@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-const LS_BILLS = "lcc_bills_v4";
+const LS_BILLS = "lcc_bills_v5";
 
 /** ---------- utils ---------- **/
 function safeParse(str, fallback) {
@@ -66,26 +66,19 @@ function plural(n, s) {
 }
 
 /**
- * Payoff estimator (single debt) with monthly compounding simulation.
+ * Payoff estimator (single debt) with monthly simulation.
  * Returns { months, payoffISO, totalInterest, totalPaid }.
- *
- * NOTE: Estimate only; real statements vary by daily interest, fees, etc.
  */
 function payoffEstimateDetailed({ balance, aprPct, monthlyPay, startISO }) {
   const bal0 = Number(balance);
   const pmt = Number(monthlyPay);
   const apr = Number(aprPct);
 
-  if (!Number.isFinite(bal0) || bal0 <= 0) {
-    return { months: null, payoffISO: null, totalInterest: 0, totalPaid: 0 };
-  }
-  if (!Number.isFinite(pmt) || pmt <= 0) {
-    return { months: null, payoffISO: null, totalInterest: 0, totalPaid: 0 };
-  }
+  if (!Number.isFinite(bal0) || bal0 <= 0) return { months: null, payoffISO: null, totalInterest: 0, totalPaid: 0 };
+  if (!Number.isFinite(pmt) || pmt <= 0) return { months: null, payoffISO: null, totalInterest: 0, totalPaid: 0 };
 
   const start = startISO || isoDate();
 
-  // 0% interest => linear payoff
   if (!Number.isFinite(apr) || apr <= 0) {
     const months = Math.ceil(bal0 / pmt);
     const totalPaid = months * pmt;
@@ -95,14 +88,7 @@ function payoffEstimateDetailed({ balance, aprPct, monthlyPay, startISO }) {
 
   const r = (apr / 100) / 12;
   const firstInterest = bal0 * r;
-  if (pmt <= firstInterest + 0.01) {
-    return {
-      months: Infinity,
-      payoffISO: null,
-      totalInterest: Infinity,
-      totalPaid: Infinity,
-    };
-  }
+  if (pmt <= firstInterest + 0.01) return { months: Infinity, payoffISO: null, totalInterest: Infinity, totalPaid: Infinity };
 
   let bal = bal0;
   let months = 0;
@@ -119,29 +105,18 @@ function payoffEstimateDetailed({ balance, aprPct, monthlyPay, startISO }) {
     bal = bal + interest - payThisMonth;
     months += 1;
 
-    if (!Number.isFinite(bal)) {
-      return { months: null, payoffISO: null, totalInterest: 0, totalPaid: 0 };
-    }
+    if (!Number.isFinite(bal)) return { months: null, payoffISO: null, totalInterest: 0, totalPaid: 0 };
     if (bal < 0) bal = 0;
   }
 
-  if (months >= 2000) {
-    return {
-      months: Infinity,
-      payoffISO: null,
-      totalInterest: Infinity,
-      totalPaid: Infinity,
-    };
-  }
-
+  if (months >= 2000) return { months: Infinity, payoffISO: null, totalInterest: Infinity, totalPaid: Infinity };
   return { months, payoffISO: addMonths(start, months), totalInterest, totalPaid };
 }
 
 /**
  * Snowball/Avalanche planner:
- * - debts: [{id,name,balance,aprPct,minPay}]
- * - monthlyExtraPool: number (extra budget to allocate)
- * - strategy: "snowball" | "avalanche"
+ * - uses minimums + global extra pool
+ * - allocates pool to ONE focus debt at a time
  */
 function planStrategy({ debts, monthlyExtraPool, strategy, startISO, previewMonths = 6 }) {
   const today = startISO || isoDate();
@@ -158,25 +133,13 @@ function planStrategy({ debts, monthlyExtraPool, strategy, startISO, previewMont
     .filter((d) => d.balance > 0 && d.name);
 
   if (ds.length === 0) {
-    return {
-      monthsToDebtFree: 0,
-      debtFreeISO: today,
-      totalInterest: 0,
-      payoffOrder: [],
-      schedulePreview: [],
-    };
+    return { monthsToDebtFree: 0, debtFreeISO: today, totalInterest: 0, payoffOrder: [], schedulePreview: [] };
   }
 
   const totalMin = ds.reduce((s, d) => s + d.minPay, 0);
   const capacity = totalMin + pool;
   if (capacity <= 0) {
-    return {
-      monthsToDebtFree: Infinity,
-      debtFreeISO: null,
-      totalInterest: Infinity,
-      payoffOrder: [],
-      schedulePreview: [],
-    };
+    return { monthsToDebtFree: Infinity, debtFreeISO: null, totalInterest: Infinity, payoffOrder: [], schedulePreview: [] };
   }
 
   let months = 0;
@@ -201,7 +164,6 @@ function planStrategy({ debts, monthlyExtraPool, strategy, startISO, previewMont
     const remaining = ds.filter((d) => d.balance > 0);
     if (remaining.length === 0) break;
 
-    // preview snapshot (start of month)
     if (months < previewMonths) {
       const focus = pickFocus(remaining);
       schedulePreview.push({
@@ -212,7 +174,7 @@ function planStrategy({ debts, monthlyExtraPool, strategy, startISO, previewMont
       });
     }
 
-    // 1) interest
+    // interest
     for (const d of remaining) {
       const r = (d.aprPct / 100) / 12;
       const interest = d.balance * r;
@@ -220,13 +182,13 @@ function planStrategy({ debts, monthlyExtraPool, strategy, startISO, previewMont
       totalInterest += interest;
     }
 
-    // 2) minimums
+    // minimums
     for (const d of remaining) {
       const pay = Math.min(d.minPay, d.balance);
       d.balance -= pay;
     }
 
-    // 3) extra pool to focus debt
+    // pool to focus
     let extraLeft = pool;
     while (extraLeft > 0) {
       const still = ds.filter((d) => d.balance > 0);
@@ -242,57 +204,33 @@ function planStrategy({ debts, monthlyExtraPool, strategy, startISO, previewMont
       if (focus.balance <= 0.000001) focus.balance = 0;
     }
 
-    // record paid off this month
+    // record payoffs
     for (const d of ds) {
       if (d.balance === 0 && !payoffOrder.some((x) => x.id === d.id)) {
-        payoffOrder.push({
-          id: d.id,
-          name: d.name,
-          months: months + 1,
-          paidOffISO: addMonths(today, months + 1),
-        });
+        payoffOrder.push({ id: d.id, name: d.name, months: months + 1, paidOffISO: addMonths(today, months + 1) });
       }
     }
 
     months += 1;
-
     if (!Number.isFinite(totalInterest)) {
-      return {
-        monthsToDebtFree: Infinity,
-        debtFreeISO: null,
-        totalInterest: Infinity,
-        payoffOrder,
-        schedulePreview,
-      };
+      return { monthsToDebtFree: Infinity, debtFreeISO: null, totalInterest: Infinity, payoffOrder, schedulePreview };
     }
   }
 
   if (months >= MAX_MONTHS) {
-    return {
-      monthsToDebtFree: Infinity,
-      debtFreeISO: null,
-      totalInterest: Infinity,
-      payoffOrder,
-      schedulePreview,
-    };
+    return { monthsToDebtFree: Infinity, debtFreeISO: null, totalInterest: Infinity, payoffOrder, schedulePreview };
   }
 
-  return {
-    monthsToDebtFree: months,
-    debtFreeISO: addMonths(today, months),
-    totalInterest,
-    payoffOrder,
-    schedulePreview,
-  };
+  return { monthsToDebtFree: months, debtFreeISO: addMonths(today, months), totalInterest, payoffOrder, schedulePreview };
 }
 
 /** ---------- normalization ---------- **/
 const DEFAULTS = {
-  version: 4,
+  version: 5,
   settings: {
     paycheckMonthly: 0,
     extraPoolMonthly: 0,
-    strategy: "avalanche", // avalanche | snowball
+    strategy: "avalanche",
   },
   items: [],
 };
@@ -300,10 +238,7 @@ const DEFAULTS = {
 function normalizeBill(raw) {
   const x = raw || {};
   const type = x.type === "controllable" ? "controllable" : "noncontrollable";
-  const freq = ["monthly", "weekly", "biweekly", "quarterly", "yearly", "one_time"].includes(x.frequency)
-    ? x.frequency
-    : "monthly";
-
+  const freq = ["monthly", "weekly", "biweekly", "quarterly", "yearly", "one_time"].includes(x.frequency) ? x.frequency : "monthly";
   const dueDate = String(x.dueDate || "").trim() || isoDate();
   const amount = Number(x.amount);
   const active = x.active !== false;
@@ -322,10 +257,12 @@ function normalizeBill(raw) {
     amount: Number.isFinite(amount) ? amount : 0,
     active,
     notes: String(x.notes || ""),
+
     balance: Number.isFinite(balance) ? balance : 0,
     aprPct: Number.isFinite(aprPct) ? aprPct : 0,
     minPay: Number.isFinite(minPay) ? minPay : 0,
     extraPay: Number.isFinite(extraPay) ? extraPay : 0,
+
     createdAt: Number.isFinite(Number(x.createdAt)) ? Number(x.createdAt) : Date.now(),
   };
 }
@@ -336,7 +273,7 @@ function normalizeState(saved) {
   const items = Array.isArray(base.items) ? base.items : Array.isArray(base) ? base : [];
 
   return {
-    version: 4,
+    version: 5,
     settings: {
       paycheckMonthly: Number.isFinite(Number(settings.paycheckMonthly)) ? Number(settings.paycheckMonthly) : 0,
       extraPoolMonthly: Number.isFinite(Number(settings.extraPoolMonthly)) ? Number(settings.extraPoolMonthly) : 0,
@@ -346,15 +283,43 @@ function normalizeState(saved) {
   };
 }
 
+/** ---------- tiny UI helpers ---------- **/
+const ACCENT = "#3b82f6"; // electric blue
+const panelStyle = {
+  background: "rgba(255,255,255,0.03)",
+  border: "1px solid rgba(255,255,255,0.07)",
+  borderRadius: 16,
+  boxShadow: "0 18px 60px rgba(0,0,0,0.35)",
+};
+
+const cardStyle = {
+  background: "rgba(255,255,255,0.035)",
+  border: "1px solid rgba(255,255,255,0.08)",
+  borderRadius: 16,
+  boxShadow: "0 14px 45px rgba(0,0,0,0.28)",
+};
+
+const chip = (bg = "rgba(255,255,255,0.06)", border = "rgba(255,255,255,0.10)") => ({
+  padding: "6px 10px",
+  borderRadius: 999,
+  background: bg,
+  border: `1px solid ${border}`,
+  fontSize: 12,
+  color: "rgba(255,255,255,0.86)",
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 8,
+});
+
 /** ---------- component ---------- **/
 export default function BillsPage() {
   const [state, setState] = useState(DEFAULTS);
 
   // form mode
-  const [mode, setMode] = useState("add"); // add | edit
+  const [mode, setMode] = useState("add");
   const [editId, setEditId] = useState(null);
 
-  // form
+  // form fields
   const [name, setName] = useState("");
   const [type, setType] = useState("noncontrollable");
   const [frequency, setFrequency] = useState("monthly");
@@ -362,7 +327,7 @@ export default function BillsPage() {
   const [amount, setAmount] = useState("");
   const [notes, setNotes] = useState("");
 
-  // controllable
+  // controllable fields
   const [balance, setBalance] = useState("");
   const [aprPct, setAprPct] = useState("");
   const [minPay, setMinPay] = useState("");
@@ -471,9 +436,7 @@ export default function BillsPage() {
 
     setState((prev) => {
       const exists = prev.items.some((x) => x.id === payload.id);
-      const nextItems = exists
-        ? prev.items.map((x) => (x.id === payload.id ? { ...x, ...payload } : x))
-        : [payload, ...prev.items];
+      const nextItems = exists ? prev.items.map((x) => (x.id === payload.id ? { ...x, ...payload } : x)) : [payload, ...prev.items];
       return { ...prev, items: nextItems };
     });
 
@@ -481,10 +444,7 @@ export default function BillsPage() {
   }
 
   function toggleActive(id) {
-    setState((prev) => ({
-      ...prev,
-      items: prev.items.map((x) => (x.id === id ? { ...x, active: !x.active } : x)),
-    }));
+    setState((prev) => ({ ...prev, items: prev.items.map((x) => (x.id === id ? { ...x, active: !x.active } : x)) }));
   }
 
   function removeBill(id) {
@@ -495,9 +455,7 @@ export default function BillsPage() {
   function setExtraFor(id, nextExtra) {
     setState((prev) => ({
       ...prev,
-      items: prev.items.map((x) =>
-        x.id === id ? { ...x, extraPay: Math.max(0, Number(nextExtra) || 0) } : x
-      ),
+      items: prev.items.map((x) => (x.id === id ? { ...x, extraPay: Math.max(0, Number(nextExtra) || 0) } : x)),
     }));
   }
 
@@ -506,32 +464,22 @@ export default function BillsPage() {
     const query = String(q || "").trim().toLowerCase();
 
     let list = items.slice();
-
     if (scope === "active") list = list.filter((x) => x.active);
     if (scope === "inactive") list = list.filter((x) => !x.active);
 
     if (tab === "controllable") list = list.filter((x) => x.type === "controllable");
     if (tab === "noncontrollable") list = list.filter((x) => x.type === "noncontrollable");
 
-    if (query) {
-      list = list.filter((x) => `${x.name} ${x.notes || ""}`.toLowerCase().includes(query));
-    }
+    if (query) list = list.filter((x) => `${x.name} ${x.notes || ""}`.toLowerCase().includes(query));
 
     const withDerived = list.map((x) => {
       const isControl = x.type === "controllable";
       const totalPay = isControl ? (Number(x.minPay) || 0) + (Number(x.extraPay) || 0) : 0;
-
       const est = isControl
         ? payoffEstimateDetailed({ balance: x.balance, aprPct: x.aprPct, monthlyPay: totalPay, startISO: today })
         : { months: null, payoffISO: null, totalInterest: 0, totalPaid: 0 };
 
-      return {
-        ...x,
-        totalPay,
-        payoffMonths: est.months,
-        payoffISO: est.payoffISO,
-        payoffInterest: est.totalInterest,
-      };
+      return { ...x, totalPay, payoffMonths: est.months, payoffISO: est.payoffISO, payoffInterest: est.totalInterest };
     });
 
     withDerived.sort((a, b) => {
@@ -549,31 +497,16 @@ export default function BillsPage() {
     });
 
     const activeItems = items.filter((x) => x.active);
-
-    const noncontrollableMonthly = activeItems
-      .filter((x) => x.type === "noncontrollable")
-      .reduce((s, x) => s + (Number(x.amount) || 0), 0);
-
-    const controllableMin = activeItems
-      .filter((x) => x.type === "controllable")
-      .reduce((s, x) => s + (Number(x.minPay) || 0), 0);
-
-    const controllableExtra = activeItems
-      .filter((x) => x.type === "controllable")
-      .reduce((s, x) => s + (Number(x.extraPay) || 0), 0);
-
-    const controllableBalances = activeItems
-      .filter((x) => x.type === "controllable")
-      .reduce((s, x) => s + (Number(x.balance) || 0), 0);
+    const noncontrollableMonthly = activeItems.filter((x) => x.type === "noncontrollable").reduce((s, x) => s + (Number(x.amount) || 0), 0);
+    const controllableMin = activeItems.filter((x) => x.type === "controllable").reduce((s, x) => s + (Number(x.minPay) || 0), 0);
+    const controllableExtra = activeItems.filter((x) => x.type === "controllable").reduce((s, x) => s + (Number(x.extraPay) || 0), 0);
+    const controllableBalances = activeItems.filter((x) => x.type === "controllable").reduce((s, x) => s + (Number(x.balance) || 0), 0);
 
     const monthlyOutflow = noncontrollableMonthly + controllableMin + controllableExtra;
 
     const nextDue = activeItems
       .filter((x) => String(x.dueDate) >= today)
       .sort((a, b) => String(a.dueDate).localeCompare(String(b.dueDate)))[0];
-
-    const paycheckMonthly = Number(state.settings.paycheckMonthly) || 0;
-    const pctIncome = paycheckMonthly > 0 ? (monthlyOutflow / paycheckMonthly) * 100 : null;
 
     const debts = activeItems
       .filter((x) => x.type === "controllable")
@@ -588,54 +521,60 @@ export default function BillsPage() {
       previewMonths: 6,
     });
 
+    const paycheckMonthly = Number(state.settings.paycheckMonthly) || 0;
+    const pctIncome = paycheckMonthly > 0 ? (monthlyOutflow / paycheckMonthly) * 100 : null;
+
     return {
       today,
       list: withDerived,
-      totals: {
-        noncontrollableMonthly,
-        controllableMin,
-        controllableExtra,
-        controllableBalances,
-        monthlyOutflow,
-        pctIncome,
-      },
+      totals: { noncontrollableMonthly, controllableMin, controllableExtra, controllableBalances, monthlyOutflow, pctIncome },
       nextDue,
       planner,
     };
-  }, [
-    items,
-    scope,
-    tab,
-    sortBy,
-    q,
-    state.settings.paycheckMonthly,
-    state.settings.extraPoolMonthly,
-    state.settings.strategy,
-  ]);
+  }, [items, scope, tab, sortBy, q, state.settings.paycheckMonthly, state.settings.extraPoolMonthly, state.settings.strategy]);
+
+  const hero = [
+    { label: "Monthly outflow", value: money(computed.totals.monthlyOutflow), sub: computed.totals.pctIncome != null ? `${computed.totals.pctIncome.toFixed(1)}% of income` : "Set income to see %", tone: "accent" },
+    { label: "Non-controllable", value: money(computed.totals.noncontrollableMonthly), sub: "Fixed bills baseline", tone: "neutral" },
+    { label: "Controllable min", value: money(computed.totals.controllableMin), sub: "Minimums (debts)", tone: "neutral" },
+    { label: "Total debt balance", value: money(computed.totals.controllableBalances), sub: computed.planner.monthsToDebtFree && computed.planner.monthsToDebtFree !== Infinity ? `Debt-free est: ${computed.planner.debtFreeISO}` : "Add debts to estimate", tone: "neutral" },
+  ];
 
   return (
-    <main className="container">
-      <header style={{ marginBottom: 14 }}>
+    <main className="container" style={{ paddingBottom: 24 }}>
+      {/* TOP */}
+      <header style={{ marginBottom: 16 }}>
         <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>Bills</div>
-        <h1 style={{ margin: 0 }}>Bills & Debt Control</h1>
-
-        <div className="muted" style={{ marginTop: 8, display: "grid", gap: 6 }}>
-          <div>
-            Non-controllable: <b>{money(computed.totals.noncontrollableMonthly)}</b> • Controllable min:{" "}
-            <b>{money(computed.totals.controllableMin)}</b> • Extra: <b>{money(computed.totals.controllableExtra)}</b> • Total:{" "}
-            <b>{money(computed.totals.monthlyOutflow)}</b>
-            {computed.totals.pctIncome != null ? <> • <b>{computed.totals.pctIncome.toFixed(1)}%</b> of income</> : null}
-          </div>
-          <div>
-            Next due: <b>{computed.nextDue ? `${computed.nextDue.name} (${computed.nextDue.dueDate})` : "—"}</b>
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 16, flexWrap: "wrap", alignItems: "baseline" }}>
+          <h1 style={{ margin: 0, letterSpacing: -0.5 }}>Bills & Debt Control</h1>
+          <div style={chip("rgba(59,130,246,0.10)", "rgba(59,130,246,0.25)")}>
+            <span style={{ width: 8, height: 8, borderRadius: 99, background: ACCENT, display: "inline-block" }} />
+            Next due: <b style={{ color: "rgba(255,255,255,0.92)" }}>{computed.nextDue ? `${computed.nextDue.name} (${computed.nextDue.dueDate})` : "—"}</b>
           </div>
         </div>
+        <div className="muted" style={{ marginTop: 6 }}>Track fixed bills + debts you can pay off. Sliders change payoff dates instantly.</div>
       </header>
 
+      {/* HERO METRICS */}
+      <div className="grid" style={{ gap: 12, gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", marginBottom: 16 }}>
+        {hero.map((h) => (
+          <div key={h.label} className="card" style={{ ...cardStyle, padding: 14 }}>
+            <div className="muted" style={{ fontSize: 12 }}>{h.label}</div>
+            <div style={{ fontWeight: 950, fontSize: 26, marginTop: 6, color: h.tone === "accent" ? ACCENT : "rgba(255,255,255,0.95)" }}>
+              {h.value}
+            </div>
+            <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>{h.sub}</div>
+          </div>
+        ))}
+      </div>
+
       {/* PLANNER */}
-      <div className="card" style={{ padding: 12, marginBottom: 16 }}>
+      <div className="card" style={{ ...panelStyle, padding: 14, marginBottom: 16 }}>
         <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-          <div style={{ fontWeight: 950 }}>Snowball / Avalanche Planner</div>
+          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+            <div style={{ fontWeight: 950 }}>Snowball / Avalanche Planner</div>
+            <div className="muted" style={{ fontSize: 12 }}>Uses minimums + extra pool (separate from per-debt extras).</div>
+          </div>
           <button className="btnGhost" type="button" onClick={() => setPlannerOpen((v) => !v)}>
             {plannerOpen ? "Hide" : "Show"}
           </button>
@@ -646,7 +585,7 @@ export default function BillsPage() {
             <div style={{ height: 10 }} />
 
             <div className="row" style={{ gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-              <div className="muted" style={{ fontSize: 12, width: 180 }}>Strategy</div>
+              <div className="muted" style={{ fontSize: 12, width: 140 }}>Strategy</div>
               <select
                 className="input"
                 value={state.settings.strategy}
@@ -656,13 +595,13 @@ export default function BillsPage() {
                     settings: { ...prev.settings, strategy: e.target.value === "snowball" ? "snowball" : "avalanche" },
                   }))
                 }
-                style={{ width: 220 }}
+                style={{ width: 240 }}
               >
                 <option value="avalanche">Avalanche (highest APR first)</option>
                 <option value="snowball">Snowball (lowest balance first)</option>
               </select>
 
-              <div className="muted" style={{ fontSize: 12, width: 180 }}>Extra pool / month</div>
+              <div className="muted" style={{ fontSize: 12, width: 160 }}>Extra pool / month</div>
               <input
                 className="input"
                 inputMode="decimal"
@@ -679,7 +618,7 @@ export default function BillsPage() {
               />
 
               <div className="muted" style={{ fontSize: 12 }}>
-                This pool is allocated to ONE debt at a time (minimums still paid on others).
+                Tip: Avalanche usually saves the most interest.
               </div>
             </div>
 
@@ -688,67 +627,46 @@ export default function BillsPage() {
             {computed.planner.monthsToDebtFree === 0 ? (
               <div className="muted">No active controllable balances to plan.</div>
             ) : computed.planner.monthsToDebtFree === Infinity ? (
-              <div className="card" style={{ padding: 12 }}>
+              <div className="card" style={{ ...cardStyle, padding: 12 }}>
                 <div style={{ fontWeight: 950 }}>Planner can’t compute payoff</div>
                 <div className="muted" style={{ marginTop: 6, fontSize: 12 }}>
                   You have no payment capacity (minimums + extra pool = 0). Set minimum payments or add an extra pool.
                 </div>
               </div>
             ) : (
-              <div className="grid" style={{ gap: 10 }}>
-                <div className="card" style={{ padding: 12 }}>
+              <div className="grid" style={{ gap: 12, gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))" }}>
+                <div className="card" style={{ ...cardStyle, padding: 12 }}>
                   <div className="muted" style={{ fontSize: 12 }}>Debt-free estimate</div>
-                  <div style={{ fontWeight: 950, marginTop: 4 }}>
-                    {computed.planner.debtFreeISO} ({computed.planner.monthsToDebtFree} {plural(computed.planner.monthsToDebtFree, "month")})
+                  <div style={{ fontWeight: 950, marginTop: 6, fontSize: 18 }}>
+                    {computed.planner.debtFreeISO}{" "}
+                    <span className="muted" style={{ fontSize: 12 }}>
+                      ({computed.planner.monthsToDebtFree} {plural(computed.planner.monthsToDebtFree, "month")})
+                    </span>
                   </div>
-                  <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
-                    Estimated interest paid: <b>{money(computed.planner.totalInterest)}</b>
+                  <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>
+                    Est. interest: <b style={{ color: "rgba(255,255,255,0.92)" }}>{money(computed.planner.totalInterest)}</b>
                   </div>
                 </div>
 
-                <div className="card" style={{ padding: 12 }}>
+                <div className="card" style={{ ...cardStyle, padding: 12 }}>
                   <div style={{ fontWeight: 950, marginBottom: 8 }}>Payoff order</div>
                   {computed.planner.payoffOrder.length === 0 ? (
                     <div className="muted" style={{ fontSize: 12 }}>No payoff order available.</div>
                   ) : (
                     <div className="grid" style={{ gap: 8 }}>
-                      {computed.planner.payoffOrder.map((x, idx) => (
-                        <div key={x.id} className="card" style={{ padding: 10 }}>
-                          <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
-                            <div style={{ fontWeight: 950 }}>{idx + 1}. {x.name}</div>
-                            <div className="muted" style={{ fontSize: 12 }}>
-                              Paid off: <b>{x.paidOffISO}</b> • Month {x.months}
-                            </div>
+                      {computed.planner.payoffOrder.slice(0, 6).map((x, idx) => (
+                        <div key={x.id} style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+                          <div style={{ fontWeight: 800 }}>{idx + 1}. {x.name}</div>
+                          <div className="muted" style={{ fontSize: 12 }}>
+                            <b style={{ color: "rgba(255,255,255,0.92)" }}>{x.paidOffISO}</b>
                           </div>
                         </div>
                       ))}
+                      {computed.planner.payoffOrder.length > 6 ? (
+                        <div className="muted" style={{ fontSize: 12 }}>+ {computed.planner.payoffOrder.length - 6} more…</div>
+                      ) : null}
                     </div>
                   )}
-                </div>
-
-                <div className="card" style={{ padding: 12 }}>
-                  <div style={{ fontWeight: 950, marginBottom: 8 }}>Next 6 months (preview)</div>
-                  <div className="grid" style={{ gap: 8 }}>
-                    {computed.planner.schedulePreview.map((m) => (
-                      <div key={m.monthIndex} className="card" style={{ padding: 10 }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
-                          <div style={{ fontWeight: 950 }}>Month {m.monthIndex} • {m.dateISO}</div>
-                          <div className="muted" style={{ fontSize: 12 }}>Focus: <b>{m.focusDebtName || "—"}</b></div>
-                        </div>
-                        <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
-                          {m.balances
-                            .slice()
-                            .sort((a, b) => (b.balance - a.balance))
-                            .map((b) => `${b.name}: ${money(b.balance)}`)
-                            .join(" • ")}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="muted" style={{ fontSize: 12, marginTop: 10 }}>
-                    Preview shows balances at the start of each month. Real payoff varies by statement cycle/fees.
-                  </div>
                 </div>
               </div>
             )}
@@ -757,19 +675,17 @@ export default function BillsPage() {
       </div>
 
       {/* SETTINGS */}
-      <div className="card" style={{ padding: 12, marginBottom: 16 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
-          <div style={{ fontWeight: 950 }}>Settings (optional)</div>
-          <div className="muted" style={{ fontSize: 12 }}>For “% of income” calculations.</div>
+      <div className="card" style={{ ...panelStyle, padding: 14, marginBottom: 16 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+          <div style={{ fontWeight: 950 }}>Settings</div>
+          <div className="muted" style={{ fontSize: 12 }}>Optional. Used for “% of income”.</div>
         </div>
-
         <div style={{ height: 10 }} />
-
         <div className="row" style={{ gap: 10, flexWrap: "wrap", alignItems: "center" }}>
           <div className="muted" style={{ fontSize: 12, width: 160 }}>Monthly income</div>
           <input
             className="input"
-            style={{ width: 220 }}
+            style={{ width: 240 }}
             inputMode="decimal"
             placeholder="e.g. 6500"
             value={state.settings.paycheckMonthly ? String(state.settings.paycheckMonthly) : ""}
@@ -781,16 +697,17 @@ export default function BillsPage() {
               }));
             }}
           />
-          <div className="muted" style={{ fontSize: 12 }}>Leave blank if you don’t want it.</div>
         </div>
       </div>
 
       {/* ADD / EDIT */}
-      <div className="card" style={{ padding: 12, marginBottom: 16 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
-          <div style={{ fontWeight: 950 }}>{mode === "edit" ? "Edit Item" : "Add Item"}</div>
+      <div className="card" style={{ ...panelStyle, padding: 14, marginBottom: 16 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+          <div style={{ fontWeight: 950 }}>{mode === "edit" ? "Edit item" : "Add item"}</div>
           {mode === "edit" ? (
-            <button className="btnGhost" type="button" onClick={resetForm}>Cancel edit</button>
+            <button className="btnGhost" type="button" onClick={resetForm}>
+              Cancel edit
+            </button>
           ) : null}
         </div>
 
@@ -798,11 +715,17 @@ export default function BillsPage() {
 
         <form onSubmit={upsertBill} className="grid" style={{ gap: 10 }}>
           <div className="row" style={{ gap: 10, flexWrap: "wrap" }}>
-            <input className="input" placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} style={{ flex: 1, minWidth: 240 }} />
+            <input
+              className="input"
+              placeholder="Name (Rent, Internet, Credit Card...)"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              style={{ flex: 1, minWidth: 260 }}
+            />
 
-            <select className="input" value={type} onChange={(e) => setType(e.target.value)} style={{ width: 220 }}>
-              <option value="noncontrollable">Non-controllable (fixed bills)</option>
-              <option value="controllable">Controllable (debt you can pay off)</option>
+            <select className="input" value={type} onChange={(e) => setType(e.target.value)} style={{ width: 240 }}>
+              <option value="noncontrollable">Non-controllable (fixed)</option>
+              <option value="controllable">Controllable (debt)</option>
             </select>
 
             <select className="input" value={frequency} onChange={(e) => setFrequency(e.target.value)} style={{ width: 170 }}>
@@ -820,48 +743,60 @@ export default function BillsPage() {
           <div className="row" style={{ gap: 10, flexWrap: "wrap" }}>
             <input
               className="input"
-              placeholder={type === "controllable" ? "Optional: minimum due (if any)" : "Amount"}
+              placeholder={type === "controllable" ? "Optional: current minimum due" : "Amount"}
               inputMode="decimal"
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
               style={{ width: 260 }}
             />
-            <input className="input" placeholder="Notes" value={notes} onChange={(e) => setNotes(e.target.value)} style={{ flex: 1, minWidth: 260 }} />
+            <input className="input" placeholder="Notes (autopay/login/etc.)" value={notes} onChange={(e) => setNotes(e.target.value)} style={{ flex: 1, minWidth: 260 }} />
           </div>
 
           {type === "controllable" ? (
-            <div className="card" style={{ padding: 12 }}>
-              <div style={{ fontWeight: 950, marginBottom: 8 }}>Payoff details (min + extra)</div>
+            <div className="card" style={{ ...cardStyle, padding: 12 }}>
+              <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                <div style={{ fontWeight: 950 }}>Debt payoff details</div>
+                <div style={chip("rgba(59,130,246,0.10)", "rgba(59,130,246,0.20)")}>
+                  Total used = min + extra
+                </div>
+              </div>
+
+              <div style={{ height: 10 }} />
+
               <div className="row" style={{ gap: 10, flexWrap: "wrap" }}>
                 <input className="input" placeholder="Balance" inputMode="decimal" value={balance} onChange={(e) => setBalance(e.target.value)} style={{ width: 220 }} />
                 <input className="input" placeholder="APR %" inputMode="decimal" value={aprPct} onChange={(e) => setAprPct(e.target.value)} style={{ width: 180 }} />
-                <input className="input" placeholder="Minimum payment" inputMode="decimal" value={minPay} onChange={(e) => setMinPay(e.target.value)} style={{ width: 200 }} />
-                <input className="input" placeholder="Extra payment" inputMode="decimal" value={extraPay} onChange={(e) => setExtraPay(e.target.value)} style={{ width: 240 }} />
+                <input className="input" placeholder="Minimum payment" inputMode="decimal" value={minPay} onChange={(e) => setMinPay(e.target.value)} style={{ width: 220 }} />
+                <input className="input" placeholder="Extra payment" inputMode="decimal" value={extraPay} onChange={(e) => setExtraPay(e.target.value)} style={{ width: 220 }} />
               </div>
+
               <div className="muted" style={{ fontSize: 12, marginTop: 10 }}>
-                Total payment used for payoff estimate = min + extra (estimate only).
+                If payoff shows “Never”, your total payment doesn’t cover interest.
               </div>
             </div>
           ) : null}
 
           {error ? (
-            <div className="card" style={{ padding: 10 }}>
+            <div className="card" style={{ ...cardStyle, padding: 12, border: `1px solid rgba(239,68,68,0.35)` }}>
               <div style={{ fontWeight: 950 }}>Fix this:</div>
-              <div className="muted" style={{ marginTop: 4 }}>{error}</div>
+              <div className="muted" style={{ marginTop: 6 }}>{error}</div>
             </div>
           ) : null}
 
           <div className="row" style={{ gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-            <button className="btn" type="submit">{mode === "edit" ? "Save Changes" : "Add"}</button>
+            <button className="btn" type="submit" style={{ background: ACCENT, border: "1px solid rgba(255,255,255,0.12)" }}>
+              {mode === "edit" ? "Save changes" : "Add item"}
+            </button>
             <button className="btnGhost" type="button" onClick={resetForm}>Clear</button>
+            <div className="muted" style={{ fontSize: 12 }}>Pro move: deactivate instead of delete to keep history.</div>
           </div>
         </form>
       </div>
 
       {/* LIST */}
-      <div className="card" style={{ padding: 12 }}>
+      <div className="card" style={{ ...panelStyle, padding: 14 }}>
         <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-          <div style={{ fontWeight: 950 }}>Bills List</div>
+          <div style={{ fontWeight: 950 }}>Bills list</div>
 
           <div className="row" style={{ gap: 10, flexWrap: "wrap", alignItems: "center" }}>
             <input className="input" placeholder="Search..." value={q} onChange={(e) => setQ(e.target.value)} style={{ width: 220 }} />
@@ -872,13 +807,13 @@ export default function BillsPage() {
               <option value="controllable">Controllable</option>
             </select>
 
-            <select className="input" value={scope} onChange={(e) => setScope(e.target.value)} style={{ width: 180 }}>
+            <select className="input" value={scope} onChange={(e) => setScope(e.target.value)} style={{ width: 170 }}>
               <option value="active">Active</option>
               <option value="all">All</option>
               <option value="inactive">Inactive</option>
             </select>
 
-            <select className="input" value={sortBy} onChange={(e) => setSortBy(e.target.value)} style={{ width: 220 }}>
+            <select className="input" value={sortBy} onChange={(e) => setSortBy(e.target.value)} style={{ width: 200 }}>
               <option value="due_asc">Due date</option>
               <option value="amt_desc">Amount</option>
               <option value="name_asc">Name</option>
@@ -887,7 +822,7 @@ export default function BillsPage() {
           </div>
         </div>
 
-        <div style={{ height: 10 }} />
+        <div style={{ height: 12 }} />
 
         {computed.list.length === 0 ? (
           <div className="muted">No items match your filters.</div>
@@ -913,49 +848,58 @@ export default function BillsPage() {
               const bal = Math.max(0, Number(b.balance) || 0);
               const sliderMax = isControl ? Math.ceil(Math.max(500, min * 2, bal * 0.1)) : 0;
 
+              const badge = isControl
+                ? chip("rgba(59,130,246,0.08)", "rgba(59,130,246,0.22)")
+                : chip("rgba(255,255,255,0.06)", "rgba(255,255,255,0.10)");
+
               return (
-                <div key={b.id} className="card" style={{ padding: 12 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start", flexWrap: "wrap" }}>
-                    <div style={{ minWidth: 260 }}>
+                <div key={b.id} className="card" style={{ ...cardStyle, padding: 14 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start", flexWrap: "wrap" }}>
+                    <div style={{ minWidth: 280, flex: 1 }}>
                       <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-                        <div style={{ fontWeight: 950 }}>{b.name}</div>
-                        <div className="muted" style={{ fontSize: 12 }}>
+                        <div style={{ fontWeight: 950, fontSize: 16 }}>{b.name}</div>
+                        <div style={badge}>
+                          <span style={{ width: 7, height: 7, borderRadius: 99, background: isControl ? ACCENT : "rgba(255,255,255,0.45)", display: "inline-block" }} />
                           {b.active ? "Active" : "Inactive"} • {isControl ? "Controllable" : "Non-controllable"} • {b.frequency}
                         </div>
                       </div>
 
-                      <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
-                        Due {b.dueDate}
+                      <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>
+                        Due <b style={{ color: "rgba(255,255,255,0.92)" }}>{b.dueDate}</b>
                         {Number.isFinite(dueIn) ? ` (${dueIn >= 0 ? `in ${dueIn}d` : `${Math.abs(dueIn)}d late`})` : ""}
                         {" • "}
                         {isControl ? (
                           <>
                             Balance {money(b.balance)} • Min {money(b.minPay)} • Extra {money(b.extraPay)} • Total{" "}
-                            <b>{money(b.totalPay)}</b> • APR {clamp(b.aprPct, 0, 100)}%
+                            <b style={{ color: "rgba(255,255,255,0.92)" }}>{money(b.totalPay)}</b> • APR {clamp(b.aprPct, 0, 100)}%
                           </>
                         ) : (
-                          <>Amount {money(b.amount)}</>
+                          <>Amount <b style={{ color: "rgba(255,255,255,0.92)" }}>{money(b.amount)}</b></>
                         )}
                       </div>
 
                       {isControl ? (
-                        <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
-                          Payoff: <b>{payoffLabel}</b> • Est. interest: <b>{money(b.payoffInterest)}</b>
+                        <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>
+                          Payoff: <b style={{ color: "rgba(255,255,255,0.92)" }}>{payoffLabel}</b>
+                          {" • "}
+                          Est. interest: <b style={{ color: "rgba(255,255,255,0.92)" }}>{money(b.payoffInterest)}</b>
                         </div>
                       ) : null}
 
                       {b.notes ? (
-                        <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>Notes: {b.notes}</div>
+                        <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>
+                          Notes: {b.notes}
+                        </div>
                       ) : null}
 
                       {isControl ? (
-                        <div className="card" style={{ padding: 10, marginTop: 10 }}>
+                        <div className="card" style={{ ...panelStyle, padding: 12, marginTop: 12 }}>
                           <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-                            <div style={{ fontWeight: 950 }}>Extra payment slider</div>
-                            <div className="muted" style={{ fontSize: 12 }}>Drag to simulate payoff changes.</div>
+                            <div style={{ fontWeight: 900 }}>Extra payment slider</div>
+                            <div className="muted" style={{ fontSize: 12 }}>Drag to see payoff change.</div>
                           </div>
 
-                          <div style={{ height: 8 }} />
+                          <div style={{ height: 10 }} />
 
                           <div className="row" style={{ gap: 10, flexWrap: "wrap", alignItems: "center" }}>
                             <div className="muted" style={{ fontSize: 12, width: 90 }}>Extra</div>
@@ -968,7 +912,7 @@ export default function BillsPage() {
                               step={5}
                               value={extra}
                               onChange={(e) => setExtraFor(b.id, e.target.value)}
-                              style={{ flex: 1, minWidth: 220 }}
+                              style={{ flex: 1, minWidth: 220, accentColor: ACCENT }}
                             />
 
                             <input
@@ -1006,14 +950,8 @@ export default function BillsPage() {
         )}
       </div>
 
-      {/* HELPERS */}
-      <div className="card" style={{ padding: 12, marginTop: 16 }}>
-        <div style={{ fontWeight: 950, marginBottom: 8 }}>Fool-proof helpers</div>
-        <div className="muted" style={{ fontSize: 12, display: "grid", gap: 6 }}>
-          <div>• Avalanche usually minimizes interest. Snowball usually maximizes motivation.</div>
-          <div>• If planner shows “can’t compute”, your minimums + extra pool are zero.</div>
-          <div>• These are estimates (daily interest + fees can change real payoff).</div>
-        </div>
+      <div className="muted" style={{ fontSize: 12, marginTop: 14 }}>
+        Estimates are simplified (monthly interest, no fees). Real payoff may differ.
       </div>
     </main>
   );
