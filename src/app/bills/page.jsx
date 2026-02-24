@@ -1,178 +1,218 @@
 "use client";
-import { useMemo, useState, useEffect } from "react";
+
+import { useEffect, useMemo, useState } from "react";
+
+const LS_BILLS = "lcc_bills_v1";
+
+function safeParse(str, fallback) {
+  try {
+    const v = JSON.parse(str);
+    return v ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function uid() {
+  return globalThis.crypto?.randomUUID?.() ?? String(Date.now());
+}
+
+function isoDate(d = new Date()) {
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
 
 function money(n) {
-  const v = Number(n || 0);
-  return v.toLocaleString(undefined, { style: "currency", currency: "USD" });
+  const num = Number(n);
+  if (!Number.isFinite(num)) return "—";
+  return num.toLocaleString(undefined, { style: "currency", currency: "USD" });
 }
 
-function fmtDate(iso) {
-  if (!iso) return "—";
-  const d = new Date(iso + "T00:00:00");
-  return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+function parseMoneyInput(v) {
+  const cleaned = String(v ?? "").replace(/[^0-9.-]/g, "");
+  const num = Number(cleaned);
+  return Number.isFinite(num) ? num : NaN;
 }
 
-export default function Bills() {
-const [bills, setBills] = useState([]);
-const [mounted, setMounted] = useState(false);
+export default function BillsPage() {
+  const [items, setItems] = useState([]); // {id,name,amount,dueDate,createdAt}
+  const [name, setName] = useState("");
+  const [amount, setAmount] = useState("");
+  const [dueDate, setDueDate] = useState(isoDate());
+  const [sortBy, setSortBy] = useState("due_asc"); // due_asc | amt_desc | name_asc
+  const [error, setError] = useState("");
 
-useEffect(() => {
-  setMounted(true);
-  const saved = JSON.parse(localStorage.getItem("bills") || "[]");
-  setBills(saved);
-}, []);
+  useEffect(() => {
+    const saved = safeParse(localStorage.getItem(LS_BILLS) || "[]", []);
+    setItems(Array.isArray(saved) ? saved : []);
+  }, []);
 
-useEffect(() => {
-  if (!mounted) return;
-  localStorage.setItem("bills", JSON.stringify(bills));
-}, [mounted, bills]);
-
-const [name, setName] = useState("");
-const [amount, setAmount] = useState("");
-const [dueDate, setDueDate] = useState(""); // YYYY-MM-DD
+  useEffect(() => {
+    try {
+      localStorage.setItem(LS_BILLS, JSON.stringify(items));
+    } catch {}
+  }, [items]);
 
   function addBill(e) {
     e.preventDefault();
-    const amt = Number(amount);
+    setError("");
 
-    if (!name.trim()) return;
-    if (!Number.isFinite(amt) || amt <= 0) return;
-    if (!dueDate) return;
+    const nm = String(name || "").trim();
+    const amt = parseMoneyInput(amount);
+    const dd = String(dueDate || "").trim();
 
-    setBills((prev) => [
+    if (!nm) return setError("Bill name is required.");
+    if (!Number.isFinite(amt) || amt <= 0) return setError("Amount must be > 0.");
+    if (!dd) return setError("Due date is required.");
+
+    setItems((prev) => [
+      { id: uid(), name: nm, amount: amt, dueDate: dd, createdAt: Date.now() },
       ...prev,
-      {
-        id: crypto.randomUUID?.() ?? String(Date.now()),
-        name: name.trim(),
-        amount: amt,
-        dueDate,
-      },
     ]);
 
     setName("");
     setAmount("");
-    setDueDate("");
+    setDueDate(isoDate());
   }
 
   function removeBill(id) {
-    setBills((prev) => prev.filter((b) => b.id !== id));
+    if (!confirm("Delete this bill?")) return;
+    setItems((prev) => prev.filter((x) => x.id !== id));
   }
 
-  const total = useMemo(() => bills.reduce((sum, b) => sum + b.amount, 0), [bills]);
+  const computed = useMemo(() => {
+    const list = items.slice();
 
-  const sorted = useMemo(() => {
-    return [...bills].sort((a, b) => a.dueDate.localeCompare(b.dueDate));
-  }, [bills]);
+    list.sort((a, b) => {
+      if (sortBy === "due_asc") return String(a.dueDate).localeCompare(String(b.dueDate));
+      if (sortBy === "amt_desc") return (Number(b.amount) || 0) - (Number(a.amount) || 0);
+      if (sortBy === "name_asc") return String(a.name).localeCompare(String(b.name));
+      return 0;
+    });
 
-  const nextDue = sorted[0]?.dueDate ?? null;
+    const total = list.reduce((s, x) => s + (Number(x.amount) || 0), 0);
+
+    const today = isoDate();
+    const nextDue = list
+      .filter((x) => x.dueDate >= today)
+      .sort((a, b) => String(a.dueDate).localeCompare(String(b.dueDate)))[0];
+
+    return { list, total, nextDue };
+  }, [items, sortBy]);
 
   return (
     <main className="container">
       <header style={{ marginBottom: 14 }}>
-        <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>
-          Bills
-        </div>
+        <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>Bills</div>
         <h1 style={{ margin: 0 }}>Bills Tracker</h1>
-        <div className="muted" style={{ marginTop: 8 }}>
-          Total monthly bills: <span style={{ fontWeight: 900 }}>{money(total)}</span> • Next due:{" "}
-          <span style={{ fontWeight: 900 }}>{fmtDate(nextDue)}</span>
+        <div className="muted" style={{ marginTop: 6 }}>
+          Total monthly bills: <b>{money(computed.total)}</b> • Next due:{" "}
+          <b>{computed.nextDue ? `${computed.nextDue.name} (${computed.nextDue.dueDate})` : "—"}</b>
         </div>
       </header>
 
-      <div className="card" style={{ marginBottom: 16 }}>
-        <form onSubmit={addBill} className="formGrid">
-          <div>
-            <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>
-              Bill name
-            </div>
+      {/* Add Bill */}
+      <div className="card" style={{ padding: 12, marginBottom: 16 }}>
+        <div style={{ fontWeight: 950, marginBottom: 10 }}>Add Bill</div>
+
+        <form onSubmit={addBill} className="grid" style={{ gap: 10 }}>
+          <div className="row" style={{ gap: 10, flexWrap: "wrap" }}>
             <input
               className="input"
-              placeholder="Rent, Internet, Car payment..."
+              placeholder="Bill name (Rent, Internet, Car payment...)"
               value={name}
               onChange={(e) => setName(e.target.value)}
+              style={{ flex: 1, minWidth: 220 }}
             />
-          </div>
-
-          <div>
-            <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>
-              Amount
-            </div>
             <input
               className="input"
-              placeholder="0.00"
+              placeholder="Amount"
               inputMode="decimal"
-              type="number"
-              step="0.01"
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
+              style={{ width: 180 }}
             />
-          </div>
-
-          <div>
-            <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>
-              Due date
-            </div>
             <input
               className="input"
               type="date"
               value={dueDate}
               onChange={(e) => setDueDate(e.target.value)}
+              style={{ width: 180 }}
             />
           </div>
 
-          <button className="btn" type="submit">
-            Add Bill
-          </button>
-        </form>
+          {error ? (
+            <div className="card" style={{ padding: 10 }}>
+              <div style={{ fontWeight: 950 }}>Fix this:</div>
+              <div className="muted" style={{ marginTop: 4 }}>{error}</div>
+            </div>
+          ) : null}
 
-        <div className="muted" style={{ fontSize: 12, marginTop: 10 }}>
-          Tip: Use the real due date for this month. We’ll add “recurring monthly” automation next.
-        </div>
+          <div className="row" style={{ gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+            <button className="btn" type="submit">Add Bill</button>
+            <button
+              className="btnGhost"
+              type="button"
+              onClick={() => {
+                setName("");
+                setAmount("");
+                setDueDate(isoDate());
+                setError("");
+              }}
+            >
+              Clear
+            </button>
+
+            <div className="muted" style={{ fontSize: 12 }}>
+              Tip: Use the real due date for this month. We’ll add “recurring monthly” automation next.
+            </div>
+          </div>
+        </form>
       </div>
 
-      <div className="card">
-        <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "baseline" }}>
-          <div style={{ fontWeight: 900 }}>Upcoming Bills</div>
-          <div className="muted" style={{ fontSize: 12 }}>
-            Sorted by due date
+      {/* Upcoming Bills */}
+      <div className="card" style={{ padding: 12 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+          <div style={{ fontWeight: 950 }}>Upcoming Bills</div>
+
+          <div className="row" style={{ gap: 10, alignItems: "center" }}>
+            <div className="muted" style={{ fontSize: 12 }}>Sort</div>
+            <select className="input" value={sortBy} onChange={(e) => setSortBy(e.target.value)} style={{ width: 200 }}>
+              <option value="due_asc">Due date (soon → later)</option>
+              <option value="amt_desc">Amount (high → low)</option>
+              <option value="name_asc">Name (A → Z)</option>
+            </select>
           </div>
         </div>
 
-        <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
-          {sorted.length === 0 ? (
-            <div className="muted">No bills yet. Add your first one above.</div>
-          ) : (
-            sorted.map((b) => {
-              const pct = total > 0 ? Math.round((b.amount / total) * 100) : 0;
+        <div style={{ height: 10 }} />
 
-              return (
-                <div key={b.id} className="tableRow">
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ fontWeight: 850, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {b.name}
-                    </div>
-                    <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
-                      Due {fmtDate(b.dueDate)} • {pct}% of total bills
-                    </div>
-                    <div className="barWrap" style={{ marginTop: 10 }}>
-                      <div className="barFill" style={{ width: `${pct}%` }} />
+        {computed.list.length === 0 ? (
+          <div className="muted">No bills yet. Add your first one above.</div>
+        ) : (
+          <div className="grid">
+            {computed.list.map((b) => (
+              <div key={b.id} className="card" style={{ padding: 12 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start", flexWrap: "wrap" }}>
+                  <div>
+                    <div style={{ fontWeight: 950 }}>{b.name}</div>
+                    <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+                      Amount {money(b.amount)} • Due {b.dueDate}
                     </div>
                   </div>
 
-                  <div style={{ fontWeight: 900 }}>{money(b.amount)}</div>
-
-                  <div className="muted" style={{ fontSize: 12 }}>
-                    {b.dueDate}
+                  <div className="row" style={{ gap: 8 }}>
+                    <button className="btnGhost" type="button" onClick={() => removeBill(b.id)}>
+                      Delete
+                    </button>
                   </div>
-
-                  <button className="btnGhost" onClick={() => removeBill(b.id)} title="Remove">
-                    Remove
-                  </button>
                 </div>
-              );
-            })
-          )}
-        </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </main>
   );
