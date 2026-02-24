@@ -4,7 +4,14 @@ import { useEffect, useMemo, useState } from "react";
 
 export const dynamic = "force-dynamic";
 
-const LS_KEY = "lcc_investments_portfolio_v2";
+// NEW storage (ledger-based)
+const LS_ASSETS = "lcc_port_assets_v1";
+const LS_TXNS = "lcc_port_txns_v1";
+const LS_PRICES = "lcc_port_prices_v1";
+const LS_UI = "lcc_port_ui_v1";
+
+// OLD storage (we'll auto-migrate if present)
+const LS_OLD = "lcc_investments_portfolio_v2";
 
 const ASSET_TYPES = [
   { value: "stock", label: "Stock" },
@@ -14,6 +21,14 @@ const ASSET_TYPES = [
   { value: "other", label: "Other" },
 ];
 
+const TXN_TYPES = [
+  { value: "BUY", label: "Buy" },
+  { value: "SELL", label: "Sell" },
+  { value: "DIVIDEND", label: "Dividend" },
+  { value: "CASH_IN", label: "Cash In" },
+  { value: "CASH_OUT", label: "Cash Out" },
+];
+
 function safeParse(str, fallback) {
   try {
     const v = JSON.parse(str);
@@ -21,6 +36,10 @@ function safeParse(str, fallback) {
   } catch {
     return fallback;
   }
+}
+
+function uid() {
+  return globalThis.crypto?.randomUUID?.() ?? String(Date.now());
 }
 
 function parseMoneyInput(v) {
@@ -48,180 +67,453 @@ function pct(n) {
   return `${sign}${num.toFixed(2)}%`;
 }
 
-function uid() {
-  return globalThis.crypto?.randomUUID?.() ?? String(Date.now());
+function isoDate(d = new Date()) {
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function normSymbol(s) {
+  return String(s || "").trim().toUpperCase();
 }
 
 export default function InvestmentsPage() {
-  const [items, setItems] = useState([]);
+  const [assets, setAssets] = useState([]); // metadata: {id,type,symbol,name,account,cgId,note,createdAt}
+  const [txns, setTxns] = useState([]); // ledger: {id,assetId,type,date,qty,price,fee,amount,note,createdAt}
+  const [prices, setPrices] = useState({}); // { "TYPE:SYMBOL": { price, ts, source } }
 
   // UI state
+  const [status, setStatus] = useState({ loading: false, msg: "" });
+  const [error, setError] = useState("");
+
   const [q, setQ] = useState("");
   const [filterType, setFilterType] = useState("all");
   const [filterAccount, setFilterAccount] = useState("all");
   const [sortBy, setSortBy] = useState("value_desc"); // value_desc | gain_desc | gain_asc | name_asc
-  const [status, setStatus] = useState({ loading: false, msg: "" });
 
-  // Add form
-  const [type, setType] = useState("stock");
-  const [symbol, setSymbol] = useState("");
-  const [name, setName] = useState("");
-  const [account, setAccount] = useState("Main");
-  const [shares, setShares] = useState("");
-  const [avgCost, setAvgCost] = useState("");
-  const [price, setPrice] = useState("");
-  const [cgId, setCgId] = useState(""); // CoinGecko id for crypto (ex: bitcoin, ethereum)
-  const [note, setNote] = useState("");
-  const [error, setError] = useState("");
+  // Add asset form
+  const [aType, setAType] = useState("stock");
+  const [aSymbol, setASymbol] = useState("");
+  const [aName, setAName] = useState("");
+  const [aAccount, setAAccount] = useState("Main");
+  const [aCgId, setACgId] = useState("");
+  const [aNote, setANote] = useState("");
 
-  // load
+  // Add transaction form
+  const [tAssetId, setTAssetId] = useState("");
+  const [tType, setTType] = useState("BUY");
+  const [tDate, setTDate] = useState(isoDate());
+  const [tQty, setTQty] = useState("");
+  const [tPrice, setTPrice] = useState("");
+  const [tFee, setTFee] = useState("");
+  const [tAmount, setTAmount] = useState(""); // for DIVIDEND/CASH
+  const [tNote, setTNote] = useState("");
+
+  // Load + migrate
   useEffect(() => {
-    const saved = safeParse(localStorage.getItem(LS_KEY) || "[]", []);
-    setItems(Array.isArray(saved) ? saved : []);
+    const savedAssets = safeParse(localStorage.getItem(LS_ASSETS) || "[]", []);
+    const savedTxns = safeParse(localStorage.getItem(LS_TXNS) || "[]", []);
+    const savedPrices = safeParse(localStorage.getItem(LS_PRICES) || "{}", {});
+    const savedUI = safeParse(localStorage.getItem(LS_UI) || "{}", {});
+
+    setAssets(Array.isArray(savedAssets) ? savedAssets : []);
+    setTxns(Array.isArray(savedTxns) ? savedTxns : []);
+    setPrices(savedPrices && typeof savedPrices === "object" ? savedPrices : {});
+    if (savedUI?.q) setQ(savedUI.q);
+    if (savedUI?.filterType) setFilterType(savedUI.filterType);
+    if (savedUI?.filterAccount) setFilterAccount(savedUI.filterAccount);
+    if (savedUI?.sortBy) setSortBy(savedUI.sortBy);
+
+    // If new storage is empty, but old holdings exist, migrate them ONCE.
+    const hasNew = Array.isArray(savedAssets) && savedAssets.length > 0;
+    if (!hasNew) {
+      const old = safeParse(localStorage.getItem(LS_OLD) || "[]", []);
+      if (Array.isArray(old) && old.length) {
+        const migratedAssets = [];
+        const migratedTxns = [];
+        const migratedPrices = {};
+
+        for (const it of old) {
+          const tp = String(it.type || "other").toLowerCase();
+          const sym = tp === "cash" ? "CASH" : normSymbol(it.symbol);
+          const acct = String(it.account || "Main").trim() || "Main";
+          const nm = String(it.name || "").trim();
+          const cgId = String(it.cgId || "").trim();
+          const note = String(it.note || "").trim();
+
+          const assetId = uid();
+          migratedAssets.push({
+            id: assetId,
+            type: tp,
+            symbol: sym,
+            name: nm,
+            account: acct,
+            cgId,
+            note,
+            createdAt: Date.now(),
+          });
+
+          // Create a "starting position" BUY transaction so the ledger matches the old holding
+          const shares = Number(it.shares) || (tp === "cash" ? 1 : 0);
+          const avgCost = Number(it.avgCost) || 0;
+          const pr = Number(it.price) || 0;
+
+          if (tp === "cash") {
+            migratedTxns.push({
+              id: uid(),
+              assetId,
+              type: "CASH_IN",
+              date: isoDate(),
+              qty: 0,
+              price: 0,
+              fee: 0,
+              amount: pr,
+              note: "Migrated cash value",
+              createdAt: Date.now(),
+            });
+          } else if (shares > 0 && avgCost > 0) {
+            migratedTxns.push({
+              id: uid(),
+              assetId,
+              type: "BUY",
+              date: isoDate(),
+              qty: shares,
+              price: avgCost,
+              fee: 0,
+              amount: 0,
+              note: "Migrated starting position",
+              createdAt: Date.now(),
+            });
+          }
+
+          if (Number.isFinite(pr) && pr > 0) {
+            migratedPrices[`${tp}:${sym}`] = { price: pr, ts: Date.now(), source: "manual" };
+          }
+        }
+
+        setAssets(migratedAssets);
+        setTxns(migratedTxns);
+        setPrices(migratedPrices);
+
+        // persist immediately
+        localStorage.setItem(LS_ASSETS, JSON.stringify(migratedAssets));
+        localStorage.setItem(LS_TXNS, JSON.stringify(migratedTxns));
+        localStorage.setItem(LS_PRICES, JSON.stringify(migratedPrices));
+        setStatus({ loading: false, msg: "Migrated your old holdings into Transactions ✅" });
+      }
+    }
   }, []);
 
-  // persist
+  // Persist
   useEffect(() => {
-    try {
-      localStorage.setItem(LS_KEY, JSON.stringify(items));
-    } catch {}
-  }, [items]);
+    try { localStorage.setItem(LS_ASSETS, JSON.stringify(assets)); } catch {}
+  }, [assets]);
 
-  function addItem(e) {
+  useEffect(() => {
+    try { localStorage.setItem(LS_TXNS, JSON.stringify(txns)); } catch {}
+  }, [txns]);
+
+  useEffect(() => {
+    try { localStorage.setItem(LS_PRICES, JSON.stringify(prices)); } catch {}
+  }, [prices]);
+
+  useEffect(() => {
+    try { localStorage.setItem(LS_UI, JSON.stringify({ q, filterType, filterAccount, sortBy })); } catch {}
+  }, [q, filterType, filterAccount, sortBy]);
+
+  function addAsset(e) {
     e.preventDefault();
     setError("");
 
-    const tp = String(type).toLowerCase();
-    const sym = String(symbol).trim().toUpperCase();
-    const nm = String(name).trim();
-    const acct = String(account).trim() || "Main";
-
-    const pr = price === "" ? NaN : parseMoneyInput(price);
+    const tp = String(aType).toLowerCase();
+    const sym = tp === "cash" ? "CASH" : normSymbol(aSymbol);
+    const acct = String(aAccount).trim() || "Main";
+    const nm = String(aName).trim();
+    const cg = String(aCgId).trim();
+    const note = String(aNote).trim();
 
     if (!acct) return setError("Account is required.");
-    if (tp !== "cash" && tp !== "other" && !sym) return setError("Symbol required (VOO, QQQ, BTC...).");
-    if (!Number.isFinite(pr) || pr < 0) return setError("Price/value must be a valid number (0 or more).");
+    if (tp !== "cash" && !sym) return setError("Symbol required (VOO, QQQ, BTC...).");
+    if (tp === "crypto" && !cg) return setError("Crypto needs CoinGecko ID for live pricing (bitcoin, ethereum...).");
 
-    let sh = tp === "cash" ? 1 : parseNumberInput(shares);
-    let ac = parseMoneyInput(avgCost);
+    // prevent duplicates (same type+symbol+account)
+    const dup = assets.some((x) => x.type === tp && x.symbol === sym && x.account === acct);
+    if (dup) return setError("That asset already exists for this account.");
 
-    if (tp !== "cash") {
-      if (!Number.isFinite(sh) || sh <= 0) return setError("Shares/units must be > 0.");
-      if (!Number.isFinite(ac) || ac <= 0) return setError("Avg cost must be > 0.");
-    } else {
-      // cash: store as 1 unit, avgCost==price==value
-      sh = 1;
-      ac = pr;
+    const id = uid();
+    const next = [
+      { id, type: tp, symbol: sym, name: nm, account: acct, cgId: tp === "crypto" ? cg : "", note, createdAt: Date.now() },
+      ...assets,
+    ];
+    setAssets(next);
+
+    // auto-select this asset for transaction entry
+    setTAssetId(id);
+
+    setAType("stock");
+    setASymbol("");
+    setAName("");
+    setAAccount(acct);
+    setACgId("");
+    setANote("");
+  }
+
+  function addTxn(e) {
+    e.preventDefault();
+    setError("");
+
+    const assetId = tAssetId;
+    const asset = assets.find((a) => a.id === assetId);
+    if (!asset) return setError("Pick an asset first.");
+
+    const tp = String(tType);
+    const date = String(tDate || isoDate()).trim();
+
+    const fee = tFee === "" ? 0 : parseMoneyInput(tFee);
+    if (!Number.isFinite(fee) || fee < 0) return setError("Fee must be 0 or more.");
+
+    let qty = 0;
+    let price = 0;
+    let amount = 0;
+
+    if (tp === "BUY" || tp === "SELL") {
+      qty = parseNumberInput(tQty);
+      price = parseMoneyInput(tPrice);
+      if (!Number.isFinite(qty) || qty <= 0) return setError("Qty must be > 0.");
+      if (!Number.isFinite(price) || price <= 0) return setError("Price must be > 0.");
+      if (asset.type === "cash") return setError("Cash assets use CASH_IN / CASH_OUT, not BUY/SELL.");
+    } else if (tp === "DIVIDEND") {
+      amount = parseMoneyInput(tAmount);
+      if (!Number.isFinite(amount) || amount <= 0) return setError("Dividend amount must be > 0.");
+      if (asset.type === "cash") return setError("Dividend should be tied to a holding, not Cash.");
+    } else if (tp === "CASH_IN" || tp === "CASH_OUT") {
+      amount = parseMoneyInput(tAmount);
+      if (!Number.isFinite(amount) || amount <= 0) return setError("Cash amount must be > 0.");
+      if (asset.type !== "cash") {
+        // allowed (cash tracking per account), but typically use a Cash asset
+        // We'll allow it anyway for flexibility.
+      }
     }
 
-    if (tp === "crypto") {
-      const id = String(cgId).trim();
-      if (!id) return setError("For crypto live pricing, fill CoinGecko ID (ex: bitcoin, ethereum).");
-    }
-
-    setItems((prev) => [
+    const id = uid();
+    setTxns((prev) => [
       {
-        id: uid(),
+        id,
+        assetId,
         type: tp,
-        symbol: tp === "cash" ? "CASH" : sym,
-        name: nm,
-        account: acct,
-        shares: sh,
-        avgCost: ac,
-        price: pr,
-        cgId: tp === "crypto" ? String(cgId).trim() : "",
-        note: String(note).trim(),
-        updatedAt: Date.now(),
+        date,
+        qty,
+        price,
+        fee,
+        amount,
+        note: String(tNote || "").trim(),
         createdAt: Date.now(),
       },
       ...prev,
     ]);
 
-    setType("stock");
-    setSymbol("");
-    setName("");
-    setShares("");
-    setAvgCost("");
-    setPrice("");
-    setCgId("");
-    setNote("");
+    // clear txn fields (keep asset selection)
+    setTQty("");
+    setTPrice("");
+    setTFee("");
+    setTAmount("");
+    setTNote("");
   }
 
-  function updateItem(id, patch) {
-    setItems((prev) =>
-      prev.map((it) => (it.id === id ? { ...it, ...patch, updatedAt: Date.now() } : it))
-    );
+  function deleteTxn(id) {
+    setTxns((prev) => prev.filter((t) => t.id !== id));
   }
 
-  function removeItem(id) {
-    setItems((prev) => prev.filter((x) => x.id !== id));
+  function setManualPrice(asset, nextPrice) {
+    const pr = parseMoneyInput(nextPrice);
+    if (!Number.isFinite(pr) || pr < 0) {
+      alert("Invalid price/value.");
+      return;
+    }
+    const key = `${asset.type}:${asset.symbol}`;
+    setPrices((p) => ({ ...p, [key]: { price: pr, ts: Date.now(), source: "manual" } }));
   }
 
+  // Ledger -> positions (avg cost method)
   const computed = useMemo(() => {
-    const rows = items.map((it) => {
-      const sh = Number(it.shares) || 0;
-      const ac = Number(it.avgCost) || 0;
-      const pr = Number(it.price) || 0;
-      const cost = sh * ac;
-      const value = sh * pr;
-      const gain = value - cost;
-      const gainPct = cost > 0 ? (gain / cost) * 100 : 0;
-      return { ...it, cost, value, gain, gainPct };
-    });
+    const assetMap = new Map(assets.map((a) => [a.id, a]));
+    const txByAsset = new Map();
+    for (const t of txns) {
+      const arr = txByAsset.get(t.assetId) || [];
+      arr.push(t);
+      txByAsset.set(t.assetId, arr);
+    }
 
-    const totalValue = rows.reduce((s, r) => s + (Number(r.value) || 0), 0);
-    const totalCost = rows.reduce((s, r) => s + (Number(r.cost) || 0), 0);
-    const totalGain = totalValue - totalCost;
-    const totalGainPct = totalCost > 0 ? (totalGain / totalCost) * 100 : 0;
+    const positions = [];
+    let totalValue = 0;
+    let totalCost = 0;
+    let totalRealized = 0;
+    let totalDividends = 0;
+    let totalCashNet = 0;
 
-    const accounts = Array.from(new Set(rows.map((r) => r.account || "Main"))).sort();
-    const types = Array.from(new Set(rows.map((r) => r.type || "other"))).sort();
+    for (const a of assets) {
+      const list = (txByAsset.get(a.id) || [])
+        .slice()
+        .sort((x, y) => String(x.date).localeCompare(String(y.date)) || (x.createdAt || 0) - (y.createdAt || 0));
 
-    const byType = rows.reduce((acc, r) => {
-      const k = r.type || "other";
-      acc[k] = (acc[k] || 0) + (Number(r.value) || 0);
+      let shares = 0;
+      let costBasis = 0; // remaining cost basis for current shares
+      let realized = 0;
+      let dividends = 0;
+      let cashNet = 0; // cash-in minus cash-out (if used on this asset)
+
+      for (const t of list) {
+        const fee = Number(t.fee) || 0;
+
+        if (t.type === "BUY") {
+          const qty = Number(t.qty) || 0;
+          const price = Number(t.price) || 0;
+          if (qty <= 0 || price <= 0) continue;
+          shares += qty;
+          costBasis += qty * price + fee;
+        }
+
+        if (t.type === "SELL") {
+          const qty = Number(t.qty) || 0;
+          const price = Number(t.price) || 0;
+          if (qty <= 0 || price <= 0) continue;
+
+          const qtyToSell = Math.min(qty, shares);
+          const avgCost = shares > 0 ? costBasis / shares : 0;
+
+          // reduce position
+          shares -= qtyToSell;
+          costBasis -= avgCost * qtyToSell;
+
+          // realized gain on sold portion
+          realized += (price - avgCost) * qtyToSell - fee;
+        }
+
+        if (t.type === "DIVIDEND") {
+          const amt = Number(t.amount) || 0;
+          if (amt > 0) {
+            dividends += amt;
+            realized += amt; // treat dividends as realized profit
+          }
+        }
+
+        if (t.type === "CASH_IN") {
+          const amt = Number(t.amount) || 0;
+          if (amt > 0) cashNet += amt - fee;
+        }
+
+        if (t.type === "CASH_OUT") {
+          const amt = Number(t.amount) || 0;
+          if (amt > 0) cashNet -= amt + fee;
+        }
+      }
+
+      const avgCostNow = shares > 0 ? costBasis / shares : 0;
+      const priceKey = `${a.type}:${a.symbol}`;
+      const lastPrice = Number(prices?.[priceKey]?.price) || 0;
+      const value = a.type === "cash" ? Math.max(0, cashNet) : shares * lastPrice;
+
+      const unrealized = value - costBasis;
+      const unrealizedPct = costBasis > 0 ? (unrealized / costBasis) * 100 : 0;
+
+      totalValue += value;
+      totalCost += costBasis;
+      totalRealized += realized;
+      totalDividends += dividends;
+      if (a.type === "cash") totalCashNet += cashNet;
+
+      positions.push({
+        asset: a,
+        shares,
+        avgCost: avgCostNow,
+        costBasis,
+        price: lastPrice,
+        value,
+        unrealized,
+        unrealizedPct,
+        realized,
+        dividends,
+        cashNet,
+        priceKey,
+        lastSource: prices?.[priceKey]?.source || "",
+        lastTs: prices?.[priceKey]?.ts || 0,
+      });
+    }
+
+    const totalUnrealized = totalValue - totalCost;
+    const totalUnrealizedPct = totalCost > 0 ? (totalUnrealized / totalCost) * 100 : 0;
+
+    const accounts = Array.from(new Set(assets.map((a) => a.account || "Main"))).sort();
+    const types = Array.from(new Set(assets.map((a) => a.type || "other"))).sort();
+
+    const byType = positions.reduce((acc, p) => {
+      const k = p.asset.type || "other";
+      acc[k] = (acc[k] || 0) + (Number(p.value) || 0);
       return acc;
     }, {});
-    const byAccount = rows.reduce((acc, r) => {
-      const k = r.account || "Main";
-      acc[k] = (acc[k] || 0) + (Number(r.value) || 0);
+    const byAccount = positions.reduce((acc, p) => {
+      const k = p.asset.account || "Main";
+      acc[k] = (acc[k] || 0) + (Number(p.value) || 0);
       return acc;
     }, {});
 
-    return { rows, totalValue, totalCost, totalGain, totalGainPct, accounts, types, byType, byAccount };
-  }, [items]);
+    return {
+      positions,
+      totalValue,
+      totalCost,
+      totalUnrealized,
+      totalUnrealizedPct,
+      totalRealized,
+      totalDividends,
+      totalCashNet,
+      accounts,
+      types,
+      byType,
+      byAccount,
+      assetMap,
+    };
+  }, [assets, txns, prices]);
 
-  const visibleRows = useMemo(() => {
+  const visiblePositions = useMemo(() => {
     const qq = q.trim().toLowerCase();
 
-    let rows = computed.rows.filter((r) => {
-      if (filterType !== "all" && r.type !== filterType) return false;
-      if (filterAccount !== "all" && r.account !== filterAccount) return false;
+    let rows = computed.positions.filter((p) => {
+      const a = p.asset;
+      if (filterType !== "all" && a.type !== filterType) return false;
+      if (filterAccount !== "all" && a.account !== filterAccount) return false;
+
       if (!qq) return true;
-      const hay = `${r.symbol} ${r.name} ${r.account} ${r.note}`.toLowerCase();
+      const hay = `${a.symbol} ${a.name} ${a.account} ${a.note}`.toLowerCase();
       return hay.includes(qq);
     });
 
     rows.sort((a, b) => {
       if (sortBy === "value_desc") return (b.value || 0) - (a.value || 0);
-      if (sortBy === "gain_desc") return (b.gain || 0) - (a.gain || 0);
-      if (sortBy === "gain_asc") return (a.gain || 0) - (b.gain || 0);
-      if (sortBy === "name_asc") return String(a.symbol).localeCompare(String(b.symbol));
+      if (sortBy === "gain_desc") return (b.unrealized || 0) - (a.unrealized || 0);
+      if (sortBy === "gain_asc") return (a.unrealized || 0) - (b.unrealized || 0);
+      if (sortBy === "name_asc") return String(a.asset.symbol).localeCompare(String(b.asset.symbol));
       return 0;
     });
 
     return rows;
-  }, [computed.rows, q, filterType, filterAccount, sortBy]);
+  }, [computed.positions, q, filterType, filterAccount, sortBy]);
+
+  const visibleTxns = useMemo(() => {
+    // show newest first, optional filter by selected asset
+    const rows = txns.slice().sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+    return tAssetId ? rows.filter((t) => t.assetId === tAssetId) : rows;
+  }, [txns, tAssetId]);
 
   async function refreshPrices() {
     setStatus({ loading: true, msg: "Refreshing prices..." });
     try {
-      const symbols = items
-        .filter((it) => it.type === "crypto" || it.type === "stock" || it.type === "etf")
-        .map((it) => ({ symbol: it.symbol, type: it.type, cgId: it.cgId || "" }));
+      const symbols = assets
+        .filter((a) => a.type === "crypto" || a.type === "stock" || a.type === "etf")
+        .map((a) => ({ symbol: a.symbol, type: a.type, cgId: a.cgId || "" }));
 
       if (!symbols.length) {
-        setStatus({ loading: false, msg: "No crypto/stocks to refresh." });
+        setStatus({ loading: false, msg: "No crypto/stocks/ETFs to refresh." });
         return;
       }
 
@@ -235,38 +527,45 @@ export default function InvestmentsPage() {
       const quotes = data?.quotes || {};
       const errors = data?.errors || {};
 
-      // Apply quotes
-      setItems((prev) =>
-        prev.map((it) => {
-          const key = `${it.type}:${String(it.symbol || "").toUpperCase()}`;
+      setPrices((prev) => {
+        const next = { ...prev };
+        for (const a of assets) {
+          const key = `${a.type}:${a.symbol}`;
           const q = quotes[key];
           if (q?.price && Number.isFinite(Number(q.price))) {
-            return { ...it, price: Number(q.price), updatedAt: Date.now(), lastQuoteSource: q.source };
+            next[key] = { price: Number(q.price), ts: Date.now(), source: q.source || "live" };
           }
-          return it;
-        })
-      );
+        }
+        return next;
+      });
 
-      // Show a short message if any failed
       const errCount = Object.keys(errors).length;
       setStatus({
         loading: false,
-        msg: errCount ? `Updated. ${errCount} symbols failed (check crypto cgId / stock API key).` : "Prices updated.",
+        msg: errCount ? `Updated. ${errCount} symbols failed (crypto cgId / stock API key).` : "Prices updated.",
       });
     } catch (e) {
       setStatus({ loading: false, msg: `Refresh failed: ${e?.message || "unknown"}` });
     }
   }
 
+  function removeAsset(assetId) {
+    if (!confirm("Delete this asset AND all its transactions?")) return;
+    setAssets((prev) => prev.filter((a) => a.id !== assetId));
+    setTxns((prev) => prev.filter((t) => t.assetId !== assetId));
+    if (tAssetId === assetId) setTAssetId("");
+  }
+
   return (
     <main className="container">
       <header style={{ marginBottom: 14 }}>
         <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>Investments</div>
+
         <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-end", flexWrap: "wrap" }}>
           <div>
-            <h1 style={{ margin: 0 }}>Portfolio Dashboard</h1>
+            <h1 style={{ margin: 0 }}>Portfolio (Ledger-Based)</h1>
             <div className="muted" style={{ marginTop: 6 }}>
-              Holdings + cost basis + live price refresh (crypto now, stocks optional).
+              Add assets once, then track everything through Transactions.
             </div>
           </div>
 
@@ -277,52 +576,49 @@ export default function InvestmentsPage() {
           </div>
         </div>
 
-        {status.msg ? (
-          <div className="muted" style={{ marginTop: 10, fontSize: 12 }}>{status.msg}</div>
-        ) : null}
+        {status.msg ? <div className="muted" style={{ marginTop: 10, fontSize: 12 }}>{status.msg}</div> : null}
       </header>
 
-      {/* TOP KPIs */}
+      {/* KPIs */}
       <div className="row" style={{ gap: 12, flexWrap: "wrap" }}>
         <div className="card" style={{ padding: 12, flex: 1, minWidth: 240 }}>
           <div className="muted" style={{ fontSize: 12 }}>Total value</div>
           <div style={{ fontSize: 24, fontWeight: 950 }}>{money(computed.totalValue)}</div>
         </div>
+
         <div className="card" style={{ padding: 12, flex: 1, minWidth: 240 }}>
-          <div className="muted" style={{ fontSize: 12 }}>Total cost</div>
-          <div style={{ fontSize: 24, fontWeight: 950 }}>{money(computed.totalCost)}</div>
-        </div>
-        <div className="card" style={{ padding: 12, flex: 1, minWidth: 240 }}>
-          <div className="muted" style={{ fontSize: 12 }}>Gain / Loss</div>
+          <div className="muted" style={{ fontSize: 12 }}>Unrealized G/L</div>
           <div style={{ fontSize: 24, fontWeight: 950 }}>
-            {money(computed.totalGain)}{" "}
-            <span className="muted" style={{ fontSize: 12, fontWeight: 800 }}>
-              ({pct(computed.totalGainPct)})
-            </span>
+            {money(computed.totalUnrealized)}{" "}
+            <span className="muted" style={{ fontSize: 12, fontWeight: 800 }}>({pct(computed.totalUnrealizedPct)})</span>
           </div>
+        </div>
+
+        <div className="card" style={{ padding: 12, flex: 1, minWidth: 240 }}>
+          <div className="muted" style={{ fontSize: 12 }}>Realized (incl dividends)</div>
+          <div style={{ fontSize: 24, fontWeight: 950 }}>{money(computed.totalRealized)}</div>
+          <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>Dividends: {money(computed.totalDividends)}</div>
         </div>
       </div>
 
       <div style={{ height: 14 }} />
 
       <div className="row" style={{ gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
-        {/* ADD / IMPORT */}
+        {/* ADD ASSET */}
         <div className="card" style={{ flex: 1, minWidth: 340 }}>
-          <div style={{ fontWeight: 950, marginBottom: 10 }}>Add Holding</div>
+          <div style={{ fontWeight: 950, marginBottom: 10 }}>1) Add Asset</div>
 
-          <form onSubmit={addItem} className="grid" style={{ gap: 10 }}>
+          <form onSubmit={addAsset} className="grid" style={{ gap: 10 }}>
             <div className="row" style={{ gap: 10, flexWrap: "wrap" }}>
-              <select className="input" value={type} onChange={(e) => setType(e.target.value)} style={{ width: 160 }}>
-                {ASSET_TYPES.map((t) => (
-                  <option key={t.value} value={t.value}>{t.label}</option>
-                ))}
+              <select className="input" value={aType} onChange={(e) => setAType(e.target.value)} style={{ width: 160 }}>
+                {ASSET_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
               </select>
 
               <input
                 className="input"
                 placeholder="Account (Fidelity, Robinhood, 401k...)"
-                value={account}
-                onChange={(e) => setAccount(e.target.value)}
+                value={aAccount}
+                onChange={(e) => setAAccount(e.target.value)}
                 style={{ flex: 1, minWidth: 200 }}
               />
             </div>
@@ -330,60 +626,31 @@ export default function InvestmentsPage() {
             <div className="row" style={{ gap: 10 }}>
               <input
                 className="input"
-                placeholder={type === "cash" ? "Symbol (auto: CASH)" : "Symbol (VOO, QQQ, BTC...)"}
-                value={symbol}
-                onChange={(e) => setSymbol(e.target.value)}
-                disabled={type === "cash"}
+                placeholder={aType === "cash" ? "Symbol (auto: CASH)" : "Symbol (VOO, QQQ, BTC...)"}
+                value={aSymbol}
+                onChange={(e) => setASymbol(e.target.value)}
+                disabled={aType === "cash"}
                 style={{ flex: 1 }}
               />
               <input
                 className="input"
                 placeholder="Name (optional)"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
+                value={aName}
+                onChange={(e) => setAName(e.target.value)}
                 style={{ flex: 1 }}
               />
             </div>
 
-            <div className="row" style={{ gap: 10, flexWrap: "wrap" }}>
-              <input
-                className="input"
-                inputMode="decimal"
-                placeholder={type === "cash" ? "Units (auto)" : "Shares / units"}
-                value={shares}
-                onChange={(e) => setShares(e.target.value)}
-                disabled={type === "cash"}
-                style={{ width: 170 }}
-              />
-              <input
-                className="input"
-                inputMode="decimal"
-                placeholder={type === "cash" ? "Avg cost (auto)" : "Avg cost"}
-                value={avgCost}
-                onChange={(e) => setAvgCost(e.target.value)}
-                disabled={type === "cash"}
-                style={{ width: 170 }}
-              />
-              <input
-                className="input"
-                inputMode="decimal"
-                placeholder={type === "cash" ? "Cash value" : "Current price"}
-                value={price}
-                onChange={(e) => setPrice(e.target.value)}
-                style={{ width: 170 }}
-              />
-            </div>
-
-            {type === "crypto" ? (
+            {aType === "crypto" ? (
               <input
                 className="input"
                 placeholder="CoinGecko ID (bitcoin, ethereum, solana...)"
-                value={cgId}
-                onChange={(e) => setCgId(e.target.value)}
+                value={aCgId}
+                onChange={(e) => setACgId(e.target.value)}
               />
             ) : null}
 
-            <input className="input" placeholder="Note (optional)" value={note} onChange={(e) => setNote(e.target.value)} />
+            <input className="input" placeholder="Note (optional)" value={aNote} onChange={(e) => setANote(e.target.value)} />
 
             {error ? (
               <div className="card" style={{ padding: 10 }}>
@@ -393,19 +660,16 @@ export default function InvestmentsPage() {
             ) : null}
 
             <div className="row" style={{ gap: 10, alignItems: "center" }}>
-              <button className="btn" type="submit">Add</button>
+              <button className="btn" type="submit">Add Asset</button>
               <button
                 className="btnGhost"
                 type="button"
                 onClick={() => {
-                  setType("stock");
-                  setSymbol("");
-                  setName("");
-                  setShares("");
-                  setAvgCost("");
-                  setPrice("");
-                  setCgId("");
-                  setNote("");
+                  setAType("stock");
+                  setASymbol("");
+                  setAName("");
+                  setACgId("");
+                  setANote("");
                   setError("");
                 }}
               >
@@ -414,12 +678,12 @@ export default function InvestmentsPage() {
             </div>
 
             <div className="muted" style={{ fontSize: 12 }}>
-              Crypto live pricing uses CoinGecko “simple price” endpoint. Stocks/ETFs can be live with Alpha Vantage key.
+              Then use Transactions to build your position. (BUY/SELL/DIVIDEND/CASH)
             </div>
           </form>
         </div>
 
-        {/* CONTROLS */}
+        {/* FILTERS */}
         <div className="card" style={{ flex: 1, minWidth: 340 }}>
           <div style={{ fontWeight: 950, marginBottom: 10 }}>Find & Filter</div>
 
@@ -429,28 +693,24 @@ export default function InvestmentsPage() {
             <div className="row" style={{ gap: 10, flexWrap: "wrap" }}>
               <select className="input" value={filterType} onChange={(e) => setFilterType(e.target.value)} style={{ width: 180 }}>
                 <option value="all">All types</option>
-                {computed.types.map((t) => (
-                  <option key={t} value={t}>{t.toUpperCase()}</option>
-                ))}
+                {computed.types.map((t) => <option key={t} value={t}>{t.toUpperCase()}</option>)}
               </select>
 
               <select className="input" value={filterAccount} onChange={(e) => setFilterAccount(e.target.value)} style={{ flex: 1, minWidth: 180 }}>
                 <option value="all">All accounts</option>
-                {computed.accounts.map((a) => (
-                  <option key={a} value={a}>{a}</option>
-                ))}
+                {computed.accounts.map((a) => <option key={a} value={a}>{a}</option>)}
               </select>
             </div>
 
             <select className="input" value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
               <option value="value_desc">Sort: Value (high → low)</option>
-              <option value="gain_desc">Sort: Gain (high → low)</option>
-              <option value="gain_asc">Sort: Gain (low → high)</option>
+              <option value="gain_desc">Sort: Unrealized (high → low)</option>
+              <option value="gain_asc">Sort: Unrealized (low → high)</option>
               <option value="name_asc">Sort: Symbol (A → Z)</option>
             </select>
 
             <div className="muted" style={{ fontSize: 12 }}>
-              Next upgrade: transactions ledger (buys/sells) so shares + cost basis auto-update.
+              Prices: crypto live now. Stocks/ETFs live if you set ALPHAVANTAGE_API_KEY in Render.
             </div>
           </div>
         </div>
@@ -461,71 +721,63 @@ export default function InvestmentsPage() {
       {/* HOLDINGS */}
       <div className="card">
         <div style={{ fontWeight: 950, marginBottom: 10 }}>
-          Holdings <span className="muted" style={{ fontWeight: 700 }}>({visibleRows.length})</span>
+          Holdings <span className="muted" style={{ fontWeight: 700 }}>({visiblePositions.length})</span>
         </div>
 
-        {visibleRows.length === 0 ? (
+        {visiblePositions.length === 0 ? (
           <div className="muted">No holdings match your filters.</div>
         ) : (
           <div className="grid">
-            {visibleRows.map((it) => {
-              const isLive = it.type === "crypto" || it.type === "stock" || it.type === "etf";
+            {visiblePositions.map((p) => {
+              const a = p.asset;
+              const hasPosition = a.type === "cash" ? p.cashNet !== 0 : p.shares > 0;
+
               return (
-                <div key={it.id} className="card" style={{ padding: 12 }}>
+                <div key={a.id} className="card" style={{ padding: 12 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start", flexWrap: "wrap" }}>
                     <div>
                       <div style={{ fontWeight: 950, fontSize: 16 }}>
-                        {it.type === "cash" ? "Cash" : it.symbol}{" "}
-                        <span className="muted" style={{ fontWeight: 800 }}>• {it.account}</span>
+                        {a.type === "cash" ? "Cash" : a.symbol}{" "}
+                        <span className="muted" style={{ fontWeight: 800 }}>• {a.account}</span>
                       </div>
+
                       <div className="muted" style={{ marginTop: 4, fontSize: 12 }}>
-                        Value {money(it.value)} • Cost {money(it.cost)} • G/L {money(it.gain)} ({pct(it.gainPct)})
+                        Value {money(p.value)} • Cost {money(p.costBasis)} • Unrealized {money(p.unrealized)} ({pct(p.unrealizedPct)})
                       </div>
-                      {it.note ? <div className="muted" style={{ marginTop: 6, fontSize: 12 }}>Note: {it.note}</div> : null}
-                      {it.type === "crypto" ? (
+
+                      <div className="muted" style={{ marginTop: 4, fontSize: 12 }}>
+                        Realized {money(p.realized)} • Dividends {money(p.dividends)}
+                      </div>
+
+                      {a.note ? <div className="muted" style={{ marginTop: 6, fontSize: 12 }}>Note: {a.note}</div> : null}
+
+                      {!hasPosition ? (
                         <div className="muted" style={{ marginTop: 6, fontSize: 12 }}>
-                          CoinGecko ID: <span style={{ fontWeight: 900 }}>{it.cgId || "—"}</span>
-                        </div>
-                      ) : null}
-                      {isLive ? (
-                        <div className="muted" style={{ marginTop: 6, fontSize: 12 }}>
-                          Live-ready: {it.type === "crypto" ? "Yes (CoinGecko)" : "Yes (Alpha Vantage key needed for stocks/ETFs)"}
+                          No position yet — add a BUY (or CASH_IN).
                         </div>
                       ) : null}
                     </div>
 
-                    <div className="row" style={{ gap: 8, alignItems: "center" }}>
+                    <div className="row" style={{ gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                      <button className="btnGhost" type="button" onClick={() => setTAssetId(a.id)}>
+                        Add Txn
+                      </button>
+
                       <button
                         className="btnGhost"
                         type="button"
                         onClick={() => {
-                          const next = prompt("Update current price/value:", String(it.price ?? ""));
+                          const next = prompt("Set manual price/value:", String(p.price || ""));
                           if (next === null) return;
-                          const pr = parseMoneyInput(next);
-                          if (!Number.isFinite(pr) || pr < 0) return alert("Invalid price/value.");
-                          updateItem(it.id, { price: pr });
+                          setManualPrice(a, next);
                         }}
+                        disabled={a.type === "cash"}
                       >
                         Set Price
                       </button>
 
-                      <button
-                        className="btnGhost"
-                        type="button"
-                        onClick={() => {
-                          const next = prompt("Update shares/units:", String(it.shares ?? ""));
-                          if (next === null) return;
-                          const sh = parseNumberInput(next);
-                          if (!Number.isFinite(sh) || sh <= 0) return alert("Invalid shares/units.");
-                          updateItem(it.id, { shares: sh });
-                        }}
-                        disabled={it.type === "cash"}
-                      >
-                        Set Shares
-                      </button>
-
-                      <button className="btnGhost" type="button" onClick={() => removeItem(it.id)}>
-                        Delete
+                      <button className="btnGhost" type="button" onClick={() => removeAsset(a.id)}>
+                        Delete Asset
                       </button>
                     </div>
                   </div>
@@ -533,17 +785,174 @@ export default function InvestmentsPage() {
                   <div style={{ height: 10 }} />
 
                   <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-                    <div className="pill">{String(it.type).toUpperCase()}</div>
-                    <div className="pill">SHARES: {it.type === "cash" ? "—" : (Number(it.shares) || 0)}</div>
-                    <div className="pill">AVG: {money(it.avgCost)}</div>
-                    <div className="pill">PRICE: {money(it.price)}</div>
-                    {it.lastQuoteSource ? <div className="pill">SRC: {it.lastQuoteSource}</div> : null}
+                    <div className="pill">{String(a.type).toUpperCase()}</div>
+                    <div className="pill">SHARES: {a.type === "cash" ? "—" : (p.shares || 0)}</div>
+                    <div className="pill">AVG: {money(p.avgCost)}</div>
+                    <div className="pill">PRICE: {money(p.price)}</div>
+                    {p.lastSource ? <div className="pill">SRC: {p.lastSource}</div> : null}
                   </div>
                 </div>
               );
             })}
           </div>
         )}
+      </div>
+
+      <div style={{ height: 16 }} />
+
+      {/* TRANSACTIONS */}
+      <div className="card">
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start", flexWrap: "wrap" }}>
+          <div>
+            <div style={{ fontWeight: 950, marginBottom: 6 }}>Transactions</div>
+            <div className="muted" style={{ fontSize: 12 }}>
+              This is the source of truth. Positions update automatically.
+            </div>
+          </div>
+
+          <div className="muted" style={{ fontSize: 12 }}>
+            Showing: {tAssetId ? "Selected asset only" : "All assets"}
+          </div>
+        </div>
+
+        <div style={{ height: 10 }} />
+
+        <form onSubmit={addTxn} className="grid" style={{ gap: 10 }}>
+          <div className="row" style={{ gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+            <select className="input" value={tAssetId} onChange={(e) => setTAssetId(e.target.value)} style={{ flex: 1, minWidth: 240 }}>
+              <option value="">Pick asset…</option>
+              {assets
+                .slice()
+                .sort((a, b) => `${a.account}-${a.symbol}`.localeCompare(`${b.account}-${b.symbol}`))
+                .map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.type === "cash" ? "CASH" : a.symbol} • {a.account}
+                  </option>
+                ))}
+            </select>
+
+            <select className="input" value={tType} onChange={(e) => setTType(e.target.value)} style={{ width: 160 }}>
+              {TXN_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+            </select>
+
+            <input className="input" type="date" value={tDate} onChange={(e) => setTDate(e.target.value)} style={{ width: 170 }} />
+          </div>
+
+          {(tType === "BUY" || tType === "SELL") ? (
+            <div className="row" style={{ gap: 10, flexWrap: "wrap" }}>
+              <input
+                className="input"
+                inputMode="decimal"
+                placeholder="Qty"
+                value={tQty}
+                onChange={(e) => setTQty(e.target.value)}
+                style={{ width: 160 }}
+              />
+              <input
+                className="input"
+                inputMode="decimal"
+                placeholder="Price"
+                value={tPrice}
+                onChange={(e) => setTPrice(e.target.value)}
+                style={{ width: 160 }}
+              />
+              <input
+                className="input"
+                inputMode="decimal"
+                placeholder="Fee (optional)"
+                value={tFee}
+                onChange={(e) => setTFee(e.target.value)}
+                style={{ width: 160 }}
+              />
+            </div>
+          ) : (
+            <div className="row" style={{ gap: 10, flexWrap: "wrap" }}>
+              <input
+                className="input"
+                inputMode="decimal"
+                placeholder="Amount"
+                value={tAmount}
+                onChange={(e) => setTAmount(e.target.value)}
+                style={{ width: 220 }}
+              />
+              <input
+                className="input"
+                inputMode="decimal"
+                placeholder="Fee (optional)"
+                value={tFee}
+                onChange={(e) => setTFee(e.target.value)}
+                style={{ width: 160 }}
+              />
+            </div>
+          )}
+
+          <input className="input" placeholder="Note (optional)" value={tNote} onChange={(e) => setTNote(e.target.value)} />
+
+          <div className="row" style={{ gap: 10, alignItems: "center" }}>
+            <button className="btn" type="submit">Add Transaction</button>
+            <button
+              className="btnGhost"
+              type="button"
+              onClick={() => {
+                setTQty("");
+                setTPrice("");
+                setTFee("");
+                setTAmount("");
+                setTNote("");
+                setError("");
+              }}
+            >
+              Clear
+            </button>
+            <button className="btnGhost" type="button" onClick={() => setTAssetId("")}>
+              Show All
+            </button>
+          </div>
+        </form>
+
+        <div style={{ height: 12 }} />
+
+        {visibleTxns.length === 0 ? (
+          <div className="muted">No transactions yet.</div>
+        ) : (
+          <div className="grid">
+            {visibleTxns.map((t) => {
+              const a = computed.assetMap.get(t.assetId);
+              const label = a ? `${a.type === "cash" ? "CASH" : a.symbol} • ${a.account}` : "Unknown asset";
+
+              return (
+                <div key={t.id} className="card" style={{ padding: 12 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start", flexWrap: "wrap" }}>
+                    <div>
+                      <div style={{ fontWeight: 950 }}>
+                        {t.type} <span className="muted" style={{ fontWeight: 800 }}>• {label}</span>
+                      </div>
+                      <div className="muted" style={{ marginTop: 4, fontSize: 12 }}>
+                        {t.date}
+                        {t.type === "BUY" || t.type === "SELL"
+                          ? ` • Qty ${t.qty} @ ${money(t.price)}`
+                          : ` • Amount ${money(t.amount)}`}
+                        {Number(t.fee) ? ` • Fee ${money(t.fee)}` : ""}
+                      </div>
+                      {t.note ? <div className="muted" style={{ marginTop: 6, fontSize: 12 }}>Note: {t.note}</div> : null}
+                    </div>
+
+                    <div className="row" style={{ gap: 8 }}>
+                      <button className="btnGhost" type="button" onClick={() => deleteTxn(t.id)}>
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      <div style={{ height: 16 }} />
+      <div className="muted" style={{ fontSize: 12 }}>
+        Next upgrades: (1) Import CSV, (2) Snapshots + charts, (3) Auto-price for stocks with your key, (4) Realized vs Unrealized breakdown by account.
       </div>
     </main>
   );
