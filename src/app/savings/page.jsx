@@ -15,12 +15,11 @@ function safeParse(str, fallback) {
   }
 }
 
-function todayISO() {
-  const d = new Date();
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).getDate ? String(d.getDate()).padStart(2, "0") : String(d.getDate()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd}`;
+function parseMoneyInput(v) {
+  // allows: 1000, 1,000, $1,000.50
+  const cleaned = String(v ?? "").replace(/[^0-9.-]/g, "");
+  const num = Number(cleaned);
+  return Number.isFinite(num) ? num : NaN;
 }
 
 function money(n) {
@@ -31,13 +30,22 @@ function money(n) {
 
 export default function SavingsPage() {
   const [goals, setGoals] = useState([]);
+
+  // add form
   const [name, setName] = useState("");
   const [target, setTarget] = useState("");
   const [current, setCurrent] = useState("");
   const [dueDate, setDueDate] = useState("");
+  const [error, setError] = useState("");
 
+  // edit
   const [editingId, setEditingId] = useState(null);
-  const [editDraft, setEditDraft] = useState({ name: "", target: "", current: "", dueDate: "" });
+  const [editDraft, setEditDraft] = useState({
+    name: "",
+    target: "",
+    current: "",
+    dueDate: "",
+  });
 
   // load
   useEffect(() => {
@@ -54,13 +62,15 @@ export default function SavingsPage() {
 
   function addGoal(e) {
     e.preventDefault();
-    const n = name.trim();
-    const t = Number(target);
-    const c = Number(current || 0);
+    setError("");
 
-    if (!n) return;
-    if (!Number.isFinite(t) || t <= 0) return;
-    if (!Number.isFinite(c) || c < 0) return;
+    const n = name.trim();
+    const t = parseMoneyInput(target);
+    const c = parseMoneyInput(current === "" ? "0" : current);
+
+    if (!n) return setError("Goal name is required.");
+    if (!Number.isFinite(t) || t <= 0) return setError("Target must be a number greater than 0.");
+    if (!Number.isFinite(c) || c < 0) return setError("Current saved must be 0 or more.");
 
     const id = globalThis.crypto?.randomUUID?.() ?? String(Date.now());
 
@@ -84,6 +94,7 @@ export default function SavingsPage() {
 
   function startEdit(g) {
     setEditingId(g.id);
+    setError("");
     setEditDraft({
       name: g.name || "",
       target: String(g.target ?? ""),
@@ -99,18 +110,16 @@ export default function SavingsPage() {
 
   function saveEdit(id) {
     const n = editDraft.name.trim();
-    const t = Number(editDraft.target);
-    const c = Number(editDraft.current || 0);
+    const t = parseMoneyInput(editDraft.target);
+    const c = parseMoneyInput(editDraft.current === "" ? "0" : editDraft.current);
 
-    if (!n) return;
-    if (!Number.isFinite(t) || t <= 0) return;
-    if (!Number.isFinite(c) || c < 0) return;
+    if (!n) return setError("Goal name is required.");
+    if (!Number.isFinite(t) || t <= 0) return setError("Target must be a number greater than 0.");
+    if (!Number.isFinite(c) || c < 0) return setError("Current saved must be 0 or more.");
 
     setGoals((prev) =>
       prev.map((g) =>
-        g.id === id
-          ? { ...g, name: n, target: t, current: c, dueDate: editDraft.dueDate || "" }
-          : g
+        g.id === id ? { ...g, name: n, target: t, current: c, dueDate: editDraft.dueDate || "" } : g
       )
     );
     cancelEdit();
@@ -156,7 +165,7 @@ export default function SavingsPage() {
               <input
                 className="input"
                 inputMode="decimal"
-                placeholder="Target amount"
+                placeholder="Target amount (ex: 1000 or $1,000)"
                 value={target}
                 onChange={(e) => setTarget(e.target.value)}
                 style={{ flex: 1 }}
@@ -164,7 +173,7 @@ export default function SavingsPage() {
               <input
                 className="input"
                 inputMode="decimal"
-                placeholder="Current saved"
+                placeholder="Current saved (ex: 250)"
                 value={current}
                 onChange={(e) => setCurrent(e.target.value)}
                 style={{ flex: 1 }}
@@ -179,6 +188,19 @@ export default function SavingsPage() {
                 onChange={(e) => setDueDate(e.target.value)}
                 style={{ width: 180 }}
               />
+            </div>
+
+            {/* Show error (below inputs, above buttons) */}
+            {error && (
+              <div className="card" style={{ padding: 10 }}>
+                <div style={{ fontWeight: 900 }}>Fix this:</div>
+                <div className="muted" style={{ marginTop: 4 }}>
+                  {error}
+                </div>
+              </div>
+            )}
+
+            <div className="row" style={{ gap: 10, alignItems: "center" }}>
               <button className="btn" type="submit">
                 Add
               </button>
@@ -190,6 +212,7 @@ export default function SavingsPage() {
                   setTarget("");
                   setCurrent("");
                   setDueDate("");
+                  setError("");
                 }}
               >
                 Clear
@@ -218,9 +241,8 @@ export default function SavingsPage() {
           </div>
 
           <div style={{ height: 10 }} />
-
           <div className="muted" style={{ fontSize: 12 }}>
-            Next: We can add “Auto-add from paycheck” rules.
+            Next: We can add “Quick add” buttons (+$25/+100/custom) per goal.
           </div>
         </div>
       </div>
@@ -240,7 +262,6 @@ export default function SavingsPage() {
               const c = Number(g.current) || 0;
               const pct = t > 0 ? Math.min(100, Math.round((c / t) * 100)) : 0;
               const left = Math.max(0, t - c);
-
               const isEditing = editingId === g.id;
 
               return (
@@ -310,7 +331,15 @@ export default function SavingsPage() {
                       <div style={{ height: 10 }} />
 
                       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                        <div style={{ flex: 1, height: 10, borderRadius: 999, border: "1px solid var(--stroke)", overflow: "hidden" }}>
+                        <div
+                          style={{
+                            flex: 1,
+                            height: 10,
+                            borderRadius: 999,
+                            border: "1px solid var(--stroke)",
+                            overflow: "hidden",
+                          }}
+                        >
                           <div
                             style={{
                               width: `${pct}%`,
