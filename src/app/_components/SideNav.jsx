@@ -3,55 +3,38 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-const NAV = [
+const LINKS = [
   { href: "/", label: "Dashboard" },
   { href: "/bills", label: "Bills" },
   { href: "/income", label: "Income" },
   { href: "/spending", label: "Daily Spending" },
   { href: "/investments", label: "Investments" },
   { href: "/savings", label: "Savings Goals" },
-  { href: "/calendar", label: "Calendar" }, //
+  { href: "/calendar", label: "Calendar" },
 ];
 
-
 export default function SideNav() {
-  const pathname = usePathname();
+  const path = usePathname();
 
   return (
-    <aside className="sidebar">
+    <aside className="sideNav">
       <div className="brand">
-        <div className="brandDot" />
-        <div>
-          <div className="brandTitle">Life Command Center</div>
-          <div className="brandSub">Finance • Life • Tracking</div>
-        </div>
+        <div className="brandTitle">Life Command Center</div>
+        <div className="brandSub muted">Finance • Life • Tracking</div>
       </div>
 
       <nav className="nav">
-        {NAV.map((item) => {
-          const active =
-            item.href === "/"
-              ? pathname === "/"
-              : pathname?.startsWith(item.href);
-
+        {LINKS.map((l) => {
+          const active = l.href === "/" ? path === "/" : path.startsWith(l.href);
           return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={`navLink ${active ? "navLinkActive" : ""}`}
-            >
-              <span className="navBullet" />
-              <span className="navLabel">{item.label}</span>
+            <Link key={l.href} href={l.href} className={`navLink ${active ? "active" : ""}`}>
+              {l.label}
             </Link>
           );
         })}
       </nav>
 
-      <div className="sidebarFooter">
-        <div className="pill">
-          Local mode <span className="spark" />
-        </div>
-      </div>
+      <div className="navFooter muted">Local • Preview</div>
     </aside>
   );
 }
