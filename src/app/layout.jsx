@@ -1,20 +1,16 @@
 import "./globals.css";
-import SideNav from "./components/SideNav";
-import RippleProvider from "./components/RippleProvider";
+import AppShell from "./components/AppShell";
 
-export const metadata = { title: "Life Command Center" };
+export const metadata = {
+  title: "Life Command Center",
+  description: "Finance + Life tracking",
+};
 
 export default function RootLayout({ children }) {
   return (
     <html lang="en">
       <body>
-        <RippleProvider />
-        <div className="appShell">
-          <SideNav />
-          <div className="appMain">
-            {children}
-          </div>
-        </div>
+        <AppShell>{children}</AppShell>
       </body>
     </html>
   );

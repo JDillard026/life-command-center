@@ -425,3 +425,27 @@ body{
   font-weight: 950;
   letter-spacing: -0.02em;
 }
+/* ===== APP LAYOUT ===== */
+.appLayout{
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  gap: 18px;
+  padding: 18px;
+}
+
+.appSide{
+  position: sticky;
+  top: 18px;
+  align-self: start;
+  height: calc(100vh - 36px);
+}
+
+.appMain{
+  min-width: 0;
+}
+
+/* Make the page containers not double-pad inside appMain */
+.appMain .container{
+  padding: 0;
+}
