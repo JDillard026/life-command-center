@@ -156,3 +156,55 @@ a{ color: inherit; text-decoration: none; }
     padding-bottom: 6px;
   }
 }
+/* ---------- Bubble buttons + ripple ---------- */
+
+.btn, .btnGhost{
+  position: relative;
+  overflow: hidden;         /* required for ripple */
+  transform: translateZ(0); /* smoother */
+  transition: transform .08s ease, filter .12s ease, background .12s ease, border-color .12s ease;
+}
+
+.btn{
+  background: rgba(255,255,255,.06);
+  border: 1px solid rgba(255,255,255,.14);
+  box-shadow: 0 10px 30px rgba(0,0,0,.25);
+}
+
+.btnGhost{
+  background: rgba(255,255,255,.03);
+  border: 1px solid rgba(255,255,255,.10);
+}
+
+.btn:hover, .btnGhost:hover{
+  filter: brightness(1.10);
+  transform: translateY(-1px);
+}
+
+.btn:active, .btnGhost:active{
+  transform: translateY(0px) scale(.98);
+}
+
+/* Nice keyboard focus */
+.btn:focus-visible, .btnGhost:focus-visible, .input:focus-visible{
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(255,255,255,.16), 0 0 0 6px rgba(99,179,237,.18);
+}
+
+/* Ripple element that we inject on click */
+.rippleDot{
+  position: absolute;
+  border-radius: 999px;
+  pointer-events: none;
+  background: rgba(255,255,255,.85); /* the “white dot” */
+  transform: translate(-50%, -50%) scale(0);
+  opacity: 1;
+  animation: rippleDot .55s ease-out forwards;
+  mix-blend-mode: screen;
+}
+
+@keyframes rippleDot{
+  0%   { transform: translate(-50%, -50%) scale(0); opacity: .9; }
+  60%  { transform: translate(-50%, -50%) scale(12); opacity: .35; }
+  100% { transform: translate(-50%, -50%) scale(18); opacity: 0; }
+}
