@@ -1,75 +1,334 @@
-export default function Savings() {
-  return (
-    <main className="container">
-      <h1 style={{ marginTop: 0 }}>Savings Goals</h1>
+"use client";
 
-      <div className="grid grid-3">
-        <GoalCard
-          title="Emergency Fund"
-          current={2000}
-          target={10000}
-        />
-        <GoalCard
-          title="House Projects"
-          current={1500}
-          target={5000}
-        />
-        <GoalCard
-          title="Future Investment Boost"
-          current={3000}
-          target={15000}
-        />
-      </div>
+import { useEffect, useMemo, useState } from "react";
 
-      <div className="card" style={{ marginTop: 18 }}>
-        <div style={{ fontWeight: 800, marginBottom: 8 }}>
-          Monthly Savings Strategy (coming next)
-        </div>
-        <div className="muted">
-          We’ll auto-allocate leftover money into goals based on priority.
-        </div>
-      </div>
-    </main>
-  );
+export const dynamic = "force-dynamic";
+
+const LS_KEY = "lcc_savings_goals";
+
+function safeParse(str, fallback) {
+  try {
+    const v = JSON.parse(str);
+    return v ?? fallback;
+  } catch {
+    return fallback;
+  }
 }
 
-function GoalCard({ title, current, target }) {
-  const percent = Math.min(100, Math.round((current / target) * 100));
+function todayISO() {
+  const d = new Date();
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).getDate ? String(d.getDate()).padStart(2, "0") : String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function money(n) {
+  const num = Number(n);
+  if (!Number.isFinite(num)) return "—";
+  return num.toLocaleString(undefined, { style: "currency", currency: "USD" });
+}
+
+export default function SavingsPage() {
+  const [goals, setGoals] = useState([]);
+  const [name, setName] = useState("");
+  const [target, setTarget] = useState("");
+  const [current, setCurrent] = useState("");
+  const [dueDate, setDueDate] = useState("");
+
+  const [editingId, setEditingId] = useState(null);
+  const [editDraft, setEditDraft] = useState({ name: "", target: "", current: "", dueDate: "" });
+
+  // load
+  useEffect(() => {
+    const saved = safeParse(localStorage.getItem(LS_KEY) || "[]", []);
+    setGoals(Array.isArray(saved) ? saved : []);
+  }, []);
+
+  // persist
+  useEffect(() => {
+    try {
+      localStorage.setItem(LS_KEY, JSON.stringify(goals));
+    } catch {}
+  }, [goals]);
+
+  function addGoal(e) {
+    e.preventDefault();
+    const n = name.trim();
+    const t = Number(target);
+    const c = Number(current || 0);
+
+    if (!n) return;
+    if (!Number.isFinite(t) || t <= 0) return;
+    if (!Number.isFinite(c) || c < 0) return;
+
+    const id = globalThis.crypto?.randomUUID?.() ?? String(Date.now());
+
+    setGoals((prev) => [
+      {
+        id,
+        name: n,
+        target: t,
+        current: c,
+        dueDate: dueDate || "",
+        createdAt: Date.now(),
+      },
+      ...prev,
+    ]);
+
+    setName("");
+    setTarget("");
+    setCurrent("");
+    setDueDate("");
+  }
+
+  function startEdit(g) {
+    setEditingId(g.id);
+    setEditDraft({
+      name: g.name || "",
+      target: String(g.target ?? ""),
+      current: String(g.current ?? ""),
+      dueDate: g.dueDate || "",
+    });
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+    setEditDraft({ name: "", target: "", current: "", dueDate: "" });
+  }
+
+  function saveEdit(id) {
+    const n = editDraft.name.trim();
+    const t = Number(editDraft.target);
+    const c = Number(editDraft.current || 0);
+
+    if (!n) return;
+    if (!Number.isFinite(t) || t <= 0) return;
+    if (!Number.isFinite(c) || c < 0) return;
+
+    setGoals((prev) =>
+      prev.map((g) =>
+        g.id === id
+          ? { ...g, name: n, target: t, current: c, dueDate: editDraft.dueDate || "" }
+          : g
+      )
+    );
+    cancelEdit();
+  }
+
+  function removeGoal(id) {
+    setGoals((prev) => prev.filter((g) => g.id !== id));
+    if (editingId === id) cancelEdit();
+  }
+
+  const totals = useMemo(() => {
+    const totalTarget = goals.reduce((s, g) => s + (Number(g.target) || 0), 0);
+    const totalCurrent = goals.reduce((s, g) => s + (Number(g.current) || 0), 0);
+    return { totalTarget, totalCurrent };
+  }, [goals]);
 
   return (
-    <div className="card">
-      <div style={{ fontWeight: 800, marginBottom: 8 }}>
-        {title}
+    <main className="container">
+      <header style={{ marginBottom: 14 }}>
+        <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>
+          Savings
+        </div>
+        <h1 style={{ margin: 0 }}>Savings Goals</h1>
+        <div className="muted" style={{ marginTop: 8 }}>
+          Add goals, update progress, and track what’s left.
+        </div>
+      </header>
+
+      <div className="row" style={{ gap: 16, alignItems: "flex-start" }}>
+        {/* LEFT: Add */}
+        <div className="card" style={{ flex: 1, minWidth: 320 }}>
+          <div style={{ fontWeight: 900, marginBottom: 10 }}>Add a goal</div>
+
+          <form onSubmit={addGoal} className="grid" style={{ gap: 10 }}>
+            <input
+              className="input"
+              placeholder="Goal name (ex: Emergency Fund, Vacation, Truck down payment)"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
+
+            <div className="row" style={{ gap: 10 }}>
+              <input
+                className="input"
+                inputMode="decimal"
+                placeholder="Target amount"
+                value={target}
+                onChange={(e) => setTarget(e.target.value)}
+                style={{ flex: 1 }}
+              />
+              <input
+                className="input"
+                inputMode="decimal"
+                placeholder="Current saved"
+                value={current}
+                onChange={(e) => setCurrent(e.target.value)}
+                style={{ flex: 1 }}
+              />
+            </div>
+
+            <div className="row" style={{ gap: 10, alignItems: "center" }}>
+              <input
+                className="input"
+                type="date"
+                value={dueDate}
+                onChange={(e) => setDueDate(e.target.value)}
+                style={{ width: 180 }}
+              />
+              <button className="btn" type="submit">
+                Add
+              </button>
+              <button
+                className="btnGhost"
+                type="button"
+                onClick={() => {
+                  setName("");
+                  setTarget("");
+                  setCurrent("");
+                  setDueDate("");
+                }}
+              >
+                Clear
+              </button>
+            </div>
+
+            <div className="muted" style={{ fontSize: 12 }}>
+              Tip: Keep goals separate (Emergency Fund, Vacation, House projects).
+            </div>
+          </form>
+        </div>
+
+        {/* RIGHT: Summary */}
+        <div className="card" style={{ flex: 1, minWidth: 320 }}>
+          <div style={{ fontWeight: 900, marginBottom: 10 }}>Summary</div>
+
+          <div className="row" style={{ gap: 10 }}>
+            <div className="card" style={{ padding: 12, flex: 1 }}>
+              <div className="muted" style={{ fontSize: 12 }}>Total saved</div>
+              <div style={{ fontSize: 20, fontWeight: 900 }}>{money(totals.totalCurrent)}</div>
+            </div>
+            <div className="card" style={{ padding: 12, flex: 1 }}>
+              <div className="muted" style={{ fontSize: 12 }}>Total targets</div>
+              <div style={{ fontSize: 20, fontWeight: 900 }}>{money(totals.totalTarget)}</div>
+            </div>
+          </div>
+
+          <div style={{ height: 10 }} />
+
+          <div className="muted" style={{ fontSize: 12 }}>
+            Next: We can add “Auto-add from paycheck” rules.
+          </div>
+        </div>
       </div>
 
-      <div style={{ fontSize: 22, fontWeight: 900 }}>
-        ${current.toLocaleString()}
-      </div>
+      <div style={{ height: 16 }} />
 
-      <div className="muted" style={{ marginBottom: 12 }}>
-        of ${target.toLocaleString()}
-      </div>
+      {/* LIST */}
+      <div className="card">
+        <div style={{ fontWeight: 900, marginBottom: 10 }}>Your goals</div>
 
-      <div
-        style={{
-          height: 10,
-          borderRadius: 999,
-          background: "rgba(255,255,255,.08)",
-          overflow: "hidden"
-        }}
-      >
-        <div
-          style={{
-            width: `${percent}%`,
-            height: "100%",
-            background: "linear-gradient(90deg,#4ade80,#22d3ee)"
-          }}
-        />
-      </div>
+        {goals.length === 0 ? (
+          <div className="muted">No goals yet. Add your first goal above.</div>
+        ) : (
+          <div className="grid">
+            {goals.map((g) => {
+              const t = Number(g.target) || 0;
+              const c = Number(g.current) || 0;
+              const pct = t > 0 ? Math.min(100, Math.round((c / t) * 100)) : 0;
+              const left = Math.max(0, t - c);
 
-      <div className="muted" style={{ marginTop: 8 }}>
-        {percent}% complete
+              const isEditing = editingId === g.id;
+
+              return (
+                <div key={g.id} className="card" style={{ padding: 12 }}>
+                  {isEditing ? (
+                    <>
+                      <div className="row" style={{ gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                        <input
+                          className="input"
+                          value={editDraft.name}
+                          onChange={(e) => setEditDraft((d) => ({ ...d, name: e.target.value }))}
+                          style={{ flex: 2, minWidth: 220 }}
+                        />
+                        <input
+                          className="input"
+                          inputMode="decimal"
+                          value={editDraft.target}
+                          onChange={(e) => setEditDraft((d) => ({ ...d, target: e.target.value }))}
+                          placeholder="Target"
+                          style={{ width: 140 }}
+                        />
+                        <input
+                          className="input"
+                          inputMode="decimal"
+                          value={editDraft.current}
+                          onChange={(e) => setEditDraft((d) => ({ ...d, current: e.target.value }))}
+                          placeholder="Current"
+                          style={{ width: 140 }}
+                        />
+                        <input
+                          className="input"
+                          type="date"
+                          value={editDraft.dueDate}
+                          onChange={(e) => setEditDraft((d) => ({ ...d, dueDate: e.target.value }))}
+                          style={{ width: 170 }}
+                        />
+
+                        <button className="btn" type="button" onClick={() => saveEdit(g.id)}>
+                          Save
+                        </button>
+                        <button className="btnGhost" type="button" onClick={cancelEdit}>
+                          Cancel
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start" }}>
+                        <div>
+                          <div style={{ fontWeight: 900, fontSize: 16 }}>{g.name}</div>
+                          <div className="muted" style={{ marginTop: 4, fontSize: 12 }}>
+                            Target {money(t)} • Saved {money(c)} • Left {money(left)}
+                            {g.dueDate ? ` • Due ${g.dueDate}` : ""}
+                          </div>
+                        </div>
+
+                        <div className="row" style={{ gap: 8 }}>
+                          <button className="btnGhost" type="button" onClick={() => startEdit(g)}>
+                            Edit
+                          </button>
+                          <button className="btnGhost" type="button" onClick={() => removeGoal(g.id)}>
+                            Delete
+                          </button>
+                        </div>
+                      </div>
+
+                      <div style={{ height: 10 }} />
+
+                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <div style={{ flex: 1, height: 10, borderRadius: 999, border: "1px solid var(--stroke)", overflow: "hidden" }}>
+                          <div
+                            style={{
+                              width: `${pct}%`,
+                              height: "100%",
+                              background: "rgba(99, 179, 237, .35)",
+                            }}
+                          />
+                        </div>
+                        <div className="pill">{pct}%</div>
+                      </div>
+                    </>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
-    </div>
+    </main>
   );
 }
