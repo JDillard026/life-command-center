@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-const LS_INCOME = "lcc_income_v1";
+const LS_INCOME = "lcc_income_v2";
 
 function safeParse(str, fallback) {
   try {
@@ -24,9 +24,26 @@ function isoDate(d = new Date()) {
   return `${yyyy}-${mm}-${dd}`;
 }
 
+function toDateOnly(iso) {
+  // ISO "YYYY-MM-DD" -> Date at local midnight
+  const s = String(iso || "").trim();
+  if (!s) return null;
+  const d = new Date(`${s}T00:00:00`);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
 function monthKeyFromISO(iso) {
   const s = String(iso || "");
   return s.length >= 7 ? s.slice(0, 7) : "";
+}
+
+function fmtMonthLabel(ym) {
+  // "YYYY-MM" -> "YYYY-MM"
+  return ym || "—";
+}
+
+function daysInMonth(year, monthIndex0) {
+  return new Date(year, monthIndex0 + 1, 0).getDate();
 }
 
 function money(n) {
@@ -45,41 +62,137 @@ function clamp(n, a, b) {
   return Math.max(a, Math.min(b, n));
 }
 
-export default function IncomePage() {
-  // settings
-  const [goalMonthly, setGoalMonthly] = useState("8000");
-  const [goalWeekly, setGoalWeekly] = useState("2000");
+function addDays(d, days) {
+  const x = new Date(d.getTime());
+  x.setDate(x.getDate() + days);
+  return x;
+}
 
-  // quick add
+function sameOrAfter(a, b) {
+  return a.getTime() >= b.getTime();
+}
+
+function sameOrBefore(a, b) {
+  return a.getTime() <= b.getTime();
+}
+
+function dateToISO(d) {
+  return isoDate(d);
+}
+
+function startOfMonthDate(ym) {
+  const [y, m] = String(ym).split("-").map((x) => Number(x));
+  if (!Number.isFinite(y) || !Number.isFinite(m)) return null;
+  return new Date(y, m - 1, 1);
+}
+
+function endOfMonthDate(ym) {
+  const [y, m] = String(ym).split("-").map((x) => Number(x));
+  if (!Number.isFinite(y) || !Number.isFinite(m)) return null;
+  return new Date(y, m - 1, daysInMonth(y, m - 1));
+}
+
+/**
+ * Pay schedule
+ * - WEEKLY / BIWEEKLY: uses anchorDate (most recent payday) and steps forward.
+ * - TWICE_MONTHLY: 1st & 15th
+ * - MONTHLY: 1st
+ */
+function computePaydaysForMonth({ monthYM, schedule, anchorDateISO }) {
+  const start = startOfMonthDate(monthYM);
+  const end = endOfMonthDate(monthYM);
+  if (!start || !end) return [];
+
+  const scheduleKey = String(schedule || "BIWEEKLY").toUpperCase();
+
+  if (scheduleKey === "TWICE_MONTHLY") {
+    const [y, m] = monthYM.split("-").map((x) => Number(x));
+    const d1 = new Date(y, m - 1, 1);
+    const d15 = new Date(y, m - 1, 15);
+    return [d1, d15].filter((d) => d >= start && d <= end);
+  }
+
+  if (scheduleKey === "MONTHLY") {
+    const [y, m] = monthYM.split("-").map((x) => Number(x));
+    const d1 = new Date(y, m - 1, 1);
+    return [d1].filter((d) => d >= start && d <= end);
+  }
+
+  // weekly / biweekly
+  const step = scheduleKey === "WEEKLY" ? 7 : 14;
+  const anchor = toDateOnly(anchorDateISO);
+  if (!anchor) return []; // can’t compute without anchor
+
+  // Back up to ensure we start before the month
+  let cur = new Date(anchor.getTime());
+  // If anchor is after end, go backwards
+  while (cur > end) cur = addDays(cur, -step);
+  // If anchor is before start by a lot, step forward until >= start
+  while (addDays(cur, step) < start) cur = addDays(cur, step);
+
+  const out = [];
+  // Ensure we include any payday inside the month
+  // Move forward from cur until beyond end
+  let iter = new Date(cur.getTime());
+  // If iter is before start, push forward
+  while (iter < start) iter = addDays(iter, step);
+
+  while (iter <= end) {
+    out.push(new Date(iter.getTime()));
+    iter = addDays(iter, step);
+  }
+
+  return out;
+}
+
+export default function IncomePage() {
+  // Settings (important)
+  const [goalMonthly, setGoalMonthly] = useState("8000");
+  const [schedule, setSchedule] = useState("BIWEEKLY"); // WEEKLY | BIWEEKLY | TWICE_MONTHLY | MONTHLY
+  const [anchorDate, setAnchorDate] = useState(isoDate()); // most recent payday (for weekly/biweekly)
+  const [paycheckAmt, setPaycheckAmt] = useState("2000"); // expected per paycheck
+  const [bonusEstimate, setBonusEstimate] = useState("0"); // expected extra for month
+
+  // Add deposit
   const [date, setDate] = useState(isoDate());
   const [source, setSource] = useState("Paycheck");
   const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");
 
-  // data
+  // Data
   const [deposits, setDeposits] = useState([]); // {id,date,source,amount,note,createdAt}
   const [status, setStatus] = useState({ msg: "" });
   const [error, setError] = useState("");
 
-  // filters
+  // UI
   const [viewMonth, setViewMonth] = useState(monthKeyFromISO(isoDate()));
   const [q, setQ] = useState("");
   const [sortBy, setSortBy] = useState("date_desc"); // date_desc | amt_desc | source_asc
 
-  // load
+  // Edit
+  const [editId, setEditId] = useState("");
+  const [eDate, setEDate] = useState(isoDate());
+  const [eSource, setESource] = useState("");
+  const [eAmount, setEAmount] = useState("");
+  const [eNote, setENote] = useState("");
+
+  // Load
   useEffect(() => {
     const saved = safeParse(localStorage.getItem(LS_INCOME) || "{}", {});
     const sDeposits = Array.isArray(saved.deposits) ? saved.deposits : [];
     setDeposits(sDeposits);
 
     if (saved.goalMonthly != null) setGoalMonthly(String(saved.goalMonthly));
-    if (saved.goalWeekly != null) setGoalWeekly(String(saved.goalWeekly));
-    if (saved.viewMonth) setViewMonth(String(saved.viewMonth));
+    if (saved.schedule) setSchedule(String(saved.schedule));
+    if (saved.anchorDate) setAnchorDate(String(saved.anchorDate));
+    if (saved.paycheckAmt != null) setPaycheckAmt(String(saved.paycheckAmt));
+    if (saved.bonusEstimate != null) setBonusEstimate(String(saved.bonusEstimate));
 
+    if (saved.viewMonth) setViewMonth(String(saved.viewMonth));
     setStatus({ msg: "Income loaded ✅" });
   }, []);
 
-  // persist
+  // Persist
   useEffect(() => {
     try {
       localStorage.setItem(
@@ -87,12 +200,15 @@ export default function IncomePage() {
         JSON.stringify({
           deposits,
           goalMonthly: parseMoneyInput(goalMonthly),
-          goalWeekly: parseMoneyInput(goalWeekly),
+          schedule,
+          anchorDate,
+          paycheckAmt: parseMoneyInput(paycheckAmt),
+          bonusEstimate: parseMoneyInput(bonusEstimate),
           viewMonth,
         })
       );
     } catch {}
-  }, [deposits, goalMonthly, goalWeekly, viewMonth]);
+  }, [deposits, goalMonthly, schedule, anchorDate, paycheckAmt, bonusEstimate, viewMonth]);
 
   function addDeposit(e) {
     e.preventDefault();
@@ -108,9 +224,8 @@ export default function IncomePage() {
     if (!src) return setError("Source is required.");
     if (!Number.isFinite(amt) || amt <= 0) return setError("Amount must be > 0.");
 
-    const id = uid();
     setDeposits((prev) => [
-      { id, date: dt, source: src, amount: amt, note: nt, createdAt: Date.now() },
+      { id: uid(), date: dt, source: src, amount: amt, note: nt, createdAt: Date.now() },
       ...prev,
     ]);
 
@@ -124,56 +239,123 @@ export default function IncomePage() {
     setDeposits((prev) => prev.filter((d) => d.id !== id));
   }
 
+  function openEdit(d) {
+    setEditId(d.id);
+    setEDate(d.date);
+    setESource(d.source);
+    setEAmount(String(d.amount ?? ""));
+    setENote(d.note || "");
+  }
+
+  function cancelEdit() {
+    setEditId("");
+    setEDate(isoDate());
+    setESource("");
+    setEAmount("");
+    setENote("");
+  }
+
+  function saveEdit() {
+    const dt = String(eDate || "").trim();
+    const src = String(eSource || "").trim();
+    const amt = parseMoneyInput(eAmount);
+    const nt = String(eNote || "").trim();
+
+    if (!dt || !src || !Number.isFinite(amt) || amt <= 0) {
+      alert("Edit invalid. Need date, source, amount > 0.");
+      return;
+    }
+
+    setDeposits((prev) =>
+      prev.map((x) => (x.id === editId ? { ...x, date: dt, source: src, amount: amt, note: nt } : x))
+    );
+    cancelEdit();
+    setStatus({ msg: "Deposit updated ✅" });
+  }
+
   function quickPreset(src, amt) {
     setSource(src);
     setAmount(String(amt));
   }
 
   const computed = useMemo(() => {
-    const thisMonth = viewMonth || monthKeyFromISO(isoDate());
+    const now = new Date();
+    const todayISO = isoDate(now);
+    const today = toDateOnly(todayISO) || new Date();
+
+    const thisMonth = viewMonth || monthKeyFromISO(todayISO);
 
     const monthDeposits = deposits.filter((d) => monthKeyFromISO(d.date) === thisMonth);
     const monthTotal = monthDeposits.reduce((s, d) => s + (Number(d.amount) || 0), 0);
 
-    // weekly: last 7 days total from today
-    const now = new Date();
+    // Month stats
+    const sm = startOfMonthDate(thisMonth);
+    const em = endOfMonthDate(thisMonth);
+    const dim = sm ? daysInMonth(sm.getFullYear(), sm.getMonth()) : 30;
+    const dayNum = sm ? clamp((today.getDate() || 1), 1, dim) : 1;
+    const daysLeftInclToday = Math.max(1, dim - dayNum + 1);
+    const daysLeftExclToday = Math.max(0, dim - dayNum);
+
+    const goalM = parseMoneyInput(goalMonthly);
+    const goalMonthlyNum = Number.isFinite(goalM) ? goalM : 0;
+
+    const remainingToGoal = Math.max(0, goalMonthlyNum - monthTotal);
+    const neededPerDay = daysLeftInclToday > 0 ? remainingToGoal / daysLeftInclToday : remainingToGoal;
+
+    // Pace line (where you should be today)
+    const paceTargetToday = goalMonthlyNum > 0 ? (goalMonthlyNum * dayNum) / dim : 0;
+
+    // Paydays this month
+    const paydays = computePaydaysForMonth({
+      monthYM: thisMonth,
+      schedule,
+      anchorDateISO: anchorDate,
+    }).sort((a, b) => a.getTime() - b.getTime());
+
+    // Paydays remaining from today to end of month (inclusive)
+    const paydaysLeft = paydays.filter((d) => sameOrAfter(d, today)).length;
+
+    const payAmt = parseMoneyInput(paycheckAmt);
+    const payAmtNum = Number.isFinite(payAmt) ? payAmt : 0;
+
+    const neededPerPaycheck = paydaysLeft > 0 ? remainingToGoal / paydaysLeft : remainingToGoal;
+
+    // Projection
+    const bonusNum = Number.isFinite(parseMoneyInput(bonusEstimate)) ? parseMoneyInput(bonusEstimate) : 0;
+    const projectedRemaining = paydaysLeft * payAmtNum + (bonusNum || 0);
+    const projectedTotal = monthTotal + projectedRemaining;
+
+    // Next payday
+    const nextPayday = paydays.find((d) => sameOrAfter(d, today));
+
+    // Weekly (last 7 days total)
     const t0 = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
     const weekStart = t0 - 6 * 86400000;
-
     let weekTotal = 0;
     for (const d of deposits) {
       const t = new Date(String(d.date) + "T00:00:00").getTime();
       if (t >= weekStart && t <= t0) weekTotal += Number(d.amount) || 0;
     }
 
-    const gM = parseMoneyInput(goalMonthly);
-    const gW = parseMoneyInput(goalWeekly);
-
-    const monthPct = Number.isFinite(gM) && gM > 0 ? clamp((monthTotal / gM) * 100, 0, 999) : 0;
-    const weekPct = Number.isFinite(gW) && gW > 0 ? clamp((weekTotal / gW) * 100, 0, 999) : 0;
-
-    // streak: consecutive days with any deposit (ending today or yesterday)
+    // Streak (consecutive days with deposit; allow starting yesterday if none today)
     const daysWith = new Set(deposits.map((d) => d.date));
     let streak = 0;
     for (let i = 0; i < 365; i++) {
       const t = t0 - i * 86400000;
-      const di = new Date(t);
-      const key = isoDate(di);
+      const key = isoDate(new Date(t));
       if (daysWith.has(key)) streak++;
       else break;
     }
-    // if today is empty, allow streak to start from yesterday (more realistic)
     if (streak === 0) {
       for (let i = 1; i < 365; i++) {
         const t = t0 - i * 86400000;
-        const di = new Date(t);
-        const key = isoDate(di);
+        const key = isoDate(new Date(t));
         if (daysWith.has(key)) streak++;
         else break;
       }
     }
 
-    // recent list (filtered)
+    // Filters
     const qq = q.trim().toLowerCase();
     let rows = deposits.slice();
 
@@ -185,30 +367,69 @@ export default function IncomePage() {
     }
 
     rows.sort((a, b) => {
-      if (sortBy === "date_desc") return String(b.date).localeCompare(String(a.date)) || (b.createdAt || 0) - (a.createdAt || 0);
+      if (sortBy === "date_desc")
+        return String(b.date).localeCompare(String(a.date)) || (b.createdAt || 0) - (a.createdAt || 0);
       if (sortBy === "amt_desc") return (Number(b.amount) || 0) - (Number(a.amount) || 0);
       if (sortBy === "source_asc") return String(a.source).localeCompare(String(b.source));
       return 0;
     });
 
-    // month options
-    const months = Array.from(new Set(deposits.map((d) => monthKeyFromISO(d.date)).filter(Boolean))).sort().reverse();
+    // Month options
+    const months = Array.from(new Set(deposits.map((d) => monthKeyFromISO(d.date)).filter(Boolean)))
+      .sort()
+      .reverse();
     if (!months.includes(thisMonth)) months.unshift(thisMonth);
 
+    // Progress %
+    const monthPct = goalMonthlyNum > 0 ? clamp((monthTotal / goalMonthlyNum) * 100, 0, 999) : 0;
+    const pacePct = goalMonthlyNum > 0 ? clamp((paceTargetToday / goalMonthlyNum) * 100, 0, 100) : 0;
+
+    // Alerts
+    const behindPace = goalMonthlyNum > 0 && monthTotal + 0.0001 < paceTargetToday; // tiny epsilon
+    const goalHit = goalMonthlyNum > 0 && monthTotal >= goalMonthlyNum;
+    const noDepositDays = (() => {
+      // days since last deposit date
+      if (deposits.length === 0) return 999;
+      const latest = deposits
+        .slice()
+        .sort((a, b) => String(b.date).localeCompare(String(a.date)))[0];
+      const ld = toDateOnly(latest?.date);
+      if (!ld) return 999;
+      const diff = Math.floor((t0 - ld.getTime()) / 86400000);
+      return Math.max(0, diff);
+    })();
+
     return {
+      todayISO,
       thisMonth,
-      monthDeposits,
+      months,
       monthTotal,
       weekTotal,
-      monthPct,
-      weekPct,
       streak,
+      goalMonthlyNum,
+      remainingToGoal,
+      neededPerDay,
+      neededPerPaycheck,
+      paydays,
+      paydaysLeft,
+      nextPaydayISO: nextPayday ? dateToISO(nextPayday) : "",
+      payAmtNum,
+      bonusNum,
+      projectedTotal,
+      projectedRemaining,
+      paceTargetToday,
+      behindPace,
+      goalHit,
+      noDepositDays,
       rows,
-      months,
-      goalMonthlyNum: Number.isFinite(gM) ? gM : 0,
-      goalWeeklyNum: Number.isFinite(gW) ? gW : 0,
+      monthPct,
+      pacePct,
+      daysLeftInclToday,
+      daysLeftExclToday,
+      dayNum,
+      dim,
     };
-  }, [deposits, goalMonthly, goalWeekly, viewMonth, q, sortBy]);
+  }, [deposits, goalMonthly, schedule, anchorDate, paycheckAmt, bonusEstimate, viewMonth, q, sortBy]);
 
   return (
     <main className="container">
@@ -216,10 +437,42 @@ export default function IncomePage() {
         <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>Income</div>
         <h1 style={{ margin: 0 }}>Income Command</h1>
         <div className="muted" style={{ marginTop: 6 }}>
-          This page drives everything. Track deposits + hit your goals.
+          This is the engine. If income is weak, everything breaks.
         </div>
         {status.msg ? <div className="muted" style={{ marginTop: 10, fontSize: 12 }}>{status.msg}</div> : null}
       </header>
+
+      {/* Alerts */}
+      {(computed.behindPace || computed.goalHit || computed.noDepositDays >= 3) ? (
+        <div className="row" style={{ gap: 12, flexWrap: "wrap", marginBottom: 12 }}>
+          {computed.goalHit ? (
+            <div className="card" style={{ padding: 12, flex: 1, minWidth: 260 }}>
+              <div style={{ fontWeight: 950 }}>Goal hit ✅</div>
+              <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
+                Month total {money(computed.monthTotal)} ≥ goal {money(computed.goalMonthlyNum)}.
+              </div>
+            </div>
+          ) : null}
+
+          {computed.behindPace ? (
+            <div className="card" style={{ padding: 12, flex: 1, minWidth: 260 }}>
+              <div style={{ fontWeight: 950 }}>Behind pace ⚠️</div>
+              <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
+                You’re at {money(computed.monthTotal)} but pace target is {money(computed.paceTargetToday)}.
+              </div>
+            </div>
+          ) : null}
+
+          {computed.noDepositDays >= 3 ? (
+            <div className="card" style={{ padding: 12, flex: 1, minWidth: 260 }}>
+              <div style={{ fontWeight: 950 }}>No deposits logged</div>
+              <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
+                It’s been {computed.noDepositDays} days since the last deposit entry.
+              </div>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
 
       {/* KPIs */}
       <div className="row" style={{ gap: 12, flexWrap: "wrap" }}>
@@ -229,82 +482,100 @@ export default function IncomePage() {
           <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
             Goal {money(computed.goalMonthlyNum)} • {computed.monthPct.toFixed(0)}%
           </div>
-          <div className="card" style={{ marginTop: 10, padding: 10 }}>
-            <div className="muted" style={{ fontSize: 12 }}>
-              Month: <b>{computed.thisMonth}</b>
+
+          <div className="card" style={{ padding: 10, marginTop: 10 }}>
+            <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>Pace bar</div>
+            <div style={{ height: 10, borderRadius: 999, border: "1px solid rgba(255,255,255,.10)", background: "rgba(255,255,255,.04)", overflow: "hidden" }}>
+              <div
+                style={{
+                  height: "100%",
+                  width: `${clamp(computed.monthPct, 0, 100)}%`,
+                  background: "rgba(255,255,255,.18)",
+                }}
+              />
+            </div>
+            <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
+              Today is day {computed.dayNum}/{computed.dim}. Pace target: {money(computed.paceTargetToday)}.
             </div>
           </div>
         </div>
 
         <div className="card kpi" style={{ flex: 1, minWidth: 240, padding: 14 }}>
-          <div className="muted" style={{ fontSize: 12 }}>Last 7 days</div>
-          <div className="kpiValue">{money(computed.weekTotal)}</div>
+          <div className="muted" style={{ fontSize: 12 }}>Needed to hit goal</div>
+          <div className="kpiValue">{money(computed.remainingToGoal)}</div>
           <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
-            Goal {money(computed.goalWeeklyNum)} • {computed.weekPct.toFixed(0)}%
+            Per day: {money(computed.neededPerDay)} • Days left: {computed.daysLeftInclToday}
           </div>
-          <div className="card" style={{ marginTop: 10, padding: 10 }}>
-            <div className="muted" style={{ fontSize: 12 }}>
-              Momentum matters.
-            </div>
+          <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
+            Paydays left: {computed.paydaysLeft} • Per paycheck: {money(computed.neededPerPaycheck)}
           </div>
         </div>
 
         <div className="card kpi" style={{ flex: 1, minWidth: 240, padding: 14 }}>
-          <div className="muted" style={{ fontSize: 12 }}>Streak</div>
-          <div className="kpiValue">{computed.streak} days</div>
+          <div className="muted" style={{ fontSize: 12 }}>Projection</div>
+          <div className="kpiValue">{money(computed.projectedTotal)}</div>
           <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
-            Days with at least one deposit logged
+            Expected remaining: {money(computed.projectedRemaining)}
           </div>
-          <div className="card" style={{ marginTop: 10, padding: 10 }}>
-            <div className="muted" style={{ fontSize: 12 }}>
-              Don’t break the chain.
-            </div>
+          <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
+            Next payday: {computed.nextPaydayISO || "—"}
           </div>
         </div>
       </div>
 
       <div style={{ height: 16 }} />
 
-      {/* Goals + Quick Add */}
+      {/* Settings + Add Deposit */}
       <div className="row" style={{ gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
-        {/* Goals */}
+        {/* Settings */}
         <div className="card" style={{ flex: 1, minWidth: 340, padding: 12 }}>
-          <div style={{ fontWeight: 950, marginBottom: 10 }}>Income Goals</div>
+          <div style={{ fontWeight: 950, marginBottom: 10 }}>Income Setup</div>
 
           <div className="grid" style={{ gap: 10 }}>
+            <div>
+              <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>Monthly goal</div>
+              <input className="input" inputMode="decimal" value={goalMonthly} onChange={(e) => setGoalMonthly(e.target.value)} placeholder="8000" />
+            </div>
+
             <div className="row" style={{ gap: 10, flexWrap: "wrap" }}>
               <div style={{ flex: 1, minWidth: 160 }}>
-                <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>Monthly goal</div>
-                <input
-                  className="input"
-                  inputMode="decimal"
-                  value={goalMonthly}
-                  onChange={(e) => setGoalMonthly(e.target.value)}
-                  placeholder="8000"
-                />
+                <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>Pay schedule</div>
+                <select className="input" value={schedule} onChange={(e) => setSchedule(e.target.value)}>
+                  <option value="WEEKLY">Weekly</option>
+                  <option value="BIWEEKLY">Biweekly</option>
+                  <option value="TWICE_MONTHLY">Twice monthly (1st + 15th)</option>
+                  <option value="MONTHLY">Monthly (1st)</option>
+                </select>
               </div>
 
               <div style={{ flex: 1, minWidth: 160 }}>
-                <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>Weekly goal</div>
-                <input
-                  className="input"
-                  inputMode="decimal"
-                  value={goalWeekly}
-                  onChange={(e) => setGoalWeekly(e.target.value)}
-                  placeholder="2000"
-                />
+                <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>Expected paycheck</div>
+                <input className="input" inputMode="decimal" value={paycheckAmt} onChange={(e) => setPaycheckAmt(e.target.value)} placeholder="2000" />
               </div>
+            </div>
+
+            {(String(schedule).toUpperCase() === "WEEKLY" || String(schedule).toUpperCase() === "BIWEEKLY") ? (
+              <div>
+                <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>Anchor payday (most recent payday)</div>
+                <input className="input" type="date" value={anchorDate} onChange={(e) => setAnchorDate(e.target.value)} />
+                <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
+                  Used to auto-calc paydays inside the month.
+                </div>
+              </div>
+            ) : null}
+
+            <div>
+              <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>Monthly bonus estimate (optional)</div>
+              <input className="input" inputMode="decimal" value={bonusEstimate} onChange={(e) => setBonusEstimate(e.target.value)} placeholder="0" />
             </div>
 
             <div className="card" style={{ padding: 12 }}>
-              <div style={{ fontWeight: 900 }}>Goal Progress</div>
+              <div style={{ fontWeight: 900 }}>Paydays this month</div>
               <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
-                Month: {computed.monthPct.toFixed(0)}% • Week: {computed.weekPct.toFixed(0)}%
+                {computed.paydays.length
+                  ? computed.paydays.map((d) => dateToISO(d)).join(" • ")
+                  : "Set schedule + anchor date (weekly/biweekly) to auto-calc."}
               </div>
-            </div>
-
-            <div className="muted" style={{ fontSize: 12 }}>
-              Set these once. Everything else runs off income.
             </div>
           </div>
         </div>
@@ -316,8 +587,21 @@ export default function IncomePage() {
           <form onSubmit={addDeposit} className="grid" style={{ gap: 10 }}>
             <div className="row" style={{ gap: 10, flexWrap: "wrap", alignItems: "center" }}>
               <input className="input" type="date" value={date} onChange={(e) => setDate(e.target.value)} style={{ width: 170 }} />
-              <input className="input" placeholder="Source (Paycheck, Bonus, Side hustle...)" value={source} onChange={(e) => setSource(e.target.value)} style={{ flex: 1, minWidth: 220 }} />
-              <input className="input" placeholder="Amount" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} style={{ width: 180 }} />
+              <input
+                className="input"
+                placeholder="Source (Paycheck, Bonus, Side hustle...)"
+                value={source}
+                onChange={(e) => setSource(e.target.value)}
+                style={{ flex: 1, minWidth: 220 }}
+              />
+              <input
+                className="input"
+                placeholder="Amount"
+                inputMode="decimal"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                style={{ width: 180 }}
+              />
             </div>
 
             <input className="input" placeholder="Note (optional)" value={note} onChange={(e) => setNote(e.target.value)} />
@@ -336,10 +620,14 @@ export default function IncomePage() {
               </button>
 
               <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
-                <button className="btnGhost" type="button" onClick={() => quickPreset("Paycheck", 2000)}>Paycheck $2,000</button>
-                <button className="btnGhost" type="button" onClick={() => quickPreset("Bonus", 500)}>Bonus $500</button>
-                <button className="btnGhost" type="button" onClick={() => quickPreset("Side Hustle", 200)}>Side $200</button>
+                <button className="btnGhost" type="button" onClick={() => quickPreset("Paycheck", computed.payAmtNum || 2000)}>Paycheck</button>
+                <button className="btnGhost" type="button" onClick={() => quickPreset("Bonus", 500)}>Bonus</button>
+                <button className="btnGhost" type="button" onClick={() => quickPreset("Side Hustle", 200)}>Side</button>
               </div>
+            </div>
+
+            <div className="muted" style={{ fontSize: 12 }}>
+              Streak: {computed.streak} days • Last 7 days: {money(computed.weekTotal)}
             </div>
           </form>
         </div>
@@ -353,7 +641,7 @@ export default function IncomePage() {
           <div>
             <div style={{ fontWeight: 950 }}>Deposit History</div>
             <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
-              {computed.rows.length} items • Search + sort below
+              {computed.rows.length} items • Month: <b>{fmtMonthLabel(computed.thisMonth)}</b>
             </div>
           </div>
 
@@ -394,6 +682,9 @@ export default function IncomePage() {
                   </div>
 
                   <div className="row" style={{ gap: 8 }}>
+                    <button className="btnGhost" type="button" onClick={() => openEdit(d)}>
+                      Edit
+                    </button>
                     <button className="btnGhost" type="button" onClick={() => deleteDeposit(d.id)}>
                       Delete
                     </button>
@@ -403,13 +694,46 @@ export default function IncomePage() {
             ))}
           </div>
         )}
-
-        <div style={{ height: 12 }} />
-
-        <div className="muted" style={{ fontSize: 12 }}>
-          Next upgrade: Auto-calc pay periods + show “needed to hit goal” per day.
-        </div>
       </div>
+
+      {/* Edit modal (simple inline) */}
+      {editId ? (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,.55)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 16,
+            zIndex: 9999,
+          }}
+        >
+          <div className="card" style={{ width: "min(720px, 100%)", padding: 12 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
+              <div style={{ fontWeight: 950 }}>Edit Deposit</div>
+              <button className="btnGhost" type="button" onClick={cancelEdit}>Close</button>
+            </div>
+
+            <div style={{ height: 10 }} />
+
+            <div className="grid" style={{ gap: 10 }}>
+              <div className="row" style={{ gap: 10, flexWrap: "wrap" }}>
+                <input className="input" type="date" value={eDate} onChange={(e) => setEDate(e.target.value)} style={{ width: 170 }} />
+                <input className="input" value={eSource} onChange={(e) => setESource(e.target.value)} placeholder="Source" style={{ flex: 1, minWidth: 220 }} />
+                <input className="input" value={eAmount} onChange={(e) => setEAmount(e.target.value)} placeholder="Amount" inputMode="decimal" style={{ width: 180 }} />
+              </div>
+              <input className="input" value={eNote} onChange={(e) => setENote(e.target.value)} placeholder="Note (optional)" />
+
+              <div className="row" style={{ gap: 10 }}>
+                <button className="btn" type="button" onClick={saveEdit}>Save</button>
+                <button className="btnGhost" type="button" onClick={cancelEdit}>Cancel</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </main>
   );
 }
