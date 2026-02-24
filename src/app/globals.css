@@ -208,3 +208,23 @@ a{ color: inherit; text-decoration: none; }
   60%  { transform: translate(-50%, -50%) scale(12); opacity: .35; }
   100% { transform: translate(-50%, -50%) scale(18); opacity: 0; }
 }
+/* Active nav “white dot” indicator */
+.navLink{
+  position: relative;
+  padding-left: 30px; /* make room for the dot */
+}
+
+.navLink.active::before{
+  content: "";
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(255,255,255,.92);
+  transform: translateY(-50%);
+  box-shadow:
+    0 0 0 3px rgba(255,255,255,.10),
+    0 0 14px rgba(255,255,255,.35);
+}
