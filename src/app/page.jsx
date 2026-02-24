@@ -1,113 +1,182 @@
-export default function Dashboard() {
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+
+const LS_BILLS = "lcc_bills_v1";
+const LS_PORT_ASSETS = "lcc_port_assets_v1";
+const LS_PORT_TXNS = "lcc_port_txns_v1";
+const LS_PORT_PRICES = "lcc_port_prices_v1";
+
+function safeParse(str, fallback) {
+  try {
+    const v = JSON.parse(str);
+    return v ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function money(n) {
+  const num = Number(n);
+  if (!Number.isFinite(num)) return "—";
+  return num.toLocaleString(undefined, { style: "currency", currency: "USD" });
+}
+
+function isoDate(d = new Date()) {
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function normSymbol(s) {
+  return String(s || "").trim().toUpperCase();
+}
+
+export default function DashboardPage() {
+  // Load ALL localStorage data inside useEffect only (prevents crashes)
+  const [bills, setBills] = useState([]);
+  const [assets, setAssets] = useState([]);
+  const [txns, setTxns] = useState([]);
+  const [prices, setPrices] = useState({});
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    const b = safeParse(localStorage.getItem(LS_BILLS) || "[]", []);
+    const a = safeParse(localStorage.getItem(LS_PORT_ASSETS) || "[]", []);
+    const t = safeParse(localStorage.getItem(LS_PORT_TXNS) || "[]", []);
+    const p = safeParse(localStorage.getItem(LS_PORT_PRICES) || "{}", {});
+
+    setBills(Array.isArray(b) ? b : []);
+    setAssets(Array.isArray(a) ? a : []);
+    setTxns(Array.isArray(t) ? t : []);
+    setPrices(p && typeof p === "object" ? p : {});
+    setLoaded(true);
+  }, []);
+
+  const billsTotal = useMemo(() => {
+    return bills.reduce((s, b) => s + (Number(b.amount) || 0), 0);
+  }, [bills]);
+
+  const investmentsTotal = useMemo(() => {
+    const txByAsset = new Map();
+    for (const t of txns) {
+      const arr = txByAsset.get(t.assetId) || [];
+      arr.push(t);
+      txByAsset.set(t.assetId, arr);
+    }
+
+    let totalValue = 0;
+
+    for (const a of assets) {
+      const list = (txByAsset.get(a.id) || [])
+        .slice()
+        .sort((x, y) => String(x.date).localeCompare(String(y.date)) || (x.createdAt || 0) - (y.createdAt || 0));
+
+      let shares = 0;
+      let cashNet = 0;
+
+      for (const t of list) {
+        const fee = Number(t.fee) || 0;
+
+        if (t.type === "BUY") shares += Number(t.qty) || 0;
+        if (t.type === "SELL") shares -= Number(t.qty) || 0;
+
+        if (t.type === "CASH_IN") cashNet += (Number(t.amount) || 0) - fee;
+        if (t.type === "CASH_OUT") cashNet -= (Number(t.amount) || 0) + fee;
+
+        if (t.type === "DIVIDEND") cashNet += Number(t.amount) || 0;
+      }
+
+      const key = `${a.type}:${a.type === "cash" ? "CASH" : normSymbol(a.symbol)}`;
+      const lastPrice = Number(prices?.[key]?.price) || 0;
+
+      const value = a.type === "cash" ? Math.max(0, cashNet) : Math.max(0, shares) * lastPrice;
+      totalValue += value;
+    }
+
+    return totalValue;
+  }, [assets, txns, prices]);
+
+  const today = isoDate();
+
   return (
     <main className="container">
-      <header style={{ marginBottom: 18 }}>
-        <div className="muted" style={{ fontSize: 13, marginBottom: 6 }}>
-          Life Command Center
-        </div>
-        <h1 style={{ margin: 0, fontSize: 30, letterSpacing: "-0.02em" }}>
-          Dashboard
-        </h1>
-        <div className="muted" style={{ marginTop: 8 }}>
-          Quick snapshot of income, bills, spending, and investments.
+      <header style={{ marginBottom: 14 }}>
+        <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>Dashboard</div>
+        <h1 style={{ margin: 0 }}>Life Command Center</h1>
+        <div className="muted" style={{ marginTop: 6 }}>
+          Today: <b>{today}</b> • Overview across bills and investments.
         </div>
       </header>
 
-      <section className="grid grid-4">
-        <Kpi title="Income (MTD)" value="$0" sub="Paychecks + side income" />
-        <Kpi title="Bills Due" value="$0" sub="Next 14 days" />
-        <Kpi title="Spending (Week)" value="$0" sub="Daily purchases" />
-        <Kpi title="Investments" value="$0" sub="Total across accounts" />
-      </section>
-
-      <section className="row" style={{ marginTop: 18 }}>
-        <Card title="Upcoming (Next 7 Days)">
-          <List
-            items={[
-              { left: "No bills yet", right: "Add your first bill →" },
-              { left: "No reminders yet", right: "Add a reminder →" },
-              { left: "No subscriptions yet", right: "Track recurring →" },
-            ]}
-          />
-        </Card>
-
-        <Card title="Recent Spending">
-          <List
-            items={[
-              { left: "No transactions yet", right: "Add a purchase →" },
-              { left: "Tip: track coffee/food/gas", right: "Fast wins" },
-              { left: "Tip: tag purchases", right: "Makes reports easy" },
-            ]}
-          />
-        </Card>
-      </section>
-
-      <section className="row" style={{ marginTop: 18 }}>
-        <Card title="What to do next">
-          <div className="muted" style={{ lineHeight: 1.6 }}>
-            1) Add bills + due dates<br />
-            2) Add income sources (you + wife)<br />
-            3) Track daily purchases (fast entry)<br />
-            4) Add investment accounts (VOO/QQQ/crypto/etc.)
+      {!loaded ? (
+        <div className="card" style={{ padding: 12 }}>
+          <div style={{ fontWeight: 950 }}>Loading…</div>
+          <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
+            Reading your saved data.
           </div>
-        </Card>
-
-        <Card title="Rules (simple but powerful)">
-          <div className="muted" style={{ lineHeight: 1.6 }}>
-            • Bills first, then spending.<br />
-            • Weekly “leftover” is the truth number.<br />
-            • Track categories so you can cut the right thing.<br />
-            • Investing stays consistent (auto, not emotional).
-          </div>
-        </Card>
-      </section>
-    </main>
-  );
-}
-
-function Kpi({ title, value, sub }) {
-  return (
-    <div className="card">
-      <div className="muted" style={{ fontSize: 12, marginBottom: 8 }}>
-        {title}
-      </div>
-      <div className="kpi">{value}</div>
-      <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
-        {sub}
-      </div>
-    </div>
-  );
-}
-
-function Card({ title, children }) {
-  return (
-    <div className="card" style={{ flex: 1, minWidth: 320 }}>
-      <div style={{ fontWeight: 850, marginBottom: 10 }}>{title}</div>
-      {children}
-    </div>
-  );
-}
-
-function List({ items }) {
-  return (
-    <div style={{ display: "grid", gap: 10 }}>
-      {items.map((it, idx) => (
-        <div
-          key={idx}
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            gap: 12,
-            padding: "10px 12px",
-            borderRadius: 12,
-            border: "1px solid rgba(255,255,255,.08)",
-            background: "rgba(255,255,255,.03)",
-          }}
-        >
-          <div>{it.left}</div>
-          <div className="muted">{it.right}</div>
         </div>
-      ))}
-    </div>
+      ) : (
+        <>
+          {/* KPIs */}
+          <div className="row" style={{ gap: 12, flexWrap: "wrap" }}>
+            <div className="card kpi" style={{ flex: 1, minWidth: 240 }}>
+              <div className="muted" style={{ fontSize: 12 }}>Investments value</div>
+              <div className="kpiValue">{money(investmentsTotal)}</div>
+              <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+                From Investments ledger
+              </div>
+            </div>
+
+            <div className="card kpi" style={{ flex: 1, minWidth: 240 }}>
+              <div className="muted" style={{ fontSize: 12 }}>Monthly bills</div>
+              <div className="kpiValue">{money(billsTotal)}</div>
+              <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+                From Bills Tracker
+              </div>
+            </div>
+
+            <div className="card kpi" style={{ flex: 1, minWidth: 240 }}>
+              <div className="muted" style={{ fontSize: 12 }}>Status</div>
+              <div className="kpiValue">OK</div>
+              <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+                Local data loaded
+              </div>
+            </div>
+          </div>
+
+          <div style={{ height: 16 }} />
+
+          {/* Next steps */}
+          <div className="card" style={{ padding: 12 }}>
+            <div style={{ fontWeight: 950, marginBottom: 10 }}>Next steps</div>
+
+            <div className="grid">
+              <div className="card" style={{ padding: 12 }}>
+                <div style={{ fontWeight: 900 }}>1) Spending storage + history</div>
+                <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
+                  Hook Daily Spending Quick Add into storage + list.
+                </div>
+              </div>
+
+              <div className="card" style={{ padding: 12 }}>
+                <div style={{ fontWeight: 900 }}>2) Bills recurring automation</div>
+                <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
+                  Auto-create next month’s bills and “due soon”.
+                </div>
+              </div>
+
+              <div className="card" style={{ padding: 12 }}>
+                <div style={{ fontWeight: 900 }}>3) Net worth snapshot</div>
+                <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
+                  Combine savings + debts + investments into one chart.
+                </div>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+    </main>
   );
 }
