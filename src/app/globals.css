@@ -3,31 +3,87 @@
   --card:#0f1a2f;
   --muted:#9fb0cc;
   --text:#e9f0ff;
-  --stroke:rgba(255,255,255,.08);
+  --stroke:rgba(255,255,255,.10);
   --shadow: 0 12px 40px rgba(0,0,0,.35);
 }
 
 *{ box-sizing: border-box; }
-
 html, body{ height: 100%; }
 
 body{
   margin: 0;
-  background: var(--bg);
+  background: radial-gradient(1200px 600px at 30% 10%, rgba(99,179,237,.14), transparent 60%),
+              radial-gradient(900px 600px at 80% 40%, rgba(167,139,250,.10), transparent 55%),
+              var(--bg);
   color: var(--text);
-  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
 }
 
 a{ color: inherit; text-decoration: none; }
 
+/* Layout shell */
+.appShell{
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  min-height: 100vh;
+}
+
+.appMain{
+  padding: 22px 22px 40px;
+}
+
+/* Sidebar */
+.sideNav{
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  padding: 18px;
+  border-right: 1px solid var(--stroke);
+  background: linear-gradient(180deg, rgba(255,255,255,.03), transparent);
+}
+
+.brand{ margin-bottom: 14px; }
+.brandTitle{ font-weight: 950; letter-spacing: .2px; }
+.brandSub{ font-size: 12px; margin-top: 4px; }
+
+.nav{
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.navLink{
+  display: block;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--stroke);
+  background: rgba(255,255,255,.03);
+  font-weight: 800;
+}
+
+.navLink:hover{
+  background: rgba(255,255,255,.06);
+}
+
+.navLink.active{
+  border-color: rgba(99, 179, 237, .55);
+  background: rgba(99, 179, 237, .16);
+}
+
+.navFooter{
+  margin-top: 16px;
+  font-size: 12px;
+  opacity: .9;
+}
+
+/* Page container + primitives */
 .container{
   max-width: 1100px;
   margin: 0 auto;
-  padding: 22px;
 }
 
 .card{
-  background: var(--card);
+  background: rgba(255,255,255,.04);
   border: 1px solid var(--stroke);
   border-radius: 16px;
   box-shadow: var(--shadow);
@@ -39,8 +95,9 @@ a{ color: inherit; text-decoration: none; }
 .row{ display:flex; }
 .grid{ display:grid; gap: 10px; }
 
+/* Inputs + buttons (this is what you're missing) */
 .input{
-  background: rgba(255,255,255,.04);
+  background: rgba(255,255,255,.05);
   border: 1px solid var(--stroke);
   color: var(--text);
   border-radius: 12px;
@@ -49,7 +106,7 @@ a{ color: inherit; text-decoration: none; }
 }
 
 .input:focus{
-  border-color: rgba(99, 179, 237, .7);
+  border-color: rgba(99, 179, 237, .75);
 }
 
 .btn{
@@ -58,27 +115,44 @@ a{ color: inherit; text-decoration: none; }
   color: var(--text);
   border-radius: 12px;
   padding: 10px 12px;
-  font-weight: 800;
+  font-weight: 900;
   cursor: pointer;
 }
 
 .btnGhost{
   border: 1px solid var(--stroke);
-  background: transparent;
+  background: rgba(255,255,255,.02);
   color: var(--text);
   border-radius: 12px;
   padding: 10px 12px;
-  font-weight: 800;
+  font-weight: 900;
   cursor: pointer;
 }
+
+.btn:hover{ filter: brightness(1.08); }
+.btnGhost:hover{ background: rgba(255,255,255,.06); }
 
 .pill{
   border: 1px solid var(--stroke);
   border-radius: 999px;
   padding: 6px 10px;
-  font-weight: 800;
+  font-weight: 900;
 }
 
-/* Optional: make buttons feel better */
-.btn:hover{ filter: brightness(1.08); }
-.btnGhost:hover{ background: rgba(255,255,255,.04); }
+/* Mobile */
+@media (max-width: 900px){
+  .appShell{ grid-template-columns: 1fr; }
+  .sideNav{
+    height: auto;
+    position: relative;
+    border-right: none;
+    border-bottom: 1px solid var(--stroke);
+  }
+  .nav{
+    grid-auto-flow: column;
+    grid-auto-columns: max-content;
+    overflow-x: auto;
+    gap: 8px;
+    padding-bottom: 6px;
+  }
+}
