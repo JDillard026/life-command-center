@@ -1,27 +1,97 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* =========================================================
+   LIFE COMMAND CENTER — SINGLE SOURCE OF TRUTH THEME
+   Dark finance dashboard, shadcn-compatible, clean hierarchy
+   ========================================================= */
+
+/* ----- Design tokens (your app tokens) ----- */
 :root{
-  --bg:#0b1220;
-  --card:#0f1a2f;
-  --muted:#9fb0cc;
-  --text:#e9f0ff;
-  --stroke:rgba(255,255,255,.10);
-  --shadow: 0 12px 40px rgba(0,0,0,.35);
+  --lcc-bg: #070a12;
+  --lcc-panel: rgba(255,255,255,.06);
+  --lcc-panel2: rgba(255,255,255,.09);
+  --lcc-border: rgba(255,255,255,.12);
+  --lcc-border2: rgba(255,255,255,.18);
+  --lcc-text: rgba(255,255,255,.92);
+  --lcc-muted: rgba(255,255,255,.66);
+
+  --lcc-shadow: 0 16px 55px rgba(0,0,0,.55);
+  --lcc-shadow-soft: 0 10px 30px rgba(0,0,0,.35);
+
+  --lcc-radius: 16px;
+  --lcc-radius-sm: 12px;
+
+  /* accent + semantic */
+  --lcc-accent: 99 179 237;     /* blue */
+  --lcc-good: 34 197 94;        /* green */
+  --lcc-warn: 245 158 11;       /* amber */
+  --lcc-bad: 239 68 68;         /* red */
 }
 
+/* ----- shadcn tokens (force dark) ----- */
+@layer base {
+  :root{
+    --background: 222 50% 4%;
+    --foreground: 0 0% 98%;
+
+    --card: 222 50% 6%;
+    --card-foreground: 0 0% 98%;
+
+    --popover: 222 50% 6%;
+    --popover-foreground: 0 0% 98%;
+
+    --primary: 0 0% 98%;
+    --primary-foreground: 222 50% 6%;
+
+    --secondary: 217 26% 14%;
+    --secondary-foreground: 0 0% 98%;
+
+    --muted: 217 26% 14%;
+    --muted-foreground: 0 0% 70%;
+
+    --accent: 217 26% 16%;
+    --accent-foreground: 0 0% 98%;
+
+    --destructive: 0 72% 45%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 0 0% 18%;
+    --input: 0 0% 18%;
+    --ring: 0 0% 30%;
+
+    --radius: 1rem;
+  }
+}
+
+/* ----- Global reset + typography ----- */
 *{ box-sizing: border-box; }
 html, body{ height: 100%; }
-
 body{
   margin: 0;
-  background: radial-gradient(1200px 600px at 30% 10%, rgba(99,179,237,.14), transparent 60%),
-              radial-gradient(900px 600px at 80% 40%, rgba(167,139,250,.10), transparent 55%),
-              var(--bg);
-  color: var(--text);
+  color: var(--lcc-text);
+  background:
+    radial-gradient(1100px 650px at 15% 12%, rgba(99,179,237,.16), transparent 60%),
+    radial-gradient(900px 600px at 82% 35%, rgba(167,139,250,.12), transparent 58%),
+    radial-gradient(900px 650px at 50% 100%, rgba(34,197,94,.10), transparent 55%),
+    var(--lcc-bg);
   font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 a{ color: inherit; text-decoration: none; }
 
-/* Layout shell */
+h1,h2,h3{
+  letter-spacing: -0.02em;
+}
+
+.muted{ color: var(--lcc-muted); }
+
+/* =========================================================
+   App layout (your existing shell classes)
+   ========================================================= */
 .appShell{
   display: grid;
   grid-template-columns: 260px 1fr;
@@ -29,22 +99,23 @@ a{ color: inherit; text-decoration: none; }
 }
 
 .appMain{
-  padding: 22px 22px 40px;
+  padding: 24px 24px 44px;
+  min-width: 0;
 }
 
-/* Sidebar */
 .sideNav{
   position: sticky;
   top: 0;
   height: 100vh;
   padding: 18px;
-  border-right: 1px solid var(--stroke);
-  background: linear-gradient(180deg, rgba(255,255,255,.03), transparent);
+  border-right: 1px solid var(--lcc-border);
+  background: linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.01));
+  backdrop-filter: blur(10px);
 }
 
 .brand{ margin-bottom: 14px; }
 .brandTitle{ font-weight: 950; letter-spacing: .2px; }
-.brandSub{ font-size: 12px; margin-top: 4px; }
+.brandSub{ font-size: 12px; margin-top: 4px; color: var(--lcc-muted); }
 
 .nav{
   display: grid;
@@ -53,165 +124,24 @@ a{ color: inherit; text-decoration: none; }
 }
 
 .navLink{
+  position: relative;
   display: block;
-  padding: 10px 12px;
-  border-radius: 12px;
-  border: 1px solid var(--stroke);
+  padding: 10px 12px 10px 30px;
+  border-radius: 14px;
+  border: 1px solid var(--lcc-border);
   background: rgba(255,255,255,.03);
-  font-weight: 800;
+  font-weight: 850;
+  transition: background .12s ease, border-color .12s ease, transform .08s ease;
 }
 
 .navLink:hover{
   background: rgba(255,255,255,.06);
-}
-
-.navLink.active{
-  border-color: rgba(99, 179, 237, .55);
-  background: rgba(99, 179, 237, .16);
-}
-
-.navFooter{
-  margin-top: 16px;
-  font-size: 12px;
-  opacity: .9;
-}
-
-/* Page container + primitives */
-.container{
-  max-width: 1100px;
-  margin: 0 auto;
-}
-
-.card{
-  background: rgba(255,255,255,.04);
-  border: 1px solid var(--stroke);
-  border-radius: 16px;
-  box-shadow: var(--shadow);
-  padding: 16px;
-}
-
-.muted{ color: var(--muted); }
-
-.row{ display:flex; }
-.grid{ display:grid; gap: 10px; }
-
-/* Inputs + buttons (this is what you're missing) */
-.input{
-  background: rgba(255,255,255,.05);
-  border: 1px solid var(--stroke);
-  color: var(--text);
-  border-radius: 12px;
-  padding: 10px 12px;
-  outline: none;
-}
-
-.input:focus{
-  border-color: rgba(99, 179, 237, .75);
-}
-
-.btn{
-  border: 1px solid rgba(99, 179, 237, .55);
-  background: rgba(99, 179, 237, .18);
-  color: var(--text);
-  border-radius: 12px;
-  padding: 10px 12px;
-  font-weight: 900;
-  cursor: pointer;
-}
-
-.btnGhost{
-  border: 1px solid var(--stroke);
-  background: rgba(255,255,255,.02);
-  color: var(--text);
-  border-radius: 12px;
-  padding: 10px 12px;
-  font-weight: 900;
-  cursor: pointer;
-}
-
-.btn:hover{ filter: brightness(1.08); }
-.btnGhost:hover{ background: rgba(255,255,255,.06); }
-
-.pill{
-  border: 1px solid var(--stroke);
-  border-radius: 999px;
-  padding: 6px 10px;
-  font-weight: 900;
-}
-
-/* Mobile */
-@media (max-width: 900px){
-  .appShell{ grid-template-columns: 1fr; }
-  .sideNav{
-    height: auto;
-    position: relative;
-    border-right: none;
-    border-bottom: 1px solid var(--stroke);
-  }
-  .nav{
-    grid-auto-flow: column;
-    grid-auto-columns: max-content;
-    overflow-x: auto;
-    gap: 8px;
-    padding-bottom: 6px;
-  }
-}
-/* ---------- Bubble buttons + ripple ---------- */
-
-.btn, .btnGhost{
-  position: relative;
-  overflow: hidden;         /* required for ripple */
-  transform: translateZ(0); /* smoother */
-  transition: transform .08s ease, filter .12s ease, background .12s ease, border-color .12s ease;
-}
-
-.btn{
-  background: rgba(255,255,255,.06);
-  border: 1px solid rgba(255,255,255,.14);
-  box-shadow: 0 10px 30px rgba(0,0,0,.25);
-}
-
-.btnGhost{
-  background: rgba(255,255,255,.03);
-  border: 1px solid rgba(255,255,255,.10);
-}
-
-.btn:hover, .btnGhost:hover{
-  filter: brightness(1.10);
   transform: translateY(-1px);
 }
 
-.btn:active, .btnGhost:active{
-  transform: translateY(0px) scale(.98);
-}
-
-/* Nice keyboard focus */
-.btn:focus-visible, .btnGhost:focus-visible, .input:focus-visible{
-  outline: none;
-  box-shadow: 0 0 0 3px rgba(255,255,255,.16), 0 0 0 6px rgba(99,179,237,.18);
-}
-
-/* Ripple element that we inject on click */
-.rippleDot{
-  position: absolute;
-  border-radius: 999px;
-  pointer-events: none;
-  background: rgba(255,255,255,.85); /* the “white dot” */
-  transform: translate(-50%, -50%) scale(0);
-  opacity: 1;
-  animation: rippleDot .55s ease-out forwards;
-  mix-blend-mode: screen;
-}
-
-@keyframes rippleDot{
-  0%   { transform: translate(-50%, -50%) scale(0); opacity: .9; }
-  60%  { transform: translate(-50%, -50%) scale(12); opacity: .35; }
-  100% { transform: translate(-50%, -50%) scale(18); opacity: 0; }
-}
-/* Active nav “white dot” indicator */
-.navLink{
-  position: relative;
-  padding-left: 30px; /* make room for the dot */
+.navLink.active{
+  border-color: rgba(var(--lcc-accent), .55);
+  background: rgba(var(--lcc-accent), .16);
 }
 
 .navLink.active::before{
@@ -228,224 +158,235 @@ a{ color: inherit; text-decoration: none; }
     0 0 0 3px rgba(255,255,255,.10),
     0 0 14px rgba(255,255,255,.35);
 }
-/* ===== LCC Investments UI upgrade ===== */
-:root{
-  --bg: #0b0f19;
-  --card: rgba(255,255,255,0.06);
-  --card2: rgba(255,255,255,0.08);
-  --border: rgba(255,255,255,0.10);
-  --text: rgba(255,255,255,0.92);
-  --muted: rgba(255,255,255,0.65);
-  --shadow: 0 10px 30px rgba(0,0,0,0.35);
-  --radius: 16px;
-}
 
-.container{
-  max-width: 1100px;
-  margin: 0 auto;
-  padding: 18px;
-  color: var(--text);
-}
-
-.card{
-  background: linear-gradient(180deg, var(--card2), var(--card));
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow);
-  backdrop-filter: blur(10px);
-}
-
-.muted{ color: var(--muted); }
-
-.row{ display:flex; }
-
-.grid{ display:grid; gap: 12px; }
-
-.input, select.input{
-  background: rgba(255,255,255,0.06);
-  border: 1px solid rgba(255,255,255,0.14);
-  color: var(--text);
-  border-radius: 12px;
-  padding: 10px 12px;
-  outline: none;
-}
-.input:focus{
-  border-color: rgba(255,255,255,0.28);
-  box-shadow: 0 0 0 4px rgba(255,255,255,0.06);
-}
-
-.btn{
-  background: rgba(255,255,255,0.92);
-  color: #0b0f19;
-  border: 1px solid rgba(255,255,255,0.2);
-  border-radius: 12px;
-  padding: 10px 14px;
-  font-weight: 900;
-  cursor: pointer;
-}
-.btn:disabled{ opacity: 0.6; cursor: not-allowed; }
-
-.btnGhost{
-  background: rgba(255,255,255,0.06);
-  color: var(--text);
-  border: 1px solid rgba(255,255,255,0.14);
-  border-radius: 12px;
-  padding: 10px 14px;
-  font-weight: 850;
-  cursor: pointer;
-}
-.btnGhost:hover{ border-color: rgba(255,255,255,0.24); }
-
-.pill{
-  background: rgba(255,255,255,0.06);
-  border: 1px solid rgba(255,255,255,0.14);
-  border-radius: 999px;
-  padding: 6px 10px;
+.navFooter{
+  margin-top: 16px;
   font-size: 12px;
-  font-weight: 850;
+  color: var(--lcc-muted);
 }
 
-/* KPI "cards" pop */
-.kpi{
-  padding: 14px;
-  position: relative;
-  overflow: hidden;
-}
-.kpi::before{
-  content:"";
-  position:absolute; inset:-60px -60px auto auto;
-  width:140px; height:140px;
-  background: rgba(255,255,255,0.10);
-  filter: blur(22px);
-  border-radius: 999px;
-}
-.kpiValue{ font-size: 26px; font-weight: 950; letter-spacing: -0.02em; }
-
-/* make lists feel tighter */
-.cardListItem{ padding: 14px; }
-.cardListItem + .cardListItem{ margin-top: 10px; }
-/* ===== LCC THEME (GLOBAL) ===== */
-:root{
-  --bg: #0b0f19;
-  --card: rgba(255,255,255,0.06);
-  --card2: rgba(255,255,255,0.08);
-  --border: rgba(255,255,255,0.10);
-  --text: rgba(255,255,255,0.92);
-  --muted: rgba(255,255,255,0.65);
-  --shadow: 0 10px 30px rgba(0,0,0,0.35);
-  --radius: 16px;
-}
-
-body{
-  background:
-    radial-gradient(1200px 600px at 10% 0%, rgba(255,255,255,0.10), transparent 50%),
-    radial-gradient(900px 500px at 90% 10%, rgba(255,255,255,0.08), transparent 55%),
-    var(--bg);
-  color: var(--text);
-}
-
+/* =========================================================
+   Page primitives (your custom classes)
+   ========================================================= */
 .container{
-  max-width: 1200px;
+  max-width: 1180px;
   margin: 0 auto;
-  padding: 18px;
 }
-
-.card{
-  background: linear-gradient(180deg, var(--card2), var(--card));
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow);
-  backdrop-filter: blur(10px);
-}
-
-.muted{ color: var(--muted); }
 
 .row{ display:flex; }
 .grid{ display:grid; gap: 12px; }
 
-.input, select.input{
-  background: rgba(255,255,255,0.06);
-  border: 1px solid rgba(255,255,255,0.14);
-  color: var(--text);
-  border-radius: 12px;
-  padding: 10px 12px;
-  outline: none;
-}
-.input:focus{
-  border-color: rgba(255,255,255,0.28);
-  box-shadow: 0 0 0 4px rgba(255,255,255,0.06);
+/* Your custom card */
+.card{
+  background: linear-gradient(180deg, var(--lcc-panel2), var(--lcc-panel));
+  border: 1px solid var(--lcc-border);
+  border-radius: var(--lcc-radius);
+  box-shadow: var(--lcc-shadow-soft);
+  backdrop-filter: blur(10px);
 }
 
-.btn{
-  background: rgba(255,255,255,0.92);
-  color: #0b0f19;
-  border: 1px solid rgba(255,255,255,0.2);
-  border-radius: 12px;
+/* Also style shadcn cards to match */
+[data-slot="card"],
+.rounded-lg.border.bg-card{
+  background: linear-gradient(180deg, var(--lcc-panel2), var(--lcc-panel)) !important;
+  border-color: var(--lcc-border) !important;
+  box-shadow: var(--lcc-shadow-soft);
+  backdrop-filter: blur(10px);
+}
+
+/* =========================================================
+   Inputs / selects
+   ========================================================= */
+.input,
+select.input,
+textarea.input{
+  background: rgba(255,255,255,.06);
+  border: 1px solid var(--lcc-border);
+  color: var(--lcc-text);
+  border-radius: var(--lcc-radius-sm);
+  padding: 10px 12px;
+  outline: none;
+  transition: border-color .12s ease, box-shadow .12s ease, background .12s ease;
+}
+
+.input::placeholder{ color: rgba(255,255,255,.45); }
+
+.input:focus,
+.input:focus-visible{
+  border-color: rgba(var(--lcc-accent), .65);
+  box-shadow: 0 0 0 3px rgba(var(--lcc-accent), .18);
+}
+
+/* shadcn inputs/select triggers */
+[data-slot="input"],
+[data-slot="select-trigger"],
+[data-slot="textarea"]{
+  background: rgba(255,255,255,.06) !important;
+  border-color: var(--lcc-border) !important;
+  color: var(--lcc-text) !important;
+}
+
+/* =========================================================
+   Buttons (bubble)
+   ========================================================= */
+.btn,
+.btnGhost{
+  position: relative;
+  overflow: hidden;
+  transform: translateZ(0);
+  border-radius: 14px;
   padding: 10px 14px;
   font-weight: 900;
   cursor: pointer;
+  transition: transform .08s ease, filter .12s ease, background .12s ease, border-color .12s ease;
 }
-.btn:disabled{ opacity: 0.6; cursor: not-allowed; }
+
+.btn{
+  border: 1px solid rgba(var(--lcc-accent), .55);
+  background: rgba(var(--lcc-accent), .20);
+  color: var(--lcc-text);
+  box-shadow: var(--lcc-shadow-soft);
+}
 
 .btnGhost{
-  background: rgba(255,255,255,0.06);
-  color: var(--text);
-  border: 1px solid rgba(255,255,255,0.14);
-  border-radius: 12px;
-  padding: 10px 14px;
-  font-weight: 850;
-  cursor: pointer;
+  border: 1px solid var(--lcc-border);
+  background: rgba(255,255,255,.03);
+  color: var(--lcc-text);
 }
-.btnGhost:hover{ border-color: rgba(255,255,255,0.24); }
 
+.btn:hover, .btnGhost:hover{
+  filter: brightness(1.10);
+  transform: translateY(-1px);
+}
+
+.btn:active, .btnGhost:active{
+  transform: translateY(0px) scale(.98);
+}
+
+.btn:focus-visible, .btnGhost:focus-visible{
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(255,255,255,.14), 0 0 0 6px rgba(var(--lcc-accent), .16);
+}
+
+/* shadcn buttons */
+[data-slot="button"]{
+  border-color: rgba(255,255,255,.14);
+}
+
+/* =========================================================
+   Pills / badges
+   ========================================================= */
 .pill{
-  background: rgba(255,255,255,0.06);
-  border: 1px solid rgba(255,255,255,0.14);
+  border: 1px solid var(--lcc-border);
   border-radius: 999px;
   padding: 6px 10px;
-  font-size: 12px;
-  font-weight: 850;
+  font-weight: 900;
+  background: rgba(255,255,255,.04);
 }
 
-.kpi{
-  padding: 14px;
-  position: relative;
-  overflow: hidden;
+[data-slot="badge"]{
+  border-color: rgba(255,255,255,.18) !important;
 }
-.kpi::before{
-  content:"";
-  position:absolute; inset:-60px -60px auto auto;
-  width:140px; height:140px;
-  background: rgba(255,255,255,0.10);
-  filter: blur(22px);
+
+/* =========================================================
+   Tabs
+   ========================================================= */
+[data-slot="tabs-list"]{
+  background: rgba(255,255,255,.05) !important;
+  border: 1px solid var(--lcc-border) !important;
+}
+
+/* =========================================================
+   Ripple (optional)
+   ========================================================= */
+.rippleDot{
+  position: absolute;
   border-radius: 999px;
+  pointer-events: none;
+  background: rgba(255,255,255,.85);
+  transform: translate(-50%, -50%) scale(0);
+  opacity: 1;
+  animation: rippleDot .55s ease-out forwards;
+  mix-blend-mode: screen;
 }
-.kpiValue{
-  font-size: 26px;
-  font-weight: 950;
-  letter-spacing: -0.02em;
+
+@keyframes rippleDot{
+  0%   { transform: translate(-50%, -50%) scale(0); opacity: .9; }
+  60%  { transform: translate(-50%, -50%) scale(12); opacity: .35; }
+  100% { transform: translate(-50%, -50%) scale(18); opacity: 0; }
 }
-/* ===== APP LAYOUT ===== */
-.appLayout{
-  min-height: 100vh;
+
+/* =========================================================
+   Mobile
+   ========================================================= */
+@media (max-width: 900px){
+  .appShell{ grid-template-columns: 1fr; }
+
+  .sideNav{
+    height: auto;
+    position: relative;
+    border-right: none;
+    border-bottom: 1px solid var(--lcc-border);
+  }
+
+  .nav{
+    grid-auto-flow: column;
+    grid-auto-columns: max-content;
+    overflow-x: auto;
+    gap: 8px;
+    padding-bottom: 6px;
+  }
+
+  .container{ max-width: 100%; }
+  .appMain{ padding: 16px 16px 28px; }
+}
+/* =============================
+   LAYOUT RESTORE (sidebar back)
+   Keeps your new theme look
+   ============================= */
+
+/* If your AppShell uses appShell/sideNav/appMain */
+.appShell{
   display: grid;
   grid-template-columns: 260px 1fr;
-  gap: 18px;
-  padding: 18px;
+  min-height: 100vh;
 }
-
-.appSide{
+.sideNav{
+  display: block;
   position: sticky;
-  top: 18px;
-  align-self: start;
-  height: calc(100vh - 36px);
+  top: 0;
+  height: 100vh;
+  overflow: auto;
+  border-right: 1px solid var(--stroke, rgba(255,255,255,.10));
 }
-
 .appMain{
   min-width: 0;
 }
 
-/* Make the page containers not double-pad inside appMain */
-.appMain .container{
-  padding: 0;
+/* If your AppShell uses appLayout/appSide/appMain */
+.appLayout{
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  min-height: 100vh;
+}
+.appSide{
+  display: block;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow: auto;
+  border-right: 1px solid var(--stroke, rgba(255,255,255,.10));
+}
+
+/* Mobile behavior */
+@media (max-width: 900px){
+  .appShell, .appLayout{
+    grid-template-columns: 1fr;
+  }
+  .sideNav, .appSide{
+    position: relative;
+    height: auto;
+    border-right: none;
+    border-bottom: 1px solid var(--stroke, rgba(255,255,255,.10));
+  }
 }
