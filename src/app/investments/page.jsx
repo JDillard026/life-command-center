@@ -10,6 +10,9 @@ const LS_TXNS = "lcc_port_txns_v1";
 const LS_PRICES = "lcc_port_prices_v1";
 const LS_UI = "lcc_port_ui_v1";
 
+// ✅ NEW: snapshots storage
+const LS_SNAPS = "lcc_port_snaps_v1";
+
 // OLD storage (we'll auto-migrate if present)
 const LS_OLD = "lcc_investments_portfolio_v2";
 
@@ -78,10 +81,72 @@ function normSymbol(s) {
   return String(s || "").trim().toUpperCase();
 }
 
+// ✅ NEW: tiny no-dependency chart
+function LineChart({ points, height = 140 }) {
+  if (!points || points.length < 2) {
+    return <div className="muted" style={{ fontSize: 12 }}>Need at least 2 snapshots to chart.</div>;
+  }
+
+  const w = 700;
+  const h = height;
+  const pad = 10;
+
+  const ys = points.map((p) => Number(p.value) || 0);
+  const minY = Math.min(...ys);
+  const maxY = Math.max(...ys);
+  const span = maxY - minY || 1;
+
+  const toX = (i) => pad + (i * (w - pad * 2)) / (points.length - 1);
+  const toY = (v) => pad + (h - pad * 2) * (1 - (v - minY) / span);
+
+  let d = "";
+  for (let i = 0; i < points.length; i++) {
+    const x = toX(i);
+    const y = toY(Number(points[i].value) || 0);
+    d += i === 0 ? `M ${x} ${y}` : ` L ${x} ${y}`;
+  }
+
+  const first = points[0];
+  const last = points[points.length - 1];
+
+  return (
+    <div>
+      <div className="row" style={{ justifyContent: "space-between", gap: 10, alignItems: "baseline", flexWrap: "wrap" }}>
+        <div className="muted" style={{ fontSize: 12 }}>
+          {first.date} → {last.date}
+        </div>
+        <div className="muted" style={{ fontSize: 12 }}>
+          Min {money(minY)} • Max {money(maxY)}
+        </div>
+      </div>
+
+      <div style={{ height: 10 }} />
+
+      <svg viewBox={`0 0 ${w} ${h}`} style={{ width: "100%", height }}>
+        <path
+          d={`M ${pad} ${h - pad} L ${w - pad} ${h - pad}`}
+          fill="none"
+          stroke="currentColor"
+          opacity="0.15"
+        />
+        <path d={d} fill="none" stroke="currentColor" strokeWidth="2" />
+      </svg>
+
+      <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>
+        Latest: <span style={{ fontWeight: 900 }}>{money(last.value)}</span>
+      </div>
+    </div>
+  );
+}
+
 export default function InvestmentsPage() {
   const [assets, setAssets] = useState([]); // metadata: {id,type,symbol,name,account,cgId,note,createdAt}
   const [txns, setTxns] = useState([]); // ledger: {id,assetId,type,date,qty,price,fee,amount,note,createdAt}
   const [prices, setPrices] = useState({}); // { "TYPE:SYMBOL": { price, ts, source } }
+
+  // ✅ NEW: snapshots
+  const [snaps, setSnaps] = useState([]); // [{date,value,cost,realized,createdAt}]
+  const [snapRange, setSnapRange] = useState("30"); // 7 | 30 | 90 | 365 | all
 
   // UI state
   const [status, setStatus] = useState({ loading: false, msg: "" });
@@ -116,10 +181,13 @@ export default function InvestmentsPage() {
     const savedTxns = safeParse(localStorage.getItem(LS_TXNS) || "[]", []);
     const savedPrices = safeParse(localStorage.getItem(LS_PRICES) || "{}", {});
     const savedUI = safeParse(localStorage.getItem(LS_UI) || "{}", {});
+    const savedSnaps = safeParse(localStorage.getItem(LS_SNAPS) || "[]", []);
 
     setAssets(Array.isArray(savedAssets) ? savedAssets : []);
     setTxns(Array.isArray(savedTxns) ? savedTxns : []);
     setPrices(savedPrices && typeof savedPrices === "object" ? savedPrices : {});
+    setSnaps(Array.isArray(savedSnaps) ? savedSnaps : []);
+
     if (savedUI?.q) setQ(savedUI.q);
     if (savedUI?.filterType) setFilterType(savedUI.filterType);
     if (savedUI?.filterAccount) setFilterAccount(savedUI.filterAccount);
@@ -200,6 +268,7 @@ export default function InvestmentsPage() {
         localStorage.setItem(LS_ASSETS, JSON.stringify(migratedAssets));
         localStorage.setItem(LS_TXNS, JSON.stringify(migratedTxns));
         localStorage.setItem(LS_PRICES, JSON.stringify(migratedPrices));
+
         setStatus({ loading: false, msg: "Migrated your old holdings into Transactions ✅" });
       }
     }
@@ -221,6 +290,11 @@ export default function InvestmentsPage() {
   useEffect(() => {
     try { localStorage.setItem(LS_UI, JSON.stringify({ q, filterType, filterAccount, sortBy })); } catch {}
   }, [q, filterType, filterAccount, sortBy]);
+
+  // ✅ NEW: persist snapshots
+  useEffect(() => {
+    try { localStorage.setItem(LS_SNAPS, JSON.stringify(snaps)); } catch {}
+  }, [snaps]);
 
   function addAsset(e) {
     e.preventDefault();
@@ -290,10 +364,7 @@ export default function InvestmentsPage() {
     } else if (tp === "CASH_IN" || tp === "CASH_OUT") {
       amount = parseMoneyInput(tAmount);
       if (!Number.isFinite(amount) || amount <= 0) return setError("Cash amount must be > 0.");
-      if (asset.type !== "cash") {
-        // allowed (cash tracking per account), but typically use a Cash asset
-        // We'll allow it anyway for flexibility.
-      }
+      // allowed even if not cash asset
     }
 
     const id = uid();
@@ -475,6 +546,36 @@ export default function InvestmentsPage() {
     };
   }, [assets, txns, prices]);
 
+  // ✅ NEW: auto snapshot once/day, updates today's snapshot as values change
+  useEffect(() => {
+    if (!assets.length) return;
+
+    const d = isoDate();
+    const value = Number(computed.totalValue) || 0;
+    const cost = Number(computed.totalCost) || 0;
+    const realized = Number(computed.totalRealized) || 0;
+
+    setSnaps((prev) => {
+      const next = Array.isArray(prev) ? prev.slice() : [];
+      const idx = next.findIndex((s) => s?.date === d);
+
+      const payload = { date: d, value, cost, realized, createdAt: Date.now() };
+
+      if (idx >= 0) next[idx] = { ...next[idx], ...payload };
+      else next.unshift(payload);
+
+      next.sort((a, b) => String(b.date).localeCompare(String(a.date)));
+      return next.slice(0, 2000);
+    });
+  }, [
+    computed.totalValue,
+    computed.totalCost,
+    computed.totalRealized,
+    assets.length,
+    txns.length,
+    Object.keys(prices || {}).length,
+  ]);
+
   const visiblePositions = useMemo(() => {
     const qq = q.trim().toLowerCase();
 
@@ -504,6 +605,38 @@ export default function InvestmentsPage() {
     const rows = txns.slice().sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
     return tAssetId ? rows.filter((t) => t.assetId === tAssetId) : rows;
   }, [txns, tAssetId]);
+
+  // ✅ NEW: chart points from snapshots
+  const chartPoints = useMemo(() => {
+    const sorted = (snaps || [])
+      .slice()
+      .filter((s) => s?.date && Number.isFinite(Number(s.value)))
+      .sort((a, b) => String(a.date).localeCompare(String(b.date))); // oldest -> newest
+
+    if (snapRange === "all") return sorted;
+    const days = Number(snapRange);
+    if (!Number.isFinite(days) || days <= 0) return sorted;
+    return sorted.slice(-days);
+  }, [snaps, snapRange]);
+
+  function saveSnapshotNow() {
+    const d = isoDate();
+    const value = Number(computed.totalValue) || 0;
+    const cost = Number(computed.totalCost) || 0;
+    const realized = Number(computed.totalRealized) || 0;
+
+    setSnaps((prev) => {
+      const next = Array.isArray(prev) ? prev.slice() : [];
+      const idx = next.findIndex((s) => s?.date === d);
+      const payload = { date: d, value, cost, realized, createdAt: Date.now() };
+      if (idx >= 0) next[idx] = { ...next[idx], ...payload };
+      else next.unshift(payload);
+      next.sort((a, b) => String(b.date).localeCompare(String(a.date)));
+      return next.slice(0, 2000);
+    });
+
+    setStatus({ loading: false, msg: "Snapshot saved ✅" });
+  }
 
   async function refreshPrices() {
     setStatus({ loading: true, msg: "Refreshing prices..." });
@@ -556,6 +689,12 @@ export default function InvestmentsPage() {
     if (tAssetId === assetId) setTAssetId("");
   }
 
+  function clearSnapshots() {
+    if (!confirm("Delete ALL snapshots?")) return;
+    setSnaps([]);
+    setStatus({ loading: false, msg: "Snapshots cleared." });
+  }
+
   return (
     <main className="container">
       <header style={{ marginBottom: 14 }}>
@@ -580,28 +719,90 @@ export default function InvestmentsPage() {
       </header>
 
       {/* KPIs */}
-      <div className="row" style={{ gap: 12, flexWrap: "wrap" }}>
-        <div className="card" style={{ padding: 12, flex: 1, minWidth: 240 }}>
-          <div className="muted" style={{ fontSize: 12 }}>Total value</div>
-          <div style={{ fontSize: 24, fontWeight: 950 }}>{money(computed.totalValue)}</div>
-        </div>
+      {/* KPIs */}
+<div className="row" style={{ gap: 12, flexWrap: "wrap" }}>
+  {/* TOTAL VALUE */}
+  <div className="card kpi" style={{ flex: 1, minWidth: 240 }}>
+    <div className="muted" style={{ fontSize: 12 }}>Total value</div>
+    <div className="kpiValue">
+      {money(computed.totalValue)}
+    </div>
+  </div>
 
-        <div className="card" style={{ padding: 12, flex: 1, minWidth: 240 }}>
-          <div className="muted" style={{ fontSize: 12 }}>Unrealized G/L</div>
-          <div style={{ fontSize: 24, fontWeight: 950 }}>
-            {money(computed.totalUnrealized)}{" "}
-            <span className="muted" style={{ fontSize: 12, fontWeight: 800 }}>({pct(computed.totalUnrealizedPct)})</span>
+  {/* UNREALIZED */}
+  <div className="card kpi" style={{ flex: 1, minWidth: 240 }}>
+    <div className="muted" style={{ fontSize: 12 }}>Unrealized G/L</div>
+    <div className="kpiValue">
+      {money(computed.totalUnrealized)}{" "}
+      <span className="muted" style={{ fontSize: 12, fontWeight: 800 }}>
+        ({pct(computed.totalUnrealizedPct)})
+      </span>
+    </div>
+  </div>
+
+  {/* REALIZED */}
+  <div className="card kpi" style={{ flex: 1, minWidth: 240 }}>
+    <div className="muted" style={{ fontSize: 12 }}>
+      Realized (incl dividends)
+    </div>
+    <div className="kpiValue">
+      {money(computed.totalRealized)}
+    </div>
+    <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+      Dividends: {money(computed.totalDividends)}
+    </div>
+  </div>
+</div>
+
+      <div style={{ height: 14 }} />
+
+      {/* ✅ NEW: SNAPSHOTS + CHART */}
+      <div className="card" style={{ padding: 12 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-end", flexWrap: "wrap" }}>
+          <div>
+            <div style={{ fontWeight: 950 }}>Daily Snapshots</div>
+            <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+              Auto-saves 1 snapshot per day (updates today automatically).
+            </div>
+          </div>
+
+          <div className="row" style={{ gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+            <select className="input" value={snapRange} onChange={(e) => setSnapRange(e.target.value)} style={{ width: 160 }}>
+              <option value="7">Last 7 days</option>
+              <option value="30">Last 30 days</option>
+              <option value="90">Last 90 days</option>
+              <option value="365">Last 1 year</option>
+              <option value="all">All</option>
+            </select>
+
+            <button className="btnGhost" type="button" onClick={saveSnapshotNow}>
+              Save Snapshot Now
+            </button>
+
+            <button className="btnGhost" type="button" onClick={clearSnapshots} disabled={!snaps.length}>
+              Clear Snapshots
+            </button>
           </div>
         </div>
 
-        <div className="card" style={{ padding: 12, flex: 1, minWidth: 240 }}>
-          <div className="muted" style={{ fontSize: 12 }}>Realized (incl dividends)</div>
-          <div style={{ fontSize: 24, fontWeight: 950 }}>{money(computed.totalRealized)}</div>
-          <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>Dividends: {money(computed.totalDividends)}</div>
+        <div style={{ height: 12 }} />
+
+        {snaps.length ? (
+          <LineChart points={chartPoints} />
+        ) : (
+          <div className="muted" style={{ fontSize: 12 }}>
+            No snapshots yet. Add assets/transactions and it will start capturing daily.
+          </div>
+        )}
+
+        <div style={{ height: 10 }} />
+
+        <div className="muted" style={{ fontSize: 12 }}>
+          Stored snapshots: <span style={{ fontWeight: 900 }}>{snaps.length}</span>
         </div>
       </div>
 
-      <div style={{ height: 14 }} />
+      <div style={{ height: 16 }} />
 
       <div className="row" style={{ gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
         {/* ADD ASSET */}
@@ -952,7 +1153,7 @@ export default function InvestmentsPage() {
 
       <div style={{ height: 16 }} />
       <div className="muted" style={{ fontSize: 12 }}>
-        Next upgrades: (1) Import CSV, (2) Snapshots + charts, (3) Auto-price for stocks with your key, (4) Realized vs Unrealized breakdown by account.
+        Next upgrades: (1) Import CSV, (2) Snapshots + charts ✅, (3) Auto-price for stocks with your key, (4) Realized vs Unrealized breakdown by account.
       </div>
     </main>
   );
