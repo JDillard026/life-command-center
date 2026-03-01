@@ -390,3 +390,35 @@ textarea.input{
     border-bottom: 1px solid var(--stroke, rgba(255,255,255,.10));
   }
 }
+/* ===== FIX: dark-theme dropdown menus (select/options) ===== */
+select,
+select.input,
+.input select {
+  color: rgba(255, 255, 255, 0.92) !important;
+  background: rgba(255, 255, 255, 0.04) !important;
+  border: 1px solid rgba(255, 255, 255, 0.10) !important;
+  color-scheme: dark; /* helps native controls behave on dark UIs */
+}
+
+/* The actual dropdown list items */
+select option {
+  background-color: #0f1a2f !important; /* matches your card */
+  color: rgba(255, 255, 255, 0.92) !important;
+}
+
+/* Some browsers use optgroup styling too */
+select optgroup {
+  background-color: #0f1a2f !important;
+  color: rgba(255, 255, 255, 0.75) !important;
+}
+
+/* Date inputs also sometimes go unreadable */
+input[type="date"],
+input[type="time"] {
+  color-scheme: dark;
+}
+
+/* If your .input class exists, make sure it always has readable text */
+.input {
+  color: rgba(255, 255, 255, 0.92);
+}

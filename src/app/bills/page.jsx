@@ -54,8 +54,8 @@ function addMonths(iso, monthsToAdd) {
 
 function daysBetween(fromISO, toISO) {
   if (!fromISO || !toISO) return null;
-  const a = new Date(fromISO + "T00:00:00");
-  const b = new Date(toISO + "T00:00:00");
+  const a = new Date(String(fromISO) + "T00:00:00");
+  const b = new Date(String(toISO) + "T00:00:00");
   const t = b.getTime() - a.getTime();
   if (!Number.isFinite(t)) return null;
   return Math.round(t / 86400000);
@@ -63,6 +63,25 @@ function daysBetween(fromISO, toISO) {
 
 function plural(n, s) {
   return n === 1 ? s : `${s}s`;
+}
+
+// ✅ frequency -> monthly multiplier
+function freqToMonthlyMult(freq) {
+  switch (freq) {
+    case "weekly":
+      return 4.333;
+    case "biweekly":
+      return 2.167;
+    case "quarterly":
+      return 1 / 3;
+    case "yearly":
+      return 1 / 12;
+    case "one_time":
+      return 0; // exclude from monthly baseline
+    case "monthly":
+    default:
+      return 1;
+  }
 }
 
 /**
@@ -453,9 +472,10 @@ export default function BillsPage() {
   }
 
   function setExtraFor(id, nextExtra) {
+    const n = Number(nextExtra);
     setState((prev) => ({
       ...prev,
-      items: prev.items.map((x) => (x.id === id ? { ...x, extraPay: Math.max(0, Number(nextExtra) || 0) } : x)),
+      items: prev.items.map((x) => (x.id === id ? { ...x, extraPay: Math.max(0, Number.isFinite(n) ? n : 0) } : x)),
     }));
   }
 
@@ -475,15 +495,29 @@ export default function BillsPage() {
     const withDerived = list.map((x) => {
       const isControl = x.type === "controllable";
       const totalPay = isControl ? (Number(x.minPay) || 0) + (Number(x.extraPay) || 0) : 0;
+
       const est = isControl
         ? payoffEstimateDetailed({ balance: x.balance, aprPct: x.aprPct, monthlyPay: totalPay, startISO: today })
         : { months: null, payoffISO: null, totalInterest: 0, totalPaid: 0 };
 
-      return { ...x, totalPay, payoffMonths: est.months, payoffISO: est.payoffISO, payoffInterest: est.totalInterest };
+      const dueIn = daysBetween(today, x.dueDate);
+
+      // ✅ monthly equivalent for non-controllable totals
+      const monthlyEquivalent =
+        x.type === "noncontrollable"
+          ? (Number(x.amount) || 0) * freqToMonthlyMult(x.frequency)
+          : 0;
+
+      return { ...x, totalPay, payoffMonths: est.months, payoffISO: est.payoffISO, payoffInterest: est.totalInterest, dueIn, monthlyEquivalent };
     });
 
     withDerived.sort((a, b) => {
-      if (sortBy === "due_asc") return String(a.dueDate).localeCompare(String(b.dueDate));
+      if (sortBy === "due_asc") {
+        // ✅ late first, then soonest
+        const ad = Number.isFinite(a.dueIn) ? a.dueIn : 999999;
+        const bd = Number.isFinite(b.dueIn) ? b.dueIn : 999999;
+        return ad - bd;
+      }
       if (sortBy === "amt_desc") return (Number(b.amount) || 0) - (Number(a.amount) || 0);
       if (sortBy === "name_asc") return String(a.name).localeCompare(String(b.name));
       if (sortBy === "payoff_asc") {
@@ -497,16 +531,31 @@ export default function BillsPage() {
     });
 
     const activeItems = items.filter((x) => x.active);
-    const noncontrollableMonthly = activeItems.filter((x) => x.type === "noncontrollable").reduce((s, x) => s + (Number(x.amount) || 0), 0);
-    const controllableMin = activeItems.filter((x) => x.type === "controllable").reduce((s, x) => s + (Number(x.minPay) || 0), 0);
-    const controllableExtra = activeItems.filter((x) => x.type === "controllable").reduce((s, x) => s + (Number(x.extraPay) || 0), 0);
-    const controllableBalances = activeItems.filter((x) => x.type === "controllable").reduce((s, x) => s + (Number(x.balance) || 0), 0);
+
+    const noncontrollableMonthly = activeItems
+      .filter((x) => x.type === "noncontrollable")
+      .reduce((s, x) => s + (Number(x.amount) || 0) * freqToMonthlyMult(x.frequency), 0);
+
+    const controllableMin = activeItems
+      .filter((x) => x.type === "controllable")
+      .reduce((s, x) => s + (Number(x.minPay) || 0), 0);
+
+    const controllableExtra = activeItems
+      .filter((x) => x.type === "controllable")
+      .reduce((s, x) => s + (Number(x.extraPay) || 0), 0);
+
+    const controllableBalances = activeItems
+      .filter((x) => x.type === "controllable")
+      .reduce((s, x) => s + (Number(x.balance) || 0), 0);
 
     const monthlyOutflow = noncontrollableMonthly + controllableMin + controllableExtra;
 
+    // ✅ include late items too
     const nextDue = activeItems
-      .filter((x) => String(x.dueDate) >= today)
-      .sort((a, b) => String(a.dueDate).localeCompare(String(b.dueDate)))[0];
+      .filter((x) => x.dueDate)
+      .map((x) => ({ ...x, dueIn: daysBetween(today, x.dueDate) }))
+      .filter((x) => x.dueIn != null)
+      .sort((a, b) => a.dueIn - b.dueIn)[0];
 
     const debts = activeItems
       .filter((x) => x.type === "controllable")
@@ -535,7 +584,7 @@ export default function BillsPage() {
 
   const hero = [
     { label: "Monthly outflow", value: money(computed.totals.monthlyOutflow), sub: computed.totals.pctIncome != null ? `${computed.totals.pctIncome.toFixed(1)}% of income` : "Set income to see %", tone: "accent" },
-    { label: "Non-controllable", value: money(computed.totals.noncontrollableMonthly), sub: "Fixed bills baseline", tone: "neutral" },
+    { label: "Non-controllable", value: money(computed.totals.noncontrollableMonthly), sub: "Frequency-aware baseline", tone: "neutral" },
     { label: "Controllable min", value: money(computed.totals.controllableMin), sub: "Minimums (debts)", tone: "neutral" },
     { label: "Total debt balance", value: money(computed.totals.controllableBalances), sub: computed.planner.monthsToDebtFree && computed.planner.monthsToDebtFree !== Infinity ? `Debt-free est: ${computed.planner.debtFreeISO}` : "Add debts to estimate", tone: "neutral" },
   ];
@@ -830,7 +879,7 @@ export default function BillsPage() {
           <div className="grid" style={{ gap: 10 }}>
             {computed.list.map((b) => {
               const isControl = b.type === "controllable";
-              const dueIn = daysBetween(computed.today, b.dueDate);
+              const dueIn = b.dueIn;
 
               const payoffLabel = (() => {
                 if (!isControl) return null;
@@ -846,7 +895,17 @@ export default function BillsPage() {
               const min = Math.max(0, Number(b.minPay) || 0);
               const extra = Math.max(0, Number(b.extraPay) || 0);
               const bal = Math.max(0, Number(b.balance) || 0);
-              const sliderMax = isControl ? Math.ceil(Math.max(500, min * 2, bal * 0.1)) : 0;
+
+              // ✅ sane slider scaling
+              const sliderMax = isControl
+                ? Math.max(
+                    50,
+                    Math.min(
+                      2000,
+                      Math.ceil(Math.max(250, min * 3, bal * 0.05))
+                    )
+                  )
+                : 0;
 
               const badge = isControl
                 ? chip("rgba(59,130,246,0.08)", "rgba(59,130,246,0.22)")
@@ -874,7 +933,15 @@ export default function BillsPage() {
                             <b style={{ color: "rgba(255,255,255,0.92)" }}>{money(b.totalPay)}</b> • APR {clamp(b.aprPct, 0, 100)}%
                           </>
                         ) : (
-                          <>Amount <b style={{ color: "rgba(255,255,255,0.92)" }}>{money(b.amount)}</b></>
+                          <>
+                            Amount <b style={{ color: "rgba(255,255,255,0.92)" }}>{money(b.amount)}</b>
+                            {b.frequency !== "monthly" && b.frequency !== "one_time" ? (
+                              <>
+                                {" • "}
+                                Monthly eq <b style={{ color: "rgba(255,255,255,0.92)" }}>{money(b.monthlyEquivalent)}</b>
+                              </>
+                            ) : null}
+                          </>
                         )}
                       </div>
 
