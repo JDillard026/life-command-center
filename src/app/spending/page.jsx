@@ -29,6 +29,7 @@ export const dynamic = "force-dynamic";
 
 const LS_KEY = "lcc_spending_v4_shadcn_charts";
 
+/** ---------------- Defaults ---------------- **/
 const DEFAULT_CATEGORIES = [
   { id: "groceries", name: "Groceries", group: "Food", color: "#22c55e", isBudgeted: true },
   { id: "eating_out", name: "Eating Out", group: "Food", color: "#10b981", isBudgeted: true },
@@ -79,6 +80,7 @@ const DEFAULT_RULES = [
 
 const FALLBACK_COLORS = ["#22c55e", "#06b6d4", "#3b82f6", "#a78bfa", "#f59e0b", "#ef4444", "#14b8a6", "#fb7185"];
 
+/** ---------------- utils ---------------- **/
 function safeParse(str, fallback) {
   try {
     if (!str) return fallback;
@@ -91,9 +93,12 @@ function safeParse(str, fallback) {
 function uid() {
   return `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 }
+function pad2(n) {
+  return String(n).padStart(2, "0");
+}
 function todayISO() {
   const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 }
 function toDate(iso) {
   return new Date(iso + "T00:00:00");
@@ -143,9 +148,6 @@ function startOfYear(d) {
 function endOfYear(d) {
   return new Date(d.getFullYear(), 11, 31, 23, 59, 59, 999);
 }
-function pad2(n) {
-  return String(n).padStart(2, "0");
-}
 function isoWeekYearAndNumber(date) {
   const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
   const dayNum = d.getUTCDay() || 7;
@@ -180,14 +182,125 @@ function downloadText(filename, text) {
   a.remove();
   URL.revokeObjectURL(url);
 }
-function pillForStatus(status) {
+
+function pill(status) {
   if (status.includes("Over")) return <Badge variant="destructive">Over</Badge>;
   if (status.includes("Near")) return <Badge variant="secondary">Near</Badge>;
   if (status.includes("No budget")) return <Badge variant="outline">No budget</Badge>;
   return <Badge variant="default">OK</Badge>;
 }
 
+function NativeSelect({ value, onChange, children, className = "", ...rest }) {
+  return (
+    <select
+      value={value}
+      onChange={onChange}
+      className={
+        "w-full h-10 rounded-md border bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring " +
+        className
+      }
+      {...rest}
+    >
+      {children}
+    </select>
+  );
+}
+
+/** ---------- receipts (client-only compression) ---------- **/
+async function fileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result));
+    r.onerror = reject;
+    r.readAsDataURL(file);
+  });
+}
+
+async function compressImageDataUrl(dataUrl, opts = {}) {
+  // opts: maxW, maxH, quality(0-1), mime
+  const { maxW = 1280, maxH = 1280, quality = 0.72, mime = "image/jpeg" } = opts;
+
+  if (typeof document === "undefined") return dataUrl;
+
+  const img = new Image();
+  img.decoding = "async";
+  img.src = dataUrl;
+
+  await new Promise((res, rej) => {
+    img.onload = () => res(true);
+    img.onerror = rej;
+  });
+
+  const w = img.naturalWidth || img.width;
+  const h = img.naturalHeight || img.height;
+  if (!w || !h) return dataUrl;
+
+  const scale = Math.min(1, maxW / w, maxH / h);
+  const tw = Math.max(1, Math.round(w * scale));
+  const th = Math.max(1, Math.round(h * scale));
+
+  const canvas = document.createElement("canvas");
+  canvas.width = tw;
+  canvas.height = th;
+
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return dataUrl;
+
+  ctx.drawImage(img, 0, 0, tw, th);
+  try {
+    return canvas.toDataURL(mime, quality);
+  } catch {
+    return dataUrl;
+  }
+}
+
+function approxBytesFromDataUrl(dataUrl) {
+  // rough estimate: base64 length * 0.75
+  const i = dataUrl.indexOf(",");
+  const b64 = i >= 0 ? dataUrl.slice(i + 1) : dataUrl;
+  return Math.round(b64.length * 0.75);
+}
+
+function formatBytes(n) {
+  if (!Number.isFinite(n)) return "0 B";
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(2)} MB`;
+}
+
+/** ---------- category suggestion ---------- **/
+function normalizeText(s) {
+  return String(s ?? "").toLowerCase().trim();
+}
+
+function heuristicSuggestCategory(merchant, note) {
+  const t = `${normalizeText(merchant)} ${normalizeText(note)}`.trim();
+
+  // quick keyword-based fallback (only used if rules didn't match)
+  const rules = [
+    { re: /(starbucks|dunkin|coffee|cafe)/, id: "coffee" },
+    { re: /(mcdonald|burger king|wendy|taco|chipotle|subway|pizza|restaurant|grill)/, id: "eating_out" },
+    { re: /(walmart|publix|target|aldi|kroger|whole foods|grocery|market)/, id: "groceries" },
+    { re: /(shell|bp|chevron|exxon|circle k|wawa|7-?eleven|gas)/, id: "gas" },
+    { re: /(netflix|hulu|spotify|apple|google one|prime video|subscription)/, id: "subscriptions" },
+    { re: /(uber|lyft|rideshare)/, id: "rideshare" },
+    { re: /(parking|toll)/, id: "parking" },
+    { re: /(doctor|pharmacy|walgreens|cvs|urgent care|hospital)/, id: "health" },
+    { re: /(gym|planet fitness|fitness)/, id: "fitness" },
+    { re: /(amazon|shopping|mall|store)/, id: "shopping" },
+    { re: /(insurance)/, id: "insurance" },
+    { re: /(verizon|at&t|t-?mobile|phone)/, id: "phone" },
+    { re: /(internet|xfinity|spectrum|comcast)/, id: "internet" },
+    { re: /(electric|water|utility|utilities)/, id: "utilities" },
+  ];
+
+  for (const r of rules) if (r.re.test(t)) return r.id;
+  return "";
+}
+
+/** ---------------- Page ---------------- **/
 export default function Spending() {
+  /** drafts */
   const newRecDraft = React.useRef({ name: "", amount: "", categoryId: "subscriptions", cadence: "monthly", nextDate: todayISO() });
   const newRuleDraft = React.useRef({ field: "either", match: "", categoryId: "misc" });
   const newCatDraft = React.useRef({ name: "", group: "Other" });
@@ -199,8 +312,13 @@ export default function Spending() {
       rules: DEFAULT_RULES,
       recurring: [],
       transactions: [],
+
+      // NEW:
+      plannedItems: [], // planned purchases (not yet transactions)
+
       planned: { weekly: {}, monthly: {}, yearly: {} },
       rollover: { enabled: true, carry: { weekly: {}, monthly: {}, yearly: {} }, finalized: { weekly: {}, monthly: {}, yearly: {} } },
+
       ui: {
         tab: "overview",
         manageTab: "budgets",
@@ -217,12 +335,16 @@ export default function Spending() {
         compact: false,
         showRoutedSections: true,
         onlyBudgetedCategories: true,
+
+        // NEW:
+        showReceipts: false,
       },
     };
 
     if (typeof window === "undefined") return base;
-
     const saved = safeParse(localStorage.getItem(LS_KEY), base);
+
+    // merge safely (so old saves still work)
     return {
       ...base,
       ...saved,
@@ -232,6 +354,7 @@ export default function Spending() {
       rules: Array.isArray(saved.rules) ? saved.rules : base.rules,
       recurring: Array.isArray(saved.recurring) ? saved.recurring : base.recurring,
       transactions: Array.isArray(saved.transactions) ? saved.transactions : base.transactions,
+      plannedItems: Array.isArray(saved.plannedItems) ? saved.plannedItems : base.plannedItems,
       planned: saved.planned ?? base.planned,
       rollover: saved.rollover ?? base.rollover,
     };
@@ -240,7 +363,9 @@ export default function Spending() {
   React.useEffect(() => {
     try {
       localStorage.setItem(LS_KEY, JSON.stringify(state));
-    } catch {}
+    } catch {
+      // localStorage full -> receipts most likely; user can delete receipts or export/reset
+    }
   }, [state]);
 
   const categoriesById = React.useMemo(() => {
@@ -290,14 +415,15 @@ export default function Spending() {
     return state.rollover.carry?.[budgetMode]?.[currentPeriodKey] ?? {};
   }, [state.rollover, budgetMode, currentPeriodKey]);
 
-  const plannedForPeriod = React.useMemo(() => {
-    return state.planned?.[budgetMode]?.[currentPeriodKey] ?? {};
-  }, [state.planned, budgetMode, currentPeriodKey]);
+  const plannedForPeriod = React.useMemo(() => state.planned?.[budgetMode]?.[currentPeriodKey] ?? {}, [state.planned, budgetMode, currentPeriodKey]);
 
-  const isFinalized = React.useMemo(() => {
-    return !!state.rollover.finalized?.[budgetMode]?.[currentPeriodKey];
-  }, [state.rollover, budgetMode, currentPeriodKey]);
+  const isFinalized = React.useMemo(() => !!state.rollover.finalized?.[budgetMode]?.[currentPeriodKey], [state.rollover, budgetMode, currentPeriodKey]);
 
+  function setUI(patch) {
+    setState((s) => ({ ...s, ui: { ...s.ui, ...patch } }));
+  }
+
+  /** ---------------- Filters ---------------- **/
   const filteredTx = React.useMemo(() => {
     const search = state.ui.search.trim().toLowerCase();
     let tx = state.transactions.filter((t) => withinRange(t.date, range.a, range.b));
@@ -344,6 +470,43 @@ export default function Spending() {
     categoriesById,
   ]);
 
+  const filteredPlanned = React.useMemo(() => {
+    // planned items are filtered by "planned date" range too (same filters)
+    const search = state.ui.search.trim().toLowerCase();
+    let arr = (state.plannedItems ?? []).filter((p) => withinRange(p.date, range.a, range.b));
+
+    if (state.ui.typeFilter !== "all") {
+      // planned are only expense-style
+      if (state.ui.typeFilter !== "expense") arr = [];
+    }
+
+    if (state.ui.groupFilter !== "All") {
+      arr = arr.filter((p) => (categoriesById.get(p.categoryId)?.group ?? "Other") === state.ui.groupFilter);
+    }
+    if (state.ui.categoryFilter !== "All") arr = arr.filter((p) => p.categoryId === state.ui.categoryFilter);
+
+    if (search) {
+      arr = arr.filter((p) => {
+        const cat = categoriesById.get(p.categoryId)?.name ?? "";
+        const grp = categoriesById.get(p.categoryId)?.group ?? "";
+        return (
+          String(p.note ?? "").toLowerCase().includes(search) ||
+          String(p.merchant ?? "").toLowerCase().includes(search) ||
+          cat.toLowerCase().includes(search) ||
+          grp.toLowerCase().includes(search) ||
+          String(p.amount).includes(search) ||
+          String(p.date).includes(search)
+        );
+      });
+    }
+
+    // newest first
+    arr.sort((a, b) => (a.date > b.date ? -1 : a.date < b.date ? 1 : (b.createdAt ?? 0) - (a.createdAt ?? 0)));
+
+    return arr;
+  }, [state.plannedItems, state.ui.search, state.ui.groupFilter, state.ui.categoryFilter, state.ui.typeFilter, range.a, range.b, categoriesById]);
+
+  /** ---------------- Totals (include planned in forecast) ---------------- **/
   const totals = React.useMemo(() => {
     let expense = 0, income = 0, transfer = 0;
     for (const t of filteredTx) {
@@ -351,10 +514,19 @@ export default function Spending() {
       else if (t.type === "income") income += t.amount;
       else transfer += t.amount;
     }
-    return { expense, income, transfer, net: income - expense };
-  }, [filteredTx]);
+    const plannedExpense = filteredPlanned.reduce((s, p) => s + Number(p.amount || 0), 0);
+    return {
+      expense,
+      income,
+      transfer,
+      plannedExpense,
+      net: income - expense,
+      netForecast: income - (expense + plannedExpense),
+    };
+  }, [filteredTx, filteredPlanned]);
 
   const totalsByCategory = React.useMemo(() => {
+    // expense transactions only
     const m = new Map();
     for (const t of filteredTx) {
       if (t.type !== "expense") continue;
@@ -362,17 +534,17 @@ export default function Spending() {
     }
     const arr = Array.from(m.entries()).map(([categoryId, total]) => {
       const c = categoriesById.get(categoryId);
-      return {
-        categoryId,
-        name: c?.name ?? "Unknown",
-        group: c?.group ?? "Other",
-        color: c?.color,
-        total,
-      };
+      return { categoryId, name: c?.name ?? "Unknown", group: c?.group ?? "Other", color: c?.color, total };
     });
     arr.sort((a, b) => b.total - a.total);
     return arr;
   }, [filteredTx, categoriesById]);
+
+  const plannedByCategory = React.useMemo(() => {
+    const m = new Map();
+    for (const p of filteredPlanned) m.set(p.categoryId, (m.get(p.categoryId) ?? 0) + Number(p.amount || 0));
+    return m;
+  }, [filteredPlanned]);
 
   const totalsByGroup = React.useMemo(() => {
     const m = new Map();
@@ -386,39 +558,63 @@ export default function Spending() {
     return arr;
   }, [filteredTx, categoriesById]);
 
+  /** ---------------- Budget rows (Spent vs Budget + Planned Forecast) ---------------- **/
   const budgetRows = React.useMemo(() => {
     const spentMap = new Map(totalsByCategory.map((x) => [x.categoryId, x.total]));
     return state.categories
       .map((c) => {
         const spent = spentMap.get(c.id) ?? 0;
+        const plannedLocal = Number(plannedByCategory.get(c.id) ?? 0);
+
         const baseBudget = Number(budgets?.[c.id] ?? 0);
         const carry = Number(carryForThisPeriod?.[c.id] ?? 0);
         const budgetWithCarry = baseBudget + carry;
 
         const plannedRemaining = Number(plannedForPeriod?.[c.id] ?? 0);
-        const forecast = spent + plannedRemaining;
+
+        // forecast = spent + (your "planned remaining") + (planned purchases)
+        const forecast = spent + plannedRemaining + plannedLocal;
 
         const pct = budgetWithCarry > 0 ? spent / budgetWithCarry : 0;
         const status = budgetWithCarry === 0 ? "No budget" : pct >= 1 ? "Over" : pct >= 0.85 ? "Near" : "OK";
 
         const forecastPct = budgetWithCarry > 0 ? forecast / budgetWithCarry : 0;
         const forecastStatus =
-          budgetWithCarry === 0 ? "No budget" : forecastPct >= 1 ? "Over (forecast)" : forecastPct >= 0.85 ? "Near (forecast)" : "OK";
+          budgetWithCarry === 0
+            ? "No budget"
+            : forecastPct >= 1
+              ? "Over (forecast)"
+              : forecastPct >= 0.85
+                ? "Near (forecast)"
+                : "OK";
 
-        return { ...c, spent, baseBudget, carry, budgetWithCarry, plannedRemaining, forecast, pct, status, forecastPct, forecastStatus };
+        return {
+          ...c,
+          spent,
+          plannedLocal,
+          baseBudget,
+          carry,
+          budgetWithCarry,
+          plannedRemaining,
+          forecast,
+          pct,
+          status,
+          forecastPct,
+          forecastStatus,
+        };
       })
-      .filter((r) => (state.ui.onlyBudgetedCategories ? r.isBudgeted || r.baseBudget > 0 || r.spent > 0 : true))
-      .sort((a, b) => (b.pct - a.pct) || (b.spent - a.spent) || a.name.localeCompare(b.name));
-  }, [state.categories, totalsByCategory, budgets, carryForThisPeriod, plannedForPeriod, state.ui.onlyBudgetedCategories]);
+      .filter((r) => (state.ui.onlyBudgetedCategories ? r.isBudgeted || r.baseBudget > 0 || r.spent > 0 || r.plannedLocal > 0 : true))
+      .sort((a, b) => (b.forecastPct - a.forecastPct) || (b.forecast - a.forecast) || a.name.localeCompare(b.name));
+  }, [state.categories, totalsByCategory, plannedByCategory, budgets, carryForThisPeriod, plannedForPeriod, state.ui.onlyBudgetedCategories]);
 
+  /** ---------------- Charts (spent only; planned shown separately) ---------------- **/
   const chartCategoryShare = React.useMemo(() => {
     const top = totalsByCategory.slice(0, 8);
     const rest = totalsByCategory.slice(8).reduce((s, x) => s + x.total, 0);
-    const data = [
+    return [
       ...top.map((x) => ({ name: x.name, value: x.total, color: x.color })),
       ...(rest > 0 ? [{ name: "Other", value: rest }] : []),
     ];
-    return data;
   }, [totalsByCategory]);
 
   const chartDailySpend = React.useMemo(() => {
@@ -427,6 +623,7 @@ export default function Spending() {
       if (t.type !== "expense") continue;
       map.set(t.date, (map.get(t.date) ?? 0) + t.amount);
     }
+
     const days = [];
     const cur = new Date(range.a);
     cur.setHours(0, 0, 0, 0);
@@ -443,33 +640,50 @@ export default function Spending() {
     return days.map((d) => ({ label: d.date.slice(5), spend: d.spend }));
   }, [filteredTx, range.a, range.b]);
 
+  /** ---------------- Actions ---------------- **/
   const sectionRefs = React.useRef({});
-  const amountRef = React.useRef(null);
-
-  function setUI(patch) {
-    setState((s) => ({ ...s, ui: { ...s.ui, ...patch } }));
+  function scrollToCategory(cid) {
+    const el = sectionRefs.current[cid];
+    el?.scrollIntoView?.({ behavior: "smooth", block: "start" });
   }
 
-  // Quick add state
-  const [qaType, setQaType] = React.useState("expense");
-  const [qaAmount, setQaAmount] = React.useState("");
-  const [qaDate, setQaDate] = React.useState(todayISO());
-  const [qaCategoryId, setQaCategoryId] = React.useState("");
-  const [qaMerchant, setQaMerchant] = React.useState("");
-  const [qaNote, setQaNote] = React.useState("");
-  const [qaPayment, setQaPayment] = React.useState("Card");
-  const [qaAccount, setQaAccount] = React.useState("Checking");
+  function exportJSON() {
+    downloadText(`spending_export_${todayISO()}.json`, JSON.stringify(state, null, 2));
+  }
+  function importJSON(file) {
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const next = safeParse(String(reader.result), state);
+        setState((s) => ({
+          ...s,
+          ...next,
+          ui: { ...(s.ui ?? {}), ...(next.ui ?? {}) },
+          categories: Array.isArray(next.categories) ? next.categories : s.categories,
+          budgets: next.budgets ?? s.budgets,
+          rules: Array.isArray(next.rules) ? next.rules : s.rules,
+          recurring: Array.isArray(next.recurring) ? next.recurring : s.recurring,
+          transactions: Array.isArray(next.transactions) ? next.transactions : s.transactions,
+          plannedItems: Array.isArray(next.plannedItems) ? next.plannedItems : (s.plannedItems ?? []),
+          planned: next.planned ?? s.planned,
+          rollover: next.rollover ?? s.rollover,
+        }));
+      } catch {
+        alert("Import failed. Use a valid export JSON.");
+      }
+    };
+    reader.readAsText(file);
+  }
 
-  const [splitMode, setSplitMode] = React.useState(false);
-  const [splitLines, setSplitLines] = React.useState([{ id: uid(), categoryId: "groceries", amountStr: "", note: "" }]);
+  function autoPickCategoryFromRules(merchant, note) {
+    const m = normalizeText(merchant);
+    const n = normalizeText(note);
 
-  function autoPickCategory(merchant, note) {
-    const m = (merchant ?? "").toLowerCase();
-    const n = (note ?? "").toLowerCase();
     for (const r of state.rules ?? []) {
       if (!r.enabled) continue;
-      const match = String(r.match ?? "").trim().toLowerCase();
+      const match = normalizeText(r.match);
       if (!match) continue;
+
       if (r.field === "merchant" && m.includes(match)) return r.categoryId;
       if (r.field === "note" && n.includes(match)) return r.categoryId;
       if (r.field === "either" && (m.includes(match) || n.includes(match))) return r.categoryId;
@@ -477,82 +691,13 @@ export default function Spending() {
     return "";
   }
 
-  function resetQuickAdd() {
-    setQaType("expense");
-    setQaAmount("");
-    setQaDate(todayISO());
-    setQaCategoryId("");
-    setQaMerchant("");
-    setQaNote("");
-    setQaPayment("Card");
-    setQaAccount("Checking");
-    setSplitMode(false);
-    setSplitLines([{ id: uid(), categoryId: "groceries", amountStr: "", note: "" }]);
-    setTimeout(() => amountRef.current?.focus?.(), 0);
-  }
-
-  const splitTotal = React.useMemo(() => {
-    if (!splitMode) return 0;
-    const nums = splitLines
-      .map((l) => parseMoneyInput(l.amountStr))
-      .filter((n) => Number.isFinite(n) && n > 0);
-    return Math.round(nums.reduce((s, x) => s + x, 0) * 100) / 100;
-  }, [splitMode, splitLines]);
-
-  function addTransaction() {
-    const date = qaDate || todayISO();
-
-    if (qaType === "expense" && splitMode) {
-      const lines = splitLines
-        .map((l) => ({ ...l, amount: parseMoneyInput(l.amountStr) }))
-        .filter((l) => Number.isFinite(l.amount) && l.amount > 0 && l.categoryId);
-
-      if (!lines.length) return alert("Split: add at least one line with category + amount.");
-
-      const groupId = uid();
-      const txs = lines.map((l) => ({
-        id: uid(),
-        type: "expense",
-        amount: Math.round(l.amount * 100) / 100,
-        categoryId: l.categoryId,
-        date,
-        merchant: qaMerchant.trim(),
-        note: (l.note || qaNote).trim(),
-        paymentMethod: qaPayment,
-        account: qaAccount,
-        createdAt: Date.now(),
-        meta: { splitGroupId: groupId },
-      }));
-
-      setState((s) => ({ ...s, transactions: [...txs, ...s.transactions] }));
-      resetQuickAdd();
-      return;
-    }
-
-    const amt = parseMoneyInput(qaAmount);
-    if (!Number.isFinite(amt) || amt <= 0) return alert("Enter a valid amount > 0.");
-
-    let cid = qaCategoryId;
-    if (qaType === "expense" && !cid) {
-      cid = autoPickCategory(qaMerchant, qaNote);
-      if (!cid) return alert("Pick a category (or add a rule so it auto-categorizes).");
-    }
-
-    const tx = {
-      id: uid(),
-      type: qaType,
-      amount: Math.round(amt * 100) / 100,
-      categoryId: qaType === "expense" ? cid : cid || "",
-      date,
-      merchant: qaMerchant.trim(),
-      note: qaNote.trim(),
-      paymentMethod: qaPayment,
-      account: qaAccount,
-      createdAt: Date.now(),
-    };
-
-    setState((s) => ({ ...s, transactions: [tx, ...s.transactions] }));
-    resetQuickAdd();
+  function suggestCategory(merchant, note) {
+    // priority: enabled rules -> heuristics
+    const fromRules = autoPickCategoryFromRules(merchant, note);
+    if (fromRules) return { categoryId: fromRules, source: "rule" };
+    const fromHeur = heuristicSuggestCategory(merchant, note);
+    if (fromHeur) return { categoryId: fromHeur, source: "hint" };
+    return { categoryId: "", source: "" };
   }
 
   function deleteTx(id) {
@@ -657,6 +802,7 @@ export default function Spending() {
           paymentMethod: (r.paymentMethod ?? "Card").trim(),
           account: (r.account ?? "Checking").trim(),
           createdAt: Date.now(),
+          receipts: [],
           meta: { recurringId: r.id, recurringName: r.name },
         });
         next = addCadence(next, r.cadence);
@@ -668,91 +814,396 @@ export default function Spending() {
     setState((s) => ({ ...s, recurring: updated, transactions: [...newTx, ...s.transactions] }));
   }
 
-  function exportJSON() {
-    downloadText(`spending_export_${todayISO()}.json`, JSON.stringify(state, null, 2));
+  /** ---------------- Quick Add / Planned Add ---------------- **/
+  const amountRef = React.useRef(null);
+
+  const [qaMode, setQaMode] = React.useState("now"); // "now" | "planned"
+  const [qaType, setQaType] = React.useState("expense");
+  const [qaAmount, setQaAmount] = React.useState("");
+  const [qaDate, setQaDate] = React.useState(todayISO());
+  const [qaCategoryId, setQaCategoryId] = React.useState("");
+  const [qaMerchant, setQaMerchant] = React.useState("");
+  const [qaNote, setQaNote] = React.useState("");
+  const [qaPayment, setQaPayment] = React.useState("Card");
+  const [qaAccount, setQaAccount] = React.useState("Checking");
+
+  const [splitMode, setSplitMode] = React.useState(false);
+  const [splitLines, setSplitLines] = React.useState([{ id: uid(), categoryId: "groceries", amountStr: "", note: "" }]);
+
+  // NEW: receipts staged for quick-add
+  const [qaReceipts, setQaReceipts] = React.useState([]); // [{id, dataUrl, bytes, createdAt}]
+
+  // NEW: live suggestion
+  const suggestion = React.useMemo(() => suggestCategory(qaMerchant, qaNote), [qaMerchant, qaNote, state.rules]);
+
+  React.useEffect(() => {
+    // if user hasn't set category and suggestion exists, don't auto-set; just show suggestion UI
+  }, [suggestion.categoryId]);
+
+  const splitTotal = React.useMemo(() => {
+    if (!splitMode) return 0;
+    const nums = splitLines.map((l) => parseMoneyInput(l.amountStr)).filter((n) => Number.isFinite(n) && n > 0);
+    return Math.round(nums.reduce((s, x) => s + x, 0) * 100) / 100;
+  }, [splitMode, splitLines]);
+
+  function resetQuickAdd() {
+    setQaMode("now");
+    setQaType("expense");
+    setQaAmount("");
+    setQaDate(todayISO());
+    setQaCategoryId("");
+    setQaMerchant("");
+    setQaNote("");
+    setQaPayment("Card");
+    setQaAccount("Checking");
+    setSplitMode(false);
+    setSplitLines([{ id: uid(), categoryId: "groceries", amountStr: "", note: "" }]);
+    setQaReceipts([]);
+    setTimeout(() => amountRef.current?.focus?.(), 0);
   }
-  function importJSON(file) {
-    const reader = new FileReader();
-    reader.onload = () => {
-      try {
-        const next = safeParse(String(reader.result), state);
-        setState((s) => ({
-          ...s,
-          ...next,
-          ui: { ...(s.ui ?? {}), ...(next.ui ?? {}) },
-          categories: Array.isArray(next.categories) ? next.categories : s.categories,
-          budgets: next.budgets ?? s.budgets,
-          rules: Array.isArray(next.rules) ? next.rules : s.rules,
-          recurring: Array.isArray(next.recurring) ? next.recurring : s.recurring,
-          transactions: Array.isArray(next.transactions) ? next.transactions : s.transactions,
-          planned: next.planned ?? s.planned,
-          rollover: next.rollover ?? s.rollover,
-        }));
-      } catch {
-        alert("Import failed. Use a valid export JSON.");
-      }
+
+  async function handleAddReceiptFiles(files) {
+    const arr = Array.from(files || []);
+    if (!arr.length) return;
+
+    const items = [];
+    for (const f of arr) {
+      // only images
+      if (!String(f.type).startsWith("image/")) continue;
+
+      const raw = await fileToDataUrl(f);
+      const compressed = await compressImageDataUrl(raw, { maxW: 1400, maxH: 1400, quality: 0.72, mime: "image/jpeg" });
+      const bytes = approxBytesFromDataUrl(compressed);
+
+      items.push({
+        id: uid(),
+        dataUrl: compressed,
+        bytes,
+        createdAt: Date.now(),
+        name: f.name,
+        mime: "image/jpeg",
+      });
+    }
+
+    if (!items.length) return;
+
+    // hard cap receipts in the quick-add stage to avoid accidental storage blowups
+    const next = [...qaReceipts, ...items].slice(0, 8);
+    setQaReceipts(next);
+  }
+
+  function removeStagedReceipt(id) {
+    setQaReceipts((s) => s.filter((r) => r.id !== id));
+  }
+
+  function applySuggestion() {
+    if (!suggestion.categoryId) return;
+    setQaCategoryId(suggestion.categoryId);
+  }
+
+  function addPlannedItem() {
+    const date = qaDate || todayISO();
+    const amt = splitMode ? splitTotal : parseMoneyInput(qaAmount);
+
+    if (!Number.isFinite(amt) || amt <= 0) return alert("Enter a valid amount > 0.");
+    if (!qaCategoryId) {
+      // if empty, try suggestion
+      if (suggestion.categoryId) setQaCategoryId(suggestion.categoryId);
+      if (!suggestion.categoryId) return alert("Pick a category for planned purchases.");
+    }
+
+    // planned items are always expense-like
+    const planned = {
+      id: uid(),
+      amount: Math.round(Number(amt) * 100) / 100,
+      categoryId: qaCategoryId || suggestion.categoryId || "misc",
+      date,
+      merchant: qaMerchant.trim(),
+      note: qaNote.trim(),
+      createdAt: Date.now(),
+      receipts: qaReceipts,
+      status: "planned", // planned | bought | canceled
     };
-    reader.readAsText(file);
+
+    setState((s) => ({ ...s, plannedItems: [planned, ...(s.plannedItems ?? [])] }));
+    resetQuickAdd();
   }
 
-  function scrollToCategory(cid) {
-    const el = sectionRefs.current[cid];
-    el?.scrollIntoView?.({ behavior: "smooth", block: "start" });
+  function addTransactionNow() {
+    const date = qaDate || todayISO();
+
+    if (qaType === "expense" && splitMode) {
+      const lines = splitLines
+        .map((l) => ({ ...l, amount: parseMoneyInput(l.amountStr) }))
+        .filter((l) => Number.isFinite(l.amount) && l.amount > 0 && l.categoryId);
+
+      if (!lines.length) return alert("Split: add at least one line with category + amount.");
+
+      const groupId = uid();
+      const txs = lines.map((l) => ({
+        id: uid(),
+        type: "expense",
+        amount: Math.round(l.amount * 100) / 100,
+        categoryId: l.categoryId,
+        date,
+        merchant: qaMerchant.trim(),
+        note: (l.note || qaNote).trim(),
+        paymentMethod: qaPayment,
+        account: qaAccount,
+        createdAt: Date.now(),
+        receipts: qaReceipts, // same receipts applied to each split line (simple + practical)
+        meta: { splitGroupId: groupId },
+      }));
+
+      setState((s) => ({ ...s, transactions: [...txs, ...s.transactions] }));
+      resetQuickAdd();
+      return;
+    }
+
+    const amt = parseMoneyInput(qaAmount);
+    if (!Number.isFinite(amt) || amt <= 0) return alert("Enter a valid amount > 0.");
+
+    let cid = qaCategoryId;
+    if (qaType === "expense" && !cid) {
+      cid = suggestion.categoryId || "";
+      if (!cid) return alert("Pick a category (or add a rule / use suggestion).");
+    }
+
+    const tx = {
+      id: uid(),
+      type: qaType,
+      amount: Math.round(Number(amt) * 100) / 100,
+      categoryId: qaType === "expense" ? cid : cid || "",
+      date,
+      merchant: qaMerchant.trim(),
+      note: qaNote.trim(),
+      paymentMethod: qaPayment,
+      account: qaAccount,
+      createdAt: Date.now(),
+      receipts: qaReceipts,
+    };
+
+    setState((s) => ({ ...s, transactions: [tx, ...s.transactions] }));
+    resetQuickAdd();
   }
 
-  const topGroups = totalsByGroup.slice(0, 6);
-  const topCats = totalsByCategory.slice(0, 8);
+  function addAction() {
+    if (qaMode === "planned") return addPlannedItem();
+    return addTransactionNow();
+  }
 
+  /** ---------------- Planned items actions ---------------- **/
+  function deletePlanned(id) {
+    if (!confirm("Delete this planned item?")) return;
+    setState((s) => ({ ...s, plannedItems: (s.plannedItems ?? []).filter((p) => p.id !== id) }));
+  }
+
+  function convertPlannedToTx(p) {
+    if (!confirm("Convert planned item to a transaction (posts it now)?")) return;
+
+    const tx = {
+      id: uid(),
+      type: "expense",
+      amount: Math.round(Number(p.amount) * 100) / 100,
+      categoryId: p.categoryId,
+      date: p.date || todayISO(),
+      merchant: (p.merchant ?? "").trim(),
+      note: (p.note ?? "").trim(),
+      paymentMethod: "Card",
+      account: "Checking",
+      createdAt: Date.now(),
+      receipts: Array.isArray(p.receipts) ? p.receipts : [],
+      meta: { convertedFromPlannedId: p.id },
+    };
+
+    setState((s) => ({
+      ...s,
+      transactions: [tx, ...s.transactions],
+      plannedItems: (s.plannedItems ?? []).filter((x) => x.id !== p.id),
+    }));
+  }
+
+  /** ---------------- Receipt actions for existing tx / planned ---------------- **/
+  async function addReceiptsToTransaction(txId, files) {
+    const arr = Array.from(files || []);
+    if (!arr.length) return;
+
+    const items = [];
+    for (const f of arr) {
+      if (!String(f.type).startsWith("image/")) continue;
+      const raw = await fileToDataUrl(f);
+      const compressed = await compressImageDataUrl(raw, { maxW: 1400, maxH: 1400, quality: 0.72, mime: "image/jpeg" });
+      items.push({
+        id: uid(),
+        dataUrl: compressed,
+        bytes: approxBytesFromDataUrl(compressed),
+        createdAt: Date.now(),
+        name: f.name,
+        mime: "image/jpeg",
+      });
+    }
+
+    if (!items.length) return;
+
+    setState((s) => ({
+      ...s,
+      transactions: s.transactions.map((t) => {
+        if (t.id !== txId) return t;
+        const cur = Array.isArray(t.receipts) ? t.receipts : [];
+        return { ...t, receipts: [...cur, ...items].slice(0, 12) };
+      }),
+    }));
+  }
+
+  function removeReceiptFromTransaction(txId, receiptId) {
+    setState((s) => ({
+      ...s,
+      transactions: s.transactions.map((t) => {
+        if (t.id !== txId) return t;
+        const cur = Array.isArray(t.receipts) ? t.receipts : [];
+        return { ...t, receipts: cur.filter((r) => r.id !== receiptId) };
+      }),
+    }));
+  }
+
+  async function addReceiptsToPlanned(plannedId, files) {
+    const arr = Array.from(files || []);
+    if (!arr.length) return;
+
+    const items = [];
+    for (const f of arr) {
+      if (!String(f.type).startsWith("image/")) continue;
+      const raw = await fileToDataUrl(f);
+      const compressed = await compressImageDataUrl(raw, { maxW: 1400, maxH: 1400, quality: 0.72, mime: "image/jpeg" });
+      items.push({
+        id: uid(),
+        dataUrl: compressed,
+        bytes: approxBytesFromDataUrl(compressed),
+        createdAt: Date.now(),
+        name: f.name,
+        mime: "image/jpeg",
+      });
+    }
+
+    if (!items.length) return;
+
+    setState((s) => ({
+      ...s,
+      plannedItems: (s.plannedItems ?? []).map((p) => {
+        if (p.id !== plannedId) return p;
+        const cur = Array.isArray(p.receipts) ? p.receipts : [];
+        return { ...p, receipts: [...cur, ...items].slice(0, 12) };
+      }),
+    }));
+  }
+
+  function removeReceiptFromPlanned(plannedId, receiptId) {
+    setState((s) => ({
+      ...s,
+      plannedItems: (s.plannedItems ?? []).map((p) => {
+        if (p.id !== plannedId) return p;
+        const cur = Array.isArray(p.receipts) ? p.receipts : [];
+        return { ...p, receipts: cur.filter((r) => r.id !== receiptId) };
+      }),
+    }));
+  }
+
+  /** ---------------- Manage budgets helpers ---------------- **/
   const carrySum = Object.values(carryForThisPeriod ?? {}).reduce((s, v) => s + Number(v || 0), 0);
   const budgetedTotal = budgetRows.reduce((s, r) => s + (r.baseBudget > 0 ? r.baseBudget : 0), 0);
 
-  return (
-    <div className="mx-auto max-w-6xl px-4 py-6 space-y-4">
-      {/* Header */}
-      <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
-        <div className="space-y-1">
-          <div className="text-xs text-muted-foreground">Spending</div>
-          <div className="text-2xl font-black tracking-tight">Budget Control Center</div>
-          <div className="text-sm text-muted-foreground">
-            Dashboard + charts. Category budgets + rollover + forecast + rules + recurring + splits.
+  /** ---------------- Top buttons ---------------- **/
+  const topGroups = totalsByGroup.slice(0, 6);
+  const topCats = totalsByCategory.slice(0, 8);
+
+  /** ---------------- Render small receipt UI ---------------- **/
+  function ReceiptStrip({ receipts, onRemove }) {
+    const list = Array.isArray(receipts) ? receipts : [];
+    if (!list.length) return null;
+    const totalBytes = list.reduce((s, r) => s + Number(r.bytes || 0), 0);
+
+    return (
+      <div className="mt-2 rounded-lg border p-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="text-xs text-muted-foreground">
+            Receipts: <b>{list.length}</b> • Stored: <b>{formatBytes(totalBytes)}</b>
           </div>
+          <div className="text-xs text-muted-foreground">Tip: localStorage is limited. Delete old receipts if it breaks saving.</div>
         </div>
 
-        <div className="flex flex-wrap gap-2">
-          <Button variant={state.ui.tab === "overview" ? "default" : "secondary"} onClick={() => setUI({ tab: "overview" })}>
-            Overview
-          </Button>
-          <Button variant={state.ui.tab === "manage" ? "default" : "secondary"} onClick={() => setUI({ tab: "manage" })}>
-            Manage
-          </Button>
+        <div className="mt-2 grid gap-2 sm:grid-cols-3 md:grid-cols-5">
+          {list.map((r) => (
+            <div key={r.id} className="relative rounded-md overflow-hidden border bg-muted/20">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={r.dataUrl} alt={r.name || "receipt"} className="h-24 w-full object-cover" />
+              <div className="p-1 text-[10px] text-muted-foreground truncate">{r.name || "receipt"} • {formatBytes(r.bytes || 0)}</div>
+              {onRemove ? (
+                <button
+                  className="absolute top-1 right-1 rounded-md bg-background/80 px-2 py-1 text-[10px] border hover:bg-background"
+                  onClick={() => onRemove(r.id)}
+                  type="button"
+                >
+                  Remove
+                </button>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
 
-          <Button variant="secondary" onClick={exportJSON}>Export</Button>
-          <Label className="inline-flex items-center">
-            <Button variant="secondary" asChild>
-              <span>Import</span>
-            </Button>
-            <input
-              className="hidden"
-              type="file"
-              accept="application/json"
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) importJSON(f);
-                e.currentTarget.value = "";
+  /** ---------------- UI ---------------- **/
+  return (
+    <div className="mx-auto max-w-6xl px-4 py-6 space-y-4">
+      {/* Sticky header */}
+      <div className="sticky top-0 z-30 -mx-4 px-4 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/70 bg-background/80 border-b">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div className="min-w-0">
+            <div className="text-xs text-muted-foreground">Spending</div>
+            <div className="text-2xl font-black tracking-tight truncate">Budget Control Center</div>
+            <div className="text-sm text-muted-foreground">
+              Budgets + rollover + planned purchases + receipts + suggestions.
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <Tabs value={state.ui.tab} onValueChange={(v) => setUI({ tab: v })}>
+              <TabsList className="h-10">
+                <TabsTrigger value="overview">Overview</TabsTrigger>
+                <TabsTrigger value="manage">Manage</TabsTrigger>
+              </TabsList>
+            </Tabs>
+
+            <Button variant="secondary" onClick={exportJSON}>Export</Button>
+
+            <Label className="inline-flex items-center">
+              <Button variant="secondary" asChild>
+                <span>Import</span>
+              </Button>
+              <input
+                className="hidden"
+                type="file"
+                accept="application/json"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) importJSON(f);
+                  e.currentTarget.value = "";
+                }}
+              />
+            </Label>
+
+            <Button
+              variant="destructive"
+              onClick={() => {
+                if (!confirm("Reset ALL data (transactions/rules/recurring/plans/rollover/planned items/receipts)?")) return;
+                localStorage.removeItem(LS_KEY);
+                location.reload();
               }}
-            />
-          </Label>
-
-          <Button
-            variant="destructive"
-            onClick={() => {
-              if (!confirm("Reset ALL data (transactions/rules/recurring/plans/rollover)?")) return;
-              localStorage.removeItem(LS_KEY);
-              location.reload();
-            }}
-          >
-            Reset All
-          </Button>
+            >
+              Reset All
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -761,9 +1212,11 @@ export default function Spending() {
         <CardHeader className="pb-3">
           <CardTitle className="text-base">Period & Filters</CardTitle>
           <CardDescription>
-            {range.label} • {range.a.toLocaleDateString()} → {range.b.toLocaleDateString()} • Budget mode: <b>{budgetMode}</b> • Key: <b>{currentPeriodKey}</b>
+            {range.label} • {range.a.toLocaleDateString()} → {range.b.toLocaleDateString()} • Budget mode:{" "}
+            <b>{budgetMode}</b> • Key: <b>{currentPeriodKey}</b>
           </CardDescription>
         </CardHeader>
+
         <CardContent className="space-y-3">
           <div className="flex flex-wrap items-center gap-2">
             <Button size="sm" variant={state.ui.period === "week" ? "default" : "secondary"} onClick={() => setUI({ period: "week" })}>Week</Button>
@@ -780,8 +1233,8 @@ export default function Spending() {
             )}
           </div>
 
-          <div className="grid gap-2 md:grid-cols-5">
-            <div className="md:col-span-2">
+          <div className="grid gap-2 md:grid-cols-12">
+            <div className="md:col-span-4">
               <Label className="text-xs text-muted-foreground">Search</Label>
               <Input
                 placeholder="Merchant, note, category, amount, date..."
@@ -790,56 +1243,28 @@ export default function Spending() {
               />
             </div>
 
-            <div>
+            <div className="md:col-span-2">
               <Label className="text-xs text-muted-foreground">Type</Label>
-              <select
-                className="w-full h-10 rounded-md border bg-background px-3 text-sm"
-                value={state.ui.typeFilter}
-                onChange={(e) => setUI({ typeFilter: e.target.value })}
-              >
+              <NativeSelect value={state.ui.typeFilter} onChange={(e) => setUI({ typeFilter: e.target.value })}>
                 <option value="expense">Expenses</option>
                 <option value="income">Income</option>
                 <option value="transfer">Transfers</option>
                 <option value="all">All</option>
-              </select>
+              </NativeSelect>
             </div>
 
-            <div>
+            <div className="md:col-span-2">
               <Label className="text-xs text-muted-foreground">Group</Label>
-              <select
-                className="w-full h-10 rounded-md border bg-background px-3 text-sm"
-                value={state.ui.groupFilter}
-                onChange={(e) => setUI({ groupFilter: e.target.value, categoryFilter: "All" })}
-              >
+              <NativeSelect value={state.ui.groupFilter} onChange={(e) => setUI({ groupFilter: e.target.value, categoryFilter: "All" })}>
                 {groups.map((g) => (
                   <option key={g} value={g}>{g === "All" ? "All Groups" : g}</option>
                 ))}
-              </select>
+              </NativeSelect>
             </div>
 
-            <div>
-              <Label className="text-xs text-muted-foreground">Sort</Label>
-              <select
-                className="w-full h-10 rounded-md border bg-background px-3 text-sm"
-                value={state.ui.sort}
-                onChange={(e) => setUI({ sort: e.target.value })}
-              >
-                <option value="date_desc">Newest</option>
-                <option value="date_asc">Oldest</option>
-                <option value="amount_desc">Amount (High)</option>
-                <option value="amount_asc">Amount (Low)</option>
-              </select>
-            </div>
-          </div>
-
-          <div className="grid gap-2 md:grid-cols-2">
-            <div>
+            <div className="md:col-span-2">
               <Label className="text-xs text-muted-foreground">Category</Label>
-              <select
-                className="w-full h-10 rounded-md border bg-background px-3 text-sm"
-                value={state.ui.categoryFilter}
-                onChange={(e) => setUI({ categoryFilter: e.target.value })}
-              >
+              <NativeSelect value={state.ui.categoryFilter} onChange={(e) => setUI({ categoryFilter: e.target.value })}>
                 <option value="All">All Categories</option>
                 {Array.from(categoriesByGroup.entries()).map(([g, arr]) => (
                   <optgroup key={g} label={g}>
@@ -848,10 +1273,22 @@ export default function Spending() {
                     ))}
                   </optgroup>
                 ))}
-              </select>
+              </NativeSelect>
             </div>
 
-            <div className="flex items-end justify-between gap-3">
+            <div className="md:col-span-2">
+              <Label className="text-xs text-muted-foreground">Sort</Label>
+              <NativeSelect value={state.ui.sort} onChange={(e) => setUI({ sort: e.target.value })}>
+                <option value="date_desc">Newest</option>
+                <option value="date_asc">Oldest</option>
+                <option value="amount_desc">Amount (High)</option>
+                <option value="amount_asc">Amount (Low)</option>
+              </NativeSelect>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-4">
               <div className="flex items-center gap-2">
                 <Switch checked={state.ui.compact} onCheckedChange={(v) => setUI({ compact: v })} />
                 <span className="text-sm">Compact</span>
@@ -864,37 +1301,27 @@ export default function Spending() {
                 <Switch checked={state.ui.onlyBudgetedCategories} onCheckedChange={(v) => setUI({ onlyBudgetedCategories: v })} />
                 <span className="text-sm">Budgeted only</span>
               </div>
-            </div>
-          </div>
-
-          {(topGroups.length || topCats.length) ? (
-            <>
-              <Separator />
-              <div className="flex flex-wrap gap-2 items-center">
-                {topGroups.length ? (
-                  <>
-                    <span className="text-xs text-muted-foreground mr-1">Top groups:</span>
-                    {topGroups.map((g) => (
-                      <Button key={g.group} size="sm" variant="secondary" onClick={() => setUI({ groupFilter: g.group, categoryFilter: "All" })}>
-                        {g.group} ({money(g.total)})
-                      </Button>
-                    ))}
-                  </>
-                ) : null}
-
-                {topCats.length ? (
-                  <>
-                    <span className="text-xs text-muted-foreground ml-2 mr-1">Top categories:</span>
-                    {topCats.map((c) => (
-                      <Button key={c.categoryId} size="sm" variant="secondary" onClick={() => scrollToCategory(c.categoryId)}>
-                        {c.name} ({money(c.total)})
-                      </Button>
-                    ))}
-                  </>
-                ) : null}
+              <div className="flex items-center gap-2">
+                <Switch checked={state.ui.showReceipts} onCheckedChange={(v) => setUI({ showReceipts: v })} />
+                <span className="text-sm">Show receipts</span>
               </div>
-            </>
-          ) : null}
+            </div>
+
+            {(topGroups.length || topCats.length) ? (
+              <div className="flex flex-wrap gap-2 items-center">
+                {topGroups.slice(0, 3).map((g) => (
+                  <Button key={g.group} size="sm" variant="secondary" onClick={() => setUI({ groupFilter: g.group, categoryFilter: "All" })}>
+                    {g.group}: {money(g.total)}
+                  </Button>
+                ))}
+                {topCats.slice(0, 3).map((c) => (
+                  <Button key={c.categoryId} size="sm" variant="secondary" onClick={() => scrollToCategory(c.categoryId)}>
+                    {c.name}: {money(c.total)}
+                  </Button>
+                ))}
+              </div>
+            ) : null}
+          </div>
         </CardContent>
       </Card>
 
@@ -902,7 +1329,7 @@ export default function Spending() {
       <div className="grid gap-3 md:grid-cols-4">
         <Card>
           <CardHeader className="pb-2">
-            <CardDescription>Expenses</CardDescription>
+            <CardDescription>Expenses (spent)</CardDescription>
             <CardTitle className="text-2xl font-black">{money(totals.expense)}</CardTitle>
           </CardHeader>
           <CardContent className="text-xs text-muted-foreground">
@@ -912,29 +1339,29 @@ export default function Spending() {
 
         <Card>
           <CardHeader className="pb-2">
-            <CardDescription>Income</CardDescription>
-            <CardTitle className="text-2xl font-black">{money(totals.income)}</CardTitle>
+            <CardDescription>Planned (forecast)</CardDescription>
+            <CardTitle className="text-2xl font-black">{money(totals.plannedExpense)}</CardTitle>
           </CardHeader>
           <CardContent className="text-xs text-muted-foreground">
-            {filteredTx.filter((t) => t.type === "income").length} tx
+            {filteredPlanned.length} planned items
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="pb-2">
-            <CardDescription>Net</CardDescription>
+            <CardDescription>Net (actual)</CardDescription>
             <CardTitle className="text-2xl font-black">{money(totals.net)}</CardTitle>
           </CardHeader>
-          <CardContent className="text-xs text-muted-foreground">Income - expenses</CardContent>
+          <CardContent className="text-xs text-muted-foreground">Income - spent</CardContent>
         </Card>
 
         <Card>
           <CardHeader className="pb-2">
-            <CardDescription>Budget snapshot ({budgetMode})</CardDescription>
-            <CardTitle className="text-lg font-black">{money(budgetedTotal)}</CardTitle>
+            <CardDescription>Net (forecast)</CardDescription>
+            <CardTitle className="text-lg font-black">{money(totals.netForecast)}</CardTitle>
           </CardHeader>
           <CardContent className="text-xs text-muted-foreground">
-            Carry: {money(carrySum)} • Finalized: {isFinalized ? "YES" : "NO"}
+            Budget total: {money(budgetedTotal)} • Carry: {money(carrySum)} • Finalized: {isFinalized ? "YES" : "NO"}
           </CardContent>
         </Card>
       </div>
@@ -945,62 +1372,64 @@ export default function Spending() {
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <CardTitle className="text-base">Quick Add</CardTitle>
-              <CardDescription>Leave category blank on an expense and rules will try to auto-categorize.</CardDescription>
+              <CardDescription>
+                Use <b>Now</b> for real transactions. Use <b>Planned</b> to forecast without posting.
+              </CardDescription>
             </div>
             <div className="flex flex-wrap gap-2">
+              <Button variant={qaMode === "now" ? "default" : "secondary"} onClick={() => setQaMode("now")}>Now</Button>
+              <Button variant={qaMode === "planned" ? "default" : "secondary"} onClick={() => setQaMode("planned")}>Planned</Button>
+
               <Button variant="secondary" onClick={() => setSplitMode((v) => !v)}>
                 Split: {splitMode ? "ON" : "OFF"}
               </Button>
-              <Button variant="secondary" onClick={runDueRecurring}>Run Due Recurring</Button>
+              <Button variant="secondary" onClick={runDueRecurring}>Run Due</Button>
               <Button variant="secondary" onClick={resetQuickAdd}>Clear</Button>
-              <Button onClick={addTransaction}>Add</Button>
+              <Button onClick={addAction}>{qaMode === "planned" ? "Add Planned" : "Add"}</Button>
             </div>
           </div>
         </CardHeader>
+
         <CardContent className="space-y-3">
-          <div className="grid gap-2 md:grid-cols-6">
-            <div>
+          <div className="grid gap-2 md:grid-cols-12">
+            <div className="md:col-span-2">
               <Label className="text-xs text-muted-foreground">Type</Label>
-              <select
-                className="w-full h-10 rounded-md border bg-background px-3 text-sm"
-                value={qaType}
-                onChange={(e) => setQaType(e.target.value)}
-              >
+              <NativeSelect value={qaType} onChange={(e) => setQaType(e.target.value)} disabled={qaMode === "planned"}>
                 <option value="expense">Expense</option>
                 <option value="income">Income</option>
                 <option value="transfer">Transfer</option>
-              </select>
+              </NativeSelect>
+              {qaMode === "planned" ? (
+                <div className="text-[11px] text-muted-foreground mt-1">Planned items are expense-only.</div>
+              ) : null}
             </div>
 
-            {!splitMode ? (
-              <div>
-                <Label className="text-xs text-muted-foreground">Amount</Label>
+            <div className="md:col-span-2">
+              <Label className="text-xs text-muted-foreground">{splitMode && (qaMode === "planned" || qaType === "expense") ? "Split total" : "Amount"}</Label>
+              {(splitMode && (qaMode === "planned" || qaType === "expense")) ? (
+                <Input value={money(splitTotal)} readOnly />
+              ) : (
                 <Input
                   ref={amountRef}
                   inputMode="decimal"
                   placeholder="0.00"
                   value={qaAmount}
                   onChange={(e) => setQaAmount(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Enter") addTransaction(); }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") addAction();
+                  }}
                 />
-              </div>
-            ) : (
-              <div>
-                <Label className="text-xs text-muted-foreground">Split Total</Label>
-                <Input value={money(splitTotal)} readOnly />
-              </div>
-            )}
+              )}
+            </div>
 
-            <div className="md:col-span-2">
+            <div className="md:col-span-3">
               <Label className="text-xs text-muted-foreground">Category</Label>
-              <select
-                className="w-full h-10 rounded-md border bg-background px-3 text-sm"
+              <NativeSelect
                 value={qaCategoryId}
                 onChange={(e) => setQaCategoryId(e.target.value)}
-                disabled={qaType !== "expense"}
-                title={qaType !== "expense" ? "Category optional for income/transfers." : ""}
+                disabled={qaMode === "now" ? (qaType !== "expense") : false}
               >
-                <option value="">{qaType === "expense" ? "Category (or auto)..." : "Category (optional)..."}</option>
+                <option value="">{qaMode === "planned" ? "Category required..." : (qaType === "expense" ? "Category (or suggestion)..." : "Category (optional)...")}</option>
                 {Array.from(categoriesByGroup.entries()).map(([g, arr]) => (
                   <optgroup key={g} label={g}>
                     {arr.map((c) => (
@@ -1008,61 +1437,98 @@ export default function Spending() {
                     ))}
                   </optgroup>
                 ))}
-              </select>
+              </NativeSelect>
+
+              {/* suggestion pill */}
+              {suggestion.categoryId && qaMode !== "now" ? null : (
+                suggestion.categoryId && (qaType === "expense") ? (
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <Badge variant={suggestion.source === "rule" ? "default" : "secondary"}>
+                      Suggest: {categoriesById.get(suggestion.categoryId)?.name ?? suggestion.categoryId}
+                    </Badge>
+                    <Button size="sm" variant="secondary" onClick={applySuggestion}>Apply</Button>
+                    <span className="text-[11px] text-muted-foreground">
+                      {suggestion.source === "rule" ? "Matched your rule." : "Keyword hint."}
+                    </span>
+                  </div>
+                ) : null
+              )}
+              {suggestion.categoryId && qaMode === "planned" ? (
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <Badge variant={suggestion.source === "rule" ? "default" : "secondary"}>
+                    Suggest: {categoriesById.get(suggestion.categoryId)?.name ?? suggestion.categoryId}
+                  </Badge>
+                  <Button size="sm" variant="secondary" onClick={applySuggestion}>Apply</Button>
+                  <span className="text-[11px] text-muted-foreground">
+                    {suggestion.source === "rule" ? "Matched your rule." : "Keyword hint."}
+                  </span>
+                </div>
+              ) : null}
             </div>
 
-            <div>
-              <Label className="text-xs text-muted-foreground">Date</Label>
+            <div className="md:col-span-2">
+              <Label className="text-xs text-muted-foreground">{qaMode === "planned" ? "Planned date" : "Date"}</Label>
               <Input type="date" value={qaDate} onChange={(e) => setQaDate(e.target.value)} />
             </div>
 
-            <div>
+            <div className="md:col-span-3">
               <Label className="text-xs text-muted-foreground">Merchant</Label>
               <Input placeholder="(optional)" value={qaMerchant} onChange={(e) => setQaMerchant(e.target.value)} />
             </div>
           </div>
 
-          <div className="grid gap-2 md:grid-cols-6">
-            <div className="md:col-span-3">
+          <div className="grid gap-2 md:grid-cols-12">
+            <div className="md:col-span-5">
               <Label className="text-xs text-muted-foreground">Note</Label>
               <Input placeholder="(optional)" value={qaNote} onChange={(e) => setQaNote(e.target.value)} />
             </div>
 
-            <div>
+            <div className="md:col-span-2">
               <Label className="text-xs text-muted-foreground">Payment</Label>
-              <select className="w-full h-10 rounded-md border bg-background px-3 text-sm" value={qaPayment} onChange={(e) => setQaPayment(e.target.value)}>
+              <NativeSelect value={qaPayment} onChange={(e) => setQaPayment(e.target.value)} disabled={qaMode === "planned"}>
                 <option>Card</option><option>Cash</option><option>Debit</option><option>Credit</option>
                 <option>Apple Pay</option><option>Google Pay</option><option>Zelle</option><option>Venmo</option>
-              </select>
+              </NativeSelect>
             </div>
 
-            <div>
+            <div className="md:col-span-2">
               <Label className="text-xs text-muted-foreground">Account</Label>
-              <select className="w-full h-10 rounded-md border bg-background px-3 text-sm" value={qaAccount} onChange={(e) => setQaAccount(e.target.value)}>
+              <NativeSelect value={qaAccount} onChange={(e) => setQaAccount(e.target.value)} disabled={qaMode === "planned"}>
                 <option>Checking</option><option>Savings</option><option>Credit Card</option><option>Business</option>
-              </select>
+              </NativeSelect>
             </div>
 
-            <div className="flex items-end gap-2">
-              <Button
-                variant="secondary"
-                className="w-full"
-                onClick={() => {
-                  const cid = autoPickCategory(qaMerchant, qaNote);
-                  if (!cid) return alert("No rule matched.");
-                  setQaCategoryId(cid);
-                }}
-              >
-                Run Rules
-              </Button>
+            <div className="md:col-span-3 flex items-end gap-2">
+              <Label className="w-full inline-flex items-center justify-between rounded-md border bg-background px-3 h-10 text-sm cursor-pointer">
+                <span>Add receipts</span>
+                <input
+                  className="hidden"
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  onChange={(e) => {
+                    const files = e.target.files;
+                    handleAddReceiptFiles(files);
+                    e.currentTarget.value = "";
+                  }}
+                />
+              </Label>
             </div>
           </div>
 
+          {/* staged receipts */}
+          {qaReceipts.length ? (
+            <div className="rounded-xl border p-3">
+              <div className="text-sm font-black">Staged receipts</div>
+              <ReceiptStrip receipts={qaReceipts} onRemove={removeStagedReceipt} />
+            </div>
+          ) : null}
+
           {/* split editor */}
-          {splitMode && qaType === "expense" ? (
-            <div className="rounded-lg border p-3 space-y-2">
+          {splitMode && (qaMode === "planned" || qaType === "expense") ? (
+            <div className="rounded-xl border p-3 space-y-2">
               <div className="flex items-center justify-between gap-2">
-                <div className="text-sm font-bold">Split lines</div>
+                <div className="text-sm font-black">Split lines</div>
                 <Button
                   size="sm"
                   variant="secondary"
@@ -1076,8 +1542,7 @@ export default function Spending() {
                 {splitLines.map((l) => (
                   <div key={l.id} className="grid gap-2 md:grid-cols-12 items-center">
                     <div className="md:col-span-4">
-                      <select
-                        className="w-full h-10 rounded-md border bg-background px-3 text-sm"
+                      <NativeSelect
                         value={l.categoryId}
                         onChange={(e) => setSplitLines((s) => s.map((x) => (x.id === l.id ? { ...x, categoryId: e.target.value } : x)))}
                       >
@@ -1089,7 +1554,7 @@ export default function Spending() {
                             ))}
                           </optgroup>
                         ))}
-                      </select>
+                      </NativeSelect>
                     </div>
                     <div className="md:col-span-2">
                       <Input
@@ -1118,11 +1583,15 @@ export default function Spending() {
                   </div>
                 ))}
               </div>
+
+              <div className="text-xs text-muted-foreground">
+                Split applies to <b>Now Expense</b> and <b>Planned</b>. Planned split will add as one planned item with total.
+              </div>
             </div>
           ) : null}
 
           {/* one-tap */}
-          {qaType === "expense" && !splitMode ? (
+          {(qaMode === "now" && qaType === "expense" && !splitMode) ? (
             <div className="flex flex-wrap gap-2 items-center">
               <span className="text-xs text-muted-foreground">One-tap:</span>
               {["groceries", "eating_out", "coffee", "gas", "shopping", "subscriptions", "misc"].map((id) => {
@@ -1140,7 +1609,76 @@ export default function Spending() {
         </CardContent>
       </Card>
 
-      {/* Tabs */}
+      {/* Planned purchases list */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">Planned Purchases</CardTitle>
+          <CardDescription>
+            These affect forecast but are not real transactions until converted.
+          </CardDescription>
+        </CardHeader>
+
+        <CardContent className="space-y-2">
+          {filteredPlanned.length === 0 ? (
+            <div className="text-sm text-muted-foreground">No planned items in this range.</div>
+          ) : (
+            filteredPlanned.map((p) => {
+              const cat = categoriesById.get(p.categoryId);
+              return (
+                <div key={p.id} className="rounded-xl border p-3">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-xs text-muted-foreground">{p.date}</span>
+                        <span className="font-black">{cat?.name ?? "—"}</span>
+                        <Badge variant="outline">{cat?.group ?? "Other"}</Badge>
+                        <Badge variant="secondary">Planned</Badge>
+                      </div>
+                      <div className="text-sm text-muted-foreground mt-1">
+                        {p.merchant ? <b>{p.merchant}</b> : "—"} {p.note ? <>• {p.note}</> : null}
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="font-black">{money(p.amount)}</div>
+                      <Button size="sm" variant="secondary" onClick={() => convertPlannedToTx(p)}>Convert</Button>
+                      <Button size="sm" variant="destructive" onClick={() => deletePlanned(p.id)}>Delete</Button>
+                    </div>
+                  </div>
+
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <Label className="inline-flex items-center">
+                      <Button size="sm" variant="secondary" asChild>
+                        <span>Add receipts</span>
+                      </Button>
+                      <input
+                        className="hidden"
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        onChange={(e) => {
+                          const files = e.target.files;
+                          addReceiptsToPlanned(p.id, files);
+                          e.currentTarget.value = "";
+                        }}
+                      />
+                    </Label>
+                  </div>
+
+                  {state.ui.showReceipts ? (
+                    <ReceiptStrip
+                      receipts={p.receipts}
+                      onRemove={(rid) => removeReceiptFromPlanned(p.id, rid)}
+                    />
+                  ) : null}
+                </div>
+              );
+            })
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Tabs content */}
       <Tabs value={state.ui.tab} onValueChange={(v) => setUI({ tab: v })}>
         <TabsList className="hidden" />
 
@@ -1149,8 +1687,8 @@ export default function Spending() {
           <div className="grid gap-3 md:grid-cols-2">
             <Card>
               <CardHeader className="pb-2">
-                <CardTitle className="text-base">Category share</CardTitle>
-                <CardDescription>Expenses only, top categories + other.</CardDescription>
+                <CardTitle className="text-base">Category share (spent)</CardTitle>
+                <CardDescription>Transactions only (planned shown in forecast cards).</CardDescription>
               </CardHeader>
               <CardContent className="h-[320px]">
                 {chartCategoryShare.length ? (
@@ -1172,8 +1710,8 @@ export default function Spending() {
 
             <Card>
               <CardHeader className="pb-2">
-                <CardTitle className="text-base">Daily spend</CardTitle>
-                <CardDescription>Expenses per day in the selected range.</CardDescription>
+                <CardTitle className="text-base">Daily spend (spent)</CardTitle>
+                <CardDescription>Transactions only.</CardDescription>
               </CardHeader>
               <CardContent className="h-[320px]">
                 {chartDailySpend.length ? (
@@ -1194,13 +1732,13 @@ export default function Spending() {
             </Card>
           </div>
 
-          {/* Budget list */}
+          {/* Budgets summary */}
           <Card>
             <CardHeader className="pb-2">
               <div className="flex flex-wrap justify-between items-start gap-2">
                 <div>
                   <CardTitle className="text-base">Budgets ({budgetMode})</CardTitle>
-                  <CardDescription>Spent vs budget+carry, plus forecast with planned remaining.</CardDescription>
+                  <CardDescription>Spent vs budget+carry, plus forecast (planned remaining + planned purchases).</CardDescription>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <Button variant="secondary" onClick={() => setState((s) => ({ ...s, rollover: { ...s.rollover, enabled: !s.rollover.enabled } }))}>
@@ -1210,30 +1748,34 @@ export default function Spending() {
                 </div>
               </div>
             </CardHeader>
+
             <CardContent className="space-y-2">
               {budgetRows.length ? (
                 budgetRows.slice(0, 12).map((r) => (
-                  <div key={r.id} className="rounded-lg border p-3">
+                  <div key={r.id} className="rounded-xl border p-3">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
-                          <div className="font-bold">{r.name}</div>
-                          {pillForStatus(r.status)}
+                          <div className="font-black">{r.name}</div>
+                          {pill(r.status)}
                           <span className="text-xs text-muted-foreground">{r.group}</span>
+                          {r.plannedLocal > 0 ? <Badge variant="secondary">Planned {money(r.plannedLocal)}</Badge> : null}
                         </div>
                         <div className="text-xs text-muted-foreground mt-1">
-                          Spent {money(r.spent)} / {money(r.budgetWithCarry)} • Planned {money(r.plannedRemaining)} • Forecast {money(r.forecast)} ({r.forecastStatus})
+                          Spent {money(r.spent)} / {money(r.budgetWithCarry)} • Planned remaining {money(r.plannedRemaining)} • Forecast {money(r.forecast)} ({r.forecastStatus})
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
                         <Button size="sm" variant="secondary" onClick={() => scrollToCategory(r.id)}>View</Button>
                       </div>
                     </div>
+
                     <div className="mt-2 h-2 w-full rounded-full bg-muted overflow-hidden">
-                      <div className="h-full bg-foreground/25" style={{ width: `${Math.round(clamp01(r.pct) * 100)}%` }} />
+                      <div className="h-full bg-foreground/25" style={{ width: `${Math.round(clamp01(r.forecastPct) * 100)}%` }} />
                     </div>
+
                     <div className="mt-1 text-xs text-muted-foreground">
-                      Used {r.budgetWithCarry > 0 ? `${Math.round(r.pct * 100)}%` : "—"} • Carry {money(r.carry)}
+                      Used (spent) {r.budgetWithCarry > 0 ? `${Math.round(r.pct * 100)}%` : "—"} • Forecast {r.budgetWithCarry > 0 ? `${Math.round(r.forecastPct * 100)}%` : "—"} • Carry {money(r.carry)}
                     </div>
                   </div>
                 ))
@@ -1254,6 +1796,7 @@ export default function Spending() {
               <CardTitle className="text-base">Manage</CardTitle>
               <CardDescription>Budgets, recurring, rules, categories.</CardDescription>
             </CardHeader>
+
             <CardContent>
               <Tabs value={state.ui.manageTab} onValueChange={(v) => setUI({ manageTab: v })}>
                 <TabsList className="flex flex-wrap">
@@ -1279,13 +1822,14 @@ export default function Spending() {
 
                   <div className="space-y-2">
                     {budgetRows.map((r) => (
-                      <div key={r.id} className="rounded-lg border p-3">
+                      <div key={r.id} className="rounded-xl border p-3">
                         <div className="flex flex-wrap items-start justify-between gap-3">
                           <div className="min-w-0">
                             <div className="flex flex-wrap items-center gap-2">
                               <div className="font-black">{r.name}</div>
-                              {pillForStatus(r.status)}
+                              {pill(r.status)}
                               <span className="text-xs text-muted-foreground">{r.group}</span>
+                              {r.plannedLocal > 0 ? <Badge variant="secondary">Planned {money(r.plannedLocal)}</Badge> : null}
                             </div>
                             <div className="text-xs text-muted-foreground mt-1">
                               Spent {money(r.spent)} / Budget+Carry {money(r.budgetWithCarry)} • Base {money(r.baseBudget)} • Carry {money(r.carry)}
@@ -1303,20 +1847,12 @@ export default function Spending() {
 
                             <div className="w-[140px]">
                               <Label className="text-xs text-muted-foreground">Base budget</Label>
-                              <Input
-                                defaultValue={String(r.baseBudget ?? 0)}
-                                inputMode="decimal"
-                                onBlur={(e) => updateCategoryBudget(r.id, e.target.value)}
-                              />
+                              <Input defaultValue={String(r.baseBudget ?? 0)} inputMode="decimal" onBlur={(e) => updateCategoryBudget(r.id, e.target.value)} />
                             </div>
 
-                            <div className="w-[160px]">
+                            <div className="w-[170px]">
                               <Label className="text-xs text-muted-foreground">Planned remaining</Label>
-                              <Input
-                                defaultValue={String(r.plannedRemaining ?? 0)}
-                                inputMode="decimal"
-                                onBlur={(e) => updatePlannedRemaining(r.id, e.target.value)}
-                              />
+                              <Input defaultValue={String(r.plannedRemaining ?? 0)} inputMode="decimal" onBlur={(e) => updatePlannedRemaining(r.id, e.target.value)} />
                             </div>
 
                             <Button size="sm" variant="secondary" onClick={() => scrollToCategory(r.id)}>View</Button>
@@ -1324,10 +1860,12 @@ export default function Spending() {
                         </div>
 
                         <div className="mt-2 h-2 w-full rounded-full bg-muted overflow-hidden">
-                          <div className="h-full bg-foreground/25" style={{ width: `${Math.round(clamp01(r.pct) * 100)}%` }} />
+                          <div className="h-full bg-foreground/25" style={{ width: `${Math.round(clamp01(r.forecastPct) * 100)}%` }} />
                         </div>
+
                         <div className="mt-1 text-xs text-muted-foreground">
-                          Used {r.budgetWithCarry > 0 ? `${Math.round(r.pct * 100)}%` : "—"} • Forecast {r.budgetWithCarry > 0 ? `${Math.round(r.forecastPct * 100)}%` : "—"}
+                          Used (spent) {r.budgetWithCarry > 0 ? `${Math.round(r.pct * 100)}%` : "—"} • Forecast{" "}
+                          {r.budgetWithCarry > 0 ? `${Math.round(r.forecastPct * 100)}%` : "—"}
                         </div>
                       </div>
                     ))}
@@ -1343,7 +1881,7 @@ export default function Spending() {
                     <Button variant="secondary" onClick={runDueRecurring}>Run Due</Button>
                   </div>
 
-                  <div className="rounded-lg border p-3 space-y-2">
+                  <div className="rounded-xl border p-3 space-y-2">
                     <div className="font-black">Add recurring</div>
                     <div className="grid gap-2 md:grid-cols-12 items-end">
                       <div className="md:col-span-3">
@@ -1356,11 +1894,7 @@ export default function Spending() {
                       </div>
                       <div className="md:col-span-3">
                         <Label className="text-xs text-muted-foreground">Category</Label>
-                        <select
-                          className="w-full h-10 rounded-md border bg-background px-3 text-sm"
-                          defaultValue="subscriptions"
-                          onChange={(e) => (newRecDraft.current.categoryId = e.target.value)}
-                        >
+                        <NativeSelect defaultValue="subscriptions" onChange={(e) => (newRecDraft.current.categoryId = e.target.value)}>
                           {Array.from(categoriesByGroup.entries()).map(([g, arr]) => (
                             <optgroup key={g} label={g}>
                               {arr.map((c) => (
@@ -1368,19 +1902,15 @@ export default function Spending() {
                               ))}
                             </optgroup>
                           ))}
-                        </select>
+                        </NativeSelect>
                       </div>
                       <div className="md:col-span-2">
                         <Label className="text-xs text-muted-foreground">Cadence</Label>
-                        <select
-                          className="w-full h-10 rounded-md border bg-background px-3 text-sm"
-                          defaultValue="monthly"
-                          onChange={(e) => (newRecDraft.current.cadence = e.target.value)}
-                        >
+                        <NativeSelect defaultValue="monthly" onChange={(e) => (newRecDraft.current.cadence = e.target.value)}>
                           <option value="weekly">Weekly</option>
                           <option value="monthly">Monthly</option>
                           <option value="yearly">Yearly</option>
-                        </select>
+                        </NativeSelect>
                       </div>
                       <div className="md:col-span-2">
                         <Label className="text-xs text-muted-foreground">Next date</Label>
@@ -1427,30 +1957,23 @@ export default function Spending() {
                       <div className="text-sm text-muted-foreground">No recurring items yet.</div>
                     ) : (
                       state.recurring.map((r) => (
-                        <div key={r.id} className="rounded-lg border p-3">
+                        <div key={r.id} className="rounded-xl border p-3">
                           <div className="flex flex-wrap items-start justify-between gap-3">
                             <div>
                               <div className="font-black">{r.name}</div>
                               <div className="text-xs text-muted-foreground">
-                                {money(r.amount)} • {categoriesById.get(r.categoryId)?.name ?? "—"} • {r.cadence} • next: {r.nextDate} • {r.enabled ? "enabled" : "disabled"}
+                                {money(r.amount)} • {categoriesById.get(r.categoryId)?.name ?? "—"} • {r.cadence} • next: {r.nextDate} •{" "}
+                                {r.enabled ? "enabled" : "disabled"}
                               </div>
                             </div>
                             <div className="flex flex-wrap gap-2">
-                              <Button
-                                size="sm"
-                                variant="secondary"
-                                onClick={() => setState((s) => ({ ...s, recurring: s.recurring.map((x) => (x.id === r.id ? { ...x, enabled: !x.enabled } : x)) }))}
-                              >
+                              <Button size="sm" variant="secondary" onClick={() => setState((s) => ({ ...s, recurring: s.recurring.map((x) => (x.id === r.id ? { ...x, enabled: !x.enabled } : x)) }))}>
                                 {r.enabled ? "Disable" : "Enable"}
                               </Button>
-                              <Button
-                                size="sm"
-                                variant="destructive"
-                                onClick={() => {
-                                  if (!confirm("Delete recurring item?")) return;
-                                  setState((s) => ({ ...s, recurring: s.recurring.filter((x) => x.id !== r.id) }));
-                                }}
-                              >
+                              <Button size="sm" variant="destructive" onClick={() => {
+                                if (!confirm("Delete recurring item?")) return;
+                                setState((s) => ({ ...s, recurring: s.recurring.filter((x) => x.id !== r.id) }));
+                              }}>
                                 Delete
                               </Button>
                             </div>
@@ -1463,32 +1986,24 @@ export default function Spending() {
 
                 {/* Rules */}
                 <TabsContent value="rules" className="pt-3 space-y-3">
-                  <div className="rounded-lg border p-3 space-y-2">
+                  <div className="rounded-xl border p-3 space-y-2">
                     <div className="font-black">Add rule</div>
                     <div className="grid gap-2 md:grid-cols-12 items-end">
                       <div className="md:col-span-3">
                         <Label className="text-xs text-muted-foreground">Field</Label>
-                        <select
-                          className="w-full h-10 rounded-md border bg-background px-3 text-sm"
-                          defaultValue="either"
-                          onChange={(e) => (newRuleDraft.current.field = e.target.value)}
-                        >
+                        <NativeSelect defaultValue="either" onChange={(e) => (newRuleDraft.current.field = e.target.value)}>
                           <option value="either">Merchant OR Note</option>
                           <option value="merchant">Merchant only</option>
                           <option value="note">Note only</option>
-                        </select>
+                        </NativeSelect>
                       </div>
                       <div className="md:col-span-4">
                         <Label className="text-xs text-muted-foreground">Match text (contains)</Label>
                         <Input placeholder="starbucks" onChange={(e) => (newRuleDraft.current.match = e.target.value)} />
                       </div>
-                      <div className="md:col-span-4">
+                      <div className="md:col-span-5">
                         <Label className="text-xs text-muted-foreground">Category</Label>
-                        <select
-                          className="w-full h-10 rounded-md border bg-background px-3 text-sm"
-                          defaultValue="misc"
-                          onChange={(e) => (newRuleDraft.current.categoryId = e.target.value)}
-                        >
+                        <NativeSelect defaultValue="misc" onChange={(e) => (newRuleDraft.current.categoryId = e.target.value)}>
                           {Array.from(categoriesByGroup.entries()).map(([g, arr]) => (
                             <optgroup key={g} label={g}>
                               {arr.map((c) => (
@@ -1496,7 +2011,7 @@ export default function Spending() {
                               ))}
                             </optgroup>
                           ))}
-                        </select>
+                        </NativeSelect>
                       </div>
                       <div className="md:col-span-12">
                         <Button
@@ -1525,30 +2040,22 @@ export default function Spending() {
                       <div className="text-sm text-muted-foreground">No rules yet.</div>
                     ) : (
                       state.rules.map((r) => (
-                        <div key={r.id} className="rounded-lg border p-3">
+                        <div key={r.id} className="rounded-xl border p-3">
                           <div className="flex flex-wrap items-start justify-between gap-3">
                             <div>
                               <div className="font-black">
                                 {r.enabled ? "✅" : "⛔"} If {r.field} contains “{r.match}” → {categoriesById.get(r.categoryId)?.name ?? "—"}
                               </div>
-                              <div className="text-xs text-muted-foreground">Rules apply only when category is blank for an expense.</div>
+                              <div className="text-xs text-muted-foreground">Suggestion + auto-fill use these rules.</div>
                             </div>
                             <div className="flex flex-wrap gap-2">
-                              <Button
-                                size="sm"
-                                variant="secondary"
-                                onClick={() => setState((s) => ({ ...s, rules: s.rules.map((x) => (x.id === r.id ? { ...x, enabled: !x.enabled } : x)) }))}
-                              >
+                              <Button size="sm" variant="secondary" onClick={() => setState((s) => ({ ...s, rules: s.rules.map((x) => (x.id === r.id ? { ...x, enabled: !x.enabled } : x)) }))}>
                                 {r.enabled ? "Disable" : "Enable"}
                               </Button>
-                              <Button
-                                size="sm"
-                                variant="destructive"
-                                onClick={() => {
-                                  if (!confirm("Delete rule?")) return;
-                                  setState((s) => ({ ...s, rules: s.rules.filter((x) => x.id !== r.id) }));
-                                }}
-                              >
+                              <Button size="sm" variant="destructive" onClick={() => {
+                                if (!confirm("Delete rule?")) return;
+                                setState((s) => ({ ...s, rules: s.rules.filter((x) => x.id !== r.id) }));
+                              }}>
                                 Delete
                               </Button>
                             </div>
@@ -1561,7 +2068,7 @@ export default function Spending() {
 
                 {/* Categories */}
                 <TabsContent value="categories" className="pt-3 space-y-3">
-                  <div className="rounded-lg border p-3 space-y-2">
+                  <div className="rounded-xl border p-3 space-y-2">
                     <div className="font-black">Add category</div>
                     <div className="grid gap-2 md:grid-cols-12 items-end">
                       <div className="md:col-span-5">
@@ -1607,7 +2114,7 @@ export default function Spending() {
 
                   <div className="space-y-2">
                     {state.categories.map((c) => (
-                      <div key={c.id} className="rounded-lg border p-3">
+                      <div key={c.id} className="rounded-xl border p-3">
                         <div className="flex flex-wrap items-start justify-between gap-3">
                           <div>
                             <div className="font-black">{c.name}</div>
@@ -1637,12 +2144,13 @@ export default function Spending() {
         </TabsContent>
       </Tabs>
 
-      {/* Routed sections */}
+      {/* Category drilldown */}
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-base">Spending by Category</CardTitle>
-          <CardDescription>Auto-routed expense transactions per category.</CardDescription>
+          <CardDescription>Collapsible sections (shows spent tx, planned shown as badge + forecast).</CardDescription>
         </CardHeader>
+
         <CardContent>
           {!state.ui.showRoutedSections ? (
             <div className="text-sm text-muted-foreground">Hidden.</div>
@@ -1651,97 +2159,144 @@ export default function Spending() {
               {state.categories.map((c) => {
                 const categoryTx = filteredTx.filter((t) => t.type === "expense" && t.categoryId === c.id);
                 const categoryTotal = categoryTx.reduce((s, t) => s + t.amount, 0);
+                const plannedLocal = Number(plannedByCategory.get(c.id) ?? 0);
 
                 const baseBudget = Number(budgets?.[c.id] ?? 0);
                 const carry = Number(carryForThisPeriod?.[c.id] ?? 0);
                 const budgetWithCarry = baseBudget + carry;
                 const pct = budgetWithCarry > 0 ? categoryTotal / budgetWithCarry : 0;
+                const forecastPct = budgetWithCarry > 0 ? (categoryTotal + plannedLocal) / budgetWithCarry : 0;
 
                 const isFilteredToThis = state.ui.categoryFilter === c.id;
                 const shouldShow =
                   isFilteredToThis ||
                   categoryTx.length > 0 ||
+                  plannedLocal > 0 ||
                   (baseBudget > 0 && (state.ui.groupFilter === "All" || state.ui.groupFilter === c.group));
 
                 if (!shouldShow) return null;
                 if (state.ui.groupFilter !== "All" && state.ui.groupFilter !== c.group && !isFilteredToThis) return null;
 
+                const cap = state.ui.compact ? 6 : 12;
+
                 return (
                   <div
                     key={c.id}
                     ref={(el) => { sectionRefs.current[c.id] = el; }}
-                    className="rounded-xl border p-4"
+                    className="rounded-2xl border overflow-hidden"
                   >
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <div className="text-lg font-black">{c.name}</div>
-                          <Badge variant="outline">{c.group}</Badge>
-                          {budgetWithCarry > 0 ? (
-                            <Badge variant={pct >= 1 ? "destructive" : pct >= 0.85 ? "secondary" : "default"}>
-                              {Math.round(pct * 100)}%
-                            </Badge>
-                          ) : (
-                            <Badge variant="outline">No budget</Badge>
-                          )}
+                    <details open={isFilteredToThis}>
+                      <summary className="cursor-pointer select-none p-4 flex flex-wrap items-center justify-between gap-3 hover:bg-muted/40">
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <div className="text-lg font-black">{c.name}</div>
+                            <Badge variant="outline">{c.group}</Badge>
+                            {budgetWithCarry > 0 ? (
+                              <Badge variant={forecastPct >= 1 ? "destructive" : forecastPct >= 0.85 ? "secondary" : "default"}>
+                                Forecast {Math.round(forecastPct * 100)}%
+                              </Badge>
+                            ) : (
+                              <Badge variant="outline">No budget</Badge>
+                            )}
+                            {plannedLocal > 0 ? <Badge variant="secondary">Planned {money(plannedLocal)}</Badge> : null}
+                          </div>
+                          <div className="text-sm text-muted-foreground mt-1">
+                            Spent: <b>{money(categoryTotal)}</b>
+                            {budgetWithCarry > 0 ? (
+                              <>
+                                {" "}• Budget+Carry: <b>{money(budgetWithCarry)}</b> (Base {money(baseBudget)} + Carry {money(carry)})
+                                {" "}• Remaining (spent): <b>{money(Math.max(0, budgetWithCarry - categoryTotal))}</b>
+                              </>
+                            ) : null}
+                          </div>
                         </div>
-                        <div className="text-sm text-muted-foreground mt-1">
-                          Total: <b>{money(categoryTotal)}</b>
-                          {budgetWithCarry > 0 ? (
-                            <>
-                              {" "}• Budget+Carry: <b>{money(budgetWithCarry)}</b> (Base {money(baseBudget)} + Carry {money(carry)})
-                              {" "}• Remaining: <b>{money(Math.max(0, budgetWithCarry - categoryTotal))}</b>
-                            </>
+
+                        <div className="flex flex-wrap gap-2">
+                          <Button size="sm" variant="secondary" onClick={(e) => { e.preventDefault(); setUI({ categoryFilter: c.id }); }}>
+                            Filter
+                          </Button>
+                          <Button size="sm" variant="secondary" onClick={(e) => { e.preventDefault(); setUI({ categoryFilter: "All", groupFilter: "All" }); }}>
+                            Clear
+                          </Button>
+                        </div>
+                      </summary>
+
+                      <div className="px-4 pb-4">
+                        {budgetWithCarry > 0 ? (
+                          <div className="mt-2 space-y-2">
+                            <div className="text-xs text-muted-foreground">Spent progress</div>
+                            <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
+                              <div className="h-full bg-foreground/25" style={{ width: `${Math.round(clamp01(pct) * 100)}%` }} />
+                            </div>
+
+                            <div className="text-xs text-muted-foreground mt-2">Forecast progress (spent + planned)</div>
+                            <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
+                              <div className="h-full bg-foreground/40" style={{ width: `${Math.round(clamp01(forecastPct) * 100)}%` }} />
+                            </div>
+                          </div>
+                        ) : null}
+
+                        <div className="mt-3 space-y-2">
+                          {categoryTx.length === 0 ? (
+                            <div className="text-sm text-muted-foreground">No spent transactions in this category for this period.</div>
+                          ) : (
+                            categoryTx.slice(0, cap).map((t) => (
+                              <div key={t.id} className="rounded-xl border p-3">
+                                <div className="flex flex-wrap items-start justify-between gap-3">
+                                  <div className="min-w-0">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <span className="text-xs text-muted-foreground">{t.date}</span>
+                                      <span className="font-bold">{t.merchant || "—"}</span>
+                                      <span className="text-xs text-muted-foreground">
+                                        • {(t.paymentMethod || "—")} / {(t.account || "—")}
+                                      </span>
+                                      {t.meta?.recurringName ? <Badge variant="outline">Recurring</Badge> : null}
+                                      {t.meta?.splitGroupId ? <Badge variant="outline">Split</Badge> : null}
+                                      {Array.isArray(t.receipts) && t.receipts.length ? <Badge variant="secondary">Receipts {t.receipts.length}</Badge> : null}
+                                    </div>
+                                    {t.note ? <div className="text-xs text-muted-foreground mt-1">{t.note}</div> : null}
+                                  </div>
+
+                                  <div className="flex items-center gap-2">
+                                    <div className="font-black">{money(t.amount)}</div>
+                                    <Button size="sm" variant="secondary" onClick={() => duplicateTx(t)}>Duplicate</Button>
+                                    <Button size="sm" variant="destructive" onClick={() => deleteTx(t.id)}>Delete</Button>
+                                  </div>
+                                </div>
+
+                                <div className="mt-2 flex flex-wrap items-center gap-2">
+                                  <Label className="inline-flex items-center">
+                                    <Button size="sm" variant="secondary" asChild>
+                                      <span>Add receipts</span>
+                                    </Button>
+                                    <input
+                                      className="hidden"
+                                      type="file"
+                                      accept="image/*"
+                                      multiple
+                                      onChange={(e) => {
+                                        addReceiptsToTransaction(t.id, e.target.files);
+                                        e.currentTarget.value = "";
+                                      }}
+                                    />
+                                  </Label>
+                                </div>
+
+                                {state.ui.showReceipts ? (
+                                  <ReceiptStrip receipts={t.receipts} onRemove={(rid) => removeReceiptFromTransaction(t.id, rid)} />
+                                ) : null}
+                              </div>
+                            ))
+                          )}
+
+                          {categoryTx.length > cap ? (
+                            <div className="text-xs text-muted-foreground">
+                              Showing top {cap}. Use filters/search to narrow.
+                            </div>
                           ) : null}
                         </div>
                       </div>
-
-                      <div className="flex flex-wrap gap-2">
-                        <Button size="sm" variant="secondary" onClick={() => setUI({ categoryFilter: c.id })}>Filter</Button>
-                        <Button size="sm" variant="secondary" onClick={() => setUI({ categoryFilter: "All", groupFilter: "All" })}>Clear</Button>
-                      </div>
-                    </div>
-
-                    {budgetWithCarry > 0 ? (
-                      <div className="mt-3 h-2 w-full rounded-full bg-muted overflow-hidden">
-                        <div className="h-full bg-foreground/25" style={{ width: `${Math.round(clamp01(pct) * 100)}%` }} />
-                      </div>
-                    ) : null}
-
-                    <div className="mt-3 space-y-2">
-                      {categoryTx.length === 0 ? (
-                        <div className="text-sm text-muted-foreground">No expenses in this category for this period.</div>
-                      ) : (
-                        categoryTx.slice(0, state.ui.compact ? 6 : 12).map((t) => (
-                          <div key={t.id} className="flex flex-wrap items-start justify-between gap-3 rounded-lg border p-3">
-                            <div className="min-w-0">
-                              <div className="flex flex-wrap items-center gap-2">
-                                <span className="text-xs text-muted-foreground">{t.date}</span>
-                                <span className="font-bold">{t.merchant || "—"}</span>
-                                <span className="text-xs text-muted-foreground">
-                                  • {(t.paymentMethod || "—")} / {(t.account || "—")}
-                                </span>
-                                {t.meta?.recurringName ? <Badge variant="outline">Recurring</Badge> : null}
-                                {t.meta?.splitGroupId ? <Badge variant="outline">Split</Badge> : null}
-                              </div>
-                              {t.note ? <div className="text-xs text-muted-foreground mt-1">{t.note}</div> : null}
-                            </div>
-
-                            <div className="flex items-center gap-2">
-                              <div className="font-black">{money(t.amount)}</div>
-                              <Button size="sm" variant="secondary" onClick={() => duplicateTx(t)}>Duplicate</Button>
-                              <Button size="sm" variant="destructive" onClick={() => deleteTx(t.id)}>Delete</Button>
-                            </div>
-                          </div>
-                        ))
-                      )}
-
-                      {categoryTx.length > (state.ui.compact ? 6 : 12) ? (
-                        <div className="text-xs text-muted-foreground">
-                          Showing top {state.ui.compact ? 6 : 12}. Use filters/search to narrow.
-                        </div>
-                      ) : null}
-                    </div>
+                    </details>
                   </div>
                 );
               })}
@@ -1761,7 +2316,7 @@ export default function Spending() {
             <Button
               variant="destructive"
               onClick={() => {
-                if (!confirm("Delete ALL transactions only? (Keeps categories/budgets/rules/recurring)")) return;
+                if (!confirm("Delete ALL transactions only? (Keeps categories/budgets/rules/recurring/planned items)")) return;
                 setState((s) => ({ ...s, transactions: [] }));
               }}
             >
@@ -1769,11 +2324,12 @@ export default function Spending() {
             </Button>
           </div>
         </CardHeader>
+
         <CardContent>
           {filteredTx.length === 0 ? (
             <div className="text-sm text-muted-foreground">No transactions for this range.</div>
           ) : (
-            <div className="overflow-x-auto rounded-lg border">
+            <div className="overflow-x-auto rounded-xl border">
               <table className="w-full text-sm">
                 <thead className="bg-muted/50">
                   <tr className="text-left">
@@ -1784,6 +2340,7 @@ export default function Spending() {
                     <th className="p-3">Merchant</th>
                     <th className="p-3">Pay/Acct</th>
                     <th className="p-3">Note</th>
+                    <th className="p-3">Receipts</th>
                     <th className="p-3 text-right">Amount</th>
                     <th className="p-3 text-right">Actions</th>
                   </tr>
@@ -1792,6 +2349,7 @@ export default function Spending() {
                   {filteredTx.map((t) => {
                     const cat = categoriesById.get(t.categoryId);
                     const group = cat?.group ?? (t.type === "expense" ? "Other" : "—");
+                    const receiptCount = Array.isArray(t.receipts) ? t.receipts.length : 0;
                     return (
                       <tr key={t.id} className="border-t">
                         <td className="p-3 whitespace-nowrap">{t.date}</td>
@@ -1803,6 +2361,9 @@ export default function Spending() {
                           {(t.paymentMethod || "—")} / {(t.account || "—")}
                         </td>
                         <td className="p-3 min-w-[220px] text-muted-foreground">{t.note || "—"}</td>
+                        <td className="p-3 whitespace-nowrap">
+                          {receiptCount ? <Badge variant="secondary">{receiptCount}</Badge> : <span className="text-muted-foreground">—</span>}
+                        </td>
                         <td className="p-3 text-right font-black whitespace-nowrap">{money(t.amount)}</td>
                         <td className="p-3 text-right whitespace-nowrap">
                           <Button size="sm" variant="secondary" className="mr-2" onClick={() => duplicateTx(t)}>
