@@ -14,6 +14,10 @@ const LINKS = [
   { href: "/savings", label: "Savings Goals", meta: "Targets + progress" },
 ];
 
+const SYSTEM_LINKS = [
+  { href: "/settings", label: "Settings", meta: "Account + integrations" },
+];
+
 function isActive(path, href) {
   if (href === "/") return path === "/";
   return path === href || path.startsWith(href + "/") || path.startsWith(href);
@@ -30,7 +34,7 @@ export default function SideNav() {
         <div className="brandSub muted">Finance • Life • Tracking</div>
       </div>
 
-      {/* Premium-ish helper */}
+      {/* Command Panel */}
       <div
         className="card"
         style={{
@@ -45,9 +49,50 @@ export default function SideNav() {
         </div>
       </div>
 
-      {/* Nav */}
+      {/* Main Nav */}
       <nav className="nav">
         {LINKS.map((l) => {
+          const active = isActive(path, l.href);
+
+          return (
+            <Link
+              key={l.href}
+              href={l.href}
+              className={`navLink ${active ? "active" : ""}`}
+              style={{
+                paddingTop: 10,
+                paddingBottom: 10,
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10 }}>
+                <span style={{ fontWeight: 900 }}>{l.label}</span>
+                <span className="muted" style={{ fontSize: 11 }}>
+                  {active ? "Open" : ""}
+                </span>
+              </div>
+
+              <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>
+                {l.meta}
+              </div>
+            </Link>
+          );
+        })}
+      </nav>
+
+      <div style={{ height: 16 }} />
+
+      {/* Divider */}
+      <div
+        style={{
+          height: 1,
+          background: "rgba(255,255,255,0.08)",
+          marginBottom: 12,
+        }}
+      />
+
+      {/* System Section (Settings) */}
+      <nav className="nav">
+        {SYSTEM_LINKS.map((l) => {
           const active = isActive(path, l.href);
 
           return (
@@ -78,8 +123,11 @@ export default function SideNav() {
       <div style={{ height: 12 }} />
 
       {/* Footer */}
-      <div className="navFooter muted" style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-        <span>Local • Preview</span>
+      <div
+        className="navFooter muted"
+        style={{ display: "flex", justifyContent: "space-between", gap: 10 }}
+      >
+        <span>Supabase • Auth Enabled</span>
         <span style={{ fontSize: 11 }}>v1</span>
       </div>
     </aside>
