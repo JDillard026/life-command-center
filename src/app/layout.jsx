@@ -1,5 +1,6 @@
 import "./globals.css";
 import AppShell from "./components/AppShell";
+import AuthGate from "./components/AuthGate";
 
 export const metadata = {
   title: "Life Command Center",
@@ -10,7 +11,9 @@ export default function RootLayout({ children }) {
   return (
     <html lang="en">
       <body>
-        <AppShell>{children}</AppShell>
+        <AuthGate>
+          <AppShell>{children}</AppShell>
+        </AuthGate>
       </body>
     </html>
   );
