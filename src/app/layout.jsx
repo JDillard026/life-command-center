@@ -1,6 +1,6 @@
 import "./globals.css";
-import AppShell from "./components/AppShell";
 import AuthGate from "./components/AuthGate";
+import ClientLayout from "./ClientLayout";
 
 export const metadata = {
   title: "Life Command Center",
@@ -12,7 +12,7 @@ export default function RootLayout({ children }) {
     <html lang="en">
       <body>
         <AuthGate>
-          <AppShell>{children}</AppShell>
+          <ClientLayout>{children}</ClientLayout>
         </AuthGate>
       </body>
     </html>
