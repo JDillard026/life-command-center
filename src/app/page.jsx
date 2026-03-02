@@ -1,15 +1,19 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { projectCashFlow, todayISO } from "../lib/projectionEngine";
 
-const LS_BILLS = "lcc_bills_v5"; // ✅ MUST match Bills page
-const LS_PORT_ASSETS = "lcc_port_assets_v1";
-const LS_PORT_TXNS = "lcc_port_txns_v1";
-const LS_PORT_PRICES = "lcc_port_prices_v1";
+export const dynamic = "force-dynamic";
 
-// Addictive dashboard state
-const LS_DASH = "lcc_dash_v2";
+// Storage keys (robust on purpose)
+const LS_ACCOUNTS = "lcc_accounts_v1";
+const LS_PRIMARY = "lcc_accounts_primary_v1";
 
+const BILL_KEYS = ["lcc_bills_v5", "lcc_bills_v4", "lcc_bills_v3", "lcc_bills_v2", "lcc_bills_v1", "lcc_bills"];
+const EVENT_KEYS = ["lcc_events", "lcc_events_v2", "lcc_events_v1"];
+
+/** ---------- utils ---------- */
 function safeParse(str, fallback) {
   try {
     const v = JSON.parse(str);
@@ -19,9 +23,15 @@ function safeParse(str, fallback) {
   }
 }
 
-function toNum(x) {
-  const n = Number(x);
-  return Number.isFinite(n) ? n : 0;
+function getFirstLS(keys, fallback) {
+  for (const k of keys) {
+    const raw = typeof window !== "undefined" ? localStorage.getItem(k) : null;
+    if (raw && raw !== "null" && raw !== "undefined" && raw !== "[]") {
+      const parsed = safeParse(raw, null);
+      if (parsed != null) return { key: k, value: parsed };
+    }
+  }
+  return { key: null, value: fallback };
 }
 
 function money(n) {
@@ -30,890 +40,578 @@ function money(n) {
   return num.toLocaleString(undefined, { style: "currency", currency: "USD" });
 }
 
-function isoDate(d = new Date()) {
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd}`;
+function fmtShort(iso) {
+  if (!iso) return "—";
+  const d = new Date(iso + "T00:00:00");
+  return d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
 }
 
-function normSymbol(s) {
-  return String(s || "").trim().toUpperCase();
+function daysUntil(iso) {
+  if (!iso) return null;
+  const now = new Date();
+  const t0 = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const d = new Date(iso + "T00:00:00").getTime();
+  return Math.round((d - t0) / 86400000);
 }
 
-function daysBetween(fromISO, toISO) {
-  if (!fromISO || !toISO) return null;
-  const a = new Date(String(fromISO) + "T00:00:00");
-  const b = new Date(String(toISO) + "T00:00:00");
-  const t = b.getTime() - a.getTime();
-  if (!Number.isFinite(t)) return null;
-  return Math.round(t / 86400000);
-}
-
-function normalizeBillsState(saved) {
-  // Bills v5 saves { version, settings, items } (but also tolerate arrays)
-  const base = saved && typeof saved === "object" ? saved : {};
-  const items = Array.isArray(base.items) ? base.items : Array.isArray(base) ? base : [];
-  return { items: items.filter(Boolean) };
-}
-
-function clamp(n, lo, hi) {
-  const x = Number(n);
-  if (!Number.isFinite(x)) return lo;
-  return Math.max(lo, Math.min(hi, x));
-}
-
-function pct01(x) {
-  return `${Math.round(clamp(x, 0, 1) * 100)}%`;
-}
-
-function fmtDeltaMoney(delta) {
-  const d = toNum(delta);
-  const sign = d > 0 ? "+" : d < 0 ? "−" : "";
-  const abs = Math.abs(d);
-  return `${sign}${money(abs)}`;
-}
-
-function deltaColor(delta) {
-  const d = toNum(delta);
-  if (d > 0) return "rgba(130, 255, 190, .92)";
-  if (d < 0) return "rgba(255, 140, 140, .92)";
-  return "rgba(255,255,255,.75)";
-}
-
-function arrow(delta) {
-  const d = toNum(delta);
-  if (d > 0) return "▲";
-  if (d < 0) return "▼";
-  return "•";
-}
-
-function moodFromScore(score) {
-  if (score >= 88) return { label: "Locked in", note: "Protect the streak.", badge: "🟢" };
-  if (score >= 74) return { label: "Solid", note: "One clean action today.", badge: "🟡" };
-  if (score >= 60) return { label: "At risk", note: "Do what’s due soon.", badge: "🟠" };
-  return { label: "Emergency mode", note: "Next action only. No thinking.", badge: "🔴" };
-}
-
-function xpForLevel(level) {
-  // Increasing curve but not insane
-  return 120 + level * 45;
-}
-
-function computeLevelFromXP(totalXP) {
-  let xp = Math.max(0, toNum(totalXP));
-  let level = 1;
-  while (xp >= xpForLevel(level)) {
-    xp -= xpForLevel(level);
-    level += 1;
-    if (level > 99) break;
-  }
-  return { level, xpIntoLevel: xp, xpNeeded: xpForLevel(level) };
-}
-
-function Pill({ children }) {
-  return (
-    <span
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        gap: 6,
-        padding: "6px 10px",
-        borderRadius: 999,
-        border: "1px solid rgba(255,255,255,.10)",
-        background: "rgba(255,255,255,.04)",
-        fontSize: 12,
-        color: "rgba(255,255,255,.82)",
-        whiteSpace: "nowrap",
-      }}
-    >
-      {children}
-    </span>
-  );
-}
-
-function Sparkline({ values }) {
-  const vals = Array.isArray(values) ? values.map((x) => toNum(x)) : [];
-  const v = vals.slice(-14);
-  const min = v.length ? Math.min(...v) : 0;
-  const max = v.length ? Math.max(...v) : 0;
-  const range = max - min || 1;
-
-  const w = 120;
-  const h = 28;
-  const pad = 2;
-
-  const pts = v
-    .map((y, i) => {
-      const x = pad + (i * (w - pad * 2)) / Math.max(1, v.length - 1);
-      const yy = h - pad - ((y - min) * (h - pad * 2)) / range;
-      return `${x.toFixed(2)},${yy.toFixed(2)}`;
+/** Normalize bills into: { name, dueDate, amount } */
+function normalizeBills(list) {
+  if (!Array.isArray(list)) return [];
+  return list
+    .map((b) => {
+      const dueDate = (b?.dueDate || b?.due || b?.nextDueDate || "").slice?.(0, 10) || b?.dueDate;
+      const amount = Number(b?.amount ?? b?.minPayment ?? b?.payment ?? b?.dueAmount);
+      const name = b?.name || b?.title || b?.vendor || "Bill";
+      if (!dueDate) return null;
+      if (!Number.isFinite(amount)) return { name, dueDate, amount: null };
+      return { name, dueDate, amount };
     })
-    .join(" ");
-
-  return (
-    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} style={{ opacity: 0.9 }}>
-      <polyline
-        points={pts}
-        fill="none"
-        stroke="rgba(255,255,255,.70)"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
+    .filter(Boolean);
 }
 
-function MicroBtn({ href, title, sub, tag }) {
-  return (
-    <a
-      className="card"
-      href={href}
-      style={{
-        padding: 10,
-        display: "block",
-        textDecoration: "none",
-        position: "relative",
-        overflow: "hidden",
-      }}
-    >
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-        <div style={{ fontWeight: 900, color: "rgba(255,255,255,.92)" }}>{title}</div>
-        {tag ? (
-          <div className="muted" style={{ fontSize: 12 }}>
-            {tag}
-          </div>
-        ) : null}
-      </div>
-      {sub ? <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>{sub}</div> : null}
-      <div
-        style={{
-          position: "absolute",
-          left: 0,
-          right: 0,
-          bottom: 0,
-          height: 2,
-          background: "rgba(255,255,255,.18)",
-          opacity: 0.55,
-        }}
-      />
-    </a>
-  );
+/** Normalize events into projectionEngine shape */
+function normalizeEvents(list) {
+  if (!Array.isArray(list)) return [];
+  return list
+    .map((e) => {
+      const id = e?.id ?? e?._id ?? e?.uuid;
+      const title = e?.title ?? e?.name ?? "Event";
+      const date = (e?.date || e?.when || e?.startDate || "").slice?.(0, 10) || e?.date;
+
+      const flow = (e?.flow || e?.type || e?.kind || "neutral").toString().toLowerCase();
+      const normalizedFlow =
+        flow.includes("income") || flow === "in" || flow === "credit"
+          ? "income"
+          : flow.includes("expense") || flow === "out" || flow === "debit"
+          ? "expense"
+          : "neutral";
+
+      const amt = Number(typeof e?.amount === "string" ? e.amount.replace(/[^0-9.-]/g, "") : e?.amount);
+      const amount = Number.isFinite(amt) ? amt : null;
+
+      const recurrence = e?.recurrence ?? { freq: "none" };
+      const exceptions = Array.isArray(e?.exceptions) ? e.exceptions : [];
+      const overrides = e?.overrides && typeof e.overrides === "object" ? e.overrides : {};
+
+      if (!id || !date) return null;
+
+      return {
+        id,
+        title,
+        date: String(date).slice(0, 10),
+        flow: normalizedFlow,
+        amount,
+        recurrence,
+        exceptions,
+        overrides,
+      };
+    })
+    .filter(Boolean);
+}
+
+function pct(n) {
+  const num = Number(n);
+  if (!Number.isFinite(num)) return 0;
+  return Math.max(0, Math.min(100, num));
+}
+
+function safeNum(n, fallback = 0) {
+  const x = Number(n);
+  return Number.isFinite(x) ? x : fallback;
 }
 
 export default function DashboardPage() {
-  const [billsState, setBillsState] = useState({ items: [] });
-  const [assets, setAssets] = useState([]);
-  const [txns, setTxns] = useState([]);
-  const [prices, setPrices] = useState({});
-  const [loaded, setLoaded] = useState(false);
+  const [accounts, setAccounts] = useState([]);
+  const [primaryId, setPrimaryId] = useState("");
+  const [events, setEvents] = useState([]);
+  const [bills, setBills] = useState([]);
 
-  const [dash, setDash] = useState({
-    streak: 0,
-    lastSeen: null,
-    lastCheckin: null, // ISO date of last check-in
-    xpTotal: 0,
-    snapshots: {}, // { [iso]: { net, inv, debt, outflow, due7 } }
-  });
-
-  const today = useMemo(() => isoDate(), []);
-
+  // Load from localStorage (client-only)
   useEffect(() => {
-    const bRaw = safeParse(localStorage.getItem(LS_BILLS) || "null", null);
-    const b = normalizeBillsState(bRaw);
+    const a = safeParse(localStorage.getItem(LS_ACCOUNTS) || "[]", []);
+    setAccounts(Array.isArray(a) ? a : []);
 
-    const aRaw = safeParse(localStorage.getItem(LS_PORT_ASSETS) || "[]", []);
-    const tRaw = safeParse(localStorage.getItem(LS_PORT_TXNS) || "[]", []);
-    const pRaw = safeParse(localStorage.getItem(LS_PORT_PRICES) || "{}", {});
+    const p = localStorage.getItem(LS_PRIMARY) || "";
+    setPrimaryId(p);
 
-    setBillsState(b);
-    setAssets(Array.isArray(aRaw) ? aRaw : []);
-    setTxns(Array.isArray(tRaw) ? tRaw : []);
-    setPrices(pRaw && typeof pRaw === "object" ? pRaw : {});
+    const ev = getFirstLS(EVENT_KEYS, []).value;
+    setEvents(normalizeEvents(ev));
 
-    // Load dash state + update "visit streak" (this is separate from check-in)
-    const saved = safeParse(localStorage.getItem(LS_DASH) || "null", null) || {};
-    const lastSeen = saved.lastSeen || null;
-    let streak = toNum(saved.streak);
+    const bl = getFirstLS(BILL_KEYS, []).value;
+    setBills(normalizeBills(bl));
+  }, []);
 
-    if (!lastSeen) {
-      streak = 1;
-    } else {
-      const diff = daysBetween(lastSeen, today);
-      if (diff === 0) {
-        // same day: keep
-      } else if (diff === 1) {
-        streak = Math.max(1, streak + 1);
-      } else if (diff > 1) {
-        streak = 1;
-      }
-    }
+  const primaryAccount = useMemo(() => {
+    const list = Array.isArray(accounts) ? accounts : [];
+    if (!list.length) return null;
+    const found = list.find((x) => x.id === primaryId);
+    return found || list[0] || null;
+  }, [accounts, primaryId]);
 
-    const next = {
-      streak,
-      lastSeen: today,
-      lastCheckin: saved.lastCheckin || null,
-      xpTotal: toNum(saved.xpTotal),
-      snapshots: saved.snapshots && typeof saved.snapshots === "object" ? saved.snapshots : {},
-    };
+  const startingBalance = useMemo(() => {
+    const bal = Number(primaryAccount?.balance);
+    return Number.isFinite(bal) ? bal : null;
+  }, [primaryAccount]);
 
-    localStorage.setItem(LS_DASH, JSON.stringify(next));
-    setDash(next);
+  const billsWithAmounts = useMemo(
+    () => bills.filter((b) => Number.isFinite(Number(b.amount))),
+    [bills]
+  );
 
-    setLoaded(true);
-  }, [today]);
+  const forecast = useMemo(() => {
+    if (startingBalance == null) return null;
 
-  const billsComputed = useMemo(() => {
-    const items = Array.isArray(billsState.items) ? billsState.items : [];
-    const active = items.filter((x) => x && x.active !== false);
+    return projectCashFlow({
+      startDateISO: todayISO(),
+      days: 30,
+      startingBalance,
+      events,
+      bills: billsWithAmounts,
+    });
+  }, [startingBalance, events, billsWithAmounts]);
 
-    const noncontrollableMonthly = active
-      .filter((x) => x.type !== "controllable")
-      .reduce((s, x) => s + toNum(x.amount), 0);
+  const upcomingBills7 = useMemo(() => {
+    const today = todayISO();
+    return bills
+      .filter((b) => b?.dueDate && b.dueDate >= today)
+      .sort((a, b) => (a.dueDate > b.dueDate ? 1 : -1))
+      .slice(0, 7);
+  }, [bills]);
 
-    const controllableMin = active
-      .filter((x) => x.type === "controllable")
-      .reduce((s, x) => s + toNum(x.minPay), 0);
+  const next7 = useMemo(() => {
+    if (!forecast?.ok) return [];
+    return forecast.daily.slice(0, 7);
+  }, [forecast]);
 
-    const controllableExtra = active
-      .filter((x) => x.type === "controllable")
-      .reduce((s, x) => s + toNum(x.extraPay), 0);
+  const kpis = useMemo(() => {
+    if (!forecast?.ok) return null;
 
-    const debtBalance = active
-      .filter((x) => x.type === "controllable")
-      .reduce((s, x) => s + toNum(x.balance), 0);
+    const start = safeNum(forecast.startingBalance, 0);
+    const end = safeNum(forecast.projectedEndBalance, 0);
+    const low = safeNum(forecast.lowestBalance, start);
+    const lowDate = forecast.lowestDate;
 
-    const monthlyOutflow = noncontrollableMonthly + controllableMin + controllableExtra;
+    // “runway” indicator: how deep is the drop vs start
+    const drop = Math.max(0, start - low);
+    const runwayScore = start <= 0 ? 0 : pct(((start - drop) / start) * 100); // 100 = no drop, 0 = wiped
+    const runwayLabel =
+      low < 0 ? "Risk: negative" : runwayScore >= 85 ? "Stable" : runwayScore >= 65 ? "Watch" : "Tight";
 
-    const dueSoon = active
-      .filter((x) => x.dueDate)
-      .map((x) => ({
-        ...x,
-        dueIn: daysBetween(today, String(x.dueDate)),
-      }))
-      .filter((x) => x.dueIn != null)
-      .sort((a, b) => a.dueIn - b.dueIn);
+    // How many days until lowest point
+    const dd = lowDate ? daysUntil(lowDate) : null;
 
-    const dueNext7 = dueSoon.filter((x) => x.dueIn >= 0 && x.dueIn <= 7);
-    const nextDue = dueSoon.find((x) => x.dueIn >= 0) || null;
+    // Balance sparkline from daily balances
+    const balances = forecast.daily.map((d) => safeNum(d.balance, 0));
+    const minB = Math.min(...balances);
+    const maxB = Math.max(...balances);
 
     return {
-      noncontrollableMonthly,
-      controllableMin,
-      controllableExtra,
-      debtBalance,
-      monthlyOutflow,
-      nextDue,
-      dueNext7,
-      activeCount: active.length,
+      start,
+      end,
+      low,
+      lowDate,
+      runwayScore,
+      runwayLabel,
+      daysToLow: dd,
+      minB,
+      maxB,
+      balances,
+      totalIn: safeNum(forecast.totalIncome, 0),
+      totalOut: safeNum(forecast.totalOut, 0),
+      totalBills: safeNum(forecast.totalBills, 0),
+      totalExp: safeNum(forecast.totalExpenses, 0),
+      through: forecast.endDate,
     };
-  }, [billsState, today]);
+  }, [forecast]);
 
-  const investmentsTotal = useMemo(() => {
-    const txByAsset = new Map();
-    for (const t of txns) {
-      if (!t || !t.assetId) continue; // ✅ ignore bad txns
-      const arr = txByAsset.get(t.assetId) || [];
-      arr.push(t);
-      txByAsset.set(t.assetId, arr);
-    }
+  const setup = useMemo(() => {
+    const hasAccounts = Array.isArray(accounts) && accounts.length > 0;
+    const hasPrimary = !!primaryAccount;
+    const hasBalance = startingBalance != null;
 
-    let totalValue = 0;
-
-    for (const a of assets) {
-      if (!a || !a.id) continue;
-
-      const list = (txByAsset.get(a.id) || [])
-        .slice()
-        .sort((x, y) => {
-          const dx = String(x?.date ?? "");
-          const dy = String(y?.date ?? "");
-          const c = dx.localeCompare(dy);
-          if (c !== 0) return c;
-          return toNum(x?.createdAt) - toNum(y?.createdAt);
-        });
-
-      let shares = 0;
-      let cashNet = 0;
-
-      for (const t of list) {
-        const fee = toNum(t?.fee);
-
-        if (t?.type === "BUY") shares += toNum(t?.qty);
-        if (t?.type === "SELL") shares -= toNum(t?.qty);
-
-        if (t?.type === "CASH_IN") cashNet += toNum(t?.amount) - fee;
-        if (t?.type === "CASH_OUT") cashNet -= toNum(t?.amount) + fee;
-
-        if (t?.type === "DIVIDEND") cashNet += toNum(t?.amount);
-      }
-
-      const type = String(a?.type ?? "").toLowerCase();
-      const symbol = type === "cash" ? "CASH" : normSymbol(a?.symbol);
-      const key = `${type}:${symbol}`;
-      const lastPrice = toNum(prices?.[key]?.price);
-
-      const value =
-        type === "cash"
-          ? Math.max(0, cashNet)
-          : Math.max(0, shares) * lastPrice;
-
-      totalValue += value;
-    }
-
-    return totalValue;
-  }, [assets, txns, prices]);
-
-  const netSnapshot = useMemo(() => {
-    const debt = toNum(billsComputed.debtBalance);
-    const inv = toNum(investmentsTotal);
-    const outflow = toNum(billsComputed.monthlyOutflow);
-    const due7 = billsComputed.dueNext7?.length || 0;
-    return { inv, debt, outflow, due7, net: inv - debt };
-  }, [billsComputed, investmentsTotal]);
-
-  // Auto-save daily KPI snapshot (this drives deltas + sparklines)
-  useEffect(() => {
-    if (!loaded) return;
-
-    const current = safeParse(localStorage.getItem(LS_DASH) || "null", null) || {};
-    const snapshots = current.snapshots && typeof current.snapshots === "object" ? current.snapshots : {};
-    const existing = snapshots[today];
-
-    const snap = {
-      net: toNum(netSnapshot.net),
-      inv: toNum(netSnapshot.inv),
-      debt: toNum(netSnapshot.debt),
-      outflow: toNum(netSnapshot.outflow),
-      due7: toNum(netSnapshot.due7),
-    };
-
-    // Only write if missing or values changed materially
-    const changed =
-      !existing ||
-      Math.abs(toNum(existing.net) - snap.net) > 0.01 ||
-      Math.abs(toNum(existing.inv) - snap.inv) > 0.01 ||
-      Math.abs(toNum(existing.debt) - snap.debt) > 0.01 ||
-      Math.abs(toNum(existing.outflow) - snap.outflow) > 0.01 ||
-      toNum(existing.due7) !== snap.due7;
-
-    if (!changed) return;
-
-    const next = {
-      streak: toNum(current.streak) || dash.streak,
-      lastSeen: current.lastSeen || today,
-      lastCheckin: current.lastCheckin || dash.lastCheckin || null,
-      xpTotal: toNum(current.xpTotal) || dash.xpTotal || 0,
-      snapshots: { ...snapshots, [today]: snap },
-    };
-
-    localStorage.setItem(LS_DASH, JSON.stringify(next));
-    setDash((prev) => ({ ...prev, snapshots: next.snapshots }));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loaded, today, netSnapshot.net, netSnapshot.inv, netSnapshot.debt, netSnapshot.outflow, netSnapshot.due7]);
-
-  const trends = useMemo(() => {
-    const snaps = dash.snapshots && typeof dash.snapshots === "object" ? dash.snapshots : {};
-
-    const yesterday = (() => {
-      const d = new Date(today + "T00:00:00");
-      d.setDate(d.getDate() - 1);
-      return isoDate(d);
-    })();
-
-    const s0 = snaps[today] || null;
-    const s1 = snaps[yesterday] || null;
-
-    const netDelta = s0 && s1 ? toNum(s0.net) - toNum(s1.net) : 0;
-    const invDelta = s0 && s1 ? toNum(s0.inv) - toNum(s1.inv) : 0;
-    const debtDelta = s0 && s1 ? toNum(s0.debt) - toNum(s1.debt) : 0;
-    const outflowDelta = s0 && s1 ? toNum(s0.outflow) - toNum(s1.outflow) : 0;
-
-    // Build last 14 days arrays for sparklines
-    const series = (key) => {
-      const arr = [];
-      for (let i = 13; i >= 0; i--) {
-        const d = new Date(today + "T00:00:00");
-        d.setDate(d.getDate() - i);
-        const iso = isoDate(d);
-        arr.push(toNum(snaps?.[iso]?.[key] ?? NaN));
-      }
-      // Replace NaN gaps with nearest previous known (so line doesn't flat to 0)
-      let last = null;
-      return arr.map((v) => {
-        const ok = Number.isFinite(v);
-        if (ok) {
-          last = v;
-          return v;
-        }
-        return last ?? 0;
-      });
-    };
+    const hasBillsAmounts = billsWithAmounts.length > 0;
+    const hasEventAmounts =
+      Array.isArray(events) &&
+      events.some((e) => Number.isFinite(Number(e.amount)) && (e.flow === "income" || e.flow === "expense"));
 
     return {
-      hasYesterday: !!s1,
-      netDelta,
-      invDelta,
-      debtDelta,
-      outflowDelta,
-      netSeries: series("net"),
-      invSeries: series("inv"),
-      debtSeries: series("debt"),
-      outflowSeries: series("outflow"),
+      hasAccounts,
+      hasPrimary,
+      hasBalance,
+      hasBillsAmounts,
+      hasEventAmounts,
+      isForecastMeaningful: hasBillsAmounts || hasEventAmounts,
     };
-  }, [dash.snapshots, today]);
+  }, [accounts, primaryAccount, startingBalance, billsWithAmounts, events]);
 
-  const engagement = useMemo(() => {
-    const due7 = toNum(netSnapshot.due7);
-    const debt = toNum(netSnapshot.debt);
-    const extra = toNum(billsComputed.controllableExtra);
-    const outflow = toNum(netSnapshot.outflow);
-    const inv = toNum(netSnapshot.inv);
-
-    // “Gamey” score that feels reactive
-    let score = 76;
-
-    // urgency pressure
-    if (due7 >= 4) score -= 14;
-    else if (due7 >= 2) score -= 9;
-    else if (due7 >= 1) score -= 5;
-
-    // debt pressure
-    if (debt > 0) score -= Math.min(18, Math.log10(debt + 10) * 6);
-
-    // positive signals
-    if (extra > 0) score += Math.min(10, extra / 50);
-    if (inv > 0) score += 6;
-
-    // outflow responsibility
-    if (outflow > 0) score -= Math.min(10, outflow / 1200);
-
-    // daily check-in bonus
-    if (dash.lastCheckin === today) score += 6;
-
-    score = clamp(Math.round(score), 35, 95);
-    const mood = moodFromScore(score);
-
-    const focus = [];
-    const nextDue = billsComputed.nextDue;
-
-    if (nextDue) {
-      focus.push({
-        title: `Next due: ${nextDue.name}`,
-        sub: nextDue.dueIn === 0 ? "Due today" : `Due in ${nextDue.dueIn} day(s)`,
-        href: "/bills",
-        tag: nextDue.dueIn <= 2 ? "Urgent" : "Soon",
-      });
-    } else {
-      focus.push({
-        title: "No due dates set",
-        sub: "Add due dates so this becomes a real command center",
-        href: "/bills",
-        tag: "Setup",
-      });
-    }
-
-    if (debt > 0 && extra === 0) {
-      focus.push({
-        title: "Add a small extra payment",
-        sub: "Even $25/mo changes the timeline",
-        href: "/bills",
-        tag: "Win",
-      });
-    } else if (debt > 0 && extra > 0) {
-      focus.push({
-        title: "Keep extra payments consistent",
-        sub: `Extra/month: ${money(extra)}`,
-        href: "/bills",
-        tag: "Momentum",
-      });
-    } else {
-      focus.push({
-        title: "Debt not added (or zero)",
-        sub: "If you have debt, add it so net is real",
-        href: "/bills",
-        tag: "Check",
-      });
-    }
-
-    if (inv === 0 && assets.length > 0) {
-      focus.push({
-        title: "Fix portfolio prices",
-        sub: "Holdings exist but value is $0",
-        href: "/investments",
-        tag: "Fix",
-      });
-    } else {
-      focus.push({
-        title: "Log one thing today",
-        sub: dash.lastCheckin === today ? "You checked in. Protect the streak." : "Check in to lock today.",
-        href: "/spending",
-        tag: "Daily",
-      });
-    }
-
-    return { score, mood, focus: focus.slice(0, 3) };
-  }, [netSnapshot, billsComputed.nextDue, billsComputed.controllableExtra, assets.length, dash.lastCheckin, today]);
-
-  const levelState = useMemo(() => computeLevelFromXP(dash.xpTotal), [dash.xpTotal]);
-
-  function saveDash(nextDash) {
-    localStorage.setItem(LS_DASH, JSON.stringify(nextDash));
-    setDash(nextDash);
-  }
-
-  function doDailyCheckin() {
-    const current = safeParse(localStorage.getItem(LS_DASH) || "null", null) || {};
-    const lastCheckin = current.lastCheckin || null;
-
-    // already checked in today
-    if (lastCheckin === today) return;
-
-    const baseXP = 30; // core dopamine
-    const urgencyBonus = (netSnapshot.due7 >= 2 ? 10 : 0) + (netSnapshot.due7 >= 4 ? 10 : 0);
-    const debtBonus = netSnapshot.debt > 0 ? 8 : 0;
-    const totalEarned = baseXP + urgencyBonus + debtBonus;
-
-    const next = {
-      streak: toNum(current.streak) || dash.streak || 1,
-      lastSeen: current.lastSeen || today,
-      lastCheckin: today,
-      xpTotal: toNum(current.xpTotal) + totalEarned,
-      snapshots: current.snapshots && typeof current.snapshots === "object" ? current.snapshots : dash.snapshots || {},
-    };
-
-    saveDash(next);
-  }
-
-  const checkedInToday = dash.lastCheckin === today;
+  const heroHint = useMemo(() => {
+    if (!setup.hasAccounts) return "Add accounts to start forecasting.";
+    if (!setup.hasBalance) return "Set your primary balance — forecast needs a starting number.";
+    if (!setup.isForecastMeaningful) return "Add bill amounts or income/expense events to get a real projection.";
+    if (kpis?.low < 0) return "Forecast shows you going negative — fix before it happens.";
+    if ((kpis?.runwayLabel || "") === "Tight") return "Runway looks tight — review due dates and upcoming expenses.";
+    return "You’re set. Keep the data real and the forecast stays useful.";
+  }, [setup, kpis]);
 
   return (
     <main className="container">
-      <header style={{ marginBottom: 14 }}>
+      {/* HERO */}
+      <header style={{ marginBottom: 16 }}>
         <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>
           Dashboard
         </div>
 
-        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "baseline" }}>
           <div>
             <h1 style={{ margin: 0 }}>Life Command Center</h1>
             <div className="muted" style={{ marginTop: 6 }}>
-              Today: <b>{today}</b> • Your numbers + your next moves.
+              {heroHint}
             </div>
           </div>
 
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
-            <Pill>🔥 Streak: <b>{dash.streak}</b></Pill>
-            <Pill>🏷️ Level: <b>{levelState.level}</b></Pill>
-            <Pill>
-              {engagement.mood.badge} Momentum: <b>{engagement.score}</b>
-            </Pill>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+            <span className="pill" style={{ padding: "8px 10px" }}>
+              Today: <b>{todayISO()}</b>
+            </span>
+            {primaryAccount?.name ? (
+              <span className="pill" style={{ padding: "8px 10px" }}>
+                Primary: <b>{primaryAccount.name}</b>
+              </span>
+            ) : null}
           </div>
         </div>
       </header>
 
-      {!loaded ? (
-        <div className="card" style={{ padding: 12 }}>
-          <div style={{ fontWeight: 950 }}>Loading…</div>
-          <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
-            Reading your saved data.
-          </div>
-        </div>
-      ) : (
-        <>
-          {/* DAILY CHECK-IN (the addiction button) */}
-          <div className="card" style={{ padding: 12, marginBottom: 12 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+      {/* LAYOUT: main + right rail */}
+      <div className="row" style={{ gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
+        {/* MAIN */}
+        <div style={{ flex: 2, minWidth: 360 }} className="grid">
+          {/* Forecast Core */}
+          <div className="card" style={{ padding: 14 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
               <div>
-                <div style={{ fontWeight: 950 }}>Daily Check-In</div>
+                <div style={{ fontWeight: 950, fontSize: 16 }}>30-Day Cash Flow Forecast</div>
                 <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
-                  {checkedInToday ? "✅ Locked for today. Come back tomorrow." : "Tap once to lock today + earn XP."}
+                  Forecast is powered by Accounts + Bills + income/expense events.
                 </div>
               </div>
 
-              <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-                <Pill>
-                  XP: <b>{dash.xpTotal}</b>
-                </Pill>
-
-                <Pill>
-                  Level XP: <b>{Math.round(levelState.xpIntoLevel)}</b> / <b>{levelState.xpNeeded}</b>
-                </Pill>
-
-                <button
-                  className="btn"
-                  onClick={doDailyCheckin}
-                  disabled={checkedInToday}
-                  style={{
-                    opacity: checkedInToday ? 0.55 : 1,
-                    cursor: checkedInToday ? "not-allowed" : "pointer",
-                  }}
-                >
-                  {checkedInToday ? "Checked in" : "Check in now"}
-                </button>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <Link className="btnGhost" href="/accounts">Accounts</Link>
+                <Link className="btnGhost" href="/calendar">Calendar</Link>
+                <Link className="btnGhost" href="/bills">Bills</Link>
               </div>
             </div>
 
-            <div style={{ marginTop: 10 }}>
-              <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>
-                Status: <b style={{ color: "rgba(255,255,255,.92)" }}>{engagement.mood.label}</b> •{" "}
-                {engagement.mood.note}
-              </div>
+            <div style={{ height: 12 }} />
 
-              {/* XP progress bar */}
-              <div className="card" style={{ padding: 10 }}>
-                <div className="muted" style={{ fontSize: 12 }}>Level progress</div>
-                <div
-                  style={{
-                    marginTop: 8,
-                    height: 10,
-                    borderRadius: 999,
-                    background: "rgba(255,255,255,.10)",
-                    overflow: "hidden",
-                  }}
-                >
+            {startingBalance == null ? (
+              <div className="card" style={{ padding: 12 }}>
+                <div style={{ fontWeight: 950, marginBottom: 6 }}>Setup required</div>
+                <div className="muted">
+                  Add an account balance in <b>Accounts</b> and set it as <b>Primary</b>.
+                </div>
+                <div style={{ height: 10 }} />
+                <Link className="btn" href="/accounts">Go to Accounts</Link>
+              </div>
+            ) : !forecast ? (
+              <div className="muted">Loading forecast…</div>
+            ) : forecast.ok === false ? (
+              <div className="card" style={{ padding: 12 }}>
+                <div style={{ fontWeight: 950 }}>Forecast error</div>
+                <div className="muted" style={{ marginTop: 6 }}>
+                  {forecast.message || "Unknown error."}
+                </div>
+              </div>
+            ) : (
+              <>
+                {/* KPI ROW */}
+                <div className="grid" style={{ gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 12 }}>
+                  <div className="card" style={{ padding: 12 }}>
+                    <div className="muted" style={{ fontSize: 12 }}>Starting balance</div>
+                    <div style={{ fontWeight: 950, fontSize: 18, marginTop: 4 }}>{money(kpis.start)}</div>
+                    <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
+                      Primary: {primaryAccount?.name || "—"}
+                    </div>
+                  </div>
+
+                  <div className="card" style={{ padding: 12 }}>
+                    <div className="muted" style={{ fontSize: 12 }}>Lowest projected</div>
+                    <div style={{ fontWeight: 950, fontSize: 18, marginTop: 4 }}>{money(kpis.low)}</div>
+                    <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
+                      {fmtShort(kpis.lowDate)}{kpis.daysToLow != null ? ` • ${kpis.daysToLow}d` : ""}
+                    </div>
+                  </div>
+
+                  <div className="card" style={{ padding: 12 }}>
+                    <div className="muted" style={{ fontSize: 12 }}>Projected end</div>
+                    <div style={{ fontWeight: 950, fontSize: 18, marginTop: 4 }}>{money(kpis.end)}</div>
+                    <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
+                      Through {fmtShort(kpis.through)}
+                    </div>
+                  </div>
+
+                  <div className="card" style={{ padding: 12 }}>
+                    <div className="muted" style={{ fontSize: 12 }}>Runway</div>
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "baseline", marginTop: 4 }}>
+                      <div style={{ fontWeight: 950, fontSize: 18 }}>{kpis.runwayLabel}</div>
+                      <div className="muted" style={{ fontSize: 12 }}>{Math.round(kpis.runwayScore)}%</div>
+                    </div>
+
+                    <div style={{ height: 8 }} />
+                    <div
+                      style={{
+                        height: 10,
+                        borderRadius: 999,
+                        border: "1px solid var(--lcc-border)",
+                        background: "rgba(255,255,255,.05)",
+                        overflow: "hidden",
+                      }}
+                    >
+                      <div
+                        style={{
+                          height: "100%",
+                          width: `${kpis.runwayScore}%`,
+                          background: "rgba(var(--lcc-accent), .35)",
+                        }}
+                      />
+                    </div>
+
+                    <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
+                      In {money(kpis.totalIn)} • Out {money(kpis.totalOut)}
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ height: 12 }} />
+
+                {/* BALANCE SPARKLINE */}
+                <div className="card" style={{ padding: 12 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "baseline", flexWrap: "wrap" }}>
+                    <div style={{ fontWeight: 950 }}>Balance trend</div>
+                    <div className="muted" style={{ fontSize: 12 }}>
+                      Min {money(kpis.minB)} • Max {money(kpis.maxB)}
+                    </div>
+                  </div>
+
+                  <div style={{ height: 10 }} />
+
                   <div
                     style={{
-                      height: 10,
-                      width: `${clamp(levelState.xpIntoLevel / levelState.xpNeeded, 0, 1) * 100}%`,
-                      background: "rgba(255,255,255,.55)",
+                      display: "grid",
+                      gridTemplateColumns: `repeat(${Math.min(30, kpis.balances.length)}, 1fr)`,
+                      gap: 4,
+                      alignItems: "end",
+                      height: 44,
                     }}
-                  />
-                </div>
-                <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
-                  Next level in <b style={{ color: "rgba(255,255,255,.92)" }}>{Math.max(0, levelState.xpNeeded - Math.round(levelState.xpIntoLevel))}</b> XP
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* DAILY FOCUS (guidance) */}
-          <div className="card" style={{ padding: 12, marginBottom: 12 }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-              <div>
-                <div style={{ fontWeight: 950 }}>Daily Focus</div>
-                <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
-                  3 moves. That’s it.
-                </div>
-              </div>
-              <div className="muted" style={{ fontSize: 12 }}>
-                Bills tracked:{" "}
-                <b style={{ color: "rgba(255,255,255,.92)" }}>{billsComputed.activeCount}</b>
-              </div>
-            </div>
-
-            <div
-              className="grid"
-              style={{
-                marginTop: 10,
-                gap: 10,
-                gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
-              }}
-            >
-              {engagement.focus.map((x, idx) => (
-                <a
-                  key={idx}
-                  href={x.href}
-                  className="card"
-                  style={{ padding: 10, display: "block", textDecoration: "none", position: "relative", overflow: "hidden" }}
-                >
-                  <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-                    <div style={{ fontWeight: 950, color: "rgba(255,255,255,.92)" }}>{x.title}</div>
-                    <div className="muted" style={{ fontSize: 12 }}>{x.tag}</div>
+                  >
+                    {kpis.balances.slice(0, 30).map((b, idx) => {
+                      const span = Math.max(1, kpis.maxB - kpis.minB);
+                      const h = 8 + Math.round(((b - kpis.minB) / span) * 34);
+                      const isLow = b === kpis.minB;
+                      return (
+                        <div
+                          key={idx}
+                          title={`${idx + 1}: ${money(b)}`}
+                          style={{
+                            height: h,
+                            borderRadius: 6,
+                            border: "1px solid var(--lcc-border)",
+                            background: isLow ? "rgba(239,68,68,.18)" : "rgba(255,255,255,.06)",
+                          }}
+                        />
+                      );
+                    })}
                   </div>
-                  <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>{x.sub}</div>
-                  <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: 2, background: "rgba(255,255,255,.18)", opacity: 0.6 }} />
-                </a>
-              ))}
-            </div>
+
+                  <div className="muted" style={{ fontSize: 12, marginTop: 10 }}>
+                    This is the “premium” feel: you can see momentum instantly.
+                  </div>
+                </div>
+
+                <div style={{ height: 12 }} />
+
+                {/* NEXT 7 DAYS */}
+                <div className="card" style={{ padding: 12 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "baseline", flexWrap: "wrap" }}>
+                    <div style={{ fontWeight: 950 }}>Next 7 days</div>
+                    <div className="muted" style={{ fontSize: 12 }}>
+                      Bills + events combined
+                    </div>
+                  </div>
+
+                  <div style={{ height: 10 }} />
+
+                  {next7.length === 0 ? (
+                    <div className="muted">No forecast days available.</div>
+                  ) : (
+                    <div className="grid" style={{ gap: 10 }}>
+                      {next7.map((d) => {
+                        const net = safeNum(d.netChange, 0);
+                        const netLabel = net === 0 ? "No change" : net > 0 ? `+${money(net)}` : `-${money(Math.abs(net))}`;
+                        const risk = safeNum(d.balance, 0) < 0;
+
+                        return (
+                          <div key={d.date} className="card" style={{ padding: 12 }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start" }}>
+                              <div>
+                                <div style={{ fontWeight: 950 }}>
+                                  {fmtShort(d.date)}
+                                  {risk ? <span className="muted" style={{ marginLeft: 8 }}>(negative)</span> : null}
+                                </div>
+                                <div className="muted" style={{ marginTop: 4, fontSize: 12 }}>
+                                  Income {money(d.income)} • Expenses {money(d.expense)} • Bills {money(d.bills)}
+                                </div>
+                              </div>
+
+                              <div style={{ textAlign: "right" }}>
+                                <span className="pill" style={{ display: "inline-block", padding: "7px 10px" }}>
+                                  {netLabel}
+                                </span>
+                                <div className="muted" style={{ marginTop: 6, fontSize: 12 }}>
+                                  Balance: <b>{money(d.balance)}</b>
+                                </div>
+                              </div>
+                            </div>
+
+                            {Array.isArray(d.items) && d.items.length > 0 ? (
+                              <div style={{ marginTop: 10 }} className="muted">
+                                <div style={{ fontSize: 12, marginBottom: 6 }}>Items</div>
+                                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                                  {d.items.slice(0, 6).map((it, idx) => (
+                                    <span key={idx} className="pill" style={{ padding: "6px 10px" }}>
+                                      {it.title}: {money(it.amount)}
+                                    </span>
+                                  ))}
+                                  {d.items.length > 6 ? (
+                                    <span className="pill" style={{ padding: "6px 10px" }}>
+                                      +{d.items.length - 6} more
+                                    </span>
+                                  ) : null}
+                                </div>
+                              </div>
+                            ) : null}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {!setup.isForecastMeaningful ? (
+                    <div className="muted" style={{ fontSize: 12, marginTop: 10 }}>
+                      Tip: Add bill amounts (Bills) or income/expense amounts (Calendar) so this becomes real.
+                    </div>
+                  ) : null}
+                </div>
+              </>
+            )}
           </div>
 
-          {/* KPIs + DELTAS (dopamine) */}
-          <div
-            className="grid"
-            style={{
-              gap: 12,
-              gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
-            }}
-          >
-            <div className="card kpi" style={{ padding: 14 }}>
-              <div className="muted" style={{ fontSize: 12, display: "flex", justifyContent: "space-between" }}>
-                <span>Net snapshot</span>
-                <Sparkline values={trends.netSeries} />
-              </div>
-
-              <div className="kpiValue">{money(netSnapshot.net)}</div>
-
-              <div className="muted" style={{ fontSize: 12, marginTop: 6, display: "flex", justifyContent: "space-between" }}>
-                <span>Investments − Debt</span>
-                <span style={{ color: deltaColor(trends.netDelta) }}>
-                  {trends.hasYesterday ? `${arrow(trends.netDelta)} ${fmtDeltaMoney(trends.netDelta)} vs yday` : "—"}
-                </span>
-              </div>
-            </div>
-
-            <div className="card kpi" style={{ padding: 14 }}>
-              <div className="muted" style={{ fontSize: 12, display: "flex", justifyContent: "space-between" }}>
-                <span>Investments</span>
-                <Sparkline values={trends.invSeries} />
-              </div>
-
-              <div className="kpiValue">{money(netSnapshot.inv)}</div>
-
-              <div className="muted" style={{ fontSize: 12, marginTop: 6, display: "flex", justifyContent: "space-between" }}>
-                <span>From portfolio prices</span>
-                <span style={{ color: deltaColor(trends.invDelta) }}>
-                  {trends.hasYesterday ? `${arrow(trends.invDelta)} ${fmtDeltaMoney(trends.invDelta)} vs yday` : "—"}
-                </span>
-              </div>
-            </div>
-
-            <div className="card kpi" style={{ padding: 14 }}>
-              <div className="muted" style={{ fontSize: 12, display: "flex", justifyContent: "space-between" }}>
-                <span>Debt balance</span>
-                <Sparkline values={trends.debtSeries} />
-              </div>
-
-              <div className="kpiValue">{money(netSnapshot.debt)}</div>
-
-              <div className="muted" style={{ fontSize: 12, marginTop: 6, display: "flex", justifyContent: "space-between" }}>
-                <span>From controllable bills</span>
-                {/* For debt: decreasing is GOOD, so invert the color logic */}
-                <span style={{ color: deltaColor(-trends.debtDelta) }}>
-                  {trends.hasYesterday
-                    ? `${arrow(-trends.debtDelta)} ${fmtDeltaMoney(-trends.debtDelta)} better vs yday`
-                    : "—"}
-                </span>
-              </div>
-            </div>
-
-            <div className="card kpi" style={{ padding: 14 }}>
-              <div className="muted" style={{ fontSize: 12, display: "flex", justifyContent: "space-between" }}>
-                <span>Monthly outflow</span>
-                <Sparkline values={trends.outflowSeries} />
-              </div>
-
-              <div className="kpiValue">{money(netSnapshot.outflow)}</div>
-
-              <div className="muted" style={{ fontSize: 12, marginTop: 6, display: "flex", justifyContent: "space-between" }}>
-                <span>Fixed + minimums + extras</span>
-                {/* Outflow: lower is “better” */}
-                <span style={{ color: deltaColor(-trends.outflowDelta) }}>
-                  {trends.hasYesterday
-                    ? `${arrow(-trends.outflowDelta)} ${fmtDeltaMoney(-trends.outflowDelta)} better vs yday`
-                    : "—"}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          <div style={{ height: 14 }} />
-
-          {/* Quick Actions */}
-          <div className="card" style={{ padding: 12 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
+          {/* Quick actions (more “product”) */}
+          <div className="card" style={{ padding: 14 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "baseline", flexWrap: "wrap" }}>
               <div style={{ fontWeight: 950 }}>Quick actions</div>
               <div className="muted" style={{ fontSize: 12 }}>
-                Rule: <b style={{ color: "rgba(255,255,255,.92)" }}>1 log/day</b> keeps you winning.
+                Keep it simple: balances + due dates + recurring.
               </div>
             </div>
 
-            <div className="row" style={{ gap: 10, flexWrap: "wrap", marginTop: 10 }}>
-              <a className="btn" href="/bills">Bills</a>
-              <a className="btn" href="/investments">Investments</a>
-              <a className="btn" href="/spending">Add Spending</a>
-              <a className="btn" href="/income">Income</a>
-              <a className="btn" href="/savings">Savings</a>
-            </div>
-
-            <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>
-              This dashboard now rewards you with: streak + XP + deltas + trend lines.
+            <div style={{ height: 10 }} />
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+              <Link className="btn" href="/accounts">Update balance</Link>
+              <Link className="btnGhost" href="/calendar">Add income/expense</Link>
+              <Link className="btnGhost" href="/bills">Add due dates</Link>
+              <Link className="btnGhost" href="/spending">Log spending</Link>
             </div>
           </div>
+        </div>
 
-          <div style={{ height: 14 }} />
+        {/* RIGHT RAIL */}
+        <div style={{ flex: 1, minWidth: 320 }} className="grid">
+          <div className="card" style={{ padding: 14 }}>
+            <div style={{ fontWeight: 950, marginBottom: 10 }}>Bills due soon</div>
 
-          {/* Bills due soon + Micro-wins */}
-          <div
-            className="grid"
-            style={{
-              gap: 12,
-              gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
-            }}
-          >
-            <div className="card" style={{ padding: 12 }}>
-              <div style={{ fontWeight: 950, marginBottom: 10 }}>
-                Bills due soon (next 7 days)
-              </div>
+            {upcomingBills7.length === 0 ? (
+              <div className="muted">No upcoming bills (or no due dates yet).</div>
+            ) : (
+              <div className="grid">
+                {upcomingBills7.map((b, i) => {
+                  const d = daysUntil(b.dueDate);
+                  const label =
+                    d === null ? "" : d === 0 ? "Due today" : d > 0 ? `Due in ${d} day${d === 1 ? "" : "s"}` : `${Math.abs(d)} day(s) late`;
 
-              {billsComputed.dueNext7.length === 0 ? (
-                <div className="muted">Nothing due in the next week.</div>
-              ) : (
-                <div className="grid" style={{ gap: 8 }}>
-                  {billsComputed.dueNext7.slice(0, 6).map((b) => (
-                    <div key={b.id} className="card" style={{ padding: 10 }}>
+                  return (
+                    <div key={`${b.name}-${b.dueDate}-${i}`} className="card" style={{ padding: 12 }}>
                       <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-                        <div style={{ fontWeight: 900 }}>{b.name}</div>
-                        <div className="muted" style={{ fontSize: 12 }}>
-                          {b.dueIn === 0 ? "Today" : `In ${b.dueIn}d`}
+                        <div>
+                          <div style={{ fontWeight: 900 }}>{b.name}</div>
+                          <div className="muted" style={{ marginTop: 4, fontSize: 12 }}>
+                            {fmtShort(b.dueDate)} • {label}
+                          </div>
                         </div>
-                      </div>
-
-                      <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
-                        Due <b style={{ color: "rgba(255,255,255,0.92)" }}>{b.dueDate}</b> •{" "}
-                        {b.type === "controllable"
-                          ? `Min ${money(b.minPay)} + Extra ${money(b.extraPay)}`
-                          : `Amt ${money(b.amount)}`}
+                        <div className="pill">{b.amount == null ? "—" : money(b.amount)}</div>
                       </div>
                     </div>
-                  ))}
-                </div>
-              )}
+                  );
+                })}
+              </div>
+            )}
 
-              <div className="muted" style={{ fontSize: 12, marginTop: 10 }}>
-                Next due:{" "}
-                <b style={{ color: "rgba(255,255,255,0.92)" }}>
-                  {billsComputed.nextDue ? `${billsComputed.nextDue.name} (${billsComputed.nextDue.dueDate})` : "—"}
-                </b>
+            <div style={{ height: 10 }} />
+            <Link className="btnGhost" href="/bills">Manage bills</Link>
+          </div>
+
+          {/* Setup Checklist (premium empty state) */}
+          <div className="card" style={{ padding: 14 }}>
+            <div style={{ fontWeight: 950, marginBottom: 8 }}>Setup checklist</div>
+
+            <div className="grid" style={{ gap: 10 }}>
+              <div className="card" style={{ padding: 12 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+                  <div>
+                    <div style={{ fontWeight: 900 }}>Accounts</div>
+                    <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+                      Add accounts + set a primary balance
+                    </div>
+                  </div>
+                  <div className="pill">{setup.hasBalance ? "Done" : "Do"}</div>
+                </div>
+              </div>
+
+              <div className="card" style={{ padding: 12 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+                  <div>
+                    <div style={{ fontWeight: 900 }}>Bills</div>
+                    <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+                      Add due dates + amounts
+                    </div>
+                  </div>
+                  <div className="pill">{setup.hasBillsAmounts ? "Done" : "Do"}</div>
+                </div>
+              </div>
+
+              <div className="card" style={{ padding: 12 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+                  <div>
+                    <div style={{ fontWeight: 900 }}>Calendar</div>
+                    <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+                      Add income/expense events with amounts
+                    </div>
+                  </div>
+                  <div className="pill">{setup.hasEventAmounts ? "Done" : "Do"}</div>
+                </div>
               </div>
             </div>
 
-            <div className="card" style={{ padding: 12 }}>
-              <div style={{ fontWeight: 950, marginBottom: 10 }}>Micro-wins</div>
-              <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>
-                Pick one. Finish it. That’s how you win.
-              </div>
-
-              <div className="grid" style={{ gap: 10 }}>
-                <MicroBtn
-                  href="/spending"
-                  title="Log 1 expense"
-                  sub={checkedInToday ? "You’re locked today. This keeps data real." : "Log one thing, then hit Check-In."}
-                  tag="Daily"
-                />
-                <MicroBtn
-                  href="/bills"
-                  title="Set the next due date"
-                  sub="Dashboard gets smarter when due dates exist."
-                  tag="Setup"
-                />
-                <MicroBtn
-                  href="/investments"
-                  title="Refresh / set prices"
-                  sub="Your net snapshot depends on prices."
-                  tag="Fix"
-                />
-              </div>
-
-              <div className="muted" style={{ fontSize: 12, marginTop: 10 }}>
-                Mood: <b style={{ color: "rgba(255,255,255,.92)" }}>{engagement.mood.label}</b> • Score{" "}
-                <b style={{ color: "rgba(255,255,255,.92)" }}>{engagement.score}</b>
-              </div>
+            <div style={{ height: 10 }} />
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+              <Link className="btn" href="/accounts">Accounts</Link>
+              <Link className="btnGhost" href="/bills">Bills</Link>
+              <Link className="btnGhost" href="/calendar">Calendar</Link>
             </div>
           </div>
-        </>
-      )}
+        </div>
+      </div>
     </main>
   );
 }
