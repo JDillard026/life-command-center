@@ -8,6 +8,7 @@ const LINKS = [
   { href: "/calendar", label: "Calendar", meta: "Timeline + recurring" },
   { href: "/accounts", label: "Accounts", meta: "Balances for forecast" },
   { href: "/bills", label: "Bills", meta: "Due dates + payments" },
+  { href: "/debt", label: "Debt", meta: "Payoff + balances" },
   { href: "/income", label: "Income", meta: "Pay + goals" },
   { href: "/spending", label: "Daily Spending", meta: "Log purchases" },
   { href: "/investments", label: "Investments", meta: "Portfolio tracking" },
@@ -28,13 +29,11 @@ export default function SideNav() {
 
   return (
     <aside className="sideNav">
-      {/* Brand */}
       <div className="brand">
         <div className="brandTitle">Life Command Center</div>
         <div className="brandSub muted">Finance • Life • Tracking</div>
       </div>
 
-      {/* Command Panel */}
       <div
         className="card"
         style={{
@@ -49,7 +48,6 @@ export default function SideNav() {
         </div>
       </div>
 
-      {/* Main Nav */}
       <nav className="nav">
         {LINKS.map((l) => {
           const active = isActive(path, l.href);
@@ -81,7 +79,6 @@ export default function SideNav() {
 
       <div style={{ height: 16 }} />
 
-      {/* Divider */}
       <div
         style={{
           height: 1,
@@ -90,7 +87,6 @@ export default function SideNav() {
         }}
       />
 
-      {/* System Section (Settings) */}
       <nav className="nav">
         {SYSTEM_LINKS.map((l) => {
           const active = isActive(path, l.href);
@@ -122,7 +118,6 @@ export default function SideNav() {
 
       <div style={{ height: 12 }} />
 
-      {/* Footer */}
       <div
         className="navFooter muted"
         style={{ display: "flex", justifyContent: "space-between", gap: 10 }}

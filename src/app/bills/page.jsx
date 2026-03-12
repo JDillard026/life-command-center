@@ -1,9 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 
-/** ---------- utils ---------- **/
+export const dynamic = "force-dynamic";
+
+/* =========================
+   utils
+========================= */
 function uid() {
   return globalThis.crypto?.randomUUID?.() ?? String(Date.now());
 }
@@ -21,10 +25,30 @@ function parseMoneyInput(v) {
   return Number.isFinite(num) ? num : NaN;
 }
 
+function safeNum(n, fallback = 0) {
+  const x = Number(n);
+  return Number.isFinite(x) ? x : fallback;
+}
+
 function money(n) {
   const num = Number(n);
   if (!Number.isFinite(num)) return "—";
-  return num.toLocaleString(undefined, { style: "currency", currency: "USD" });
+  return num.toLocaleString(undefined, {
+    style: "currency",
+    currency: "USD",
+  });
+}
+
+function fmtWhen(ts) {
+  if (!ts) return "—";
+  const d = new Date(ts);
+  return d.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
 }
 
 function clamp(n, min, max) {
@@ -35,7 +59,7 @@ function clamp(n, min, max) {
 
 function addMonths(iso, monthsToAdd) {
   if (!iso) return "";
-  const [y, m, d] = String(iso).split("-").map((x) => Number(x));
+  const [y, m, d] = String(iso).split("-").map(Number);
   if (![y, m, d].every(Number.isFinite)) return "";
   const dt = new Date(y, m - 1, d);
   dt.setMonth(dt.getMonth() + Number(monthsToAdd || 0));
@@ -44,7 +68,7 @@ function addMonths(iso, monthsToAdd) {
 
 function addDays(iso, daysToAdd) {
   if (!iso) return "";
-  const [y, m, d] = String(iso).split("-").map((x) => Number(x));
+  const [y, m, d] = String(iso).split("-").map(Number);
   if (![y, m, d].every(Number.isFinite)) return "";
   const dt = new Date(y, m - 1, d);
   dt.setDate(dt.getDate() + Number(daysToAdd || 0));
@@ -72,15 +96,11 @@ function nextDueDateFromFrequency(currentISO, frequency) {
 
 function daysBetween(fromISO, toISO) {
   if (!fromISO || !toISO) return null;
-  const a = new Date(String(fromISO) + "T00:00:00");
-  const b = new Date(String(toISO) + "T00:00:00");
-  const t = b.getTime() - a.getTime();
-  if (!Number.isFinite(t)) return null;
-  return Math.round(t / 86400000);
-}
-
-function plural(n, s) {
-  return n === 1 ? s : `${s}s`;
+  const a = new Date(`${fromISO}T00:00:00`);
+  const b = new Date(`${toISO}T00:00:00`);
+  const diff = b.getTime() - a.getTime();
+  if (!Number.isFinite(diff)) return null;
+  return Math.round(diff / 86400000);
 }
 
 function freqToMonthlyMult(freq) {
@@ -99,27 +119,6 @@ function freqToMonthlyMult(freq) {
     default:
       return 1;
   }
-}
-
-function safeNum(n, fallback = 0) {
-  const x = Number(n);
-  return Number.isFinite(x) ? x : fallback;
-}
-
-function fmtWhen(ts) {
-  if (!ts) return "—";
-  const d = new Date(ts);
-  return d.toLocaleString(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
-
-function typeLabel(type) {
-  return type === "controllable" ? "Debt" : "Bill";
 }
 
 function accountTypeLabel(t) {
@@ -142,270 +141,97 @@ function accountIcon(type) {
   return "📁";
 }
 
-/**
- * Payoff estimator (single debt) with monthly simulation.
- * Returns { months, payoffISO, totalInterest, totalPaid }.
- */
-function payoffEstimateDetailed({ balance, aprPct, monthlyPay, startISO }) {
-  const bal0 = Number(balance);
-  const pmt = Number(monthlyPay);
-  const apr = Number(aprPct);
-
-  if (!Number.isFinite(bal0) || bal0 <= 0) {
-    return { months: null, payoffISO: null, totalInterest: 0, totalPaid: 0 };
-  }
-  if (!Number.isFinite(pmt) || pmt <= 0) {
-    return { months: null, payoffISO: null, totalInterest: 0, totalPaid: 0 };
-  }
-
-  const start = startISO || isoDate();
-
-  if (!Number.isFinite(apr) || apr <= 0) {
-    const months = Math.ceil(bal0 / pmt);
-    const totalPaid = months * pmt;
-    const totalInterest = Math.max(0, totalPaid - bal0);
+function dueTone(days) {
+  if (!Number.isFinite(days)) {
     return {
-      months,
-      payoffISO: addMonths(start, months),
-      totalInterest,
-      totalPaid,
+      label: "No due date",
+      color: "#60a5fa",
+      bg: "rgba(96,165,250,.12)",
+      border: "rgba(96,165,250,.24)",
+      glow: "0 0 24px rgba(96,165,250,.20)",
     };
   }
-
-  const r = apr / 100 / 12;
-  const firstInterest = bal0 * r;
-  if (pmt <= firstInterest + 0.01) {
+  if (days < 0) {
     return {
-      months: Infinity,
-      payoffISO: null,
-      totalInterest: Infinity,
-      totalPaid: Infinity,
+      label: `${Math.abs(days)} day${Math.abs(days) === 1 ? "" : "s"} late`,
+      color: "#f87171",
+      bg: "rgba(248,113,113,.12)",
+      border: "rgba(248,113,113,.28)",
+      glow: "0 0 24px rgba(248,113,113,.22)",
     };
   }
-
-  let bal = bal0;
-  let months = 0;
-  let totalInterest = 0;
-  let totalPaid = 0;
-
-  while (bal > 0 && months < 2000) {
-    const interest = bal * r;
-    totalInterest += interest;
-
-    const payThisMonth = Math.min(pmt, bal + interest);
-    totalPaid += payThisMonth;
-
-    bal = bal + interest - payThisMonth;
-    months += 1;
-
-    if (!Number.isFinite(bal)) {
-      return { months: null, payoffISO: null, totalInterest: 0, totalPaid: 0 };
-    }
-    if (bal < 0) bal = 0;
-  }
-
-  if (months >= 2000) {
+  if (days <= 3) {
     return {
-      months: Infinity,
-      payoffISO: null,
-      totalInterest: Infinity,
-      totalPaid: Infinity,
+      label: days === 0 ? "Due today" : `Due in ${days} day${days === 1 ? "" : "s"}`,
+      color: "#fb7185",
+      bg: "rgba(251,113,133,.12)",
+      border: "rgba(251,113,133,.28)",
+      glow: "0 0 24px rgba(251,113,133,.22)",
     };
   }
-
+  if (days <= 7) {
+    return {
+      label: `Due in ${days} days`,
+      color: "#f59e0b",
+      bg: "rgba(245,158,11,.12)",
+      border: "rgba(245,158,11,.28)",
+      glow: "0 0 24px rgba(245,158,11,.18)",
+    };
+  }
   return {
-    months,
-    payoffISO: addMonths(start, months),
-    totalInterest,
-    totalPaid,
+    label: `Due in ${days} days`,
+    color: "#34d399",
+    bg: "rgba(52,211,153,.12)",
+    border: "rgba(52,211,153,.24)",
+    glow: "0 0 24px rgba(52,211,153,.18)",
   };
 }
 
-/**
- * Snowball/Avalanche planner:
- * - uses minimums + global extra pool
- * - allocates pool to ONE focus debt at a time
- */
-function planStrategy({ debts, monthlyExtraPool, strategy, startISO, previewMonths = 6 }) {
-  const today = startISO || isoDate();
-  const pool = Math.max(0, Number(monthlyExtraPool) || 0);
-
-  const ds = (debts || [])
-    .map((d) => ({
-      id: String(d.id),
-      name: String(d.name || ""),
-      balance: Math.max(0, Number(d.balance) || 0),
-      aprPct: Math.max(0, Number(d.aprPct) || 0),
-      minPay: Math.max(0, Number(d.minPay) || 0),
-    }))
-    .filter((d) => d.balance > 0 && d.name);
-
-  if (ds.length === 0) {
-    return {
-      monthsToDebtFree: 0,
-      debtFreeISO: today,
-      totalInterest: 0,
-      payoffOrder: [],
-      schedulePreview: [],
-    };
-  }
-
-  const totalMin = ds.reduce((s, d) => s + d.minPay, 0);
-  const capacity = totalMin + pool;
-  if (capacity <= 0) {
-    return {
-      monthsToDebtFree: Infinity,
-      debtFreeISO: null,
-      totalInterest: Infinity,
-      payoffOrder: [],
-      schedulePreview: [],
-    };
-  }
-
-  let months = 0;
-  let totalInterest = 0;
-  const payoffOrder = [];
-  const schedulePreview = [];
-
-  function pickFocus(remaining) {
-    const list = remaining.slice();
-    if (strategy === "snowball") {
-      list.sort((a, b) => a.balance - b.balance || b.aprPct - a.aprPct);
-    } else {
-      list.sort((a, b) => b.aprPct - a.aprPct || a.balance - b.balance);
-    }
-    return list[0];
-  }
-
-  const MAX_MONTHS = 3000;
-
-  while (months < MAX_MONTHS) {
-    const remaining = ds.filter((d) => d.balance > 0);
-    if (remaining.length === 0) break;
-
-    if (months < previewMonths) {
-      const focus = pickFocus(remaining);
-      schedulePreview.push({
-        monthIndex: months + 1,
-        dateISO: addMonths(today, months + 1),
-        focusDebtName: focus?.name || "",
-        balances: remaining.map((d) => ({ id: d.id, name: d.name, balance: d.balance })),
-      });
-    }
-
-    for (const d of remaining) {
-      const r = d.aprPct / 100 / 12;
-      const interest = d.balance * r;
-      d.balance += interest;
-      totalInterest += interest;
-    }
-
-    for (const d of remaining) {
-      const pay = Math.min(d.minPay, d.balance);
-      d.balance -= pay;
-    }
-
-    let extraLeft = pool;
-    while (extraLeft > 0) {
-      const still = ds.filter((d) => d.balance > 0);
-      if (still.length === 0) break;
-
-      const focus = pickFocus(still);
-      if (!focus) break;
-
-      const pay = Math.min(extraLeft, focus.balance);
-      focus.balance -= pay;
-      extraLeft -= pay;
-
-      if (focus.balance <= 0.000001) focus.balance = 0;
-    }
-
-    for (const d of ds) {
-      if (d.balance === 0 && !payoffOrder.some((x) => x.id === d.id)) {
-        payoffOrder.push({
-          id: d.id,
-          name: d.name,
-          months: months + 1,
-          paidOffISO: addMonths(today, months + 1),
-        });
-      }
-    }
-
-    months += 1;
-
-    if (!Number.isFinite(totalInterest)) {
-      return {
-        monthsToDebtFree: Infinity,
-        debtFreeISO: null,
-        totalInterest: Infinity,
-        payoffOrder,
-        schedulePreview,
-      };
-    }
-  }
-
-  if (months >= MAX_MONTHS) {
-    return {
-      monthsToDebtFree: Infinity,
-      debtFreeISO: null,
-      totalInterest: Infinity,
-      payoffOrder,
-      schedulePreview,
-    };
-  }
-
-  return {
-    monthsToDebtFree: months,
-    debtFreeISO: addMonths(today, months),
-    totalInterest,
-    payoffOrder,
-    schedulePreview,
-  };
+function duePercent(days) {
+  if (!Number.isFinite(days)) return 0;
+  if (days < 0) return 100;
+  if (days === 0) return 100;
+  if (days <= 3) return 92;
+  if (days <= 7) return 72;
+  if (days <= 14) return 48;
+  if (days <= 21) return 26;
+  return 10;
 }
 
-/** ---------- normalization ---------- **/
+function monthlyWeight(amount, frequency) {
+  const amt = safeNum(amount, 0);
+  return amt * freqToMonthlyMult(frequency);
+}
+
+/* =========================
+   normalization
+========================= */
 const DEFAULTS = {
-  version: 6,
+  version: 1,
   settings: {
     paycheckMonthly: 0,
-    extraPoolMonthly: 0,
-    strategy: "avalanche",
   },
   items: [],
 };
 
 function normalizeBill(raw) {
   const x = raw || {};
-  const type = x.type === "controllable" ? "controllable" : "noncontrollable";
   const freq = ["monthly", "weekly", "biweekly", "quarterly", "yearly", "one_time"].includes(x.frequency)
     ? x.frequency
     : "monthly";
-  const dueDate = String(x.dueDate || "").trim() || isoDate();
-  const amount = Number(x.amount);
-  const active = x.active !== false;
-
-  const balance = Number(x.balance);
-  const aprPct = Number(x.aprPct);
-  const minPay = Number(x.minPay);
-  const extraPay = Number(x.extraPay);
 
   return {
     id: String(x.id || uid()),
     name: String(x.name || "").trim(),
-    type,
+    amount: Number.isFinite(Number(x.amount)) ? Number(x.amount) : 0,
+    dueDate: String(x.dueDate || "").trim() || isoDate(),
     frequency: freq,
-    dueDate,
-    amount: Number.isFinite(amount) ? amount : 0,
-    active,
-    notes: String(x.notes || ""),
-    balance: Number.isFinite(balance) ? balance : 0,
-    aprPct: Number.isFinite(aprPct) ? aprPct : 0,
-    minPay: Number.isFinite(minPay) ? minPay : 0,
-    extraPay: Number.isFinite(extraPay) ? extraPay : 0,
-    lastPaidDate: String(x.lastPaidDate || "").trim(),
-    autopay: x.autopay === true,
     category: String(x.category || "").trim(),
+    notes: String(x.notes || ""),
+    active: x.active !== false,
+    autopay: x.autopay === true,
     accountId: String(x.accountId || "").trim(),
+    lastPaidDate: String(x.lastPaidDate || "").trim(),
     createdAt: Number.isFinite(Number(x.createdAt)) ? Number(x.createdAt) : Date.now(),
   };
 }
@@ -413,42 +239,35 @@ function normalizeBill(raw) {
 function normalizeState(saved) {
   const base = saved && typeof saved === "object" ? saved : {};
   const settings = base.settings && typeof base.settings === "object" ? base.settings : {};
-  const items = Array.isArray(base.items) ? base.items : Array.isArray(base) ? base : [];
+  const items = Array.isArray(base.items) ? base.items : [];
 
   return {
-    version: 6,
+    version: 1,
     settings: {
       paycheckMonthly: Number.isFinite(Number(settings.paycheckMonthly))
         ? Number(settings.paycheckMonthly)
         : 0,
-      extraPoolMonthly: Number.isFinite(Number(settings.extraPoolMonthly))
-        ? Number(settings.extraPoolMonthly)
-        : 0,
-      strategy: settings.strategy === "snowball" ? "snowball" : "avalanche",
     },
     items: items.map(normalizeBill).filter((b) => b.name),
   };
 }
 
-/** ---------- db mapping ---------- **/
+/* =========================
+   db mapping
+========================= */
 function mapRowToBill(row) {
   return normalizeBill({
     id: row.id,
     name: row.name,
-    type: row.type,
-    frequency: row.frequency,
-    dueDate: row.due_date,
     amount: row.amount,
-    active: row.active,
-    notes: row.notes,
-    balance: row.balance,
-    aprPct: row.apr_pct,
-    minPay: row.min_pay,
-    extraPay: row.extra_pay,
-    lastPaidDate: row.last_paid_date,
-    autopay: row.autopay,
+    dueDate: row.due_date,
+    frequency: row.frequency,
     category: row.category,
+    notes: row.notes,
+    active: row.active,
+    autopay: row.autopay,
     accountId: row.account_id,
+    lastPaidDate: row.last_paid_date,
     createdAt: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
   });
 }
@@ -458,20 +277,16 @@ function mapBillToRow(bill, userId) {
     id: bill.id,
     user_id: userId,
     name: bill.name,
-    type: bill.type,
+    type: "noncontrollable",
     frequency: bill.frequency,
     due_date: bill.dueDate || null,
     amount: Number(bill.amount) || 0,
-    active: bill.active !== false,
     notes: bill.notes || "",
-    balance: Number(bill.balance) || 0,
-    apr_pct: Number(bill.aprPct) || 0,
-    min_pay: Number(bill.minPay) || 0,
-    extra_pay: Number(bill.extraPay) || 0,
-    last_paid_date: bill.lastPaidDate || null,
+    active: bill.active !== false,
     autopay: bill.autopay === true,
     category: bill.category || "",
     account_id: bill.accountId || null,
+    last_paid_date: bill.lastPaidDate || null,
     created_at: bill.createdAt ? new Date(bill.createdAt).toISOString() : new Date().toISOString(),
     updated_at: new Date().toISOString(),
   };
@@ -481,8 +296,8 @@ function mapSettingsToRow(settings, userId) {
   return {
     user_id: userId,
     paycheck_monthly: Number(settings.paycheckMonthly) || 0,
-    extra_pool_monthly: Number(settings.extraPoolMonthly) || 0,
-    strategy: settings.strategy === "snowball" ? "snowball" : "avalanche",
+    extra_pool_monthly: 0,
+    strategy: "avalanche",
     updated_at: new Date().toISOString(),
   };
 }
@@ -507,8 +322,6 @@ function mapTxnRowToClient(row) {
     delta: safeNum(row.delta, 0),
     resultingBalance: safeNum(row.resulting_balance, 0),
     note: row.note || "",
-    relatedAccountId: row.related_account_id || "",
-    relatedAccountName: row.related_account_name || "",
     sourceType: row.source_type || "",
     sourceId: row.source_id || "",
   };
@@ -524,72 +337,71 @@ function mapTxnClientToRow(txn, userId) {
     delta: safeNum(txn.delta, 0),
     resulting_balance: safeNum(txn.resultingBalance, 0),
     note: txn.note || "",
-    related_account_id: txn.relatedAccountId || null,
-    related_account_name: txn.relatedAccountName || "",
+    related_account_id: null,
+    related_account_name: "",
     source_type: txn.sourceType || "",
     source_id: txn.sourceId || "",
     created_at: new Date(txn.ts || Date.now()).toISOString(),
   };
 }
 
-/** ---------- tiny UI helpers ---------- **/
+/* =========================
+   visual tokens
+========================= */
 const ACCENT = "#60a5fa";
 const GOOD = "#34d399";
 const WARN = "#f59e0b";
 const BAD = "#f87171";
 
-const panelStyle = {
-  background: "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.025))",
-  border: "1px solid rgba(255,255,255,0.08)",
-  borderRadius: 22,
-  boxShadow: "0 20px 60px rgba(0,0,0,0.35)",
+const shellCard = {
+  background: "linear-gradient(180deg, rgba(255,255,255,.045), rgba(255,255,255,.025))",
+  border: "1px solid rgba(255,255,255,.08)",
+  borderRadius: 24,
+  boxShadow: "0 18px 55px rgba(0,0,0,.30)",
   backdropFilter: "blur(12px)",
 };
 
-const cardStyle = {
-  background: "linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.025))",
-  border: "1px solid rgba(255,255,255,0.08)",
+const softCard = {
+  background: "linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02))",
+  border: "1px solid rgba(255,255,255,.07)",
   borderRadius: 20,
-  boxShadow: "0 16px 45px rgba(0,0,0,0.28)",
+  boxShadow: "0 14px 36px rgba(0,0,0,.24)",
   backdropFilter: "blur(10px)",
 };
 
-const chip = (bg = "rgba(255,255,255,0.06)", border = "rgba(255,255,255,0.10)") => ({
-  padding: "6px 10px",
-  borderRadius: 999,
-  background: bg,
-  border: `1px solid ${border}`,
-  fontSize: 12,
-  color: "rgba(255,255,255,0.86)",
-  display: "inline-flex",
-  alignItems: "center",
-  gap: 8,
-});
+function pill(bg = "rgba(255,255,255,.06)", border = "rgba(255,255,255,.1)") {
+  return {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 8,
+    padding: "8px 12px",
+    borderRadius: 999,
+    background: bg,
+    border: `1px solid ${border}`,
+    color: "rgba(255,255,255,.9)",
+    fontSize: 12,
+    whiteSpace: "nowrap",
+  };
+}
 
-function ProgressBar({
-  label,
-  value,
-  sublabel,
-  pct = 0,
-  color = ACCENT,
-  danger = false,
-}) {
+function MetricBar({ label, value, sublabel, pct, color = ACCENT, danger = false }) {
   const safePct = clamp(pct, 0, 100);
 
   return (
     <div style={{ display: "grid", gap: 8 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "baseline", flexWrap: "wrap" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "baseline" }}>
         <div className="muted" style={{ fontSize: 12 }}>{label}</div>
         <div style={{ fontWeight: 900 }}>{value}</div>
       </div>
 
       <div
         style={{
-          height: 10,
+          position: "relative",
+          height: 12,
           borderRadius: 999,
           overflow: "hidden",
-          background: danger ? "rgba(248,113,113,0.10)" : "rgba(255,255,255,0.06)",
-          border: `1px solid ${danger ? "rgba(248,113,113,0.18)" : "rgba(255,255,255,0.08)"}`,
+          background: danger ? "rgba(248,113,113,.08)" : "rgba(255,255,255,.05)",
+          border: `1px solid ${danger ? "rgba(248,113,113,.18)" : "rgba(255,255,255,.08)"}`,
         }}
       >
         <div
@@ -597,8 +409,8 @@ function ProgressBar({
             width: `${safePct}%`,
             height: "100%",
             borderRadius: 999,
-            background: `linear-gradient(90deg, ${color}, rgba(255,255,255,0.9))`,
-            boxShadow: `0 0 20px ${color}55`,
+            background: `linear-gradient(90deg, ${color}, rgba(255,255,255,.95))`,
+            boxShadow: `0 0 18px ${color}66`,
             transition: "width 180ms ease",
           }}
         />
@@ -611,37 +423,6 @@ function ProgressBar({
       ) : null}
     </div>
   );
-}
-
-function dueUrgencyPct(dueIn) {
-  if (!Number.isFinite(dueIn)) return 0;
-  if (dueIn <= 0) return 100;
-  if (dueIn >= 30) return 8;
-  return clamp(((30 - dueIn) / 30) * 100, 8, 100);
-}
-
-function payoffSpeedPct(months) {
-  if (months === Infinity || months == null) return 6;
-  if (months <= 3) return 100;
-  if (months <= 6) return 88;
-  if (months <= 12) return 72;
-  if (months <= 24) return 52;
-  if (months <= 36) return 34;
-  return 18;
-}
-
-function paymentStrengthPct(balance, totalPay) {
-  const bal = Math.max(0, Number(balance) || 0);
-  const pay = Math.max(0, Number(totalPay) || 0);
-  if (bal <= 0) return 100;
-  return clamp((pay / bal) * 100 * 12, 4, 100);
-}
-
-function incomePressurePct(monthlyOutflow, income) {
-  const out = Math.max(0, Number(monthlyOutflow) || 0);
-  const inc = Math.max(0, Number(income) || 0);
-  if (inc <= 0) return 0;
-  return clamp((out / inc) * 100, 0, 100);
 }
 
 function Modal({ open, title, subtitle, onClose, children }) {
@@ -661,8 +442,8 @@ function Modal({ open, title, subtitle, onClose, children }) {
         background: "rgba(2,6,23,.72)",
         backdropFilter: "blur(10px)",
         display: "flex",
-        alignItems: "center",
         justifyContent: "center",
+        alignItems: "center",
         padding: 16,
       }}
     >
@@ -670,19 +451,17 @@ function Modal({ open, title, subtitle, onClose, children }) {
         className="card"
         style={{
           width: "min(760px, 100%)",
-          padding: 16,
-          borderRadius: 22,
+          padding: 18,
+          borderRadius: 24,
           border: "1px solid rgba(255,255,255,.08)",
-          boxShadow: "0 20px 80px rgba(0,0,0,.45)",
+          boxShadow: "0 24px 80px rgba(0,0,0,.45)",
         }}
       >
         <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start" }}>
           <div>
-            <div style={{ fontWeight: 900, fontSize: 18 }}>{title}</div>
+            <div style={{ fontWeight: 950, fontSize: 18 }}>{title}</div>
             {subtitle ? (
-              <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
-                {subtitle}
-              </div>
+              <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>{subtitle}</div>
             ) : null}
           </div>
 
@@ -691,21 +470,21 @@ function Modal({ open, title, subtitle, onClose, children }) {
           </button>
         </div>
 
-        <div style={{ height: 14 }} />
+        <div style={{ height: 16 }} />
         {children}
       </div>
     </div>
   );
 }
 
-/** ---------- component ---------- **/
+/* =========================
+   component
+========================= */
 export default function BillsPage() {
   const [state, setState] = useState(DEFAULTS);
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [pageError, setPageError] = useState("");
-
-  const extraSaveTimers = useRef({});
 
   const [accounts, setAccounts] = useState([]);
   const [transactions, setTransactions] = useState([]);
@@ -715,27 +494,18 @@ export default function BillsPage() {
   const [editId, setEditId] = useState(null);
 
   const [name, setName] = useState("");
-  const [type, setType] = useState("noncontrollable");
-  const [frequency, setFrequency] = useState("monthly");
-  const [dueDate, setDueDate] = useState(isoDate());
   const [amount, setAmount] = useState("");
-  const [notes, setNotes] = useState("");
-
-  const [balance, setBalance] = useState("");
-  const [aprPct, setAprPct] = useState("");
-  const [minPay, setMinPay] = useState("");
-  const [extraPay, setExtraPay] = useState("0");
-  const [autopay, setAutopay] = useState(false);
+  const [dueDate, setDueDate] = useState(isoDate());
+  const [frequency, setFrequency] = useState("monthly");
   const [category, setCategory] = useState("");
+  const [notes, setNotes] = useState("");
   const [linkedAccountId, setLinkedAccountId] = useState("");
+  const [autopay, setAutopay] = useState(false);
 
   const [scope, setScope] = useState("active");
-  const [tab, setTab] = useState("all");
   const [sortBy, setSortBy] = useState("due_asc");
+  const [lane, setLane] = useState("all");
   const [q, setQ] = useState("");
-
-  const [plannerOpen, setPlannerOpen] = useState(true);
-  const [error, setError] = useState("");
 
   const [historyOpenId, setHistoryOpenId] = useState("");
   const [payModalOpen, setPayModalOpen] = useState(false);
@@ -743,6 +513,8 @@ export default function BillsPage() {
   const [payFromAccountId, setPayFromAccountId] = useState("");
   const [payAmount, setPayAmount] = useState("");
   const [payNote, setPayNote] = useState("");
+
+  const [error, setError] = useState("");
 
   useEffect(() => {
     let mounted = true;
@@ -769,11 +541,12 @@ export default function BillsPage() {
           return;
         }
 
-        const [billsRes, settingsRes, accountsRes, billSettingsRes, txnsRes] = await Promise.all([
+        const [billsRes, settingsRes, accountsRes, accountSettingsRes, txnsRes] = await Promise.all([
           supabase
             .from("bills")
             .select("*")
             .eq("user_id", currentUser.id)
+            .eq("type", "noncontrollable")
             .order("created_at", { ascending: false }),
           supabase
             .from("bill_settings")
@@ -800,7 +573,7 @@ export default function BillsPage() {
         if (billsRes.error) throw billsRes.error;
         if (settingsRes.error) throw settingsRes.error;
         if (accountsRes.error) throw accountsRes.error;
-        if (billSettingsRes.error) throw billSettingsRes.error;
+        if (accountSettingsRes.error) throw accountSettingsRes.error;
         if (txnsRes.error) throw txnsRes.error;
 
         const bills = (billsRes.data || []).map(mapRowToBill);
@@ -809,11 +582,9 @@ export default function BillsPage() {
         const loadedTxns = (txnsRes.data || []).map(mapTxnRowToClient);
 
         const nextState = normalizeState({
-          version: 6,
+          version: 1,
           settings: {
             paycheckMonthly: settingsRow?.paycheck_monthly ?? 0,
-            extraPoolMonthly: settingsRow?.extra_pool_monthly ?? 0,
-            strategy: settingsRow?.strategy === "snowball" ? "snowball" : "avalanche",
           },
           items: bills,
         });
@@ -823,7 +594,7 @@ export default function BillsPage() {
         setState(nextState);
         setAccounts(loadedAccounts);
         setTransactions(loadedTxns);
-        setPrimaryAccountId(billSettingsRes.data?.primary_account_id || loadedAccounts[0]?.id || "");
+        setPrimaryAccountId(accountSettingsRes.data?.primary_account_id || loadedAccounts[0]?.id || "");
         setPageError("");
       } catch (err) {
         if (!mounted) return;
@@ -834,10 +605,8 @@ export default function BillsPage() {
     }
 
     bootstrap();
-
     return () => {
       mounted = false;
-      Object.values(extraSaveTimers.current).forEach((t) => clearTimeout(t));
     };
   }, []);
 
@@ -857,18 +626,13 @@ export default function BillsPage() {
     setMode("add");
     setEditId(null);
     setName("");
-    setType("noncontrollable");
-    setFrequency("monthly");
-    setDueDate(isoDate());
     setAmount("");
-    setNotes("");
-    setBalance("");
-    setAprPct("");
-    setMinPay("");
-    setExtraPay("0");
-    setAutopay(false);
+    setDueDate(isoDate());
+    setFrequency("monthly");
     setCategory("");
+    setNotes("");
     setLinkedAccountId("");
+    setAutopay(false);
     setError("");
   }
 
@@ -876,18 +640,13 @@ export default function BillsPage() {
     setMode("edit");
     setEditId(bill.id);
     setName(bill.name || "");
-    setType(bill.type || "noncontrollable");
-    setFrequency(bill.frequency || "monthly");
-    setDueDate(bill.dueDate || isoDate());
     setAmount(String(Number.isFinite(Number(bill.amount)) ? bill.amount : ""));
-    setNotes(bill.notes || "");
-    setBalance(String(Number.isFinite(Number(bill.balance)) ? bill.balance : ""));
-    setAprPct(String(Number.isFinite(Number(bill.aprPct)) ? bill.aprPct : ""));
-    setMinPay(String(Number.isFinite(Number(bill.minPay)) ? bill.minPay : ""));
-    setExtraPay(String(Number.isFinite(Number(bill.extraPay)) ? bill.extraPay : "0"));
-    setAutopay(bill.autopay === true);
+    setDueDate(bill.dueDate || isoDate());
+    setFrequency(bill.frequency || "monthly");
     setCategory(bill.category || "");
+    setNotes(bill.notes || "");
     setLinkedAccountId(bill.accountId || "");
+    setAutopay(bill.autopay === true);
     setError("");
   }
 
@@ -905,27 +664,9 @@ export default function BillsPage() {
     const dd = String(dueDate || "").trim();
     const amt = parseMoneyInput(amount);
 
-    if (!nm) return setError("Name is required.");
+    if (!nm) return setError("Bill name is required.");
     if (!dd) return setError("Due date is required.");
-
-    if (type === "noncontrollable") {
-      if (!Number.isFinite(amt) || amt <= 0) {
-        return setError("Amount must be > 0 for non-controllable bills.");
-      }
-    }
-
-    const bbal = parseMoneyInput(balance);
-    const aapr = parseMoneyInput(aprPct);
-    const mmin = parseMoneyInput(minPay);
-    const xtra = parseMoneyInput(extraPay);
-
-    if (type === "controllable") {
-      if (!Number.isFinite(bbal) || bbal < 0) return setError("Balance must be a number (0 or more).");
-      if (!Number.isFinite(aapr) || aapr < 0 || aapr > 100) return setError("APR must be between 0 and 100.");
-      if (!Number.isFinite(mmin) || mmin < 0) return setError("Minimum payment must be 0 or more.");
-      if (!Number.isFinite(xtra) || xtra < 0) return setError("Extra payment must be 0 or more.");
-      if (bbal > 0 && mmin + xtra <= 0) return setError("Set a minimum payment or extra payment > 0.");
-    }
+    if (!Number.isFinite(amt) || amt <= 0) return setError("Amount must be greater than 0.");
 
     const existingCreatedAt =
       mode === "edit" ? state.items.find((x) => x.id === editId)?.createdAt ?? Date.now() : Date.now();
@@ -933,21 +674,16 @@ export default function BillsPage() {
     const payload = normalizeBill({
       id: mode === "edit" ? editId : uid(),
       name: nm,
-      type,
-      frequency,
+      amount: amt,
       dueDate: dd,
-      amount: type === "noncontrollable" ? amt : Number.isFinite(amt) && amt > 0 ? amt : 0,
-      notes,
-      balance: type === "controllable" ? bbal : 0,
-      aprPct: type === "controllable" ? aapr : 0,
-      minPay: type === "controllable" ? mmin : 0,
-      extraPay: type === "controllable" ? xtra : 0,
-      lastPaidDate: mode === "edit" ? state.items.find((x) => x.id === editId)?.lastPaidDate || "" : "",
-      autopay,
+      frequency,
       category,
+      notes,
       accountId: linkedAccountId || "",
-      createdAt: existingCreatedAt,
+      autopay,
       active: true,
+      lastPaidDate: mode === "edit" ? state.items.find((x) => x.id === editId)?.lastPaidDate || "" : "",
+      createdAt: existingCreatedAt,
     });
 
     const row = mapBillToRow(payload, user.id);
@@ -963,13 +699,13 @@ export default function BillsPage() {
       return;
     }
 
-    const savedBill = mapRowToBill(data);
+    const saved = mapRowToBill(data);
 
     setState((prev) => {
-      const exists = prev.items.some((x) => x.id === savedBill.id);
+      const exists = prev.items.some((x) => x.id === saved.id);
       const nextItems = exists
-        ? prev.items.map((x) => (x.id === savedBill.id ? savedBill : x))
-        : [savedBill, ...prev.items];
+        ? prev.items.map((x) => (x.id === saved.id ? saved : x))
+        : [saved, ...prev.items];
       return { ...prev, items: nextItems };
     });
 
@@ -1040,9 +776,10 @@ export default function BillsPage() {
 
   async function removeBill(id) {
     if (!user || !supabase) return;
-    if (!confirm("Delete this item permanently?")) return;
+    if (!confirm("Delete this bill permanently?")) return;
 
     const previous = state.items;
+
     setState((prev) => ({
       ...prev,
       items: prev.items.filter((x) => x.id !== id),
@@ -1058,37 +795,6 @@ export default function BillsPage() {
       setState((prev) => ({ ...prev, items: previous }));
       setPageError(delErr.message || "Failed to delete bill.");
     }
-  }
-
-  function setExtraFor(id, nextExtra) {
-    const n = Number(nextExtra);
-    const safeExtra = Math.max(0, Number.isFinite(n) ? n : 0);
-
-    setState((prev) => ({
-      ...prev,
-      items: prev.items.map((x) => (x.id === id ? { ...x, extraPay: safeExtra } : x)),
-    }));
-
-    if (!user || !supabase) return;
-
-    if (extraSaveTimers.current[id]) {
-      clearTimeout(extraSaveTimers.current[id]);
-    }
-
-    extraSaveTimers.current[id] = setTimeout(async () => {
-      const { error: saveErr } = await supabase
-        .from("bills")
-        .update({
-          extra_pay: safeExtra,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", id)
-        .eq("user_id", user.id);
-
-      if (saveErr) {
-        setPageError(saveErr.message || "Failed to save extra payment.");
-      }
-    }, 250);
   }
 
   async function createAccountTransaction(entry) {
@@ -1148,6 +854,7 @@ export default function BillsPage() {
       ...prev,
       items: prev.items.map((x) => (x.id === billId ? saved : x)),
     }));
+
     return { ok: true, bill: saved };
   }
 
@@ -1155,11 +862,7 @@ export default function BillsPage() {
     const defaultAccount = bill.accountId || primaryAccountId || accounts[0]?.id || "";
     setPayingBillId(bill.id);
     setPayFromAccountId(defaultAccount);
-    setPayAmount(String(
-      bill.type === "controllable"
-        ? Math.max(0, Number(bill.minPay) || Number(bill.amount) || 0)
-        : Math.max(0, Number(bill.amount) || 0)
-    ));
+    setPayAmount(String(Math.max(0, Number(bill.amount) || 0)));
     setPayNote("");
     setPayModalOpen(true);
   }
@@ -1198,15 +901,10 @@ export default function BillsPage() {
     const billPatch = {
       last_paid_date: today,
       account_id: account.id,
+      due_date: payingBill.frequency !== "one_time"
+        ? nextDueDateFromFrequency(payingBill.dueDate || today, payingBill.frequency)
+        : payingBill.dueDate || today,
     };
-
-    if (payingBill.frequency !== "one_time") {
-      billPatch.due_date = nextDueDateFromFrequency(payingBill.dueDate || today, payingBill.frequency);
-    }
-
-    if (payingBill.type === "controllable") {
-      billPatch.balance = Math.max(0, safeNum(payingBill.balance, 0) - Math.abs(amt));
-    }
 
     const saveBillRes = await saveBillPatch(payingBill.id, billPatch);
     if (!saveBillRes.ok) {
@@ -1223,8 +921,6 @@ export default function BillsPage() {
       delta: -Math.abs(amt),
       resultingBalance: accountNext,
       note: payNote?.trim() || `${payingBill.name} payment`,
-      relatedAccountId: "",
-      relatedAccountName: "",
       sourceType: "bill",
       sourceId: payingBill.id,
     });
@@ -1246,190 +942,139 @@ export default function BillsPage() {
     const query = String(q || "").trim().toLowerCase();
 
     let list = state.items.slice();
+
     if (scope === "active") list = list.filter((x) => x.active);
     if (scope === "inactive") list = list.filter((x) => !x.active);
 
-    if (tab === "controllable") list = list.filter((x) => x.type === "controllable");
-    if (tab === "noncontrollable") list = list.filter((x) => x.type === "noncontrollable");
-
-    if (query) {
-      list = list.filter((x) =>
-        `${x.name} ${x.notes || ""} ${x.category || ""}`.toLowerCase().includes(query)
-      );
-    }
-
     const withDerived = list.map((x) => {
-      const isControl = x.type === "controllable";
-      const totalPay = isControl ? (Number(x.minPay) || 0) + (Number(x.extraPay) || 0) : 0;
-
-      const est = isControl
-        ? payoffEstimateDetailed({
-            balance: x.balance,
-            aprPct: x.aprPct,
-            monthlyPay: totalPay,
-            startISO: today,
-          })
-        : { months: null, payoffISO: null, totalInterest: 0, totalPaid: 0 };
-
       const dueIn = daysBetween(today, x.dueDate);
-
-      const monthlyEquivalent =
-        x.type === "noncontrollable"
-          ? (Number(x.amount) || 0) * freqToMonthlyMult(x.frequency)
-          : 0;
-
+      const monthlyEq = monthlyWeight(x.amount, x.frequency);
       const linkedAccount = accounts.find((a) => a.id === x.accountId) || null;
       const history = transactions
         .filter((t) => t.sourceType === "bill" && t.sourceId === x.id)
         .sort((a, b) => safeNum(b.ts, 0) - safeNum(a.ts, 0));
 
+      let laneName = "upcoming";
+      if (Number.isFinite(dueIn)) {
+        if (dueIn < 0) laneName = "late";
+        else if (dueIn <= 7) laneName = "soon";
+      }
+      if (x.autopay) laneName = "autopay";
+
       return {
         ...x,
-        totalPay,
-        payoffMonths: est.months,
-        payoffISO: est.payoffISO,
-        payoffInterest: est.totalInterest,
         dueIn,
-        monthlyEquivalent,
+        monthlyEq,
         linkedAccount,
         history,
+        laneName,
+        tone: dueTone(dueIn),
       };
     });
 
-    withDerived.sort((a, b) => {
+    let filtered = withDerived;
+
+    if (query) {
+      filtered = filtered.filter((x) =>
+        `${x.name} ${x.category || ""} ${x.notes || ""}`.toLowerCase().includes(query)
+      );
+    }
+
+    if (lane !== "all") {
+      filtered = filtered.filter((x) => x.laneName === lane);
+    }
+
+    filtered.sort((a, b) => {
       if (sortBy === "due_asc") {
         const ad = Number.isFinite(a.dueIn) ? a.dueIn : 999999;
         const bd = Number.isFinite(b.dueIn) ? b.dueIn : 999999;
         return ad - bd;
       }
-      if (sortBy === "amt_desc") return (Number(b.amount) || 0) - (Number(a.amount) || 0);
+      if (sortBy === "amount_desc") return safeNum(b.amount, 0) - safeNum(a.amount, 0);
+      if (sortBy === "monthly_desc") return safeNum(b.monthlyEq, 0) - safeNum(a.monthlyEq, 0);
       if (sortBy === "name_asc") return String(a.name).localeCompare(String(b.name));
-      if (sortBy === "payoff_asc") {
-        const am = a.payoffMonths;
-        const bm = b.payoffMonths;
-        const aVal = am === Infinity ? Number.POSITIVE_INFINITY : Number.isFinite(am) ? am : Number.POSITIVE_INFINITY;
-        const bVal = bm === Infinity ? Number.POSITIVE_INFINITY : Number.isFinite(bm) ? bm : Number.POSITIVE_INFINITY;
-        return aVal - bVal;
-      }
       return 0;
     });
 
     const activeItems = state.items.filter((x) => x.active);
 
-    const noncontrollableMonthly = activeItems
-      .filter((x) => x.type === "noncontrollable")
-      .reduce((s, x) => s + (Number(x.amount) || 0) * freqToMonthlyMult(x.frequency), 0);
+    const totalMonthly = activeItems.reduce((s, x) => s + monthlyWeight(x.amount, x.frequency), 0);
+    const lateCount = activeItems.filter((x) => {
+      const d = daysBetween(today, x.dueDate);
+      return Number.isFinite(d) && d < 0;
+    }).length;
 
-    const controllableMin = activeItems
-      .filter((x) => x.type === "controllable")
-      .reduce((s, x) => s + (Number(x.minPay) || 0), 0);
+    const dueSoonCount = activeItems.filter((x) => {
+      const d = daysBetween(today, x.dueDate);
+      return Number.isFinite(d) && d >= 0 && d <= 7;
+    }).length;
 
-    const controllableExtra = activeItems
-      .filter((x) => x.type === "controllable")
-      .reduce((s, x) => s + (Number(x.extraPay) || 0), 0);
-
-    const controllableBalances = activeItems
-      .filter((x) => x.type === "controllable")
-      .reduce((s, x) => s + (Number(x.balance) || 0), 0);
-
-    const monthlyOutflow = noncontrollableMonthly + controllableMin + controllableExtra;
+    const autopayCount = activeItems.filter((x) => x.autopay).length;
 
     const nextDue = activeItems
-      .filter((x) => x.dueDate)
       .map((x) => ({ ...x, dueIn: daysBetween(today, x.dueDate) }))
-      .filter((x) => x.dueIn != null)
+      .filter((x) => Number.isFinite(x.dueIn))
       .sort((a, b) => a.dueIn - b.dueIn)[0];
 
-    const debts = activeItems
-      .filter((x) => x.type === "controllable")
-      .map((x) => ({
-        id: x.id,
-        name: x.name,
-        balance: x.balance,
-        aprPct: x.aprPct,
-        minPay: x.minPay,
-      }))
-      .filter((d) => (Number(d.balance) || 0) > 0);
+    const topMonthly = activeItems
+      .map((x) => ({ ...x, monthlyEq: monthlyWeight(x.amount, x.frequency) }))
+      .sort((a, b) => safeNum(b.monthlyEq, 0) - safeNum(a.monthlyEq, 0))
+      .slice(0, 4);
 
-    const planner = planStrategy({
-      debts,
-      monthlyExtraPool: Number(state.settings.extraPoolMonthly) || 0,
-      strategy: state.settings.strategy,
-      startISO: today,
-      previewMonths: 6,
-    });
-
-    const paycheckMonthly = Number(state.settings.paycheckMonthly) || 0;
-    const pctIncome = paycheckMonthly > 0 ? (monthlyOutflow / paycheckMonthly) * 100 : null;
-
-    const upcoming = activeItems
-      .map((x) => ({
-        ...x,
-        dueIn: daysBetween(today, x.dueDate),
-      }))
-      .filter((x) => Number.isFinite(x.dueIn))
-      .sort((a, b) => a.dueIn - b.dueIn)
-      .slice(0, 5);
+    const paycheckMonthly = safeNum(state.settings.paycheckMonthly, 0);
+    const pressurePct = paycheckMonthly > 0 ? clamp((totalMonthly / paycheckMonthly) * 100, 0, 100) : 0;
 
     return {
       today,
-      list: withDerived,
+      list: filtered,
       totals: {
-        noncontrollableMonthly,
-        controllableMin,
-        controllableExtra,
-        controllableBalances,
-        monthlyOutflow,
-        pctIncome,
+        totalMonthly,
+        lateCount,
+        dueSoonCount,
+        autopayCount,
+        activeCount: activeItems.length,
+        pressurePct,
       },
       nextDue,
-      planner,
-      upcoming,
+      topMonthly,
     };
-  }, [
-    state.items,
-    scope,
-    tab,
-    sortBy,
-    q,
-    state.settings.paycheckMonthly,
-    state.settings.extraPoolMonthly,
-    state.settings.strategy,
-    accounts,
-    transactions,
-  ]);
+  }, [state.items, accounts, transactions, q, lane, scope, sortBy, state.settings.paycheckMonthly]);
 
   const hero = [
     {
-      label: "Monthly outflow",
-      value: money(computed.totals.monthlyOutflow),
-      sub: computed.totals.pctIncome != null ? `${computed.totals.pctIncome.toFixed(1)}% of income` : "Set income to see pressure",
-      pct: incomePressurePct(computed.totals.monthlyOutflow, state.settings.paycheckMonthly),
-      color: computed.totals.pctIncome != null && computed.totals.pctIncome >= 70 ? BAD : ACCENT,
+      label: "Monthly bill load",
+      value: money(computed.totals.totalMonthly),
+      sublabel:
+        state.settings.paycheckMonthly > 0
+          ? `${computed.totals.pressurePct.toFixed(1)}% of monthly income`
+          : "Set monthly income to see pressure",
+      pct: computed.totals.pressurePct,
+      color: computed.totals.pressurePct >= 70 ? BAD : ACCENT,
+      danger: computed.totals.pressurePct >= 70,
     },
     {
-      label: "Non-controllable",
-      value: money(computed.totals.noncontrollableMonthly),
-      sub: "Frequency-aware baseline",
-      pct: computed.totals.monthlyOutflow > 0 ? (computed.totals.noncontrollableMonthly / computed.totals.monthlyOutflow) * 100 : 0,
-      color: ACCENT,
+      label: "Late bills",
+      value: String(computed.totals.lateCount),
+      sublabel: computed.totals.lateCount > 0 ? "These need action first" : "Nothing overdue",
+      pct: clamp(computed.totals.lateCount * 22, 0, 100),
+      color: BAD,
+      danger: computed.totals.lateCount > 0,
     },
     {
-      label: "Controllable min",
-      value: money(computed.totals.controllableMin),
-      sub: "Minimum debt payments",
-      pct: computed.totals.monthlyOutflow > 0 ? (computed.totals.controllableMin / computed.totals.monthlyOutflow) * 100 : 0,
+      label: "Due in 7 days",
+      value: String(computed.totals.dueSoonCount),
+      sublabel: "Short-window timeline",
+      pct: clamp(computed.totals.dueSoonCount * 18, 0, 100),
       color: WARN,
     },
     {
-      label: "Total debt balance",
-      value: money(computed.totals.controllableBalances),
-      sub:
-        computed.planner.monthsToDebtFree &&
-        computed.planner.monthsToDebtFree !== Infinity
-          ? `Debt-free est: ${computed.planner.debtFreeISO}`
-          : "Add debts to estimate",
-      pct: payoffSpeedPct(computed.planner.monthsToDebtFree),
+      label: "Autopay enabled",
+      value: String(computed.totals.autopayCount),
+      sublabel: `${computed.totals.activeCount} active total`,
+      pct:
+        computed.totals.activeCount > 0
+          ? (computed.totals.autopayCount / computed.totals.activeCount) * 100
+          : 0,
       color: GOOD,
     },
   ];
@@ -1437,7 +1082,7 @@ export default function BillsPage() {
   if (loading) {
     return (
       <main className="container" style={{ paddingBottom: 24 }}>
-        <div className="card" style={{ ...panelStyle, padding: 16 }}>
+        <div className="card" style={{ ...shellCard, padding: 18 }}>
           Loading bills...
         </div>
       </main>
@@ -1447,10 +1092,10 @@ export default function BillsPage() {
   if (!user) {
     return (
       <main className="container" style={{ paddingBottom: 24 }}>
-        <div className="card" style={{ ...panelStyle, padding: 16 }}>
+        <div className="card" style={{ ...shellCard, padding: 18 }}>
           <div style={{ fontWeight: 900 }}>Please log in</div>
           <div className="muted" style={{ marginTop: 6 }}>
-            This page now loads from Supabase, so you need to be signed in.
+            This page loads from Supabase, so you need to be signed in.
           </div>
         </div>
       </main>
@@ -1458,9 +1103,9 @@ export default function BillsPage() {
   }
 
   return (
-    <main className="container" style={{ paddingBottom: 24 }}>
-      <header style={{ marginBottom: 16 }}>
-        <div className="muted" style={{ fontSize: 12, marginBottom: 6, letterSpacing: ".08em", textTransform: "uppercase" }}>
+    <main className="container" style={{ paddingBottom: 26 }}>
+      <header style={{ marginBottom: 18 }}>
+        <div className="muted" style={{ fontSize: 12, letterSpacing: ".12em", textTransform: "uppercase", marginBottom: 8 }}>
           Bills
         </div>
 
@@ -1468,40 +1113,40 @@ export default function BillsPage() {
           style={{
             display: "flex",
             justifyContent: "space-between",
-            gap: 16,
+            gap: 18,
             flexWrap: "wrap",
             alignItems: "baseline",
           }}
         >
           <div>
-            <h1 style={{ margin: 0, letterSpacing: -1, fontSize: "clamp(28px,4vw,42px)" }}>
-              Bills & Debt Control
+            <h1 style={{ margin: 0, fontSize: "clamp(30px,4vw,46px)", letterSpacing: -1.2 }}>
+              Premium Bills Control
             </h1>
-            <div className="muted" style={{ marginTop: 8 }}>
-              Premium bill tracking with payoff planning, linked accounts, payment history, and real pay-bill actions.
+            <div className="muted" style={{ marginTop: 8, maxWidth: 760 }}>
+              Clean bill tracking with real urgency, better due-date visibility, linked-account payments,
+              history, and a layout that feels premium instead of cramped.
             </div>
           </div>
 
           <div
             style={{
-              ...chip("rgba(96,165,250,0.10)", "rgba(96,165,250,0.28)"),
-              padding: "10px 12px",
-              borderRadius: 14,
+              ...pill("rgba(96,165,250,.10)", "rgba(96,165,250,.28)"),
+              padding: "10px 14px",
+              borderRadius: 16,
             }}
           >
             <span
               style={{
                 width: 8,
                 height: 8,
-                borderRadius: 99,
+                borderRadius: 999,
                 background: ACCENT,
-                display: "inline-block",
                 boxShadow: `0 0 14px ${ACCENT}`,
               }}
             />
-            Next due:{" "}
-            <b style={{ color: "rgba(255,255,255,0.92)" }}>
-              {computed.nextDue ? `${computed.nextDue.name} (${computed.nextDue.dueDate})` : "—"}
+            Next due:
+            <b style={{ color: "rgba(255,255,255,.94)" }}>
+              {computed.nextDue ? `${computed.nextDue.name} • ${computed.nextDue.dueDate}` : " — "}
             </b>
           </div>
         </div>
@@ -1511,17 +1156,15 @@ export default function BillsPage() {
         <div
           className="card"
           style={{
-            ...cardStyle,
-            padding: 12,
+            ...softCard,
+            padding: 14,
             marginBottom: 16,
-            border: "1px solid rgba(239,68,68,0.35)",
-            background: "linear-gradient(180deg, rgba(127,29,29,0.30), rgba(127,29,29,0.15))",
+            border: "1px solid rgba(239,68,68,.30)",
+            background: "linear-gradient(180deg, rgba(127,29,29,.30), rgba(127,29,29,.12))",
           }}
         >
           <div style={{ fontWeight: 950 }}>Database issue</div>
-          <div className="muted" style={{ marginTop: 6 }}>
-            {pageError}
-          </div>
+          <div className="muted" style={{ marginTop: 6 }}>{pageError}</div>
         </div>
       ) : null}
 
@@ -1533,15 +1176,15 @@ export default function BillsPage() {
           marginBottom: 16,
         }}
       >
-        {hero.map((h) => (
-          <div key={h.label} className="card" style={{ ...cardStyle, padding: 14 }}>
-            <ProgressBar
-              label={h.label}
-              value={h.value}
-              sublabel={h.sub}
-              pct={h.pct}
-              color={h.color}
-              danger={h.color === BAD}
+        {hero.map((item) => (
+          <div key={item.label} className="card" style={{ ...softCard, padding: 14 }}>
+            <MetricBar
+              label={item.label}
+              value={item.value}
+              sublabel={item.sublabel}
+              pct={item.pct}
+              color={item.color}
+              danger={item.danger}
             />
           </div>
         ))}
@@ -1551,14 +1194,14 @@ export default function BillsPage() {
         className="grid"
         style={{
           gap: 16,
-          gridTemplateColumns: "1.15fr .85fr",
+          gridTemplateColumns: "1.18fr .82fr",
           marginBottom: 16,
         }}
       >
         <div
           className="card"
           style={{
-            ...panelStyle,
+            ...shellCard,
             padding: 16,
             position: "relative",
             overflow: "hidden",
@@ -1570,218 +1213,162 @@ export default function BillsPage() {
               inset: 0,
               pointerEvents: "none",
               background:
-                "radial-gradient(circle at top left, rgba(96,165,250,0.10), transparent 28%), radial-gradient(circle at bottom right, rgba(52,211,153,0.08), transparent 24%)",
+                "radial-gradient(circle at top left, rgba(96,165,250,.10), transparent 28%), radial-gradient(circle at bottom right, rgba(52,211,153,.08), transparent 24%)",
             }}
           />
 
           <div style={{ position: "relative" }}>
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                gap: 10,
-                flexWrap: "wrap",
-                alignItems: "center",
-              }}
-            >
-              <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-                <div style={{ fontWeight: 950, fontSize: 18 }}>Snowball / Avalanche Planner</div>
-                <div className="muted" style={{ fontSize: 12 }}>
-                  Uses minimums + extra pool. Cleaner debt-free projection.
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+              <div>
+                <div style={{ fontWeight: 950, fontSize: 18 }}>Bill pressure overview</div>
+                <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
+                  Your biggest bill weight, pressure against income, and what is creating the most monthly drag.
                 </div>
               </div>
-              <button className="btnGhost" type="button" onClick={() => setPlannerOpen((v) => !v)}>
-                {plannerOpen ? "Hide" : "Show"}
-              </button>
+
+              <div style={pill("rgba(255,255,255,.05)", "rgba(255,255,255,.10)")}>
+                Active bills: <b>{computed.totals.activeCount}</b>
+              </div>
             </div>
 
-            {plannerOpen ? (
-              <>
-                <div style={{ height: 12 }} />
+            <div style={{ height: 14 }} />
 
-                <div
-                  className="row"
-                  style={{
-                    gap: 10,
-                    flexWrap: "wrap",
-                    alignItems: "center",
-                    padding: 12,
-                    borderRadius: 16,
-                    background: "rgba(255,255,255,0.03)",
-                    border: "1px solid rgba(255,255,255,0.06)",
-                  }}
-                >
-                  <div className="muted" style={{ fontSize: 12, width: 140 }}>
-                    Strategy
-                  </div>
-                  <select
-                    className="input"
-                    value={state.settings.strategy}
-                    onChange={async (e) => {
-                      const nextSettings = {
-                        ...state.settings,
-                        strategy: e.target.value === "snowball" ? "snowball" : "avalanche",
-                      };
-                      setState((prev) => ({ ...prev, settings: nextSettings }));
-                      await saveSettings(nextSettings);
-                    }}
-                    style={{ width: 260 }}
-                  >
-                    <option value="avalanche">Avalanche (highest APR first)</option>
-                    <option value="snowball">Snowball (lowest balance first)</option>
-                  </select>
+            <div className="grid" style={{ gap: 12, gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))" }}>
+              <div className="card" style={{ ...softCard, padding: 14 }}>
+                <MetricBar
+                  label="Income pressure"
+                  value={`${computed.totals.pressurePct.toFixed(1)}%`}
+                  sublabel={
+                    state.settings.paycheckMonthly > 0
+                      ? `${money(computed.totals.totalMonthly)} of ${money(state.settings.paycheckMonthly)}`
+                      : "Set monthly income below"
+                  }
+                  pct={computed.totals.pressurePct}
+                  color={computed.totals.pressurePct >= 70 ? BAD : ACCENT}
+                  danger={computed.totals.pressurePct >= 70}
+                />
+              </div>
 
-                  <div className="muted" style={{ fontSize: 12, width: 160 }}>
-                    Extra pool / month
-                  </div>
-                  <input
-                    className="input"
-                    inputMode="decimal"
-                    placeholder="e.g. 300"
-                    value={state.settings.extraPoolMonthly ? String(state.settings.extraPoolMonthly) : ""}
-                    onChange={async (e) => {
-                      const v = parseMoneyInput(e.target.value);
-                      const nextSettings = {
-                        ...state.settings,
-                        extraPoolMonthly: Number.isFinite(v) ? Math.max(0, v) : 0,
-                      };
-                      setState((prev) => ({ ...prev, settings: nextSettings }));
-                      await saveSettings(nextSettings);
-                    }}
-                    style={{ width: 220 }}
-                  />
-                </div>
-
-                <div style={{ height: 12 }} />
-
-                {computed.planner.monthsToDebtFree === 0 ? (
-                  <div className="muted">No active controllable balances to plan.</div>
-                ) : computed.planner.monthsToDebtFree === Infinity ? (
-                  <div className="card" style={{ ...cardStyle, padding: 12 }}>
-                    <div style={{ fontWeight: 950 }}>Planner can’t compute payoff</div>
-                    <div className="muted" style={{ marginTop: 6, fontSize: 12 }}>
-                      You have no payment capacity. Set minimum payments or add an extra pool.
-                    </div>
-                  </div>
+              <div className="card" style={{ ...softCard, padding: 14 }}>
+                <div style={{ fontWeight: 900, marginBottom: 10 }}>Top monthly weight</div>
+                {computed.topMonthly.length === 0 ? (
+                  <div className="muted" style={{ fontSize: 12 }}>No active bills yet.</div>
                 ) : (
-                  <div
-                    className="grid"
-                    style={{ gap: 12, gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))" }}
-                  >
-                    <div className="card" style={{ ...cardStyle, padding: 14 }}>
-                      <ProgressBar
-                        label="Debt-free estimate"
-                        value={`${computed.planner.debtFreeISO}`}
-                        sublabel={`Estimated interest ${money(computed.planner.totalInterest)} • ${computed.planner.monthsToDebtFree} ${plural(computed.planner.monthsToDebtFree, "month")}`}
-                        pct={payoffSpeedPct(computed.planner.monthsToDebtFree)}
-                        color={GOOD}
-                      />
-                    </div>
-
-                    <div className="card" style={{ ...cardStyle, padding: 14 }}>
-                      <div style={{ fontWeight: 950, marginBottom: 10 }}>Payoff order</div>
-                      {computed.planner.payoffOrder.length === 0 ? (
-                        <div className="muted" style={{ fontSize: 12 }}>
-                          No payoff order available.
+                  <div className="grid" style={{ gap: 10 }}>
+                    {computed.topMonthly.map((b) => (
+                      <div
+                        key={b.id}
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          gap: 10,
+                          padding: "10px 12px",
+                          borderRadius: 14,
+                          background: "rgba(255,255,255,.03)",
+                          border: "1px solid rgba(255,255,255,.06)",
+                        }}
+                      >
+                        <div>
+                          <div style={{ fontWeight: 800 }}>{b.name}</div>
+                          <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+                            {b.frequency} • {b.category || "No category"}
+                          </div>
                         </div>
-                      ) : (
-                        <div className="grid" style={{ gap: 10 }}>
-                          {computed.planner.payoffOrder.slice(0, 6).map((x, idx) => (
-                            <div
-                              key={x.id}
-                              style={{
-                                display: "flex",
-                                justifyContent: "space-between",
-                                gap: 10,
-                                padding: "10px 12px",
-                                borderRadius: 14,
-                                background: "rgba(255,255,255,0.03)",
-                                border: "1px solid rgba(255,255,255,0.06)",
-                              }}
-                            >
-                              <div style={{ fontWeight: 800 }}>
-                                {idx + 1}. {x.name}
-                              </div>
-                              <div className="muted" style={{ fontSize: 12 }}>
-                                <b style={{ color: "rgba(255,255,255,0.92)" }}>{x.paidOffISO}</b>
-                              </div>
-                            </div>
-                          ))}
+                        <div style={{ textAlign: "right" }}>
+                          <div style={{ fontWeight: 900 }}>{money(b.monthlyEq)}</div>
+                          <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+                            monthly eq
+                          </div>
                         </div>
-                      )}
-                    </div>
+                      </div>
+                    ))}
                   </div>
                 )}
-              </>
-            ) : null}
+              </div>
+            </div>
           </div>
         </div>
 
-        <div className="card" style={{ ...panelStyle, padding: 16 }}>
-          <div style={{ fontWeight: 950, fontSize: 18 }}>Upcoming bills</div>
+        <div className="card" style={{ ...shellCard, padding: 16 }}>
+          <div style={{ fontWeight: 950, fontSize: 18 }}>Upcoming timeline</div>
           <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
-            Quick timeline for the next few due dates.
+            Fast visual read for what is late, close, and under control.
           </div>
 
-          <div style={{ height: 12 }} />
+          <div style={{ height: 14 }} />
 
-          {computed.upcoming.length === 0 ? (
-            <div className="muted">No upcoming items.</div>
+          {state.items.filter((x) => x.active).length === 0 ? (
+            <div className="muted">No active bills yet.</div>
           ) : (
             <div className="grid" style={{ gap: 10 }}>
-              {computed.upcoming.map((b) => (
-                <div
-                  key={b.id}
-                  style={{
-                    padding: "12px 12px",
-                    borderRadius: 16,
-                    background: "rgba(255,255,255,0.03)",
-                    border: "1px solid rgba(255,255,255,0.06)",
-                  }}
-                >
-                  <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
-                    <div>
-                      <div style={{ fontWeight: 900 }}>{b.name}</div>
-                      <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
-                        {b.dueDate} • {b.type === "controllable" ? "Debt" : "Bill"}
+              {state.items
+                .filter((x) => x.active)
+                .map((x) => ({ ...x, dueIn: daysBetween(isoDate(), x.dueDate), tone: dueTone(daysBetween(isoDate(), x.dueDate)) }))
+                .sort((a, b) => {
+                  const ad = Number.isFinite(a.dueIn) ? a.dueIn : 999999;
+                  const bd = Number.isFinite(b.dueIn) ? b.dueIn : 999999;
+                  return ad - bd;
+                })
+                .slice(0, 5)
+                .map((b) => (
+                  <div
+                    key={b.id}
+                    style={{
+                      padding: 12,
+                      borderRadius: 16,
+                      background: b.tone.bg,
+                      border: `1px solid ${b.tone.border}`,
+                      boxShadow: b.tone.glow,
+                    }}
+                  >
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
+                      <div>
+                        <div style={{ fontWeight: 900 }}>{b.name}</div>
+                        <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+                          {b.dueDate} • {b.frequency}
+                        </div>
+                      </div>
+
+                      <div style={{ textAlign: "right" }}>
+                        <div style={{ fontWeight: 900 }}>{money(b.amount)}</div>
+                        <div style={{ fontSize: 12, marginTop: 4, color: b.tone.color }}>
+                          {b.tone.label}
+                        </div>
                       </div>
                     </div>
-                    <div style={{ textAlign: "right" }}>
-                      <div style={{ fontWeight: 900 }}>
-                        {money(b.type === "controllable" ? b.minPay || b.amount : b.amount)}
-                      </div>
+
+                    <div style={{ height: 10 }} />
+
+                    <div
+                      style={{
+                        height: 8,
+                        borderRadius: 999,
+                        overflow: "hidden",
+                        background: "rgba(255,255,255,.10)",
+                        border: "1px solid rgba(255,255,255,.10)",
+                      }}
+                    >
                       <div
-                        className="muted"
                         style={{
-                          fontSize: 12,
-                          color: b.dueIn <= 3 ? BAD : b.dueIn <= 7 ? WARN : "rgba(255,255,255,0.72)",
+                          width: `${duePercent(b.dueIn)}%`,
+                          height: "100%",
+                          borderRadius: 999,
+                          background: `linear-gradient(90deg, ${b.tone.color}, rgba(255,255,255,.92))`,
+                          boxShadow: `0 0 18px ${b.tone.color}66`,
                         }}
-                      >
-                        {b.dueIn >= 0 ? `in ${b.dueIn}d` : `${Math.abs(b.dueIn)}d late`}
-                      </div>
+                      />
                     </div>
                   </div>
-                </div>
-              ))}
+                ))}
             </div>
           )}
         </div>
       </div>
 
-      <div className="card" style={{ ...panelStyle, padding: 14, marginBottom: 16 }}>
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            gap: 10,
-            flexWrap: "wrap",
-            alignItems: "center",
-          }}
-        >
+      <div className="card" style={{ ...shellCard, padding: 14, marginBottom: 16 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
           <div style={{ fontWeight: 950 }}>Settings</div>
-          <div className="muted" style={{ fontSize: 12 }}>
-            Used for pressure bars and % of income.
-          </div>
+          <div className="muted" style={{ fontSize: 12 }}>Used for pressure bars and affordability view.</div>
         </div>
 
         <div style={{ height: 10 }} />
@@ -1794,13 +1381,14 @@ export default function BillsPage() {
             alignItems: "center",
             padding: 12,
             borderRadius: 16,
-            background: "rgba(255,255,255,0.03)",
-            border: "1px solid rgba(255,255,255,0.06)",
+            background: "rgba(255,255,255,.03)",
+            border: "1px solid rgba(255,255,255,.06)",
           }}
         >
           <div className="muted" style={{ fontSize: 12, width: 160 }}>
             Monthly income
           </div>
+
           <input
             className="input"
             style={{ width: 240 }}
@@ -1820,17 +1408,12 @@ export default function BillsPage() {
         </div>
       </div>
 
-      <div className="card" style={{ ...panelStyle, padding: 14, marginBottom: 16 }}>
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            gap: 10,
-            flexWrap: "wrap",
-            alignItems: "center",
-          }}
-        >
-          <div style={{ fontWeight: 950, fontSize: 18 }}>{mode === "edit" ? "Edit item" : "Add item"}</div>
+      <div className="card" style={{ ...shellCard, padding: 14, marginBottom: 16 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+          <div style={{ fontWeight: 950, fontSize: 18 }}>
+            {mode === "edit" ? "Edit bill" : "Add bill"}
+          </div>
+
           {mode === "edit" ? (
             <button className="btnGhost" type="button" onClick={resetForm}>
               Cancel edit
@@ -1844,21 +1427,28 @@ export default function BillsPage() {
           <div className="row" style={{ gap: 10, flexWrap: "wrap" }}>
             <input
               className="input"
-              placeholder="Name (Rent, Internet, Credit Card...)"
+              placeholder="Bill name (Rent, Internet, Insurance...)"
               value={name}
               onChange={(e) => setName(e.target.value)}
               style={{ flex: 1, minWidth: 260 }}
             />
 
-            <select
+            <input
               className="input"
-              value={type}
-              onChange={(e) => setType(e.target.value)}
-              style={{ width: 240 }}
-            >
-              <option value="noncontrollable">Non-controllable (fixed)</option>
-              <option value="controllable">Controllable (debt)</option>
-            </select>
+              placeholder="Amount"
+              inputMode="decimal"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              style={{ width: 180 }}
+            />
+
+            <input
+              className="input"
+              type="date"
+              value={dueDate}
+              onChange={(e) => setDueDate(e.target.value)}
+              style={{ width: 180 }}
+            />
 
             <select
               className="input"
@@ -1873,37 +1463,22 @@ export default function BillsPage() {
               <option value="yearly">Yearly</option>
               <option value="one_time">One-time</option>
             </select>
-
-            <input
-              className="input"
-              type="date"
-              value={dueDate}
-              onChange={(e) => setDueDate(e.target.value)}
-              style={{ width: 180 }}
-            />
           </div>
 
           <div className="row" style={{ gap: 10, flexWrap: "wrap" }}>
             <input
               className="input"
-              placeholder={type === "controllable" ? "Optional: current minimum due" : "Amount"}
-              inputMode="decimal"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              style={{ width: 260 }}
-            />
-            <input
-              className="input"
               placeholder="Category (Housing, Utilities, Insurance...)"
               value={category}
               onChange={(e) => setCategory(e.target.value)}
-              style={{ width: 240 }}
+              style={{ width: 260 }}
             />
+
             <select
               className="input"
               value={linkedAccountId}
               onChange={(e) => setLinkedAccountId(e.target.value)}
-              style={{ minWidth: 240, flex: 1 }}
+              style={{ minWidth: 260, flex: 1 }}
             >
               <option value="">Linked account (optional)</option>
               {accounts.map((a) => (
@@ -1912,20 +1487,10 @@ export default function BillsPage() {
                 </option>
               ))}
             </select>
-          </div>
-
-          <div className="row" style={{ gap: 10, flexWrap: "wrap" }}>
-            <input
-              className="input"
-              placeholder="Notes (autopay/login/etc.)"
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              style={{ flex: 1, minWidth: 260 }}
-            />
 
             <label
               style={{
-                ...chip("rgba(255,255,255,0.05)", "rgba(255,255,255,0.10)"),
+                ...pill("rgba(255,255,255,.05)", "rgba(255,255,255,.10)"),
                 minHeight: 42,
                 padding: "10px 12px",
               }}
@@ -1939,80 +1504,25 @@ export default function BillsPage() {
             </label>
           </div>
 
-          {type === "controllable" ? (
-            <div
-              className="card"
-              style={{
-                ...cardStyle,
-                padding: 14,
-                background:
-                  "linear-gradient(180deg, rgba(96,165,250,0.10), rgba(255,255,255,0.025))",
-              }}
-            >
-              <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-                <div style={{ fontWeight: 950 }}>Debt payoff details</div>
-                <div style={chip("rgba(96,165,250,0.10)", "rgba(96,165,250,0.20)")}>
-                  Total used = min + extra
-                </div>
-              </div>
-
-              <div style={{ height: 10 }} />
-
-              <div className="row" style={{ gap: 10, flexWrap: "wrap" }}>
-                <input
-                  className="input"
-                  placeholder="Balance"
-                  inputMode="decimal"
-                  value={balance}
-                  onChange={(e) => setBalance(e.target.value)}
-                  style={{ width: 220 }}
-                />
-                <input
-                  className="input"
-                  placeholder="APR %"
-                  inputMode="decimal"
-                  value={aprPct}
-                  onChange={(e) => setAprPct(e.target.value)}
-                  style={{ width: 180 }}
-                />
-                <input
-                  className="input"
-                  placeholder="Minimum payment"
-                  inputMode="decimal"
-                  value={minPay}
-                  onChange={(e) => setMinPay(e.target.value)}
-                  style={{ width: 220 }}
-                />
-                <input
-                  className="input"
-                  placeholder="Extra payment"
-                  inputMode="decimal"
-                  value={extraPay}
-                  onChange={(e) => setExtraPay(e.target.value)}
-                  style={{ width: 220 }}
-                />
-              </div>
-
-              <div className="muted" style={{ fontSize: 12, marginTop: 10 }}>
-                If payoff shows “Never”, your total payment does not beat monthly interest.
-              </div>
-            </div>
-          ) : null}
+          <input
+            className="input"
+            placeholder="Notes (login, account number, reminder info...)"
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+          />
 
           {error ? (
             <div
               className="card"
               style={{
-                ...cardStyle,
+                ...softCard,
                 padding: 12,
-                border: "1px solid rgba(239,68,68,0.35)",
-                background: "linear-gradient(180deg, rgba(127,29,29,0.28), rgba(127,29,29,0.12))",
+                border: "1px solid rgba(239,68,68,.35)",
+                background: "linear-gradient(180deg, rgba(127,29,29,.28), rgba(127,29,29,.12))",
               }}
             >
               <div style={{ fontWeight: 950 }}>Fix this</div>
-              <div className="muted" style={{ marginTop: 6 }}>
-                {error}
-              </div>
+              <div className="muted" style={{ marginTop: 6 }}>{error}</div>
             </div>
           ) : null}
 
@@ -2020,36 +1530,30 @@ export default function BillsPage() {
             <button
               className="btn"
               type="submit"
-              style={{ background: ACCENT, border: "1px solid rgba(255,255,255,0.12)" }}
+              style={{ background: ACCENT, border: "1px solid rgba(255,255,255,.12)" }}
             >
-              {mode === "edit" ? "Save changes" : "Add item"}
+              {mode === "edit" ? "Save changes" : "Add bill"}
             </button>
+
             <button className="btnGhost" type="button" onClick={resetForm}>
               Clear
             </button>
+
             <div className="muted" style={{ fontSize: 12 }}>
-              Deactivate instead of delete if you want history.
+              Use deactivate instead of delete if you want to keep history.
             </div>
           </div>
         </form>
       </div>
 
-      <div className="card" style={{ ...panelStyle, padding: 14 }}>
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            gap: 10,
-            alignItems: "center",
-            flexWrap: "wrap",
-          }}
-        >
+      <div className="card" style={{ ...shellCard, padding: 14 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
           <div style={{ fontWeight: 950, fontSize: 18 }}>Bills list</div>
 
           <div className="row" style={{ gap: 10, flexWrap: "wrap", alignItems: "center" }}>
             <input
               className="input"
-              placeholder="Search..."
+              placeholder="Search bills..."
               value={q}
               onChange={(e) => setQ(e.target.value)}
               style={{ width: 220 }}
@@ -2057,13 +1561,15 @@ export default function BillsPage() {
 
             <select
               className="input"
-              value={tab}
-              onChange={(e) => setTab(e.target.value)}
-              style={{ width: 200 }}
+              value={lane}
+              onChange={(e) => setLane(e.target.value)}
+              style={{ width: 170 }}
             >
-              <option value="all">All</option>
-              <option value="noncontrollable">Non-controllable</option>
-              <option value="controllable">Controllable</option>
+              <option value="all">All lanes</option>
+              <option value="late">Late</option>
+              <option value="soon">Due soon</option>
+              <option value="upcoming">Upcoming</option>
+              <option value="autopay">Autopay</option>
             </select>
 
             <select
@@ -2081,12 +1587,12 @@ export default function BillsPage() {
               className="input"
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value)}
-              style={{ width: 200 }}
+              style={{ width: 190 }}
             >
               <option value="due_asc">Due date</option>
-              <option value="amt_desc">Amount</option>
+              <option value="amount_desc">Amount</option>
+              <option value="monthly_desc">Monthly weight</option>
               <option value="name_asc">Name</option>
-              <option value="payoff_asc">Payoff</option>
             </select>
           </div>
         </div>
@@ -2094,299 +1600,145 @@ export default function BillsPage() {
         <div style={{ height: 12 }} />
 
         {computed.list.length === 0 ? (
-          <div className="muted">No items match your filters.</div>
+          <div className="muted">No bills match your filters.</div>
         ) : (
-          <div className="grid" style={{ gap: 12 }}>
+          <div className="grid" style={{ gap: 14 }}>
             {computed.list.map((b) => {
-              const isControl = b.type === "controllable";
-              const dueIn = b.dueIn;
-
-              const payoffLabel = (() => {
-                if (!isControl) return null;
-                const bal = Number(b.balance) || 0;
-                const pay = Number(b.totalPay) || 0;
-                if (bal <= 0) return "Paid off";
-                if (pay <= 0) return "No payment set";
-                if (b.payoffMonths === Infinity) return "Never (payment too low)";
-                if (Number.isFinite(b.payoffMonths) && b.payoffISO) {
-                  return `${b.payoffISO} (${b.payoffMonths} ${plural(b.payoffMonths, "month")})`;
-                }
-                return "Estimate unavailable";
-              })();
-
-              const min = Math.max(0, Number(b.minPay) || 0);
-              const extra = Math.max(0, Number(b.extraPay) || 0);
-              const bal = Math.max(0, Number(b.balance) || 0);
-
-              const sliderMax = isControl
-                ? Math.max(50, Math.min(2000, Math.ceil(Math.max(250, min * 3, bal * 0.05))))
-                : 0;
-
-              const badge = isControl
-                ? chip("rgba(96,165,250,0.08)", "rgba(96,165,250,0.22)")
-                : chip("rgba(255,255,255,0.06)", "rgba(255,255,255,0.10)");
-
-              const duePct = dueUrgencyPct(dueIn);
-              const speedPct = payoffSpeedPct(b.payoffMonths);
-              const strengthPct = paymentStrengthPct(b.balance, b.totalPay);
-
-              const dueColor = !Number.isFinite(dueIn)
-                ? ACCENT
-                : dueIn <= 3
-                  ? BAD
-                  : dueIn <= 7
-                    ? WARN
-                    : GOOD;
+              const tone = b.tone;
+              const duePct = duePercent(b.dueIn);
 
               return (
                 <div
                   key={b.id}
                   className="card"
                   style={{
-                    ...cardStyle,
+                    ...softCard,
                     padding: 16,
-                    background: isControl
-                      ? "linear-gradient(180deg, rgba(96,165,250,0.08), rgba(255,255,255,0.025))"
-                      : "linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.025))",
+                    background: `linear-gradient(180deg, ${tone.bg}, rgba(255,255,255,.02))`,
+                    border: `1px solid ${tone.border}`,
+                    boxShadow: tone.glow,
                   }}
                 >
                   <div
                     style={{
                       display: "flex",
                       justifyContent: "space-between",
-                      gap: 12,
+                      gap: 14,
                       alignItems: "flex-start",
                       flexWrap: "wrap",
                     }}
                   >
                     <div style={{ minWidth: 280, flex: 1 }}>
                       <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-                        <div style={{ fontWeight: 950, fontSize: 18 }}>{b.name}</div>
+                        <div style={{ fontWeight: 950, fontSize: 20 }}>{b.name}</div>
 
-                        <div style={badge}>
+                        <div style={pill(tone.bg, tone.border)}>
                           <span
                             style={{
-                              width: 7,
-                              height: 7,
-                              borderRadius: 99,
-                              background: isControl ? ACCENT : "rgba(255,255,255,0.45)",
-                              display: "inline-block",
-                              boxShadow: isControl ? `0 0 12px ${ACCENT}` : "none",
+                              width: 8,
+                              height: 8,
+                              borderRadius: 999,
+                              background: tone.color,
+                              boxShadow: `0 0 14px ${tone.color}`,
                             }}
                           />
-                          {b.active ? "Active" : "Inactive"} • {typeLabel(b.type)} • {b.frequency}
+                          {b.active ? "Active" : "Inactive"}
+                        </div>
+
+                        <div style={pill("rgba(255,255,255,.05)", "rgba(255,255,255,.10)")}>
+                          {b.frequency}
                         </div>
 
                         {b.autopay ? (
-                          <div style={chip("rgba(52,211,153,0.10)", "rgba(52,211,153,0.24)")}>
+                          <div style={pill("rgba(52,211,153,.10)", "rgba(52,211,153,.22)")}>
                             Autopay
                           </div>
                         ) : null}
 
                         {b.category ? (
-                          <div style={chip("rgba(255,255,255,0.05)", "rgba(255,255,255,0.10)")}>
+                          <div style={pill("rgba(255,255,255,.05)", "rgba(255,255,255,.10)")}>
                             {b.category}
                           </div>
                         ) : null}
                       </div>
 
-                      <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>
-                        Due <b style={{ color: "rgba(255,255,255,0.92)" }}>{b.dueDate}</b>
-                        {Number.isFinite(dueIn)
-                          ? ` (${dueIn >= 0 ? `in ${dueIn}d` : `${Math.abs(dueIn)}d late`})`
-                          : ""}
-                        {" • "}
-                        {isControl ? (
+                      <div className="muted" style={{ fontSize: 13, marginTop: 10 }}>
+                        Due <b style={{ color: "rgba(255,255,255,.94)" }}>{b.dueDate}</b> • Amount{" "}
+                        <b style={{ color: "rgba(255,255,255,.94)" }}>{money(b.amount)}</b>
+                        {b.frequency !== "monthly" && b.frequency !== "one_time" ? (
                           <>
-                            Balance {money(b.balance)} • Min {money(b.minPay)} • Extra {money(b.extraPay)} • Total{" "}
-                            <b style={{ color: "rgba(255,255,255,0.92)" }}>{money(b.totalPay)}</b> • APR {clamp(b.aprPct, 0, 100)}%
+                            {" • "}Monthly eq <b style={{ color: "rgba(255,255,255,.94)" }}>{money(b.monthlyEq)}</b>
                           </>
-                        ) : (
-                          <>
-                            Amount <b style={{ color: "rgba(255,255,255,0.92)" }}>{money(b.amount)}</b>
-                            {b.frequency !== "monthly" && b.frequency !== "one_time" ? (
-                              <>
-                                {" • "}
-                                Monthly eq{" "}
-                                <b style={{ color: "rgba(255,255,255,0.92)" }}>
-                                  {money(b.monthlyEquivalent)}
-                                </b>
-                              </>
-                            ) : null}
-                          </>
-                        )}
+                        ) : null}
                       </div>
 
-                      <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>
+                      <div className="muted" style={{ fontSize: 13, marginTop: 8 }}>
                         Linked account:{" "}
-                        <b style={{ color: "rgba(255,255,255,0.92)" }}>
+                        <b style={{ color: "rgba(255,255,255,.94)" }}>
                           {b.linkedAccount
                             ? `${accountIcon(b.linkedAccount.type)} ${b.linkedAccount.name}`
                             : "None"}
                         </b>
                         {" • "}
-                        Last paid:{" "}
-                        <b style={{ color: "rgba(255,255,255,0.92)" }}>
-                          {b.lastPaidDate || "—"}
-                        </b>
+                        Last paid: <b style={{ color: "rgba(255,255,255,.94)" }}>{b.lastPaidDate || "—"}</b>
                       </div>
 
-                      {isControl ? (
-                        <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>
-                          Payoff: <b style={{ color: "rgba(255,255,255,0.92)" }}>{payoffLabel}</b>
-                          {" • "}
-                          Est. interest:{" "}
-                          <b style={{ color: "rgba(255,255,255,0.92)" }}>{money(b.payoffInterest)}</b>
-                        </div>
-                      ) : null}
-
                       {b.notes ? (
-                        <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>
+                        <div className="muted" style={{ fontSize: 13, marginTop: 8 }}>
                           Notes: {b.notes}
                         </div>
                       ) : null}
 
-                      <div
-                        className="grid"
-                        style={{
-                          gap: 10,
-                          gridTemplateColumns: isControl ? "repeat(auto-fit, minmax(220px, 1fr))" : "1fr",
-                          marginTop: 14,
-                        }}
-                      >
+                      <div style={{ marginTop: 14 }}>
                         <div
                           style={{
-                            padding: 12,
-                            borderRadius: 16,
-                            background: "rgba(255,255,255,0.03)",
-                            border: "1px solid rgba(255,255,255,0.06)",
+                            display: "flex",
+                            justifyContent: "space-between",
+                            gap: 12,
+                            flexWrap: "wrap",
+                            alignItems: "baseline",
+                            marginBottom: 8,
                           }}
                         >
-                          <ProgressBar
-                            label="Due urgency"
-                            value={Number.isFinite(dueIn) ? (dueIn >= 0 ? `${dueIn}d left` : `${Math.abs(dueIn)}d late`) : "—"}
-                            sublabel={dueIn <= 3 ? "This needs attention now." : "Keeps upcoming bills visible."}
-                            pct={duePct}
-                            color={dueColor}
-                            danger={dueIn <= 3}
-                          />
+                          <div className="muted" style={{ fontSize: 12 }}>Urgency line</div>
+                          <div style={{ fontSize: 12, fontWeight: 900, color: tone.color }}>
+                            {tone.label}
+                          </div>
                         </div>
 
-                        {isControl ? (
-                          <>
-                            <div
-                              style={{
-                                padding: 12,
-                                borderRadius: 16,
-                                background: "rgba(255,255,255,0.03)",
-                                border: "1px solid rgba(255,255,255,0.06)",
-                              }}
-                            >
-                              <ProgressBar
-                                label="Payoff speed"
-                                value={b.payoffMonths === Infinity ? "Too slow" : b.payoffMonths ? `${b.payoffMonths} mo` : "—"}
-                                sublabel="Higher bar = faster payoff path."
-                                pct={speedPct}
-                                color={GOOD}
-                              />
-                            </div>
-
-                            <div
-                              style={{
-                                padding: 12,
-                                borderRadius: 16,
-                                background: "rgba(255,255,255,0.03)",
-                                border: "1px solid rgba(255,255,255,0.06)",
-                              }}
-                            >
-                              <ProgressBar
-                                label="Payment strength"
-                                value={money(b.totalPay)}
-                                sublabel="How aggressive your payment is relative to this balance."
-                                pct={strengthPct}
-                                color={ACCENT}
-                              />
-                            </div>
-                          </>
-                        ) : null}
-                      </div>
-
-                      {isControl ? (
-                        <div className="card" style={{ ...panelStyle, padding: 12, marginTop: 12 }}>
+                        <div
+                          style={{
+                            position: "relative",
+                            height: 12,
+                            borderRadius: 999,
+                            overflow: "hidden",
+                            background: "rgba(255,255,255,.08)",
+                            border: "1px solid rgba(255,255,255,.10)",
+                          }}
+                        >
                           <div
                             style={{
-                              display: "flex",
-                              justifyContent: "space-between",
-                              gap: 10,
-                              flexWrap: "wrap",
-                              alignItems: "center",
+                              width: `${duePct}%`,
+                              height: "100%",
+                              borderRadius: 999,
+                              background: `linear-gradient(90deg, ${tone.color}, rgba(255,255,255,.95))`,
+                              boxShadow: `0 0 20px ${tone.color}66`,
                             }}
-                          >
-                            <div style={{ fontWeight: 900 }}>Extra payment slider</div>
-                            <div className="muted" style={{ fontSize: 12 }}>
-                              Drag to see payoff shift live.
-                            </div>
-                          </div>
-
-                          <div style={{ height: 10 }} />
-
-                          <div className="row" style={{ gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-                            <div className="muted" style={{ fontSize: 12, width: 90 }}>
-                              Extra
-                            </div>
-
-                            <input
-                              className="input"
-                              type="range"
-                              min={0}
-                              max={sliderMax}
-                              step={5}
-                              value={extra}
-                              onChange={(e) => setExtraFor(b.id, e.target.value)}
-                              style={{ flex: 1, minWidth: 220, accentColor: ACCENT }}
-                            />
-
-                            <input
-                              className="input"
-                              inputMode="decimal"
-                              value={String(extra)}
-                              onChange={(e) => setExtraFor(b.id, parseMoneyInput(e.target.value))}
-                              style={{ width: 140 }}
-                            />
-
-                            <button className="btnGhost" type="button" onClick={() => setExtraFor(b.id, 0)}>
-                              Reset
-                            </button>
-                          </div>
-
-                          <div style={{ height: 10 }} />
-
-                          <ProgressBar
-                            label="Extra payment intensity"
-                            value={money(extra)}
-                            sublabel="This is your manual push beyond the minimum."
-                            pct={min + extra > 0 ? (extra / (min + extra)) * 100 : 0}
-                            color={WARN}
                           />
                         </div>
-                      ) : null}
+                      </div>
 
                       {historyOpenId === b.id ? (
-                        <div
-                          className="card"
-                          style={{
-                            ...panelStyle,
-                            padding: 12,
-                            marginTop: 12,
-                          }}
-                        >
+                        <div className="card" style={{ ...shellCard, padding: 12, marginTop: 14 }}>
                           <div style={{ fontWeight: 900, marginBottom: 10 }}>Payment history</div>
+
                           {b.history.length === 0 ? (
                             <div className="muted" style={{ fontSize: 12 }}>No payment history yet.</div>
                           ) : (
                             <div className="grid" style={{ gap: 8 }}>
                               {b.history.slice(0, 6).map((h) => {
                                 const account = accounts.find((a) => a.id === h.accountId);
+
                                 return (
                                   <div
                                     key={h.id}
@@ -2396,8 +1748,8 @@ export default function BillsPage() {
                                       gap: 10,
                                       padding: "10px 12px",
                                       borderRadius: 14,
-                                      background: "rgba(255,255,255,0.03)",
-                                      border: "1px solid rgba(255,255,255,0.06)",
+                                      background: "rgba(255,255,255,.03)",
+                                      border: "1px solid rgba(255,255,255,.06)",
                                     }}
                                   >
                                     <div>
@@ -2411,6 +1763,7 @@ export default function BillsPage() {
                                         </div>
                                       ) : null}
                                     </div>
+
                                     <div className="muted" style={{ fontSize: 12, whiteSpace: "nowrap" }}>
                                       {fmtWhen(h.ts)}
                                     </div>
@@ -2456,7 +1809,7 @@ export default function BillsPage() {
       </div>
 
       <div className="muted" style={{ fontSize: 12, marginTop: 14 }}>
-        Estimates are simplified. Monthly interest only, no fees, no promo APR changes.
+        Bills page only. No debt planner, no payoff noise, no extra clutter.
       </div>
 
       <Modal
@@ -2464,7 +1817,7 @@ export default function BillsPage() {
         title={payingBill ? `Pay: ${payingBill.name}` : "Pay Bill"}
         subtitle={
           payingBill
-            ? `${typeLabel(payingBill.type)} • Due ${payingBill.dueDate} • Last paid ${payingBill.lastPaidDate || "—"}`
+            ? `Due ${payingBill.dueDate} • ${payingBill.frequency} • Last paid ${payingBill.lastPaidDate || "—"}`
             : ""
         }
         onClose={() => setPayModalOpen(false)}
@@ -2510,9 +1863,9 @@ export default function BillsPage() {
                 <div
                   className="card"
                   style={{
-                    ...cardStyle,
+                    ...softCard,
                     padding: 12,
-                    background: "rgba(255,255,255,0.03)",
+                    background: "rgba(255,255,255,.03)",
                   }}
                 >
                   <div className="muted" style={{ fontSize: 12 }}>Account preview</div>
@@ -2520,9 +1873,12 @@ export default function BillsPage() {
                     {accountIcon(a.type)} {a.name}
                   </div>
                   <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>
-                    Current: <b style={{ color: "rgba(255,255,255,0.92)" }}>{money(a.balance)}</b>
+                    Current: <b style={{ color: "rgba(255,255,255,.92)" }}>{money(a.balance)}</b>
                     {" • "}
-                    After payment: <b style={{ color: projected < 0 ? BAD : "rgba(255,255,255,0.92)" }}>{money(projected)}</b>
+                    After payment:{" "}
+                    <b style={{ color: projected < 0 ? BAD : "rgba(255,255,255,.92)" }}>
+                      {money(projected)}
+                    </b>
                   </div>
                 </div>
               ) : null;

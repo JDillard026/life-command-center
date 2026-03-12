@@ -3,43 +3,55 @@
 @tailwind utilities;
 
 /* =========================================================
-   LIFE COMMAND CENTER — SINGLE SOURCE OF TRUTH THEME
-   Dark finance dashboard, shadcn-compatible, clean hierarchy
+   LIFE COMMAND CENTER — PREMIUM GLOBAL THEME
+   Single clean source of truth
    ========================================================= */
 
-/* ----- Design tokens (your app tokens) ----- */
 :root{
-  --lcc-bg: #070a12;
-  --lcc-panel: rgba(255,255,255,.06);
-  --lcc-panel2: rgba(255,255,255,.09);
-  --lcc-border: rgba(255,255,255,.12);
-  --lcc-border2: rgba(255,255,255,.18);
-  --lcc-text: rgba(255,255,255,.92);
-  --lcc-muted: rgba(255,255,255,.66);
+  --lcc-bg: #070b14;
+  --lcc-bg-2: #0b1220;
 
-  --lcc-shadow: 0 16px 55px rgba(0,0,0,.55);
-  --lcc-shadow-soft: 0 10px 30px rgba(0,0,0,.35);
+  --lcc-panel: rgba(255,255,255,0.045);
+  --lcc-panel-2: rgba(255,255,255,0.028);
+  --lcc-panel-3: rgba(255,255,255,0.065);
 
-  --lcc-radius: 16px;
-  --lcc-radius-sm: 12px;
+  --lcc-border: rgba(255,255,255,0.09);
+  --lcc-border-2: rgba(255,255,255,0.14);
+  --lcc-border-strong: rgba(255,255,255,0.18);
 
-  /* accent + semantic */
-  --lcc-accent: 99 179 237;     /* blue */
-  --lcc-good: 34 197 94;        /* green */
-  --lcc-warn: 245 158 11;       /* amber */
-  --lcc-bad: 239 68 68;         /* red */
+  --lcc-text: rgba(255,255,255,0.94);
+  --lcc-text-strong: rgba(255,255,255,0.98);
+  --lcc-muted: rgba(255,255,255,0.68);
+  --lcc-faint: rgba(255,255,255,0.45);
+
+  --lcc-accent: 96 165 250;   /* blue */
+  --lcc-good: 52 211 153;     /* green */
+  --lcc-warn: 245 158 11;     /* amber */
+  --lcc-bad: 248 113 113;     /* red */
+
+  --lcc-shadow-lg: 0 24px 80px rgba(0,0,0,.42);
+  --lcc-shadow-md: 0 16px 48px rgba(0,0,0,.30);
+  --lcc-shadow-sm: 0 10px 24px rgba(0,0,0,.18);
+
+  --lcc-radius-xl: 24px;
+  --lcc-radius-lg: 20px;
+  --lcc-radius-md: 16px;
+  --lcc-radius-sm: 14px;
+  --lcc-radius-xs: 12px;
 }
 
-/* ----- shadcn tokens (force dark) ----- */
+/* =========================================================
+   shadcn dark tokens
+   ========================================================= */
 @layer base {
   :root{
     --background: 222 50% 4%;
     --foreground: 0 0% 98%;
 
-    --card: 222 50% 6%;
+    --card: 222 40% 7%;
     --card-foreground: 0 0% 98%;
 
-    --popover: 222 50% 6%;
+    --popover: 222 40% 7%;
     --popover-foreground: 0 0% 98%;
 
     --primary: 0 0% 98%;
@@ -65,57 +77,127 @@
   }
 }
 
-/* ----- Global reset + typography ----- */
-*{ box-sizing: border-box; }
-html, body{ height: 100%; }
+/* =========================================================
+   Reset / base
+   ========================================================= */
+*{
+  box-sizing: border-box;
+}
+
+html,
+body{
+  min-height: 100%;
+}
+
 body{
   margin: 0;
   color: var(--lcc-text);
   background:
-    radial-gradient(1100px 650px at 15% 12%, rgba(99,179,237,.16), transparent 60%),
-    radial-gradient(900px 600px at 82% 35%, rgba(167,139,250,.12), transparent 58%),
-    radial-gradient(900px 650px at 50% 100%, rgba(34,197,94,.10), transparent 55%),
-    var(--lcc-bg);
-  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+    radial-gradient(1200px 700px at 12% 12%, rgba(96,165,250,.14), transparent 58%),
+    radial-gradient(900px 620px at 85% 20%, rgba(167,139,250,.10), transparent 56%),
+    radial-gradient(900px 700px at 50% 100%, rgba(52,211,153,.07), transparent 55%),
+    linear-gradient(180deg, var(--lcc-bg) 0%, var(--lcc-bg-2) 100%);
+  background-attachment: fixed;
+  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-a{ color: inherit; text-decoration: none; }
-
-h1,h2,h3{
-  letter-spacing: -0.02em;
+a{
+  color: inherit;
+  text-decoration: none;
 }
 
-.muted{ color: var(--lcc-muted); }
+h1,h2,h3,h4,h5,h6{
+  color: var(--lcc-text-strong);
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+  margin-top: 0;
+}
+
+label{
+  color: rgba(255,255,255,.88);
+}
+
+.muted{
+  color: var(--lcc-muted);
+}
 
 /* =========================================================
-   App layout (your existing shell classes)
+   Scrollbars
    ========================================================= */
-.appShell{
+*{
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,.18) transparent;
+}
+
+*::-webkit-scrollbar{
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track{
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb{
+  background: rgba(255,255,255,.15);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+*::-webkit-scrollbar-thumb:hover{
+  background: rgba(255,255,255,.22);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+/* =========================================================
+   App layout
+   ========================================================= */
+.appShell,
+.appLayout{
   display: grid;
   grid-template-columns: 260px 1fr;
   min-height: 100vh;
 }
 
 .appMain{
-  padding: 24px 24px 44px;
   min-width: 0;
+  padding: 24px 24px 42px;
 }
 
-.sideNav{
+.sideNav,
+.appSide{
+  display: block;
   position: sticky;
   top: 0;
   height: 100vh;
+  overflow: auto;
   padding: 18px;
   border-right: 1px solid var(--lcc-border);
-  background: linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.01));
-  backdrop-filter: blur(10px);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.045), rgba(255,255,255,.015));
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }
 
-.brand{ margin-bottom: 14px; }
-.brandTitle{ font-weight: 950; letter-spacing: .2px; }
-.brandSub{ font-size: 12px; margin-top: 4px; color: var(--lcc-muted); }
+.brand{
+  margin-bottom: 14px;
+}
+
+.brandTitle{
+  font-weight: 950;
+  letter-spacing: .2px;
+  color: var(--lcc-text-strong);
+}
+
+.brandSub{
+  font-size: 12px;
+  margin-top: 4px;
+  color: var(--lcc-muted);
+}
 
 .nav{
   display: grid;
@@ -126,22 +208,32 @@ h1,h2,h3{
 .navLink{
   position: relative;
   display: block;
-  padding: 10px 12px 10px 30px;
-  border-radius: 14px;
+  padding: 11px 12px 11px 30px;
+  border-radius: 16px;
   border: 1px solid var(--lcc-border);
   background: rgba(255,255,255,.03);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.03);
   font-weight: 850;
-  transition: background .12s ease, border-color .12s ease, transform .08s ease;
+  transition:
+    background .14s ease,
+    border-color .14s ease,
+    transform .10s ease,
+    box-shadow .14s ease;
 }
 
 .navLink:hover{
-  background: rgba(255,255,255,.06);
+  background: rgba(255,255,255,.055);
+  border-color: var(--lcc-border-2);
   transform: translateY(-1px);
+  box-shadow: var(--lcc-shadow-sm);
 }
 
 .navLink.active{
-  border-color: rgba(var(--lcc-accent), .55);
-  background: rgba(var(--lcc-accent), .16);
+  border-color: rgba(var(--lcc-accent), .42);
+  background: rgba(var(--lcc-accent), .14);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.04),
+    0 10px 24px rgba(0,0,0,.18);
 }
 
 .navLink.active::before{
@@ -152,11 +244,11 @@ h1,h2,h3{
   width: 8px;
   height: 8px;
   border-radius: 999px;
-  background: rgba(255,255,255,.92);
   transform: translateY(-50%);
+  background: rgba(255,255,255,.94);
   box-shadow:
     0 0 0 3px rgba(255,255,255,.10),
-    0 0 14px rgba(255,255,255,.35);
+    0 0 14px rgba(255,255,255,.34);
 }
 
 .navFooter{
@@ -166,58 +258,140 @@ h1,h2,h3{
 }
 
 /* =========================================================
-   Page primitives (your custom classes)
+   Layout helpers
    ========================================================= */
 .container{
-  max-width: 1180px;
-  margin: 0 auto;
+  width: min(1600px, calc(100% - 32px));
+  margin-inline: auto;
+  padding-top: 18px;
 }
 
-.row{ display:flex; }
-.grid{ display:grid; gap: 12px; }
-
-/* Your custom card */
-.card{
-  background: linear-gradient(180deg, var(--lcc-panel2), var(--lcc-panel));
-  border: 1px solid var(--lcc-border);
-  border-radius: var(--lcc-radius);
-  box-shadow: var(--lcc-shadow-soft);
-  backdrop-filter: blur(10px);
+.row{
+  display: flex;
 }
 
-/* Also style shadcn cards to match */
-[data-slot="card"],
-.rounded-lg.border.bg-card{
-  background: linear-gradient(180deg, var(--lcc-panel2), var(--lcc-panel)) !important;
-  border-color: var(--lcc-border) !important;
-  box-shadow: var(--lcc-shadow-soft);
-  backdrop-filter: blur(10px);
+.grid{
+  display: grid;
+  gap: 12px;
 }
 
 /* =========================================================
-   Inputs / selects
+   Cards
+   ========================================================= */
+.card{
+  position: relative;
+  background:
+    linear-gradient(180deg, var(--lcc-panel), var(--lcc-panel-2));
+  border: 1px solid var(--lcc-border);
+  border-radius: var(--lcc-radius-xl);
+  box-shadow: var(--lcc-shadow-md);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+.card::before{
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.01));
+  opacity: .82;
+}
+
+[data-slot="card"],
+.rounded-lg.border.bg-card{
+  background:
+    linear-gradient(180deg, var(--lcc-panel), var(--lcc-panel-2)) !important;
+  border-color: var(--lcc-border) !important;
+  box-shadow: var(--lcc-shadow-md) !important;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+/* =========================================================
+   Inputs / selects / textarea
    ========================================================= */
 .input,
 select.input,
 textarea.input{
-  background: rgba(255,255,255,.06);
-  border: 1px solid var(--lcc-border);
-  color: var(--lcc-text);
+  appearance: none;
+  width: 100%;
+  min-height: 46px;
   border-radius: var(--lcc-radius-sm);
-  padding: 10px 12px;
+  border: 1px solid var(--lcc-border);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,.03));
+  color: var(--lcc-text);
+  padding: 12px 14px;
   outline: none;
-  transition: border-color .12s ease, box-shadow .12s ease, background .12s ease;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.03),
+    0 6px 18px rgba(0,0,0,.14);
+  transition:
+    border-color .16s ease,
+    box-shadow .16s ease,
+    background .16s ease,
+    transform .16s ease;
 }
 
-.input::placeholder{ color: rgba(255,255,255,.45); }
+.input::placeholder,
+textarea.input::placeholder{
+  color: var(--lcc-faint);
+}
+
+.input:hover,
+select.input:hover,
+textarea.input:hover{
+  border-color: var(--lcc-border-2);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.035));
+}
 
 .input:focus,
-.input:focus-visible{
-  border-color: rgba(var(--lcc-accent), .65);
-  box-shadow: 0 0 0 3px rgba(var(--lcc-accent), .18);
+.input:focus-visible,
+select.input:focus,
+select.input:focus-visible,
+textarea.input:focus,
+textarea.input:focus-visible{
+  border-color: rgba(var(--lcc-accent), .55);
+  box-shadow:
+    0 0 0 4px rgba(var(--lcc-accent), .12),
+    0 10px 26px rgba(0,0,0,.20);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.07), rgba(255,255,255,.04));
 }
 
-/* shadcn inputs/select triggers */
+select,
+select.input,
+.input select{
+  color: var(--lcc-text) !important;
+  background: rgba(255,255,255,.04) !important;
+  border: 1px solid var(--lcc-border) !important;
+  color-scheme: dark;
+  cursor: pointer;
+}
+
+select option{
+  background-color: #0f1a2f !important;
+  color: rgba(255,255,255,.94) !important;
+}
+
+select optgroup{
+  background-color: #0f1a2f !important;
+  color: rgba(255,255,255,.74) !important;
+}
+
+input[type="date"],
+input[type="time"]{
+  color-scheme: dark;
+}
+
+input[type="checkbox"]{
+  accent-color: rgb(var(--lcc-accent));
+}
+
 [data-slot="input"],
 [data-slot="select-trigger"],
 [data-slot="textarea"]{
@@ -227,48 +401,79 @@ textarea.input{
 }
 
 /* =========================================================
-   Buttons (bubble)
+   Buttons
    ========================================================= */
 .btn,
 .btnGhost{
+  appearance: none;
   position: relative;
   overflow: hidden;
   transform: translateZ(0);
-  border-radius: 14px;
+  min-height: 42px;
+  border-radius: var(--lcc-radius-sm);
   padding: 10px 14px;
   font-weight: 900;
+  letter-spacing: .01em;
   cursor: pointer;
-  transition: transform .08s ease, filter .12s ease, background .12s ease, border-color .12s ease;
+  white-space: nowrap;
+  transition:
+    transform .12s ease,
+    box-shadow .16s ease,
+    border-color .16s ease,
+    filter .16s ease,
+    background .16s ease,
+    opacity .16s ease;
 }
 
 .btn{
-  border: 1px solid rgba(var(--lcc-accent), .55);
-  background: rgba(var(--lcc-accent), .20);
-  color: var(--lcc-text);
-  box-shadow: var(--lcc-shadow-soft);
+  color: white;
+  background:
+    linear-gradient(135deg, rgb(var(--lcc-accent)) 0%, rgba(147,197,253,1) 100%);
+  border: 1px solid rgba(255,255,255,.14);
+  box-shadow:
+    0 12px 24px rgba(96,165,250,.22),
+    inset 0 1px 0 rgba(255,255,255,.22);
+}
+
+.btn:hover{
+  transform: translateY(-1px);
+  filter: brightness(1.04);
+  box-shadow:
+    0 16px 30px rgba(96,165,250,.30),
+    inset 0 1px 0 rgba(255,255,255,.24);
 }
 
 .btnGhost{
-  border: 1px solid var(--lcc-border);
-  background: rgba(255,255,255,.03);
   color: var(--lcc-text);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.045), rgba(255,255,255,.025));
+  border: 1px solid var(--lcc-border);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.04),
+    0 8px 18px rgba(0,0,0,.14);
 }
 
-.btn:hover, .btnGhost:hover{
-  filter: brightness(1.10);
+.btnGhost:hover{
   transform: translateY(-1px);
+  filter: brightness(1.06);
+  border-color: var(--lcc-border-2);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.03));
 }
 
-.btn:active, .btnGhost:active{
-  transform: translateY(0px) scale(.98);
+.btn:active,
+.btnGhost:active{
+  transform: translateY(0) scale(.985);
 }
 
-.btn:focus-visible, .btnGhost:focus-visible{
+.btn:focus-visible,
+.btnGhost:focus-visible{
   outline: none;
-  box-shadow: 0 0 0 3px rgba(255,255,255,.14), 0 0 0 6px rgba(var(--lcc-accent), .16);
+  box-shadow:
+    0 0 0 3px rgba(255,255,255,.10),
+    0 0 0 6px rgba(var(--lcc-accent), .14);
 }
 
-/* shadcn buttons */
 [data-slot="button"]{
   border-color: rgba(255,255,255,.14);
 }
@@ -277,6 +482,9 @@ textarea.input{
    Pills / badges
    ========================================================= */
 .pill{
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   border: 1px solid var(--lcc-border);
   border-radius: 999px;
   padding: 6px 10px;
@@ -289,15 +497,25 @@ textarea.input{
 }
 
 /* =========================================================
-   Tabs
+   Tabs / misc shadcn polish
    ========================================================= */
 [data-slot="tabs-list"]{
   background: rgba(255,255,255,.05) !important;
   border: 1px solid var(--lcc-border) !important;
 }
 
+[data-slot="popover-content"],
+[data-slot="dropdown-menu-content"],
+[data-slot="select-content"]{
+  background:
+    linear-gradient(180deg, rgba(15,23,42,.96), rgba(9,14,27,.96)) !important;
+  border-color: var(--lcc-border) !important;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
 /* =========================================================
-   Ripple (optional)
+   Optional ripple
    ========================================================= */
 .rippleDot{
   position: absolute;
@@ -319,12 +537,27 @@ textarea.input{
 /* =========================================================
    Mobile
    ========================================================= */
-@media (max-width: 900px){
-  .appShell{ grid-template-columns: 1fr; }
+@media (max-width: 980px){
+  .container{
+    width: min(100%, calc(100% - 20px));
+    padding-top: 14px;
+  }
 
-  .sideNav{
-    height: auto;
+  .appMain{
+    padding: 16px 16px 28px;
+  }
+}
+
+@media (max-width: 900px){
+  .appShell,
+  .appLayout{
+    grid-template-columns: 1fr;
+  }
+
+  .sideNav,
+  .appSide{
     position: relative;
+    height: auto;
     border-right: none;
     border-bottom: 1px solid var(--lcc-border);
   }
@@ -336,89 +569,14 @@ textarea.input{
     gap: 8px;
     padding-bottom: 6px;
   }
-
-  .container{ max-width: 100%; }
-  .appMain{ padding: 16px 16px 28px; }
-}
-/* =============================
-   LAYOUT RESTORE (sidebar back)
-   Keeps your new theme look
-   ============================= */
-
-/* If your AppShell uses appShell/sideNav/appMain */
-.appShell{
-  display: grid;
-  grid-template-columns: 260px 1fr;
-  min-height: 100vh;
-}
-.sideNav{
-  display: block;
-  position: sticky;
-  top: 0;
-  height: 100vh;
-  overflow: auto;
-  border-right: 1px solid var(--stroke, rgba(255,255,255,.10));
-}
-.appMain{
-  min-width: 0;
 }
 
-/* If your AppShell uses appLayout/appSide/appMain */
-.appLayout{
-  display: grid;
-  grid-template-columns: 260px 1fr;
-  min-height: 100vh;
-}
-.appSide{
-  display: block;
-  position: sticky;
-  top: 0;
-  height: 100vh;
-  overflow: auto;
-  border-right: 1px solid var(--stroke, rgba(255,255,255,.10));
-}
-
-/* Mobile behavior */
-@media (max-width: 900px){
-  .appShell, .appLayout{
-    grid-template-columns: 1fr;
+@media (max-width: 640px){
+  .btn,
+  .btnGhost,
+  .input,
+  select.input,
+  textarea.input{
+    width: 100%;
   }
-  .sideNav, .appSide{
-    position: relative;
-    height: auto;
-    border-right: none;
-    border-bottom: 1px solid var(--stroke, rgba(255,255,255,.10));
-  }
-}
-/* ===== FIX: dark-theme dropdown menus (select/options) ===== */
-select,
-select.input,
-.input select {
-  color: rgba(255, 255, 255, 0.92) !important;
-  background: rgba(255, 255, 255, 0.04) !important;
-  border: 1px solid rgba(255, 255, 255, 0.10) !important;
-  color-scheme: dark; /* helps native controls behave on dark UIs */
-}
-
-/* The actual dropdown list items */
-select option {
-  background-color: #0f1a2f !important; /* matches your card */
-  color: rgba(255, 255, 255, 0.92) !important;
-}
-
-/* Some browsers use optgroup styling too */
-select optgroup {
-  background-color: #0f1a2f !important;
-  color: rgba(255, 255, 255, 0.75) !important;
-}
-
-/* Date inputs also sometimes go unreadable */
-input[type="date"],
-input[type="time"] {
-  color-scheme: dark;
-}
-
-/* If your .input class exists, make sure it always has readable text */
-.input {
-  color: rgba(255, 255, 255, 0.92);
 }
