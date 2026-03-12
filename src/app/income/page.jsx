@@ -1,19 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-
-const LS_INCOME = "lcc_income_v2";
+import { supabase } from "@/lib/supabaseClient";
 
 /** ---------- utils ---------- **/
-function safeParse(str, fallback) {
-  try {
-    const v = JSON.parse(str);
-    return v ?? fallback;
-  } catch {
-    return fallback;
-  }
-}
-
 function uid() {
   return globalThis.crypto?.randomUUID?.() ?? String(Date.now());
 }
@@ -140,13 +130,94 @@ function pct(n, d) {
   return (n / d) * 100;
 }
 
+/** ---------- defaults ---------- **/
+const DEFAULT_SETTINGS = {
+  goalMonthly: 8000,
+  schedule: "BIWEEKLY",
+  anchorDate: isoDate(),
+  paycheckAmt: 2000,
+  bonusEstimate: 0,
+};
+
+function normalizeDeposit(raw) {
+  const x = raw || {};
+  const amt = Number(x.amount);
+  const createdAt = Number(x.createdAt);
+
+  return {
+    id: String(x.id || uid()),
+    date: String(x.date || isoDate()),
+    source: String(x.source || "").trim(),
+    amount: Number.isFinite(amt) ? amt : 0,
+    note: String(x.note || ""),
+    createdAt: Number.isFinite(createdAt) ? createdAt : Date.now(),
+  };
+}
+
+function mapDepositRowToClient(row) {
+  return normalizeDeposit({
+    id: row.id,
+    date: row.deposit_date,
+    source: row.source,
+    amount: row.amount,
+    note: row.note,
+    createdAt: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
+  });
+}
+
+function mapDepositClientToRow(deposit, userId) {
+  return {
+    id: deposit.id,
+    user_id: userId,
+    deposit_date: deposit.date,
+    source: deposit.source,
+    amount: Number(deposit.amount) || 0,
+    note: deposit.note || "",
+    created_at: deposit.createdAt
+      ? new Date(deposit.createdAt).toISOString()
+      : new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+}
+
+function mapIncomeSettingsRowToClient(row) {
+  return {
+    goalMonthly:
+      Number.isFinite(Number(row?.goal_monthly)) ? Number(row.goal_monthly) : DEFAULT_SETTINGS.goalMonthly,
+    schedule: row?.schedule ? String(row.schedule) : DEFAULT_SETTINGS.schedule,
+    anchorDate: row?.anchor_date ? String(row.anchor_date) : DEFAULT_SETTINGS.anchorDate,
+    paycheckAmt:
+      Number.isFinite(Number(row?.paycheck_amt)) ? Number(row.paycheck_amt) : DEFAULT_SETTINGS.paycheckAmt,
+    bonusEstimate:
+      Number.isFinite(Number(row?.bonus_estimate)) ? Number(row.bonus_estimate) : DEFAULT_SETTINGS.bonusEstimate,
+    viewMonth: row?.view_month ? String(row.view_month) : monthKeyFromISO(isoDate()),
+  };
+}
+
+function mapIncomeSettingsClientToRow(settings, userId) {
+  return {
+    user_id: userId,
+    goal_monthly: Number(settings.goalMonthly) || 0,
+    schedule: String(settings.schedule || "BIWEEKLY").toUpperCase(),
+    anchor_date: settings.anchorDate || null,
+    paycheck_amt: Number(settings.paycheckAmt) || 0,
+    bonus_estimate: Number(settings.bonusEstimate) || 0,
+    view_month: settings.viewMonth || monthKeyFromISO(isoDate()),
+    updated_at: new Date().toISOString(),
+  };
+}
+
 export default function IncomePage() {
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [pageError, setPageError] = useState("");
+
   // Settings
-  const [goalMonthly, setGoalMonthly] = useState("8000");
-  const [schedule, setSchedule] = useState("BIWEEKLY"); // WEEKLY | BIWEEKLY | TWICE_MONTHLY | MONTHLY
-  const [anchorDate, setAnchorDate] = useState(isoDate()); // most recent payday (for weekly/biweekly)
-  const [paycheckAmt, setPaycheckAmt] = useState("2000");
-  const [bonusEstimate, setBonusEstimate] = useState("0");
+  const [goalMonthly, setGoalMonthly] = useState(String(DEFAULT_SETTINGS.goalMonthly));
+  const [schedule, setSchedule] = useState(DEFAULT_SETTINGS.schedule);
+  const [anchorDate, setAnchorDate] = useState(DEFAULT_SETTINGS.anchorDate);
+  const [paycheckAmt, setPaycheckAmt] = useState(String(DEFAULT_SETTINGS.paycheckAmt));
+  const [bonusEstimate, setBonusEstimate] = useState(String(DEFAULT_SETTINGS.bonusEstimate));
 
   // Add deposit
   const [date, setDate] = useState(isoDate());
@@ -176,41 +247,113 @@ export default function IncomePage() {
   const controlStyle = { height: CONTROL_H, display: "inline-flex", alignItems: "center" };
 
   useEffect(() => {
-    const saved = safeParse(localStorage.getItem(LS_INCOME) || "{}", {});
-    const sDeposits = Array.isArray(saved.deposits) ? saved.deposits : [];
-    setDeposits(sDeposits);
+    let mounted = true;
 
-    if (saved.goalMonthly != null) setGoalMonthly(String(saved.goalMonthly));
-    if (saved.schedule) setSchedule(String(saved.schedule));
-    if (saved.anchorDate) setAnchorDate(String(saved.anchorDate));
-    if (saved.paycheckAmt != null) setPaycheckAmt(String(saved.paycheckAmt));
-    if (saved.bonusEstimate != null) setBonusEstimate(String(saved.bonusEstimate));
-    if (saved.viewMonth) setViewMonth(String(saved.viewMonth));
+    async function bootstrap() {
+      try {
+        if (!supabase) {
+          throw new Error("Supabase is not configured. Check your environment variables.");
+        }
 
-    setStatus({ msg: "Income loaded ✅" });
+        const {
+          data: { user: currentUser },
+          error: userErr,
+        } = await supabase.auth.getUser();
+
+        if (userErr) throw userErr;
+        if (!mounted) return;
+
+        setUser(currentUser || null);
+
+        if (!currentUser) {
+          setLoading(false);
+          return;
+        }
+
+        const [depositsRes, settingsRes] = await Promise.all([
+          supabase
+            .from("income_deposits")
+            .select("*")
+            .eq("user_id", currentUser.id)
+            .order("deposit_date", { ascending: false })
+            .order("created_at", { ascending: false }),
+          supabase
+            .from("income_settings")
+            .select("*")
+            .eq("user_id", currentUser.id)
+            .maybeSingle(),
+        ]);
+
+        if (depositsRes.error) throw depositsRes.error;
+        if (settingsRes.error) throw settingsRes.error;
+
+        const loadedDeposits = (depositsRes.data || []).map(mapDepositRowToClient);
+        const s = mapIncomeSettingsRowToClient(settingsRes.data);
+
+        if (!mounted) return;
+
+        setDeposits(loadedDeposits);
+        setGoalMonthly(String(s.goalMonthly));
+        setSchedule(String(s.schedule));
+        setAnchorDate(String(s.anchorDate));
+        setPaycheckAmt(String(s.paycheckAmt));
+        setBonusEstimate(String(s.bonusEstimate));
+        setViewMonth(String(s.viewMonth || monthKeyFromISO(isoDate())));
+        setStatus({ msg: "Income loaded ✅" });
+      } catch (err) {
+        if (!mounted) return;
+        setPageError(err?.message || "Failed to load income data.");
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    }
+
+    bootstrap();
+    return () => {
+      mounted = false;
+    };
   }, []);
 
-  useEffect(() => {
-    try {
-      localStorage.setItem(
-        LS_INCOME,
-        JSON.stringify({
-          deposits,
-          goalMonthly: parseMoneyInput(goalMonthly),
-          schedule,
-          anchorDate,
-          paycheckAmt: parseMoneyInput(paycheckAmt),
-          bonusEstimate: parseMoneyInput(bonusEstimate),
-          viewMonth,
-        })
-      );
-    } catch {}
-  }, [deposits, goalMonthly, schedule, anchorDate, paycheckAmt, bonusEstimate, viewMonth]);
+  async function saveSettings(next) {
+    if (!user || !supabase) return;
 
-  function addDeposit(e) {
+    const payload = mapIncomeSettingsClientToRow(
+      {
+        goalMonthly: Number.isFinite(parseMoneyInput(next.goalMonthly))
+          ? parseMoneyInput(next.goalMonthly)
+          : 0,
+        schedule: next.schedule,
+        anchorDate: next.anchorDate,
+        paycheckAmt: Number.isFinite(parseMoneyInput(next.paycheckAmt))
+          ? parseMoneyInput(next.paycheckAmt)
+          : 0,
+        bonusEstimate: Number.isFinite(parseMoneyInput(next.bonusEstimate))
+          ? parseMoneyInput(next.bonusEstimate)
+          : 0,
+        viewMonth: next.viewMonth,
+      },
+      user.id
+    );
+
+    const { error: saveErr } = await supabase
+      .from("income_settings")
+      .upsert(payload, { onConflict: "user_id" });
+
+    if (saveErr) {
+      setPageError(saveErr.message || "Failed to save income settings.");
+    }
+  }
+
+  async function addDeposit(e) {
     e.preventDefault();
     setError("");
     setStatus({ msg: "" });
+    setPageError("");
+
+    if (!user || !supabase) {
+      setError("You must be logged in.");
+      return;
+    }
 
     const dt = String(date || "").trim();
     const src = String(source || "").trim();
@@ -221,19 +364,51 @@ export default function IncomePage() {
     if (!src) return setError("Source is required.");
     if (!Number.isFinite(amt) || amt <= 0) return setError("Amount must be > 0.");
 
-    setDeposits((prev) => [
-      { id: uid(), date: dt, source: src, amount: amt, note: nt, createdAt: Date.now() },
-      ...prev,
-    ]);
+    const deposit = normalizeDeposit({
+      id: uid(),
+      date: dt,
+      source: src,
+      amount: amt,
+      note: nt,
+      createdAt: Date.now(),
+    });
 
+    const { data, error: saveErr } = await supabase
+      .from("income_deposits")
+      .insert([mapDepositClientToRow(deposit, user.id)])
+      .select()
+      .single();
+
+    if (saveErr) {
+      setError(saveErr.message || "Failed to save deposit.");
+      return;
+    }
+
+    const savedDeposit = mapDepositRowToClient(data);
+
+    setDeposits((prev) => [savedDeposit, ...prev]);
     setAmount("");
     setNote("");
     setStatus({ msg: "Deposit added ✅" });
   }
 
-  function deleteDeposit(id) {
+  async function deleteDeposit(id) {
+    if (!user || !supabase) return;
     if (!confirm("Delete this deposit?")) return;
+
+    const previous = deposits;
     setDeposits((prev) => prev.filter((d) => d.id !== id));
+
+    const { error: delErr } = await supabase
+      .from("income_deposits")
+      .delete()
+      .eq("id", id)
+      .eq("user_id", user.id);
+
+    if (delErr) {
+      setDeposits(previous);
+      setPageError(delErr.message || "Failed to delete deposit.");
+    }
   }
 
   function openEdit(d) {
@@ -252,7 +427,9 @@ export default function IncomePage() {
     setENote("");
   }
 
-  function saveEdit() {
+  async function saveEdit() {
+    if (!user || !supabase) return;
+
     const dt = String(eDate || "").trim();
     const src = String(eSource || "").trim();
     const amt = parseMoneyInput(eAmount);
@@ -263,9 +440,39 @@ export default function IncomePage() {
       return;
     }
 
-    setDeposits((prev) =>
-      prev.map((x) => (x.id === editId ? { ...x, date: dt, source: src, amount: amt, note: nt } : x))
-    );
+    const current = deposits.find((x) => x.id === editId);
+    if (!current) return;
+
+    const nextDeposit = normalizeDeposit({
+      ...current,
+      date: dt,
+      source: src,
+      amount: amt,
+      note: nt,
+    });
+
+    const { data, error: saveErr } = await supabase
+      .from("income_deposits")
+      .update({
+        deposit_date: nextDeposit.date,
+        source: nextDeposit.source,
+        amount: nextDeposit.amount,
+        note: nextDeposit.note,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", editId)
+      .eq("user_id", user.id)
+      .select()
+      .single();
+
+    if (saveErr) {
+      setPageError(saveErr.message || "Failed to update deposit.");
+      return;
+    }
+
+    const savedDeposit = mapDepositRowToClient(data);
+
+    setDeposits((prev) => prev.map((x) => (x.id === editId ? savedDeposit : x)));
     cancelEdit();
     setStatus({ msg: "Deposit updated ✅" });
   }
@@ -356,8 +563,12 @@ export default function IncomePage() {
     }
 
     rows.sort((a, b) => {
-      if (sortBy === "date_desc")
-        return String(b.date).localeCompare(String(a.date)) || (b.createdAt || 0) - (a.createdAt || 0);
+      if (sortBy === "date_desc") {
+        return (
+          String(b.date).localeCompare(String(a.date)) ||
+          (b.createdAt || 0) - (a.createdAt || 0)
+        );
+      }
       if (sortBy === "amt_desc") return (Number(b.amount) || 0) - (Number(a.amount) || 0);
       if (sortBy === "source_asc") return String(a.source).localeCompare(String(b.source));
       return 0;
@@ -386,7 +597,11 @@ export default function IncomePage() {
       bySourceMap.set(k, (bySourceMap.get(k) || 0) + (Number(d.amount) || 0));
     }
     const bySource = Array.from(bySourceMap.entries())
-      .map(([source, total]) => ({ source, total, pct: monthTotal > 0 ? (total / monthTotal) * 100 : 0 }))
+      .map(([source, total]) => ({
+        source,
+        total,
+        pct: monthTotal > 0 ? (total / monthTotal) * 100 : 0,
+      }))
       .sort((a, b) => b.total - a.total);
 
     const topSource = bySource[0]?.source || "";
@@ -427,6 +642,7 @@ export default function IncomePage() {
       projectedTotal,
       projectedGap,
       plan,
+      neededPerPaycheck,
       shortfallIfOnlyPaychecks,
       bonusNeeded,
       bySource,
@@ -445,6 +661,29 @@ export default function IncomePage() {
 
   const scheduleKey = String(schedule || "").toUpperCase();
 
+  if (loading) {
+    return (
+      <main className="container">
+        <div className="card" style={{ padding: 16 }}>
+          Loading income...
+        </div>
+      </main>
+    );
+  }
+
+  if (!user) {
+    return (
+      <main className="container">
+        <div className="card" style={{ padding: 16 }}>
+          <div style={{ fontWeight: 950 }}>Please log in</div>
+          <div className="muted" style={{ marginTop: 6 }}>
+            This page now loads from Supabase, so you need to be signed in.
+          </div>
+        </div>
+      </main>
+    );
+  }
+
   return (
     <main className="container">
       <header style={{ marginBottom: 14 }}>
@@ -452,7 +691,10 @@ export default function IncomePage() {
           Income
         </div>
 
-        <div className="row" style={{ justifyContent: "space-between", alignItems: "flex-end", gap: 12, flexWrap: "wrap" }}>
+        <div
+          className="row"
+          style={{ justifyContent: "space-between", alignItems: "flex-end", gap: 12, flexWrap: "wrap" }}
+        >
           <div>
             <h1 style={{ margin: 0 }}>Income Command</h1>
             <div className="muted" style={{ marginTop: 6 }}>
@@ -471,7 +713,13 @@ export default function IncomePage() {
         ) : null}
       </header>
 
-      {/* Alerts */}
+      {pageError ? (
+        <div className="card" style={{ padding: 12, marginBottom: 12 }}>
+          <div style={{ fontWeight: 950 }}>Database issue</div>
+          <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>{pageError}</div>
+        </div>
+      ) : null}
+
       {computed.behindPace || computed.goalHit || computed.noDepositDays >= 3 ? (
         <div className="row" style={{ gap: 12, flexWrap: "wrap", marginBottom: 12 }}>
           {computed.goalHit ? (
@@ -503,7 +751,6 @@ export default function IncomePage() {
         </div>
       ) : null}
 
-      {/* Command Strip */}
       <div
         className="grid"
         style={{
@@ -513,7 +760,6 @@ export default function IncomePage() {
           marginBottom: 12,
         }}
       >
-        {/* Pace Status */}
         <div className="card" style={{ padding: 14, display: "flex", flexDirection: "column", gap: 10 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10 }}>
             <div>
@@ -567,13 +813,12 @@ export default function IncomePage() {
           </div>
         </div>
 
-        {/* Paycheck Plan */}
         <div className="card" style={{ padding: 14, display: "flex", flexDirection: "column", gap: 10 }}>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "baseline" }}>
             <div>
               <div className="muted" style={{ fontSize: 12 }}>Paycheck Plan (rest of month)</div>
               <div style={{ fontWeight: 950, fontSize: 18 }}>
-                Need <span className="muted" style={{ fontWeight: 800 }}>{money(computed.neededPerDay ? computed.remainingToGoal / Math.max(1, computed.paydaysLeft) : 0)}</span> / paycheck
+                Need <span className="muted" style={{ fontWeight: 800 }}>{money(computed.neededPerPaycheck)}</span> / paycheck
               </div>
             </div>
             <div className="muted" style={{ fontSize: 12, textAlign: "right" }}>
@@ -627,8 +872,7 @@ export default function IncomePage() {
               <div className="muted" style={{ fontSize: 12, marginTop: 10 }}>
                 {computed.shortfallIfOnlyPaychecks > 0 ? (
                   <>
-                    If you only get paychecks, you’re short <b>{money(computed.shortfallIfOnlyPaychecks)}</b>. Bonus estimate covers <b>{money(computed.bonusEstimate)}</b>.
-                    Remaining bonus needed: <b>{money(computed.bonusNeeded)}</b>.
+                    If you only get paychecks, you’re short <b>{money(computed.shortfallIfOnlyPaychecks)}</b>. Bonus estimate covers <b>{money(computed.bonusNum)}</b>. Remaining bonus needed: <b>{money(computed.bonusNeeded)}</b>.
                   </>
                 ) : (
                   <>Your expected paychecks + bonus estimate should cover the goal (projection dependent).</>
@@ -638,7 +882,6 @@ export default function IncomePage() {
           </div>
         </div>
 
-        {/* Income Streams */}
         <div className="card" style={{ padding: 14, display: "flex", flexDirection: "column", gap: 10 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10 }}>
             <div>
@@ -682,7 +925,6 @@ export default function IncomePage() {
 
       <div style={{ height: 12 }} />
 
-      {/* Settings + Add Deposit */}
       <div
         className="grid"
         style={{
@@ -691,20 +933,53 @@ export default function IncomePage() {
           alignItems: "start",
         }}
       >
-        {/* Settings */}
         <div className="card" style={{ padding: 12 }}>
           <div style={{ fontWeight: 950, marginBottom: 10 }}>Income Setup</div>
 
           <div className="grid" style={{ gap: 10 }}>
             <div>
               <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>Monthly goal</div>
-              <input className="input" inputMode="decimal" value={goalMonthly} onChange={(e) => setGoalMonthly(e.target.value)} placeholder="8000" style={controlStyle} />
+              <input
+                className="input"
+                inputMode="decimal"
+                value={goalMonthly}
+                onChange={async (e) => {
+                  const next = e.target.value;
+                  setGoalMonthly(next);
+                  await saveSettings({
+                    goalMonthly: next,
+                    schedule,
+                    anchorDate,
+                    paycheckAmt,
+                    bonusEstimate,
+                    viewMonth,
+                  });
+                }}
+                placeholder="8000"
+                style={controlStyle}
+              />
             </div>
 
             <div className="grid" style={{ gap: 10, gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
               <div>
                 <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>Pay schedule</div>
-                <select className="input" value={schedule} onChange={(e) => setSchedule(e.target.value)} style={controlStyle}>
+                <select
+                  className="input"
+                  value={schedule}
+                  onChange={async (e) => {
+                    const next = e.target.value;
+                    setSchedule(next);
+                    await saveSettings({
+                      goalMonthly,
+                      schedule: next,
+                      anchorDate,
+                      paycheckAmt,
+                      bonusEstimate,
+                      viewMonth,
+                    });
+                  }}
+                  style={controlStyle}
+                >
                   <option value="WEEKLY">Weekly</option>
                   <option value="BIWEEKLY">Biweekly</option>
                   <option value="TWICE_MONTHLY">Twice monthly (1st + 15th)</option>
@@ -714,33 +989,87 @@ export default function IncomePage() {
 
               <div>
                 <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>Expected paycheck</div>
-                <input className="input" inputMode="decimal" value={paycheckAmt} onChange={(e) => setPaycheckAmt(e.target.value)} placeholder="2000" style={controlStyle} />
+                <input
+                  className="input"
+                  inputMode="decimal"
+                  value={paycheckAmt}
+                  onChange={async (e) => {
+                    const next = e.target.value;
+                    setPaycheckAmt(next);
+                    await saveSettings({
+                      goalMonthly,
+                      schedule,
+                      anchorDate,
+                      paycheckAmt: next,
+                      bonusEstimate,
+                      viewMonth,
+                    });
+                  }}
+                  placeholder="2000"
+                  style={controlStyle}
+                />
               </div>
             </div>
 
             {scheduleKey === "WEEKLY" || scheduleKey === "BIWEEKLY" ? (
               <div>
                 <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>Anchor payday (most recent payday)</div>
-                <input className="input" type="date" value={anchorDate} onChange={(e) => setAnchorDate(e.target.value)} style={controlStyle} />
+                <input
+                  className="input"
+                  type="date"
+                  value={anchorDate}
+                  onChange={async (e) => {
+                    const next = e.target.value;
+                    setAnchorDate(next);
+                    await saveSettings({
+                      goalMonthly,
+                      schedule,
+                      anchorDate: next,
+                      paycheckAmt,
+                      bonusEstimate,
+                      viewMonth,
+                    });
+                  }}
+                  style={controlStyle}
+                />
                 <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>Used to auto-calc paydays inside the month.</div>
               </div>
             ) : null}
 
             <div>
               <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>Monthly bonus estimate (optional)</div>
-              <input className="input" inputMode="decimal" value={bonusEstimate} onChange={(e) => setBonusEstimate(e.target.value)} placeholder="0" style={controlStyle} />
+              <input
+                className="input"
+                inputMode="decimal"
+                value={bonusEstimate}
+                onChange={async (e) => {
+                  const next = e.target.value;
+                  setBonusEstimate(next);
+                  await saveSettings({
+                    goalMonthly,
+                    schedule,
+                    anchorDate,
+                    paycheckAmt,
+                    bonusEstimate: next,
+                    viewMonth,
+                  });
+                }}
+                placeholder="0"
+                style={controlStyle}
+              />
             </div>
 
             <div className="card" style={{ padding: 12 }}>
               <div style={{ fontWeight: 900 }}>Paydays this month</div>
               <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
-                {computed.paydays.length ? computed.paydays.map((d) => dateToISO(d)).join(" • ") : "Set schedule + anchor date (weekly/biweekly) to auto-calc."}
+                {computed.paydays.length
+                  ? computed.paydays.map((d) => dateToISO(d)).join(" • ")
+                  : "Set schedule + anchor date (weekly/biweekly) to auto-calc."}
               </div>
             </div>
           </div>
         </div>
 
-        {/* Add Deposit */}
         <div className="card" style={{ padding: 12 }}>
           <div style={{ fontWeight: 950, marginBottom: 10 }}>Add Deposit</div>
 
@@ -762,7 +1091,16 @@ export default function IncomePage() {
 
             <div className="row" style={{ gap: 10, flexWrap: "wrap", alignItems: "center" }}>
               <button className="btn" type="submit" style={{ height: CONTROL_H }}>Add Deposit</button>
-              <button className="btnGhost" type="button" onClick={() => { setAmount(""); setNote(""); setError(""); }} style={{ height: CONTROL_H }}>
+              <button
+                className="btnGhost"
+                type="button"
+                onClick={() => {
+                  setAmount("");
+                  setNote("");
+                  setError("");
+                }}
+                style={{ height: CONTROL_H }}
+              >
                 Clear
               </button>
 
@@ -788,7 +1126,6 @@ export default function IncomePage() {
 
       <div style={{ height: 16 }} />
 
-      {/* History */}
       <div className="card" style={{ padding: 12 }}>
         <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
           <div>
@@ -799,7 +1136,23 @@ export default function IncomePage() {
           </div>
 
           <div className="row" style={{ gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-            <select className="input" value={viewMonth} onChange={(e) => setViewMonth(e.target.value)} style={{ width: 170, ...controlStyle }}>
+            <select
+              className="input"
+              value={viewMonth}
+              onChange={async (e) => {
+                const next = e.target.value;
+                setViewMonth(next);
+                await saveSettings({
+                  goalMonthly,
+                  schedule,
+                  anchorDate,
+                  paycheckAmt,
+                  bonusEstimate,
+                  viewMonth: next,
+                });
+              }}
+              style={{ width: 170, ...controlStyle }}
+            >
               {computed.months.map((m) => (
                 <option key={m} value={m}>{fmtMonthLabel(m)}</option>
               ))}
@@ -844,7 +1197,6 @@ export default function IncomePage() {
         )}
       </div>
 
-      {/* Edit modal */}
       {editId ? (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.55)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16, zIndex: 9999 }}>
           <div className="card" style={{ width: "min(720px, 100%)", padding: 12 }}>
