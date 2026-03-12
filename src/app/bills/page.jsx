@@ -42,6 +42,34 @@ function addMonths(iso, monthsToAdd) {
   return isoDate(dt);
 }
 
+function addDays(iso, daysToAdd) {
+  if (!iso) return "";
+  const [y, m, d] = String(iso).split("-").map((x) => Number(x));
+  if (![y, m, d].every(Number.isFinite)) return "";
+  const dt = new Date(y, m - 1, d);
+  dt.setDate(dt.getDate() + Number(daysToAdd || 0));
+  return isoDate(dt);
+}
+
+function nextDueDateFromFrequency(currentISO, frequency) {
+  const base = currentISO || isoDate();
+  switch (frequency) {
+    case "weekly":
+      return addDays(base, 7);
+    case "biweekly":
+      return addDays(base, 14);
+    case "quarterly":
+      return addMonths(base, 3);
+    case "yearly":
+      return addMonths(base, 12);
+    case "one_time":
+      return base;
+    case "monthly":
+    default:
+      return addMonths(base, 1);
+  }
+}
+
 function daysBetween(fromISO, toISO) {
   if (!fromISO || !toISO) return null;
   const a = new Date(String(fromISO) + "T00:00:00");
@@ -71,6 +99,47 @@ function freqToMonthlyMult(freq) {
     default:
       return 1;
   }
+}
+
+function safeNum(n, fallback = 0) {
+  const x = Number(n);
+  return Number.isFinite(x) ? x : fallback;
+}
+
+function fmtWhen(ts) {
+  if (!ts) return "—";
+  const d = new Date(ts);
+  return d.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function typeLabel(type) {
+  return type === "controllable" ? "Debt" : "Bill";
+}
+
+function accountTypeLabel(t) {
+  const v = String(t || "other").toLowerCase();
+  if (v === "checking") return "Checking";
+  if (v === "savings") return "Savings";
+  if (v === "cash") return "Cash";
+  if (v === "credit") return "Credit Card";
+  if (v === "investment") return "Investment";
+  return "Other";
+}
+
+function accountIcon(type) {
+  const t = String(type || "other").toLowerCase();
+  if (t === "checking") return "🏦";
+  if (t === "savings") return "💰";
+  if (t === "cash") return "💵";
+  if (t === "credit") return "💳";
+  if (t === "investment") return "📈";
+  return "📁";
 }
 
 /**
@@ -296,7 +365,7 @@ function planStrategy({ debts, monthlyExtraPool, strategy, startISO, previewMont
 
 /** ---------- normalization ---------- **/
 const DEFAULTS = {
-  version: 5,
+  version: 6,
   settings: {
     paycheckMonthly: 0,
     extraPoolMonthly: 0,
@@ -333,6 +402,10 @@ function normalizeBill(raw) {
     aprPct: Number.isFinite(aprPct) ? aprPct : 0,
     minPay: Number.isFinite(minPay) ? minPay : 0,
     extraPay: Number.isFinite(extraPay) ? extraPay : 0,
+    lastPaidDate: String(x.lastPaidDate || "").trim(),
+    autopay: x.autopay === true,
+    category: String(x.category || "").trim(),
+    accountId: String(x.accountId || "").trim(),
     createdAt: Number.isFinite(Number(x.createdAt)) ? Number(x.createdAt) : Date.now(),
   };
 }
@@ -343,7 +416,7 @@ function normalizeState(saved) {
   const items = Array.isArray(base.items) ? base.items : Array.isArray(base) ? base : [];
 
   return {
-    version: 5,
+    version: 6,
     settings: {
       paycheckMonthly: Number.isFinite(Number(settings.paycheckMonthly))
         ? Number(settings.paycheckMonthly)
@@ -372,6 +445,10 @@ function mapRowToBill(row) {
     aprPct: row.apr_pct,
     minPay: row.min_pay,
     extraPay: row.extra_pay,
+    lastPaidDate: row.last_paid_date,
+    autopay: row.autopay,
+    category: row.category,
+    accountId: row.account_id,
     createdAt: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
   });
 }
@@ -391,6 +468,10 @@ function mapBillToRow(bill, userId) {
     apr_pct: Number(bill.aprPct) || 0,
     min_pay: Number(bill.minPay) || 0,
     extra_pay: Number(bill.extraPay) || 0,
+    last_paid_date: bill.lastPaidDate || null,
+    autopay: bill.autopay === true,
+    category: bill.category || "",
+    account_id: bill.accountId || null,
     created_at: bill.createdAt ? new Date(bill.createdAt).toISOString() : new Date().toISOString(),
     updated_at: new Date().toISOString(),
   };
@@ -406,21 +487,71 @@ function mapSettingsToRow(settings, userId) {
   };
 }
 
+function mapAccountRowToClient(row) {
+  return {
+    id: row.id,
+    name: row.name || "",
+    type: row.account_type || "other",
+    balance: safeNum(row.balance, 0),
+    updatedAt: row.updated_at ? new Date(row.updated_at).getTime() : Date.now(),
+  };
+}
+
+function mapTxnRowToClient(row) {
+  return {
+    id: row.id,
+    accountId: row.account_id,
+    ts: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
+    kind: row.kind || "transaction",
+    amount: safeNum(row.amount, 0),
+    delta: safeNum(row.delta, 0),
+    resultingBalance: safeNum(row.resulting_balance, 0),
+    note: row.note || "",
+    relatedAccountId: row.related_account_id || "",
+    relatedAccountName: row.related_account_name || "",
+    sourceType: row.source_type || "",
+    sourceId: row.source_id || "",
+  };
+}
+
+function mapTxnClientToRow(txn, userId) {
+  return {
+    id: txn.id,
+    user_id: userId,
+    account_id: txn.accountId,
+    kind: txn.kind || "transaction",
+    amount: safeNum(txn.amount, 0),
+    delta: safeNum(txn.delta, 0),
+    resulting_balance: safeNum(txn.resultingBalance, 0),
+    note: txn.note || "",
+    related_account_id: txn.relatedAccountId || null,
+    related_account_name: txn.relatedAccountName || "",
+    source_type: txn.sourceType || "",
+    source_id: txn.sourceId || "",
+    created_at: new Date(txn.ts || Date.now()).toISOString(),
+  };
+}
+
 /** ---------- tiny UI helpers ---------- **/
-const ACCENT = "#3b82f6";
+const ACCENT = "#60a5fa";
+const GOOD = "#34d399";
+const WARN = "#f59e0b";
+const BAD = "#f87171";
 
 const panelStyle = {
-  background: "rgba(255,255,255,0.03)",
-  border: "1px solid rgba(255,255,255,0.07)",
-  borderRadius: 16,
-  boxShadow: "0 18px 60px rgba(0,0,0,0.35)",
+  background: "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.025))",
+  border: "1px solid rgba(255,255,255,0.08)",
+  borderRadius: 22,
+  boxShadow: "0 20px 60px rgba(0,0,0,0.35)",
+  backdropFilter: "blur(12px)",
 };
 
 const cardStyle = {
-  background: "rgba(255,255,255,0.035)",
+  background: "linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.025))",
   border: "1px solid rgba(255,255,255,0.08)",
-  borderRadius: 16,
-  boxShadow: "0 14px 45px rgba(0,0,0,0.28)",
+  borderRadius: 20,
+  boxShadow: "0 16px 45px rgba(0,0,0,0.28)",
+  backdropFilter: "blur(10px)",
 };
 
 const chip = (bg = "rgba(255,255,255,0.06)", border = "rgba(255,255,255,0.10)") => ({
@@ -435,6 +566,138 @@ const chip = (bg = "rgba(255,255,255,0.06)", border = "rgba(255,255,255,0.10)") 
   gap: 8,
 });
 
+function ProgressBar({
+  label,
+  value,
+  sublabel,
+  pct = 0,
+  color = ACCENT,
+  danger = false,
+}) {
+  const safePct = clamp(pct, 0, 100);
+
+  return (
+    <div style={{ display: "grid", gap: 8 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "baseline", flexWrap: "wrap" }}>
+        <div className="muted" style={{ fontSize: 12 }}>{label}</div>
+        <div style={{ fontWeight: 900 }}>{value}</div>
+      </div>
+
+      <div
+        style={{
+          height: 10,
+          borderRadius: 999,
+          overflow: "hidden",
+          background: danger ? "rgba(248,113,113,0.10)" : "rgba(255,255,255,0.06)",
+          border: `1px solid ${danger ? "rgba(248,113,113,0.18)" : "rgba(255,255,255,0.08)"}`,
+        }}
+      >
+        <div
+          style={{
+            width: `${safePct}%`,
+            height: "100%",
+            borderRadius: 999,
+            background: `linear-gradient(90deg, ${color}, rgba(255,255,255,0.9))`,
+            boxShadow: `0 0 20px ${color}55`,
+            transition: "width 180ms ease",
+          }}
+        />
+      </div>
+
+      {sublabel ? (
+        <div className="muted" style={{ fontSize: 12 }}>
+          {sublabel}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function dueUrgencyPct(dueIn) {
+  if (!Number.isFinite(dueIn)) return 0;
+  if (dueIn <= 0) return 100;
+  if (dueIn >= 30) return 8;
+  return clamp(((30 - dueIn) / 30) * 100, 8, 100);
+}
+
+function payoffSpeedPct(months) {
+  if (months === Infinity || months == null) return 6;
+  if (months <= 3) return 100;
+  if (months <= 6) return 88;
+  if (months <= 12) return 72;
+  if (months <= 24) return 52;
+  if (months <= 36) return 34;
+  return 18;
+}
+
+function paymentStrengthPct(balance, totalPay) {
+  const bal = Math.max(0, Number(balance) || 0);
+  const pay = Math.max(0, Number(totalPay) || 0);
+  if (bal <= 0) return 100;
+  return clamp((pay / bal) * 100 * 12, 4, 100);
+}
+
+function incomePressurePct(monthlyOutflow, income) {
+  const out = Math.max(0, Number(monthlyOutflow) || 0);
+  const inc = Math.max(0, Number(income) || 0);
+  if (inc <= 0) return 0;
+  return clamp((out / inc) * 100, 0, 100);
+}
+
+function Modal({ open, title, subtitle, onClose, children }) {
+  if (!open) return null;
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose?.();
+      }}
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 100,
+        background: "rgba(2,6,23,.72)",
+        backdropFilter: "blur(10px)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 16,
+      }}
+    >
+      <div
+        className="card"
+        style={{
+          width: "min(760px, 100%)",
+          padding: 16,
+          borderRadius: 22,
+          border: "1px solid rgba(255,255,255,.08)",
+          boxShadow: "0 20px 80px rgba(0,0,0,.45)",
+        }}
+      >
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start" }}>
+          <div>
+            <div style={{ fontWeight: 900, fontSize: 18 }}>{title}</div>
+            {subtitle ? (
+              <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
+                {subtitle}
+              </div>
+            ) : null}
+          </div>
+
+          <button className="btnGhost" type="button" onClick={onClose}>
+            Close
+          </button>
+        </div>
+
+        <div style={{ height: 14 }} />
+        {children}
+      </div>
+    </div>
+  );
+}
+
 /** ---------- component ---------- **/
 export default function BillsPage() {
   const [state, setState] = useState(DEFAULTS);
@@ -443,6 +706,10 @@ export default function BillsPage() {
   const [pageError, setPageError] = useState("");
 
   const extraSaveTimers = useRef({});
+
+  const [accounts, setAccounts] = useState([]);
+  const [transactions, setTransactions] = useState([]);
+  const [primaryAccountId, setPrimaryAccountId] = useState("");
 
   const [mode, setMode] = useState("add");
   const [editId, setEditId] = useState(null);
@@ -458,6 +725,9 @@ export default function BillsPage() {
   const [aprPct, setAprPct] = useState("");
   const [minPay, setMinPay] = useState("");
   const [extraPay, setExtraPay] = useState("0");
+  const [autopay, setAutopay] = useState(false);
+  const [category, setCategory] = useState("");
+  const [linkedAccountId, setLinkedAccountId] = useState("");
 
   const [scope, setScope] = useState("active");
   const [tab, setTab] = useState("all");
@@ -466,6 +736,13 @@ export default function BillsPage() {
 
   const [plannerOpen, setPlannerOpen] = useState(true);
   const [error, setError] = useState("");
+
+  const [historyOpenId, setHistoryOpenId] = useState("");
+  const [payModalOpen, setPayModalOpen] = useState(false);
+  const [payingBillId, setPayingBillId] = useState("");
+  const [payFromAccountId, setPayFromAccountId] = useState("");
+  const [payAmount, setPayAmount] = useState("");
+  const [payNote, setPayNote] = useState("");
 
   useEffect(() => {
     let mounted = true;
@@ -492,7 +769,7 @@ export default function BillsPage() {
           return;
         }
 
-        const [billsRes, settingsRes] = await Promise.all([
+        const [billsRes, settingsRes, accountsRes, billSettingsRes, txnsRes] = await Promise.all([
           supabase
             .from("bills")
             .select("*")
@@ -503,16 +780,36 @@ export default function BillsPage() {
             .select("*")
             .eq("user_id", currentUser.id)
             .maybeSingle(),
+          supabase
+            .from("accounts")
+            .select("*")
+            .eq("user_id", currentUser.id)
+            .order("updated_at", { ascending: false }),
+          supabase
+            .from("account_settings")
+            .select("*")
+            .eq("user_id", currentUser.id)
+            .maybeSingle(),
+          supabase
+            .from("account_transactions")
+            .select("*")
+            .eq("user_id", currentUser.id)
+            .order("created_at", { ascending: false }),
         ]);
 
         if (billsRes.error) throw billsRes.error;
         if (settingsRes.error) throw settingsRes.error;
+        if (accountsRes.error) throw accountsRes.error;
+        if (billSettingsRes.error) throw billSettingsRes.error;
+        if (txnsRes.error) throw txnsRes.error;
 
         const bills = (billsRes.data || []).map(mapRowToBill);
         const settingsRow = settingsRes.data;
+        const loadedAccounts = (accountsRes.data || []).map(mapAccountRowToClient);
+        const loadedTxns = (txnsRes.data || []).map(mapTxnRowToClient);
 
         const nextState = normalizeState({
-          version: 5,
+          version: 6,
           settings: {
             paycheckMonthly: settingsRow?.paycheck_monthly ?? 0,
             extraPoolMonthly: settingsRow?.extra_pool_monthly ?? 0,
@@ -522,7 +819,11 @@ export default function BillsPage() {
         });
 
         if (!mounted) return;
+
         setState(nextState);
+        setAccounts(loadedAccounts);
+        setTransactions(loadedTxns);
+        setPrimaryAccountId(billSettingsRes.data?.primary_account_id || loadedAccounts[0]?.id || "");
         setPageError("");
       } catch (err) {
         if (!mounted) return;
@@ -565,6 +866,9 @@ export default function BillsPage() {
     setAprPct("");
     setMinPay("");
     setExtraPay("0");
+    setAutopay(false);
+    setCategory("");
+    setLinkedAccountId("");
     setError("");
   }
 
@@ -581,6 +885,9 @@ export default function BillsPage() {
     setAprPct(String(Number.isFinite(Number(bill.aprPct)) ? bill.aprPct : ""));
     setMinPay(String(Number.isFinite(Number(bill.minPay)) ? bill.minPay : ""));
     setExtraPay(String(Number.isFinite(Number(bill.extraPay)) ? bill.extraPay : "0"));
+    setAutopay(bill.autopay === true);
+    setCategory(bill.category || "");
+    setLinkedAccountId(bill.accountId || "");
     setError("");
   }
 
@@ -635,6 +942,10 @@ export default function BillsPage() {
       aprPct: type === "controllable" ? aapr : 0,
       minPay: type === "controllable" ? mmin : 0,
       extraPay: type === "controllable" ? xtra : 0,
+      lastPaidDate: mode === "edit" ? state.items.find((x) => x.id === editId)?.lastPaidDate || "" : "",
+      autopay,
+      category,
+      accountId: linkedAccountId || "",
       createdAt: existingCreatedAt,
       active: true,
     });
@@ -696,6 +1007,37 @@ export default function BillsPage() {
     }
   }
 
+  async function toggleAutopay(id) {
+    if (!user || !supabase) return;
+
+    const current = state.items.find((x) => x.id === id);
+    if (!current) return;
+
+    const nextValue = !current.autopay;
+
+    setState((prev) => ({
+      ...prev,
+      items: prev.items.map((x) => (x.id === id ? { ...x, autopay: nextValue } : x)),
+    }));
+
+    const { error: saveErr } = await supabase
+      .from("bills")
+      .update({
+        autopay: nextValue,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", id)
+      .eq("user_id", user.id);
+
+    if (saveErr) {
+      setState((prev) => ({
+        ...prev,
+        items: prev.items.map((x) => (x.id === id ? { ...x, autopay: current.autopay } : x)),
+      }));
+      setPageError(saveErr.message || "Failed to update autopay.");
+    }
+  }
+
   async function removeBill(id) {
     if (!user || !supabase) return;
     if (!confirm("Delete this item permanently?")) return;
@@ -749,6 +1091,156 @@ export default function BillsPage() {
     }, 250);
   }
 
+  async function createAccountTransaction(entry) {
+    if (!user || !supabase) return { ok: false, error: "Missing user." };
+
+    const { data, error } = await supabase
+      .from("account_transactions")
+      .insert([mapTxnClientToRow(entry, user.id)])
+      .select()
+      .single();
+
+    if (error) return { ok: false, error: error.message || "Failed to save transaction." };
+
+    setTransactions((prev) => [mapTxnRowToClient(data), ...prev]);
+    return { ok: true };
+  }
+
+  async function saveAccountBalance(accountId, nextBalance) {
+    if (!user || !supabase) return { ok: false, error: "Missing user." };
+
+    const { data, error } = await supabase
+      .from("accounts")
+      .update({
+        balance: safeNum(nextBalance, 0),
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", accountId)
+      .eq("user_id", user.id)
+      .select()
+      .single();
+
+    if (error) return { ok: false, error: error.message || "Failed to save account." };
+
+    const saved = mapAccountRowToClient(data);
+    setAccounts((prev) => prev.map((a) => (a.id === accountId ? saved : a)));
+    return { ok: true, account: saved };
+  }
+
+  async function saveBillPatch(billId, patch) {
+    if (!user || !supabase) return { ok: false, error: "Missing user." };
+
+    const { data, error } = await supabase
+      .from("bills")
+      .update({
+        ...patch,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", billId)
+      .eq("user_id", user.id)
+      .select()
+      .single();
+
+    if (error) return { ok: false, error: error.message || "Failed to save bill." };
+
+    const saved = mapRowToBill(data);
+    setState((prev) => ({
+      ...prev,
+      items: prev.items.map((x) => (x.id === billId ? saved : x)),
+    }));
+    return { ok: true, bill: saved };
+  }
+
+  function openPayModal(bill) {
+    const defaultAccount = bill.accountId || primaryAccountId || accounts[0]?.id || "";
+    setPayingBillId(bill.id);
+    setPayFromAccountId(defaultAccount);
+    setPayAmount(String(
+      bill.type === "controllable"
+        ? Math.max(0, Number(bill.minPay) || Number(bill.amount) || 0)
+        : Math.max(0, Number(bill.amount) || 0)
+    ));
+    setPayNote("");
+    setPayModalOpen(true);
+  }
+
+  const payingBill = useMemo(
+    () => state.items.find((x) => x.id === payingBillId) || null,
+    [state.items, payingBillId]
+  );
+
+  async function payBillNow() {
+    setPageError("");
+    if (!payingBill) return;
+
+    const account = accounts.find((a) => a.id === payFromAccountId);
+    if (!account) {
+      alert("Choose an account to pay from.");
+      return;
+    }
+
+    const amt = parseMoneyInput(payAmount);
+    if (!Number.isFinite(amt) || amt <= 0) {
+      alert("Payment amount must be greater than 0.");
+      return;
+    }
+
+    const accountCur = safeNum(account.balance, 0);
+    const accountNext = accountCur - Math.abs(amt);
+
+    const saveAccountRes = await saveAccountBalance(account.id, accountNext);
+    if (!saveAccountRes.ok) {
+      setPageError(saveAccountRes.error || "Failed to update account.");
+      return;
+    }
+
+    const today = isoDate();
+    const billPatch = {
+      last_paid_date: today,
+      account_id: account.id,
+    };
+
+    if (payingBill.frequency !== "one_time") {
+      billPatch.due_date = nextDueDateFromFrequency(payingBill.dueDate || today, payingBill.frequency);
+    }
+
+    if (payingBill.type === "controllable") {
+      billPatch.balance = Math.max(0, safeNum(payingBill.balance, 0) - Math.abs(amt));
+    }
+
+    const saveBillRes = await saveBillPatch(payingBill.id, billPatch);
+    if (!saveBillRes.ok) {
+      setPageError(saveBillRes.error || "Failed to update bill.");
+      return;
+    }
+
+    const txnRes = await createAccountTransaction({
+      id: uid(),
+      ts: Date.now(),
+      kind: "bill_payment",
+      accountId: account.id,
+      amount: Math.abs(amt),
+      delta: -Math.abs(amt),
+      resultingBalance: accountNext,
+      note: payNote?.trim() || `${payingBill.name} payment`,
+      relatedAccountId: "",
+      relatedAccountName: "",
+      sourceType: "bill",
+      sourceId: payingBill.id,
+    });
+
+    if (!txnRes.ok) {
+      setPageError(txnRes.error || "Failed to save payment transaction.");
+      return;
+    }
+
+    setPayModalOpen(false);
+    setPayingBillId("");
+    setPayFromAccountId("");
+    setPayAmount("");
+    setPayNote("");
+  }
+
   const computed = useMemo(() => {
     const today = isoDate();
     const query = String(q || "").trim().toLowerCase();
@@ -761,7 +1253,9 @@ export default function BillsPage() {
     if (tab === "noncontrollable") list = list.filter((x) => x.type === "noncontrollable");
 
     if (query) {
-      list = list.filter((x) => `${x.name} ${x.notes || ""}`.toLowerCase().includes(query));
+      list = list.filter((x) =>
+        `${x.name} ${x.notes || ""} ${x.category || ""}`.toLowerCase().includes(query)
+      );
     }
 
     const withDerived = list.map((x) => {
@@ -784,6 +1278,11 @@ export default function BillsPage() {
           ? (Number(x.amount) || 0) * freqToMonthlyMult(x.frequency)
           : 0;
 
+      const linkedAccount = accounts.find((a) => a.id === x.accountId) || null;
+      const history = transactions
+        .filter((t) => t.sourceType === "bill" && t.sourceId === x.id)
+        .sort((a, b) => safeNum(b.ts, 0) - safeNum(a.ts, 0));
+
       return {
         ...x,
         totalPay,
@@ -792,6 +1291,8 @@ export default function BillsPage() {
         payoffInterest: est.totalInterest,
         dueIn,
         monthlyEquivalent,
+        linkedAccount,
+        history,
       };
     });
 
@@ -861,6 +1362,15 @@ export default function BillsPage() {
     const paycheckMonthly = Number(state.settings.paycheckMonthly) || 0;
     const pctIncome = paycheckMonthly > 0 ? (monthlyOutflow / paycheckMonthly) * 100 : null;
 
+    const upcoming = activeItems
+      .map((x) => ({
+        ...x,
+        dueIn: daysBetween(today, x.dueDate),
+      }))
+      .filter((x) => Number.isFinite(x.dueIn))
+      .sort((a, b) => a.dueIn - b.dueIn)
+      .slice(0, 5);
+
     return {
       today,
       list: withDerived,
@@ -874,27 +1384,42 @@ export default function BillsPage() {
       },
       nextDue,
       planner,
+      upcoming,
     };
-  }, [state.items, scope, tab, sortBy, q, state.settings.paycheckMonthly, state.settings.extraPoolMonthly, state.settings.strategy]);
+  }, [
+    state.items,
+    scope,
+    tab,
+    sortBy,
+    q,
+    state.settings.paycheckMonthly,
+    state.settings.extraPoolMonthly,
+    state.settings.strategy,
+    accounts,
+    transactions,
+  ]);
 
   const hero = [
     {
       label: "Monthly outflow",
       value: money(computed.totals.monthlyOutflow),
-      sub: computed.totals.pctIncome != null ? `${computed.totals.pctIncome.toFixed(1)}% of income` : "Set income to see %",
-      tone: "accent",
+      sub: computed.totals.pctIncome != null ? `${computed.totals.pctIncome.toFixed(1)}% of income` : "Set income to see pressure",
+      pct: incomePressurePct(computed.totals.monthlyOutflow, state.settings.paycheckMonthly),
+      color: computed.totals.pctIncome != null && computed.totals.pctIncome >= 70 ? BAD : ACCENT,
     },
     {
       label: "Non-controllable",
       value: money(computed.totals.noncontrollableMonthly),
       sub: "Frequency-aware baseline",
-      tone: "neutral",
+      pct: computed.totals.monthlyOutflow > 0 ? (computed.totals.noncontrollableMonthly / computed.totals.monthlyOutflow) * 100 : 0,
+      color: ACCENT,
     },
     {
       label: "Controllable min",
       value: money(computed.totals.controllableMin),
-      sub: "Minimums (debts)",
-      tone: "neutral",
+      sub: "Minimum debt payments",
+      pct: computed.totals.monthlyOutflow > 0 ? (computed.totals.controllableMin / computed.totals.monthlyOutflow) * 100 : 0,
+      color: WARN,
     },
     {
       label: "Total debt balance",
@@ -904,7 +1429,8 @@ export default function BillsPage() {
         computed.planner.monthsToDebtFree !== Infinity
           ? `Debt-free est: ${computed.planner.debtFreeISO}`
           : "Add debts to estimate",
-      tone: "neutral",
+      pct: payoffSpeedPct(computed.planner.monthsToDebtFree),
+      color: GOOD,
     },
   ];
 
@@ -934,9 +1460,10 @@ export default function BillsPage() {
   return (
     <main className="container" style={{ paddingBottom: 24 }}>
       <header style={{ marginBottom: 16 }}>
-        <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>
+        <div className="muted" style={{ fontSize: 12, marginBottom: 6, letterSpacing: ".08em", textTransform: "uppercase" }}>
           Bills
         </div>
+
         <div
           style={{
             display: "flex",
@@ -946,8 +1473,22 @@ export default function BillsPage() {
             alignItems: "baseline",
           }}
         >
-          <h1 style={{ margin: 0, letterSpacing: -0.5 }}>Bills & Debt Control</h1>
-          <div style={chip("rgba(59,130,246,0.10)", "rgba(59,130,246,0.25)")}>
+          <div>
+            <h1 style={{ margin: 0, letterSpacing: -1, fontSize: "clamp(28px,4vw,42px)" }}>
+              Bills & Debt Control
+            </h1>
+            <div className="muted" style={{ marginTop: 8 }}>
+              Premium bill tracking with payoff planning, linked accounts, payment history, and real pay-bill actions.
+            </div>
+          </div>
+
+          <div
+            style={{
+              ...chip("rgba(96,165,250,0.10)", "rgba(96,165,250,0.28)"),
+              padding: "10px 12px",
+              borderRadius: 14,
+            }}
+          >
             <span
               style={{
                 width: 8,
@@ -955,6 +1496,7 @@ export default function BillsPage() {
                 borderRadius: 99,
                 background: ACCENT,
                 display: "inline-block",
+                boxShadow: `0 0 14px ${ACCENT}`,
               }}
             />
             Next due:{" "}
@@ -962,9 +1504,6 @@ export default function BillsPage() {
               {computed.nextDue ? `${computed.nextDue.name} (${computed.nextDue.dueDate})` : "—"}
             </b>
           </div>
-        </div>
-        <div className="muted" style={{ marginTop: 6 }}>
-          Track fixed bills + debts you can pay off. Sliders change payoff dates instantly.
         </div>
       </header>
 
@@ -976,6 +1515,7 @@ export default function BillsPage() {
             padding: 12,
             marginBottom: 16,
             border: "1px solid rgba(239,68,68,0.35)",
+            background: "linear-gradient(180deg, rgba(127,29,29,0.30), rgba(127,29,29,0.15))",
           }}
         >
           <div style={{ fontWeight: 950 }}>Database issue</div>
@@ -989,170 +1529,243 @@ export default function BillsPage() {
         className="grid"
         style={{
           gap: 12,
-          gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+          gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
           marginBottom: 16,
         }}
       >
         {hero.map((h) => (
           <div key={h.label} className="card" style={{ ...cardStyle, padding: 14 }}>
-            <div className="muted" style={{ fontSize: 12 }}>
-              {h.label}
-            </div>
-            <div
-              style={{
-                fontWeight: 950,
-                fontSize: 26,
-                marginTop: 6,
-                color: h.tone === "accent" ? ACCENT : "rgba(255,255,255,0.95)",
-              }}
-            >
-              {h.value}
-            </div>
-            <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
-              {h.sub}
-            </div>
+            <ProgressBar
+              label={h.label}
+              value={h.value}
+              sublabel={h.sub}
+              pct={h.pct}
+              color={h.color}
+              danger={h.color === BAD}
+            />
           </div>
         ))}
       </div>
 
-      <div className="card" style={{ ...panelStyle, padding: 14, marginBottom: 16 }}>
+      <div
+        className="grid"
+        style={{
+          gap: 16,
+          gridTemplateColumns: "1.15fr .85fr",
+          marginBottom: 16,
+        }}
+      >
         <div
+          className="card"
           style={{
-            display: "flex",
-            justifyContent: "space-between",
-            gap: 10,
-            flexWrap: "wrap",
-            alignItems: "center",
+            ...panelStyle,
+            padding: 16,
+            position: "relative",
+            overflow: "hidden",
           }}
         >
-          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-            <div style={{ fontWeight: 950 }}>Snowball / Avalanche Planner</div>
-            <div className="muted" style={{ fontSize: 12 }}>
-              Uses minimums + extra pool (separate from per-debt extras).
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              pointerEvents: "none",
+              background:
+                "radial-gradient(circle at top left, rgba(96,165,250,0.10), transparent 28%), radial-gradient(circle at bottom right, rgba(52,211,153,0.08), transparent 24%)",
+            }}
+          />
+
+          <div style={{ position: "relative" }}>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                gap: 10,
+                flexWrap: "wrap",
+                alignItems: "center",
+              }}
+            >
+              <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                <div style={{ fontWeight: 950, fontSize: 18 }}>Snowball / Avalanche Planner</div>
+                <div className="muted" style={{ fontSize: 12 }}>
+                  Uses minimums + extra pool. Cleaner debt-free projection.
+                </div>
+              </div>
+              <button className="btnGhost" type="button" onClick={() => setPlannerOpen((v) => !v)}>
+                {plannerOpen ? "Hide" : "Show"}
+              </button>
             </div>
+
+            {plannerOpen ? (
+              <>
+                <div style={{ height: 12 }} />
+
+                <div
+                  className="row"
+                  style={{
+                    gap: 10,
+                    flexWrap: "wrap",
+                    alignItems: "center",
+                    padding: 12,
+                    borderRadius: 16,
+                    background: "rgba(255,255,255,0.03)",
+                    border: "1px solid rgba(255,255,255,0.06)",
+                  }}
+                >
+                  <div className="muted" style={{ fontSize: 12, width: 140 }}>
+                    Strategy
+                  </div>
+                  <select
+                    className="input"
+                    value={state.settings.strategy}
+                    onChange={async (e) => {
+                      const nextSettings = {
+                        ...state.settings,
+                        strategy: e.target.value === "snowball" ? "snowball" : "avalanche",
+                      };
+                      setState((prev) => ({ ...prev, settings: nextSettings }));
+                      await saveSettings(nextSettings);
+                    }}
+                    style={{ width: 260 }}
+                  >
+                    <option value="avalanche">Avalanche (highest APR first)</option>
+                    <option value="snowball">Snowball (lowest balance first)</option>
+                  </select>
+
+                  <div className="muted" style={{ fontSize: 12, width: 160 }}>
+                    Extra pool / month
+                  </div>
+                  <input
+                    className="input"
+                    inputMode="decimal"
+                    placeholder="e.g. 300"
+                    value={state.settings.extraPoolMonthly ? String(state.settings.extraPoolMonthly) : ""}
+                    onChange={async (e) => {
+                      const v = parseMoneyInput(e.target.value);
+                      const nextSettings = {
+                        ...state.settings,
+                        extraPoolMonthly: Number.isFinite(v) ? Math.max(0, v) : 0,
+                      };
+                      setState((prev) => ({ ...prev, settings: nextSettings }));
+                      await saveSettings(nextSettings);
+                    }}
+                    style={{ width: 220 }}
+                  />
+                </div>
+
+                <div style={{ height: 12 }} />
+
+                {computed.planner.monthsToDebtFree === 0 ? (
+                  <div className="muted">No active controllable balances to plan.</div>
+                ) : computed.planner.monthsToDebtFree === Infinity ? (
+                  <div className="card" style={{ ...cardStyle, padding: 12 }}>
+                    <div style={{ fontWeight: 950 }}>Planner can’t compute payoff</div>
+                    <div className="muted" style={{ marginTop: 6, fontSize: 12 }}>
+                      You have no payment capacity. Set minimum payments or add an extra pool.
+                    </div>
+                  </div>
+                ) : (
+                  <div
+                    className="grid"
+                    style={{ gap: 12, gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))" }}
+                  >
+                    <div className="card" style={{ ...cardStyle, padding: 14 }}>
+                      <ProgressBar
+                        label="Debt-free estimate"
+                        value={`${computed.planner.debtFreeISO}`}
+                        sublabel={`Estimated interest ${money(computed.planner.totalInterest)} • ${computed.planner.monthsToDebtFree} ${plural(computed.planner.monthsToDebtFree, "month")}`}
+                        pct={payoffSpeedPct(computed.planner.monthsToDebtFree)}
+                        color={GOOD}
+                      />
+                    </div>
+
+                    <div className="card" style={{ ...cardStyle, padding: 14 }}>
+                      <div style={{ fontWeight: 950, marginBottom: 10 }}>Payoff order</div>
+                      {computed.planner.payoffOrder.length === 0 ? (
+                        <div className="muted" style={{ fontSize: 12 }}>
+                          No payoff order available.
+                        </div>
+                      ) : (
+                        <div className="grid" style={{ gap: 10 }}>
+                          {computed.planner.payoffOrder.slice(0, 6).map((x, idx) => (
+                            <div
+                              key={x.id}
+                              style={{
+                                display: "flex",
+                                justifyContent: "space-between",
+                                gap: 10,
+                                padding: "10px 12px",
+                                borderRadius: 14,
+                                background: "rgba(255,255,255,0.03)",
+                                border: "1px solid rgba(255,255,255,0.06)",
+                              }}
+                            >
+                              <div style={{ fontWeight: 800 }}>
+                                {idx + 1}. {x.name}
+                              </div>
+                              <div className="muted" style={{ fontSize: 12 }}>
+                                <b style={{ color: "rgba(255,255,255,0.92)" }}>{x.paidOffISO}</b>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </>
+            ) : null}
           </div>
-          <button className="btnGhost" type="button" onClick={() => setPlannerOpen((v) => !v)}>
-            {plannerOpen ? "Hide" : "Show"}
-          </button>
         </div>
 
-        {plannerOpen ? (
-          <>
-            <div style={{ height: 10 }} />
+        <div className="card" style={{ ...panelStyle, padding: 16 }}>
+          <div style={{ fontWeight: 950, fontSize: 18 }}>Upcoming bills</div>
+          <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
+            Quick timeline for the next few due dates.
+          </div>
 
-            <div className="row" style={{ gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-              <div className="muted" style={{ fontSize: 12, width: 140 }}>
-                Strategy
-              </div>
-              <select
-                className="input"
-                value={state.settings.strategy}
-                onChange={async (e) => {
-                  const nextSettings = {
-                    ...state.settings,
-                    strategy: e.target.value === "snowball" ? "snowball" : "avalanche",
-                  };
-                  setState((prev) => ({ ...prev, settings: nextSettings }));
-                  await saveSettings(nextSettings);
-                }}
-                style={{ width: 240 }}
-              >
-                <option value="avalanche">Avalanche (highest APR first)</option>
-                <option value="snowball">Snowball (lowest balance first)</option>
-              </select>
+          <div style={{ height: 12 }} />
 
-              <div className="muted" style={{ fontSize: 12, width: 160 }}>
-                Extra pool / month
-              </div>
-              <input
-                className="input"
-                inputMode="decimal"
-                placeholder="e.g. 300"
-                value={state.settings.extraPoolMonthly ? String(state.settings.extraPoolMonthly) : ""}
-                onChange={async (e) => {
-                  const v = parseMoneyInput(e.target.value);
-                  const nextSettings = {
-                    ...state.settings,
-                    extraPoolMonthly: Number.isFinite(v) ? Math.max(0, v) : 0,
-                  };
-                  setState((prev) => ({ ...prev, settings: nextSettings }));
-                  await saveSettings(nextSettings);
-                }}
-                style={{ width: 220 }}
-              />
-
-              <div className="muted" style={{ fontSize: 12 }}>
-                Tip: Avalanche usually saves the most interest.
-              </div>
+          {computed.upcoming.length === 0 ? (
+            <div className="muted">No upcoming items.</div>
+          ) : (
+            <div className="grid" style={{ gap: 10 }}>
+              {computed.upcoming.map((b) => (
+                <div
+                  key={b.id}
+                  style={{
+                    padding: "12px 12px",
+                    borderRadius: 16,
+                    background: "rgba(255,255,255,0.03)",
+                    border: "1px solid rgba(255,255,255,0.06)",
+                  }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
+                    <div>
+                      <div style={{ fontWeight: 900 }}>{b.name}</div>
+                      <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+                        {b.dueDate} • {b.type === "controllable" ? "Debt" : "Bill"}
+                      </div>
+                    </div>
+                    <div style={{ textAlign: "right" }}>
+                      <div style={{ fontWeight: 900 }}>
+                        {money(b.type === "controllable" ? b.minPay || b.amount : b.amount)}
+                      </div>
+                      <div
+                        className="muted"
+                        style={{
+                          fontSize: 12,
+                          color: b.dueIn <= 3 ? BAD : b.dueIn <= 7 ? WARN : "rgba(255,255,255,0.72)",
+                        }}
+                      >
+                        {b.dueIn >= 0 ? `in ${b.dueIn}d` : `${Math.abs(b.dueIn)}d late`}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
-
-            <div style={{ height: 12 }} />
-
-            {computed.planner.monthsToDebtFree === 0 ? (
-              <div className="muted">No active controllable balances to plan.</div>
-            ) : computed.planner.monthsToDebtFree === Infinity ? (
-              <div className="card" style={{ ...cardStyle, padding: 12 }}>
-                <div style={{ fontWeight: 950 }}>Planner can’t compute payoff</div>
-                <div className="muted" style={{ marginTop: 6, fontSize: 12 }}>
-                  You have no payment capacity (minimums + extra pool = 0). Set minimum payments or add an extra pool.
-                </div>
-              </div>
-            ) : (
-              <div
-                className="grid"
-                style={{ gap: 12, gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))" }}
-              >
-                <div className="card" style={{ ...cardStyle, padding: 12 }}>
-                  <div className="muted" style={{ fontSize: 12 }}>
-                    Debt-free estimate
-                  </div>
-                  <div style={{ fontWeight: 950, marginTop: 6, fontSize: 18 }}>
-                    {computed.planner.debtFreeISO}{" "}
-                    <span className="muted" style={{ fontSize: 12 }}>
-                      ({computed.planner.monthsToDebtFree} {plural(computed.planner.monthsToDebtFree, "month")})
-                    </span>
-                  </div>
-                  <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>
-                    Est. interest:{" "}
-                    <b style={{ color: "rgba(255,255,255,0.92)" }}>
-                      {money(computed.planner.totalInterest)}
-                    </b>
-                  </div>
-                </div>
-
-                <div className="card" style={{ ...cardStyle, padding: 12 }}>
-                  <div style={{ fontWeight: 950, marginBottom: 8 }}>Payoff order</div>
-                  {computed.planner.payoffOrder.length === 0 ? (
-                    <div className="muted" style={{ fontSize: 12 }}>
-                      No payoff order available.
-                    </div>
-                  ) : (
-                    <div className="grid" style={{ gap: 8 }}>
-                      {computed.planner.payoffOrder.slice(0, 6).map((x, idx) => (
-                        <div
-                          key={x.id}
-                          style={{ display: "flex", justifyContent: "space-between", gap: 10 }}
-                        >
-                          <div style={{ fontWeight: 800 }}>
-                            {idx + 1}. {x.name}
-                          </div>
-                          <div className="muted" style={{ fontSize: 12 }}>
-                            <b style={{ color: "rgba(255,255,255,0.92)" }}>{x.paidOffISO}</b>
-                          </div>
-                        </div>
-                      ))}
-                      {computed.planner.payoffOrder.length > 6 ? (
-                        <div className="muted" style={{ fontSize: 12 }}>
-                          + {computed.planner.payoffOrder.length - 6} more…
-                        </div>
-                      ) : null}
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-          </>
-        ) : null}
+          )}
+        </div>
       </div>
 
       <div className="card" style={{ ...panelStyle, padding: 14, marginBottom: 16 }}>
@@ -1167,11 +1780,24 @@ export default function BillsPage() {
         >
           <div style={{ fontWeight: 950 }}>Settings</div>
           <div className="muted" style={{ fontSize: 12 }}>
-            Optional. Used for “% of income”.
+            Used for pressure bars and % of income.
           </div>
         </div>
+
         <div style={{ height: 10 }} />
-        <div className="row" style={{ gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+
+        <div
+          className="row"
+          style={{
+            gap: 10,
+            flexWrap: "wrap",
+            alignItems: "center",
+            padding: 12,
+            borderRadius: 16,
+            background: "rgba(255,255,255,0.03)",
+            border: "1px solid rgba(255,255,255,0.06)",
+          }}
+        >
           <div className="muted" style={{ fontSize: 12, width: 160 }}>
             Monthly income
           </div>
@@ -1204,7 +1830,7 @@ export default function BillsPage() {
             alignItems: "center",
           }}
         >
-          <div style={{ fontWeight: 950 }}>{mode === "edit" ? "Edit item" : "Add item"}</div>
+          <div style={{ fontWeight: 950, fontSize: 18 }}>{mode === "edit" ? "Edit item" : "Add item"}</div>
           {mode === "edit" ? (
             <button className="btnGhost" type="button" onClick={resetForm}>
               Cancel edit
@@ -1268,18 +1894,64 @@ export default function BillsPage() {
             />
             <input
               className="input"
+              placeholder="Category (Housing, Utilities, Insurance...)"
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+              style={{ width: 240 }}
+            />
+            <select
+              className="input"
+              value={linkedAccountId}
+              onChange={(e) => setLinkedAccountId(e.target.value)}
+              style={{ minWidth: 240, flex: 1 }}
+            >
+              <option value="">Linked account (optional)</option>
+              {accounts.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {accountIcon(a.type)} {a.name} — {accountTypeLabel(a.type)}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="row" style={{ gap: 10, flexWrap: "wrap" }}>
+            <input
+              className="input"
               placeholder="Notes (autopay/login/etc.)"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               style={{ flex: 1, minWidth: 260 }}
             />
+
+            <label
+              style={{
+                ...chip("rgba(255,255,255,0.05)", "rgba(255,255,255,0.10)"),
+                minHeight: 42,
+                padding: "10px 12px",
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={autopay}
+                onChange={(e) => setAutopay(e.target.checked)}
+              />
+              Autopay
+            </label>
           </div>
 
           {type === "controllable" ? (
-            <div className="card" style={{ ...cardStyle, padding: 12 }}>
+            <div
+              className="card"
+              style={{
+                ...cardStyle,
+                padding: 14,
+                background:
+                  "linear-gradient(180deg, rgba(96,165,250,0.10), rgba(255,255,255,0.025))",
+              }}
+            >
               <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
                 <div style={{ fontWeight: 950 }}>Debt payoff details</div>
-                <div style={chip("rgba(59,130,246,0.10)", "rgba(59,130,246,0.20)")}>
+                <div style={chip("rgba(96,165,250,0.10)", "rgba(96,165,250,0.20)")}>
                   Total used = min + extra
                 </div>
               </div>
@@ -1322,7 +1994,7 @@ export default function BillsPage() {
               </div>
 
               <div className="muted" style={{ fontSize: 12, marginTop: 10 }}>
-                If payoff shows “Never”, your total payment doesn’t cover interest.
+                If payoff shows “Never”, your total payment does not beat monthly interest.
               </div>
             </div>
           ) : null}
@@ -1330,9 +2002,14 @@ export default function BillsPage() {
           {error ? (
             <div
               className="card"
-              style={{ ...cardStyle, padding: 12, border: `1px solid rgba(239,68,68,0.35)` }}
+              style={{
+                ...cardStyle,
+                padding: 12,
+                border: "1px solid rgba(239,68,68,0.35)",
+                background: "linear-gradient(180deg, rgba(127,29,29,0.28), rgba(127,29,29,0.12))",
+              }}
             >
-              <div style={{ fontWeight: 950 }}>Fix this:</div>
+              <div style={{ fontWeight: 950 }}>Fix this</div>
               <div className="muted" style={{ marginTop: 6 }}>
                 {error}
               </div>
@@ -1351,7 +2028,7 @@ export default function BillsPage() {
               Clear
             </button>
             <div className="muted" style={{ fontSize: 12 }}>
-              Pro move: deactivate instead of delete to keep history.
+              Deactivate instead of delete if you want history.
             </div>
           </div>
         </form>
@@ -1367,7 +2044,7 @@ export default function BillsPage() {
             flexWrap: "wrap",
           }}
         >
-          <div style={{ fontWeight: 950 }}>Bills list</div>
+          <div style={{ fontWeight: 950, fontSize: 18 }}>Bills list</div>
 
           <div className="row" style={{ gap: 10, flexWrap: "wrap", alignItems: "center" }}>
             <input
@@ -1419,7 +2096,7 @@ export default function BillsPage() {
         {computed.list.length === 0 ? (
           <div className="muted">No items match your filters.</div>
         ) : (
-          <div className="grid" style={{ gap: 10 }}>
+          <div className="grid" style={{ gap: 12 }}>
             {computed.list.map((b) => {
               const isControl = b.type === "controllable";
               const dueIn = b.dueIn;
@@ -1446,11 +2123,33 @@ export default function BillsPage() {
                 : 0;
 
               const badge = isControl
-                ? chip("rgba(59,130,246,0.08)", "rgba(59,130,246,0.22)")
+                ? chip("rgba(96,165,250,0.08)", "rgba(96,165,250,0.22)")
                 : chip("rgba(255,255,255,0.06)", "rgba(255,255,255,0.10)");
 
+              const duePct = dueUrgencyPct(dueIn);
+              const speedPct = payoffSpeedPct(b.payoffMonths);
+              const strengthPct = paymentStrengthPct(b.balance, b.totalPay);
+
+              const dueColor = !Number.isFinite(dueIn)
+                ? ACCENT
+                : dueIn <= 3
+                  ? BAD
+                  : dueIn <= 7
+                    ? WARN
+                    : GOOD;
+
               return (
-                <div key={b.id} className="card" style={{ ...cardStyle, padding: 14 }}>
+                <div
+                  key={b.id}
+                  className="card"
+                  style={{
+                    ...cardStyle,
+                    padding: 16,
+                    background: isControl
+                      ? "linear-gradient(180deg, rgba(96,165,250,0.08), rgba(255,255,255,0.025))"
+                      : "linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.025))",
+                  }}
+                >
                   <div
                     style={{
                       display: "flex",
@@ -1462,7 +2161,8 @@ export default function BillsPage() {
                   >
                     <div style={{ minWidth: 280, flex: 1 }}>
                       <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-                        <div style={{ fontWeight: 950, fontSize: 16 }}>{b.name}</div>
+                        <div style={{ fontWeight: 950, fontSize: 18 }}>{b.name}</div>
+
                         <div style={badge}>
                           <span
                             style={{
@@ -1471,10 +2171,23 @@ export default function BillsPage() {
                               borderRadius: 99,
                               background: isControl ? ACCENT : "rgba(255,255,255,0.45)",
                               display: "inline-block",
+                              boxShadow: isControl ? `0 0 12px ${ACCENT}` : "none",
                             }}
                           />
-                          {b.active ? "Active" : "Inactive"} • {isControl ? "Controllable" : "Non-controllable"} • {b.frequency}
+                          {b.active ? "Active" : "Inactive"} • {typeLabel(b.type)} • {b.frequency}
                         </div>
+
+                        {b.autopay ? (
+                          <div style={chip("rgba(52,211,153,0.10)", "rgba(52,211,153,0.24)")}>
+                            Autopay
+                          </div>
+                        ) : null}
+
+                        {b.category ? (
+                          <div style={chip("rgba(255,255,255,0.05)", "rgba(255,255,255,0.10)")}>
+                            {b.category}
+                          </div>
+                        ) : null}
                       </div>
 
                       <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>
@@ -1486,8 +2199,7 @@ export default function BillsPage() {
                         {isControl ? (
                           <>
                             Balance {money(b.balance)} • Min {money(b.minPay)} • Extra {money(b.extraPay)} • Total{" "}
-                            <b style={{ color: "rgba(255,255,255,0.92)" }}>{money(b.totalPay)}</b> • APR{" "}
-                            {clamp(b.aprPct, 0, 100)}%
+                            <b style={{ color: "rgba(255,255,255,0.92)" }}>{money(b.totalPay)}</b> • APR {clamp(b.aprPct, 0, 100)}%
                           </>
                         ) : (
                           <>
@@ -1505,6 +2217,20 @@ export default function BillsPage() {
                         )}
                       </div>
 
+                      <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>
+                        Linked account:{" "}
+                        <b style={{ color: "rgba(255,255,255,0.92)" }}>
+                          {b.linkedAccount
+                            ? `${accountIcon(b.linkedAccount.type)} ${b.linkedAccount.name}`
+                            : "None"}
+                        </b>
+                        {" • "}
+                        Last paid:{" "}
+                        <b style={{ color: "rgba(255,255,255,0.92)" }}>
+                          {b.lastPaidDate || "—"}
+                        </b>
+                      </div>
+
                       {isControl ? (
                         <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>
                           Payoff: <b style={{ color: "rgba(255,255,255,0.92)" }}>{payoffLabel}</b>
@@ -1520,6 +2246,71 @@ export default function BillsPage() {
                         </div>
                       ) : null}
 
+                      <div
+                        className="grid"
+                        style={{
+                          gap: 10,
+                          gridTemplateColumns: isControl ? "repeat(auto-fit, minmax(220px, 1fr))" : "1fr",
+                          marginTop: 14,
+                        }}
+                      >
+                        <div
+                          style={{
+                            padding: 12,
+                            borderRadius: 16,
+                            background: "rgba(255,255,255,0.03)",
+                            border: "1px solid rgba(255,255,255,0.06)",
+                          }}
+                        >
+                          <ProgressBar
+                            label="Due urgency"
+                            value={Number.isFinite(dueIn) ? (dueIn >= 0 ? `${dueIn}d left` : `${Math.abs(dueIn)}d late`) : "—"}
+                            sublabel={dueIn <= 3 ? "This needs attention now." : "Keeps upcoming bills visible."}
+                            pct={duePct}
+                            color={dueColor}
+                            danger={dueIn <= 3}
+                          />
+                        </div>
+
+                        {isControl ? (
+                          <>
+                            <div
+                              style={{
+                                padding: 12,
+                                borderRadius: 16,
+                                background: "rgba(255,255,255,0.03)",
+                                border: "1px solid rgba(255,255,255,0.06)",
+                              }}
+                            >
+                              <ProgressBar
+                                label="Payoff speed"
+                                value={b.payoffMonths === Infinity ? "Too slow" : b.payoffMonths ? `${b.payoffMonths} mo` : "—"}
+                                sublabel="Higher bar = faster payoff path."
+                                pct={speedPct}
+                                color={GOOD}
+                              />
+                            </div>
+
+                            <div
+                              style={{
+                                padding: 12,
+                                borderRadius: 16,
+                                background: "rgba(255,255,255,0.03)",
+                                border: "1px solid rgba(255,255,255,0.06)",
+                              }}
+                            >
+                              <ProgressBar
+                                label="Payment strength"
+                                value={money(b.totalPay)}
+                                sublabel="How aggressive your payment is relative to this balance."
+                                pct={strengthPct}
+                                color={ACCENT}
+                              />
+                            </div>
+                          </>
+                        ) : null}
+                      </div>
+
                       {isControl ? (
                         <div className="card" style={{ ...panelStyle, padding: 12, marginTop: 12 }}>
                           <div
@@ -1533,7 +2324,7 @@ export default function BillsPage() {
                           >
                             <div style={{ fontWeight: 900 }}>Extra payment slider</div>
                             <div className="muted" style={{ fontSize: 12 }}>
-                              Drag to see payoff change.
+                              Drag to see payoff shift live.
                             </div>
                           </div>
 
@@ -1568,16 +2359,86 @@ export default function BillsPage() {
                             </button>
                           </div>
 
-                          <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>
-                            Slider max auto-scales. Total payment used = min + extra.
-                          </div>
+                          <div style={{ height: 10 }} />
+
+                          <ProgressBar
+                            label="Extra payment intensity"
+                            value={money(extra)}
+                            sublabel="This is your manual push beyond the minimum."
+                            pct={min + extra > 0 ? (extra / (min + extra)) * 100 : 0}
+                            color={WARN}
+                          />
+                        </div>
+                      ) : null}
+
+                      {historyOpenId === b.id ? (
+                        <div
+                          className="card"
+                          style={{
+                            ...panelStyle,
+                            padding: 12,
+                            marginTop: 12,
+                          }}
+                        >
+                          <div style={{ fontWeight: 900, marginBottom: 10 }}>Payment history</div>
+                          {b.history.length === 0 ? (
+                            <div className="muted" style={{ fontSize: 12 }}>No payment history yet.</div>
+                          ) : (
+                            <div className="grid" style={{ gap: 8 }}>
+                              {b.history.slice(0, 6).map((h) => {
+                                const account = accounts.find((a) => a.id === h.accountId);
+                                return (
+                                  <div
+                                    key={h.id}
+                                    style={{
+                                      display: "flex",
+                                      justifyContent: "space-between",
+                                      gap: 10,
+                                      padding: "10px 12px",
+                                      borderRadius: 14,
+                                      background: "rgba(255,255,255,0.03)",
+                                      border: "1px solid rgba(255,255,255,0.06)",
+                                    }}
+                                  >
+                                    <div>
+                                      <div style={{ fontWeight: 800 }}>{money(h.amount)}</div>
+                                      <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+                                        {account ? `${accountIcon(account.type)} ${account.name}` : "Unknown account"}
+                                      </div>
+                                      {h.note ? (
+                                        <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+                                          {h.note}
+                                        </div>
+                                      ) : null}
+                                    </div>
+                                    <div className="muted" style={{ fontSize: 12, whiteSpace: "nowrap" }}>
+                                      {fmtWhen(h.ts)}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
                         </div>
                       ) : null}
                     </div>
 
                     <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+                      <button className="btn" type="button" onClick={() => openPayModal(b)}>
+                        Pay Bill
+                      </button>
                       <button className="btnGhost" type="button" onClick={() => startEdit(b)}>
                         Edit
+                      </button>
+                      <button className="btnGhost" type="button" onClick={() => toggleAutopay(b.id)}>
+                        {b.autopay ? "Autopay On" : "Autopay Off"}
+                      </button>
+                      <button
+                        className="btnGhost"
+                        type="button"
+                        onClick={() => setHistoryOpenId((prev) => (prev === b.id ? "" : b.id))}
+                      >
+                        {historyOpenId === b.id ? "Hide History" : "History"}
                       </button>
                       <button className="btnGhost" type="button" onClick={() => toggleActive(b.id)}>
                         {b.active ? "Deactivate" : "Activate"}
@@ -1595,8 +2456,89 @@ export default function BillsPage() {
       </div>
 
       <div className="muted" style={{ fontSize: 12, marginTop: 14 }}>
-        Estimates are simplified (monthly interest, no fees). Real payoff may differ.
+        Estimates are simplified. Monthly interest only, no fees, no promo APR changes.
       </div>
+
+      <Modal
+        open={payModalOpen}
+        title={payingBill ? `Pay: ${payingBill.name}` : "Pay Bill"}
+        subtitle={
+          payingBill
+            ? `${typeLabel(payingBill.type)} • Due ${payingBill.dueDate} • Last paid ${payingBill.lastPaidDate || "—"}`
+            : ""
+        }
+        onClose={() => setPayModalOpen(false)}
+      >
+        {!payingBill ? (
+          <div className="muted">No bill selected.</div>
+        ) : (
+          <div className="grid" style={{ gap: 12 }}>
+            <select
+              className="input"
+              value={payFromAccountId}
+              onChange={(e) => setPayFromAccountId(e.target.value)}
+            >
+              <option value="">Choose account to pay from</option>
+              {accounts.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {accountIcon(a.type)} {a.name} — {accountTypeLabel(a.type)} — {money(a.balance)}
+                </option>
+              ))}
+            </select>
+
+            <input
+              className="input"
+              inputMode="decimal"
+              placeholder="Payment amount"
+              value={payAmount}
+              onChange={(e) => setPayAmount(e.target.value)}
+            />
+
+            <input
+              className="input"
+              placeholder="Optional note"
+              value={payNote}
+              onChange={(e) => setPayNote(e.target.value)}
+            />
+
+            {payFromAccountId ? (() => {
+              const a = accounts.find((x) => x.id === payFromAccountId);
+              const amt = parseMoneyInput(payAmount);
+              const projected = a ? safeNum(a.balance, 0) - (Number.isFinite(amt) ? Math.abs(amt) : 0) : null;
+
+              return a ? (
+                <div
+                  className="card"
+                  style={{
+                    ...cardStyle,
+                    padding: 12,
+                    background: "rgba(255,255,255,0.03)",
+                  }}
+                >
+                  <div className="muted" style={{ fontSize: 12 }}>Account preview</div>
+                  <div style={{ marginTop: 6, fontWeight: 900 }}>
+                    {accountIcon(a.type)} {a.name}
+                  </div>
+                  <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>
+                    Current: <b style={{ color: "rgba(255,255,255,0.92)" }}>{money(a.balance)}</b>
+                    {" • "}
+                    After payment: <b style={{ color: projected < 0 ? BAD : "rgba(255,255,255,0.92)" }}>{money(projected)}</b>
+                  </div>
+                </div>
+              ) : null;
+            })() : null}
+
+            <div className="row" style={{ gap: 10, flexWrap: "wrap" }}>
+              <button className="btn" type="button" onClick={payBillNow}>
+                Confirm payment
+              </button>
+              <button className="btnGhost" type="button" onClick={() => setPayModalOpen(false)}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
     </main>
   );
 }
