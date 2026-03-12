@@ -81,6 +81,11 @@ function endOfMonthDate(ym) {
   return new Date(y, m - 1, daysInMonth(y, m - 1));
 }
 
+function pct(n, d) {
+  if (!Number.isFinite(n) || !Number.isFinite(d) || d === 0) return 0;
+  return (n / d) * 100;
+}
+
 /**
  * Pay schedule
  * - WEEKLY / BIWEEKLY: uses anchorDate (most recent payday) and steps forward.
@@ -125,11 +130,6 @@ function computePaydaysForMonth({ monthYM, schedule, anchorDateISO }) {
   return out;
 }
 
-function pct(n, d) {
-  if (!Number.isFinite(n) || !Number.isFinite(d) || d === 0) return 0;
-  return (n / d) * 100;
-}
-
 /** ---------- defaults ---------- **/
 const DEFAULT_SETTINGS = {
   goalMonthly: 8000,
@@ -138,6 +138,44 @@ const DEFAULT_SETTINGS = {
   paycheckAmt: 2000,
   bonusEstimate: 0,
 };
+
+const ACCENT = "#3b82f6";
+const ACCENT_SOFT = "rgba(59,130,246,.18)";
+const BORDER = "rgba(255,255,255,.08)";
+const BORDER_SOFT = "rgba(255,255,255,.06)";
+const TEXT_SOFT = "rgba(255,255,255,.72)";
+const TEXT_MID = "rgba(255,255,255,.86)";
+const BG_SOFT = "rgba(255,255,255,.035)";
+const BG_PANEL = "rgba(255,255,255,.03)";
+const SHADOW = "0 18px 60px rgba(0,0,0,.30)";
+
+const panelStyle = {
+  background: BG_PANEL,
+  border: `1px solid ${BORDER_SOFT}`,
+  borderRadius: 18,
+  boxShadow: SHADOW,
+};
+
+const cardStyle = {
+  background: BG_SOFT,
+  border: `1px solid ${BORDER}`,
+  borderRadius: 16,
+  boxShadow: "0 12px 35px rgba(0,0,0,.22)",
+};
+
+function pill(bg = "rgba(255,255,255,.05)", border = "rgba(255,255,255,.10)") {
+  return {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 8,
+    padding: "7px 11px",
+    borderRadius: 999,
+    background: bg,
+    border: `1px solid ${border}`,
+    fontSize: 12,
+    color: TEXT_MID,
+  };
+}
 
 function normalizeDeposit(raw) {
   const x = raw || {};
@@ -207,6 +245,30 @@ function mapIncomeSettingsClientToRow(settings, userId) {
   };
 }
 
+function ProgressBar({ valuePct, background = "rgba(255,255,255,.07)", fill = ACCENT, height = 14 }) {
+  return (
+    <div
+      style={{
+        height,
+        borderRadius: 999,
+        background,
+        border: "1px solid rgba(255,255,255,.08)",
+        overflow: "hidden",
+      }}
+    >
+      <div
+        style={{
+          height: "100%",
+          width: `${clamp(valuePct, 0, 100)}%`,
+          background: fill,
+          borderRadius: 999,
+          transition: "width .25s ease",
+        }}
+      />
+    </div>
+  );
+}
+
 export default function IncomePage() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -242,8 +304,7 @@ export default function IncomePage() {
   const [eAmount, setEAmount] = useState("");
   const [eNote, setENote] = useState("");
 
-  // Alignment
-  const CONTROL_H = 44;
+  const CONTROL_H = 46;
   const controlStyle = { height: CONTROL_H, display: "inline-flex", alignItems: "center" };
 
   useEffect(() => {
@@ -251,9 +312,7 @@ export default function IncomePage() {
 
     async function bootstrap() {
       try {
-        if (!supabase) {
-          throw new Error("Supabase is not configured. Check your environment variables.");
-        }
+        if (!supabase) throw new Error("Supabase is not configured. Check your environment variables.");
 
         const {
           data: { user: currentUser },
@@ -319,29 +378,19 @@ export default function IncomePage() {
 
     const payload = mapIncomeSettingsClientToRow(
       {
-        goalMonthly: Number.isFinite(parseMoneyInput(next.goalMonthly))
-          ? parseMoneyInput(next.goalMonthly)
-          : 0,
+        goalMonthly: Number.isFinite(parseMoneyInput(next.goalMonthly)) ? parseMoneyInput(next.goalMonthly) : 0,
         schedule: next.schedule,
         anchorDate: next.anchorDate,
-        paycheckAmt: Number.isFinite(parseMoneyInput(next.paycheckAmt))
-          ? parseMoneyInput(next.paycheckAmt)
-          : 0,
-        bonusEstimate: Number.isFinite(parseMoneyInput(next.bonusEstimate))
-          ? parseMoneyInput(next.bonusEstimate)
-          : 0,
+        paycheckAmt: Number.isFinite(parseMoneyInput(next.paycheckAmt)) ? parseMoneyInput(next.paycheckAmt) : 0,
+        bonusEstimate: Number.isFinite(parseMoneyInput(next.bonusEstimate)) ? parseMoneyInput(next.bonusEstimate) : 0,
         viewMonth: next.viewMonth,
       },
       user.id
     );
 
-    const { error: saveErr } = await supabase
-      .from("income_settings")
-      .upsert(payload, { onConflict: "user_id" });
+    const { error: saveErr } = await supabase.from("income_settings").upsert(payload, { onConflict: "user_id" });
 
-    if (saveErr) {
-      setPageError(saveErr.message || "Failed to save income settings.");
-    }
+    if (saveErr) setPageError(saveErr.message || "Failed to save income settings.");
   }
 
   async function addDeposit(e) {
@@ -471,7 +520,6 @@ export default function IncomePage() {
     }
 
     const savedDeposit = mapDepositRowToClient(data);
-
     setDeposits((prev) => prev.map((x) => (x.id === editId ? savedDeposit : x)));
     cancelEdit();
     setStatus({ msg: "Deposit updated ✅" });
@@ -525,7 +573,7 @@ export default function IncomePage() {
     const b = parseMoneyInput(bonusEstimate);
     const bonusNum = Number.isFinite(b) ? b : 0;
 
-    const projectedRemaining = paydaysLeft * payAmtNum + (bonusNum || 0);
+    const projectedRemaining = paydaysLeft * payAmtNum + bonusNum;
     const projectedTotal = monthTotal + projectedRemaining;
     const projectedGap = projectedTotal - goalMonthlyNum;
 
@@ -558,29 +606,23 @@ export default function IncomePage() {
 
     const qq = q.trim().toLowerCase();
     let rows = deposits.slice();
-    if (qq) {
-      rows = rows.filter((d) => (`${d.source} ${d.note} ${d.date}`).toLowerCase().includes(qq));
-    }
+    if (qq) rows = rows.filter((d) => `${d.source} ${d.note} ${d.date}`.toLowerCase().includes(qq));
 
     rows.sort((a, b) => {
       if (sortBy === "date_desc") {
-        return (
-          String(b.date).localeCompare(String(a.date)) ||
-          (b.createdAt || 0) - (a.createdAt || 0)
-        );
+        return String(b.date).localeCompare(String(a.date)) || (b.createdAt || 0) - (a.createdAt || 0);
       }
       if (sortBy === "amt_desc") return (Number(b.amount) || 0) - (Number(a.amount) || 0);
       if (sortBy === "source_asc") return String(a.source).localeCompare(String(b.source));
       return 0;
     });
 
-    const months = Array.from(new Set(deposits.map((d) => monthKeyFromISO(d.date)).filter(Boolean)))
-      .sort()
-      .reverse();
+    const months = Array.from(new Set(deposits.map((d) => monthKeyFromISO(d.date)).filter(Boolean))).sort().reverse();
     if (!months.includes(thisMonth)) months.unshift(thisMonth);
 
     const monthPct = goalMonthlyNum > 0 ? clamp(pct(monthTotal, goalMonthlyNum), 0, 999) : 0;
     const pacePct = goalMonthlyNum > 0 ? clamp(pct(paceTargetToday, goalMonthlyNum), 0, 100) : 0;
+    const projectedPct = goalMonthlyNum > 0 ? clamp(pct(projectedTotal, goalMonthlyNum), 0, 999) : 0;
 
     const plan = paydaysLeftDates.slice(0, 4).map((d) => {
       const need = neededPerPaycheck;
@@ -605,9 +647,9 @@ export default function IncomePage() {
       .sort((a, b) => b.total - a.total);
 
     const topSource = bySource[0]?.source || "";
-
     const behindPace = goalMonthlyNum > 0 && monthTotal + 0.0001 < paceTargetToday;
     const goalHit = goalMonthlyNum > 0 && monthTotal >= goalMonthlyNum;
+    const projectedHit = goalMonthlyNum > 0 && projectedTotal >= goalMonthlyNum;
 
     const noDepositDays = (() => {
       if (deposits.length === 0) return 999;
@@ -616,6 +658,13 @@ export default function IncomePage() {
       if (!ld) return 999;
       const diff = Math.floor((t0 - ld.getTime()) / 86400000);
       return Math.max(0, diff);
+    })();
+
+    const targetStatus = (() => {
+      if (goalHit) return "Target Hit";
+      if (projectedHit) return "Projected Hit";
+      if (behindPace) return "Behind";
+      return "On Track";
     })();
 
     return {
@@ -629,6 +678,7 @@ export default function IncomePage() {
       paceTargetToday,
       monthPct,
       pacePct,
+      projectedPct,
       gapToPace,
       behindBy,
       aheadBy,
@@ -649,6 +699,7 @@ export default function IncomePage() {
       topSource,
       behindPace,
       goalHit,
+      projectedHit,
       noDepositDays,
       streak,
       weekTotal,
@@ -656,6 +707,7 @@ export default function IncomePage() {
       dayNum,
       dim,
       daysLeftInclToday,
+      targetStatus,
     };
   }, [deposits, goalMonthly, schedule, anchorDate, paycheckAmt, bonusEstimate, viewMonth, q, sortBy]);
 
@@ -663,18 +715,16 @@ export default function IncomePage() {
 
   if (loading) {
     return (
-      <main className="container">
-        <div className="card" style={{ padding: 16 }}>
-          Loading income...
-        </div>
+      <main className="container" style={{ paddingBottom: 24 }}>
+        <div className="card" style={{ ...panelStyle, padding: 16 }}>Loading income...</div>
       </main>
     );
   }
 
   if (!user) {
     return (
-      <main className="container">
-        <div className="card" style={{ padding: 16 }}>
+      <main className="container" style={{ paddingBottom: 24 }}>
+        <div className="card" style={{ ...panelStyle, padding: 16 }}>
           <div style={{ fontWeight: 950 }}>Please log in</div>
           <div className="muted" style={{ marginTop: 6 }}>
             This page now loads from Supabase, so you need to be signed in.
@@ -685,24 +735,24 @@ export default function IncomePage() {
   }
 
   return (
-    <main className="container">
-      <header style={{ marginBottom: 14 }}>
-        <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>
-          Income
-        </div>
+    <main className="container" style={{ paddingBottom: 24 }}>
+      <header style={{ marginBottom: 16 }}>
+        <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>Income</div>
 
         <div
           className="row"
           style={{ justifyContent: "space-between", alignItems: "flex-end", gap: 12, flexWrap: "wrap" }}
         >
           <div>
-            <h1 style={{ margin: 0 }}>Income Command</h1>
+            <h1 style={{ margin: 0, letterSpacing: -0.4 }}>Income Target Command</h1>
             <div className="muted" style={{ marginTop: 6 }}>
-              This is the engine. If income is weak, everything breaks.
+              Set the target. Log deposits. Watch the gap close.
             </div>
           </div>
-          <div className="muted" style={{ fontSize: 12 }}>
-            Viewing: <b>{fmtMonthLabel(computed.thisMonth)}</b>
+
+          <div style={pill(ACCENT_SOFT, "rgba(59,130,246,.28)")}>
+            <span style={{ width: 8, height: 8, borderRadius: 99, background: ACCENT, display: "inline-block" }} />
+            Viewing: <b style={{ color: "rgba(255,255,255,.95)" }}>{fmtMonthLabel(computed.thisMonth)}</b>
           </div>
         </div>
 
@@ -714,109 +764,197 @@ export default function IncomePage() {
       </header>
 
       {pageError ? (
-        <div className="card" style={{ padding: 12, marginBottom: 12 }}>
+        <div className="card" style={{ ...cardStyle, padding: 12, marginBottom: 16, border: "1px solid rgba(239,68,68,.35)" }}>
           <div style={{ fontWeight: 950 }}>Database issue</div>
           <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>{pageError}</div>
         </div>
       ) : null}
 
-      {computed.behindPace || computed.goalHit || computed.noDepositDays >= 3 ? (
-        <div className="row" style={{ gap: 12, flexWrap: "wrap", marginBottom: 12 }}>
+      {/* HERO TARGET SECTION */}
+      <div className="card" style={{ ...panelStyle, padding: 16, marginBottom: 16 }}>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            gap: 12,
+            alignItems: "flex-start",
+            flexWrap: "wrap",
+            marginBottom: 14,
+          }}
+        >
+          <div>
+            <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>Main target tracker</div>
+            <div style={{ fontWeight: 950, fontSize: 22 }}>
+              {computed.targetStatus}{" "}
+              <span className="muted" style={{ fontSize: 14, fontWeight: 800 }}>
+                • {fmtMonthLabel(computed.thisMonth)}
+              </span>
+            </div>
+          </div>
+
+          <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+            <div style={pill()}>{computed.paydaysLeft} paycheck{computed.paydaysLeft === 1 ? "" : "s"} left</div>
+            <div style={pill()}>{computed.nextPaydayISO || "No payday queued"}</div>
+          </div>
+        </div>
+
+        <div
+          className="grid"
+          style={{
+            gap: 12,
+            gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))",
+            marginBottom: 14,
+          }}
+        >
+          <div className="card" style={{ ...cardStyle, padding: 14 }}>
+            <div className="muted" style={{ fontSize: 12 }}>Income target</div>
+            <div style={{ fontSize: 30, fontWeight: 950, marginTop: 6 }}>{money(computed.goalMonthlyNum)}</div>
+            <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>The number you are chasing this month.</div>
+          </div>
+
+          <div className="card" style={{ ...cardStyle, padding: 14 }}>
+            <div className="muted" style={{ fontSize: 12 }}>Made so far</div>
+            <div style={{ fontSize: 30, fontWeight: 950, marginTop: 6, color: "rgba(255,255,255,.96)" }}>
+              {money(computed.monthTotal)}
+            </div>
+            <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
+              {computed.monthPct.toFixed(0)}% of target logged.
+            </div>
+          </div>
+
+          <div className="card" style={{ ...cardStyle, padding: 14 }}>
+            <div className="muted" style={{ fontSize: 12 }}>Left to target</div>
+            <div style={{ fontSize: 30, fontWeight: 950, marginTop: 6, color: computed.remainingToGoal > 0 ? "#f8fafc" : "#22c55e" }}>
+              {money(computed.remainingToGoal)}
+            </div>
+            <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
+              {computed.remainingToGoal > 0 ? `Need ${money(computed.neededPerDay)} per day.` : "Target already cleared."}
+            </div>
+          </div>
+
+          <div className="card" style={{ ...cardStyle, padding: 14 }}>
+            <div className="muted" style={{ fontSize: 12 }}>Projected finish</div>
+            <div style={{ fontSize: 30, fontWeight: 950, marginTop: 6, color: computed.projectedGap >= 0 ? "#22c55e" : "#f8fafc" }}>
+              {money(computed.projectedTotal)}
+            </div>
+            <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
+              {computed.projectedGap >= 0
+                ? `Projected to finish ${money(computed.projectedGap)} over target.`
+                : `Projected short by ${money(Math.abs(computed.projectedGap))}.`}
+            </div>
+          </div>
+        </div>
+
+        <div className="card" style={{ ...cardStyle, padding: 14 }}>
+          <div style={{ display: "grid", gap: 12 }}>
+            <div>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "baseline", marginBottom: 8 }}>
+                <div style={{ fontWeight: 900 }}>Actual progress</div>
+                <div className="muted" style={{ fontSize: 12 }}>
+                  {money(computed.monthTotal)} / {money(computed.goalMonthlyNum)}
+                </div>
+              </div>
+              <ProgressBar valuePct={computed.monthPct} fill={ACCENT} height={16} />
+            </div>
+
+            <div>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "baseline", marginBottom: 8 }}>
+                <div style={{ fontWeight: 900 }}>Projected finish line</div>
+                <div className="muted" style={{ fontSize: 12 }}>
+                  {money(computed.projectedTotal)} projected
+                </div>
+              </div>
+              <ProgressBar valuePct={computed.projectedPct} fill="rgba(255,255,255,.35)" height={10} />
+            </div>
+
+            <div
+              className="grid"
+              style={{
+                gap: 10,
+                gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+                marginTop: 2,
+              }}
+            >
+              <div style={pill("rgba(255,255,255,.04)", "rgba(255,255,255,.09)")}>
+                <b style={{ color: "rgba(255,255,255,.95)" }}>{money(computed.remainingToGoal)}</b> left to close
+              </div>
+              <div style={pill("rgba(255,255,255,.04)", "rgba(255,255,255,.09)")}>
+                Need <b style={{ color: "rgba(255,255,255,.95)" }}>{money(computed.neededPerPaycheck)}</b> per remaining paycheck
+              </div>
+              <div style={pill("rgba(255,255,255,.04)", "rgba(255,255,255,.09)")}>
+                Pace today: <b style={{ color: "rgba(255,255,255,.95)" }}>{money(computed.paceTargetToday)}</b>
+              </div>
+              <div style={pill("rgba(255,255,255,.04)", "rgba(255,255,255,.09)")}>
+                {computed.gapToPace >= 0 ? "Ahead" : "Behind"} by{" "}
+                <b style={{ color: "rgba(255,255,255,.95)" }}>{money(Math.abs(computed.gapToPace))}</b>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ALERTS / COMMAND STRIP */}
+      {(computed.behindPace || computed.goalHit || computed.noDepositDays >= 3 || computed.projectedGap < 0) ? (
+        <div
+          className="grid"
+          style={{
+            gap: 12,
+            gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+            marginBottom: 16,
+          }}
+        >
           {computed.goalHit ? (
-            <div className="card" style={{ padding: 12, flex: 1, minWidth: 260 }}>
-              <div style={{ fontWeight: 950 }}>Goal hit ✅</div>
+            <div className="card" style={{ ...cardStyle, padding: 12 }}>
+              <div style={{ fontWeight: 950 }}>Target hit ✅</div>
               <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
-                Month total {money(computed.monthTotal)} ≥ goal {money(computed.goalMonthlyNum)}.
+                You already logged {money(computed.monthTotal)} this month.
+              </div>
+            </div>
+          ) : null}
+
+          {computed.projectedGap < 0 ? (
+            <div className="card" style={{ ...cardStyle, padding: 12 }}>
+              <div style={{ fontWeight: 950 }}>Projection is short</div>
+              <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
+                Current projection misses target by {money(Math.abs(computed.projectedGap))}.
               </div>
             </div>
           ) : null}
 
           {computed.behindPace ? (
-            <div className="card" style={{ padding: 12, flex: 1, minWidth: 260 }}>
+            <div className="card" style={{ ...cardStyle, padding: 12 }}>
               <div style={{ fontWeight: 950 }}>Behind pace ⚠️</div>
               <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
-                You’re at {money(computed.monthTotal)} but pace target is {money(computed.paceTargetToday)}.
+                You are at {money(computed.monthTotal)} but should be near {money(computed.paceTargetToday)}.
               </div>
             </div>
           ) : null}
 
           {computed.noDepositDays >= 3 ? (
-            <div className="card" style={{ padding: 12, flex: 1, minWidth: 260 }}>
+            <div className="card" style={{ ...cardStyle, padding: 12 }}>
               <div style={{ fontWeight: 950 }}>No deposits logged</div>
               <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
-                It’s been {computed.noDepositDays} days since the last deposit entry.
+                It has been {computed.noDepositDays} days since the last logged deposit.
               </div>
             </div>
           ) : null}
         </div>
       ) : null}
 
+      {/* SECONDARY CARDS */}
       <div
         className="grid"
         style={{
           gap: 12,
           gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
           alignItems: "stretch",
-          marginBottom: 12,
+          marginBottom: 16,
         }}
       >
-        <div className="card" style={{ padding: 14, display: "flex", flexDirection: "column", gap: 10 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10 }}>
-            <div>
-              <div className="muted" style={{ fontSize: 12 }}>Pace status (today)</div>
-              <div style={{ fontWeight: 950, fontSize: 18 }}>
-                {computed.gapToPace >= 0 ? "Ahead" : "Behind"}{" "}
-                <span className="muted" style={{ fontWeight: 800 }}>
-                  {money(Math.abs(computed.gapToPace))}
-                </span>
-              </div>
-            </div>
-            {computed.gapToPace >= 0 ? (
-              <div className="muted" style={{ fontSize: 12, textAlign: "right" }}>
-                Buffer days
-                <div style={{ fontWeight: 950, fontSize: 16 }}>{computed.bufferDays}</div>
-              </div>
-            ) : (
-              <div className="muted" style={{ fontSize: 12, textAlign: "right" }}>
-                Catch-up
-                <div style={{ fontWeight: 950, fontSize: 16 }}>{money(computed.behindBy)}</div>
-              </div>
-            )}
-          </div>
-
-          <div className="card" style={{ padding: 10 }}>
-            <div className="muted" style={{ fontSize: 12, marginBottom: 8 }}>Month progress vs pace</div>
-
-            <div style={{ display: "grid", gap: 8 }}>
-              <div>
-                <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>
-                  Progress: {computed.monthPct.toFixed(0)}%
-                </div>
-                <div style={{ height: 10, borderRadius: 999, border: "1px solid rgba(255,255,255,.10)", background: "rgba(255,255,255,.04)", overflow: "hidden" }}>
-                  <div style={{ height: "100%", width: `${clamp(computed.monthPct, 0, 100)}%`, background: "rgba(255,255,255,.18)" }} />
-                </div>
-              </div>
-
-              <div>
-                <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>
-                  Pace target today: {computed.pacePct.toFixed(0)}%
-                </div>
-                <div style={{ height: 10, borderRadius: 999, border: "1px solid rgba(255,255,255,.10)", background: "rgba(255,255,255,.04)", overflow: "hidden" }}>
-                  <div style={{ height: "100%", width: `${clamp(computed.pacePct, 0, 100)}%`, background: "rgba(255,255,255,.10)" }} />
-                </div>
-              </div>
-            </div>
-
-            <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>
-              Day {computed.dayNum}/{computed.dim}. Target by today: {money(computed.paceTargetToday)}.
-            </div>
-          </div>
-        </div>
-
-        <div className="card" style={{ padding: 14, display: "flex", flexDirection: "column", gap: 10 }}>
+        <div className="card" style={{ ...panelStyle, padding: 14 }}>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "baseline" }}>
             <div>
-              <div className="muted" style={{ fontSize: 12 }}>Paycheck Plan (rest of month)</div>
+              <div className="muted" style={{ fontSize: 12 }}>Paycheck planner</div>
               <div style={{ fontWeight: 950, fontSize: 18 }}>
                 Need <span className="muted" style={{ fontWeight: 800 }}>{money(computed.neededPerPaycheck)}</span> / paycheck
               </div>
@@ -827,14 +965,16 @@ export default function IncomePage() {
             </div>
           </div>
 
-          <div className="card" style={{ padding: 10 }}>
+          <div style={{ height: 10 }} />
+
+          <div className="card" style={{ ...cardStyle, padding: 10 }}>
             <div className="muted" style={{ fontSize: 12, marginBottom: 8 }}>
               {computed.paydaysLeft ? (
                 <>
-                  Paydays left: <b>{computed.paydaysLeft}</b> • Expected check: <b>{money(computed.payAmtNum)}</b>
+                  {computed.paydaysLeft} left • Expected check <b>{money(computed.payAmtNum)}</b>
                 </>
               ) : (
-                <>No paydays left in this month (based on your schedule).</>
+                <>No paydays left in this month based on current setup.</>
               )}
             </div>
 
@@ -843,20 +983,24 @@ export default function IncomePage() {
                 {computed.plan.map((p) => {
                   const good = p.delta >= 0;
                   return (
-                    <div key={p.iso} className="card" style={{ padding: 10, display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
-                      <div>
-                        <div style={{ fontWeight: 950 }}>{p.iso}</div>
-                        <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
-                          Need {money(p.need)}
+                    <div key={p.iso} className="card" style={{ ...cardStyle, padding: 10, background: "rgba(255,255,255,.025)" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
+                        <div>
+                          <div style={{ fontWeight: 900 }}>{p.iso}</div>
+                          <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+                            Need {money(p.need)}
+                          </div>
                         </div>
-                      </div>
 
-                      <div style={{ textAlign: "right" }}>
-                        <div style={{ fontWeight: 950 }}>
-                          {good ? "Covered" : "Short"}{" "}
-                          <span className="muted" style={{ fontWeight: 800 }}>{money(Math.abs(p.delta))}</span>
+                        <div style={{ textAlign: "right" }}>
+                          <div style={{ fontWeight: 900 }}>
+                            {good ? "Covered" : "Short"}{" "}
+                            <span className="muted" style={{ fontWeight: 800 }}>{money(Math.abs(p.delta))}</span>
+                          </div>
+                          <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+                            Expected {money(p.expected)}
+                          </div>
                         </div>
-                        <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>Expected {money(p.expected)}</div>
                       </div>
                     </div>
                   );
@@ -864,30 +1008,29 @@ export default function IncomePage() {
               </div>
             ) : (
               <div className="muted" style={{ fontSize: 12 }}>
-                Set schedule + anchor date (weekly/biweekly) to auto-calc.
+                Set schedule and anchor date to auto-calc paydays.
               </div>
             )}
 
-            {computed.goalMonthlyNum > 0 ? (
-              <div className="muted" style={{ fontSize: 12, marginTop: 10 }}>
-                {computed.shortfallIfOnlyPaychecks > 0 ? (
-                  <>
-                    If you only get paychecks, you’re short <b>{money(computed.shortfallIfOnlyPaychecks)}</b>. Bonus estimate covers <b>{money(computed.bonusNum)}</b>. Remaining bonus needed: <b>{money(computed.bonusNeeded)}</b>.
-                  </>
-                ) : (
-                  <>Your expected paychecks + bonus estimate should cover the goal (projection dependent).</>
-                )}
-              </div>
-            ) : null}
+            <div className="muted" style={{ fontSize: 12, marginTop: 10 }}>
+              {computed.shortfallIfOnlyPaychecks > 0 ? (
+                <>
+                  Paychecks alone leave you short <b>{money(computed.shortfallIfOnlyPaychecks)}</b>. Bonus estimate:{" "}
+                  <b>{money(computed.bonusNum)}</b>. Extra bonus still needed: <b>{money(computed.bonusNeeded)}</b>.
+                </>
+              ) : (
+                <>Expected paychecks plus bonus estimate should cover the target.</>
+              )}
+            </div>
           </div>
         </div>
 
-        <div className="card" style={{ padding: 14, display: "flex", flexDirection: "column", gap: 10 }}>
+        <div className="card" style={{ ...panelStyle, padding: 14 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10 }}>
             <div>
-              <div className="muted" style={{ fontSize: 12 }}>Income streams (this month)</div>
+              <div className="muted" style={{ fontSize: 12 }}>Income streams this month</div>
               <div style={{ fontWeight: 950, fontSize: 18 }}>
-                Top: <span className="muted" style={{ fontWeight: 800 }}>{computed.topSource || "—"}</span>
+                Top source <span className="muted" style={{ fontWeight: 800 }}>{computed.topSource || "—"}</span>
               </div>
             </div>
             <div className="muted" style={{ fontSize: 12, textAlign: "right" }}>
@@ -896,20 +1039,20 @@ export default function IncomePage() {
             </div>
           </div>
 
-          <div className="card" style={{ padding: 10 }}>
+          <div style={{ height: 10 }} />
+
+          <div className="card" style={{ ...cardStyle, padding: 10 }}>
             {computed.bySource.length ? (
               <div className="grid" style={{ gap: 8 }}>
                 {computed.bySource.slice(0, 6).map((s) => (
                   <div key={s.source} style={{ display: "grid", gap: 6 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "baseline" }}>
-                      <div style={{ fontWeight: 950 }}>{s.source}</div>
+                      <div style={{ fontWeight: 900 }}>{s.source}</div>
                       <div className="muted" style={{ fontWeight: 900 }}>
                         {money(s.total)} <span style={{ fontSize: 12, fontWeight: 800 }}>({s.pct.toFixed(0)}%)</span>
                       </div>
                     </div>
-                    <div style={{ height: 10, borderRadius: 999, border: "1px solid rgba(255,255,255,.10)", background: "rgba(255,255,255,.04)", overflow: "hidden" }}>
-                      <div style={{ height: "100%", width: `${clamp(s.pct, 0, 100)}%`, background: "rgba(255,255,255,.18)" }} />
-                    </div>
+                    <ProgressBar valuePct={s.pct} fill="rgba(255,255,255,.22)" height={10} />
                   </div>
                 ))}
                 {computed.bySource.length > 6 ? (
@@ -917,28 +1060,58 @@ export default function IncomePage() {
                 ) : null}
               </div>
             ) : (
-              <div className="muted" style={{ fontSize: 12 }}>No deposits in this month yet.</div>
+              <div className="muted" style={{ fontSize: 12 }}>No deposits logged for this month yet.</div>
             )}
+          </div>
+        </div>
+
+        <div className="card" style={{ ...panelStyle, padding: 14 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "baseline" }}>
+            <div>
+              <div className="muted" style={{ fontSize: 12 }}>Fast snapshot</div>
+              <div style={{ fontWeight: 950, fontSize: 18 }}>This month in plain English</div>
+            </div>
+          </div>
+
+          <div style={{ height: 10 }} />
+
+          <div className="grid" style={{ gap: 8 }}>
+            <div className="card" style={{ ...cardStyle, padding: 10 }}>
+              <div className="muted" style={{ fontSize: 12 }}>Last 7 days</div>
+              <div style={{ fontWeight: 950, fontSize: 20, marginTop: 6 }}>{money(computed.weekTotal)}</div>
+            </div>
+
+            <div className="card" style={{ ...cardStyle, padding: 10 }}>
+              <div className="muted" style={{ fontSize: 12 }}>Deposit streak</div>
+              <div style={{ fontWeight: 950, fontSize: 20, marginTop: 6 }}>{computed.streak} day{computed.streak === 1 ? "" : "s"}</div>
+            </div>
+
+            <div className="card" style={{ ...cardStyle, padding: 10 }}>
+              <div className="muted" style={{ fontSize: 12 }}>Buffer / catch-up</div>
+              <div style={{ fontWeight: 950, fontSize: 20, marginTop: 6 }}>
+                {computed.gapToPace >= 0 ? `${computed.bufferDays} day${computed.bufferDays === 1 ? "" : "s"} buffer` : money(computed.behindBy)}
+              </div>
+            </div>
           </div>
         </div>
       </div>
 
-      <div style={{ height: 12 }} />
-
+      {/* SETTINGS + ADD DEPOSIT */}
       <div
         className="grid"
         style={{
           gap: 16,
           gridTemplateColumns: "repeat(auto-fit, minmax(360px, 1fr))",
           alignItems: "start",
+          marginBottom: 16,
         }}
       >
-        <div className="card" style={{ padding: 12 }}>
-          <div style={{ fontWeight: 950, marginBottom: 10 }}>Income Setup</div>
+        <div className="card" style={{ ...panelStyle, padding: 14 }}>
+          <div style={{ fontWeight: 950, marginBottom: 10 }}>Income setup</div>
 
-          <div className="grid" style={{ gap: 10 }}>
+          <div className="grid" style={{ gap: 12 }}>
             <div>
-              <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>Monthly goal</div>
+              <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>Income target</div>
               <input
                 className="input"
                 inputMode="decimal"
@@ -956,11 +1129,17 @@ export default function IncomePage() {
                   });
                 }}
                 placeholder="8000"
-                style={controlStyle}
+                style={{ ...controlStyle, width: "100%" }}
               />
             </div>
 
-            <div className="grid" style={{ gap: 10, gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
+            <div
+              className="grid"
+              style={{
+                gap: 10,
+                gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+              }}
+            >
               <div>
                 <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>Pay schedule</div>
                 <select
@@ -978,7 +1157,7 @@ export default function IncomePage() {
                       viewMonth,
                     });
                   }}
-                  style={controlStyle}
+                  style={{ ...controlStyle, width: "100%" }}
                 >
                   <option value="WEEKLY">Weekly</option>
                   <option value="BIWEEKLY">Biweekly</option>
@@ -1006,12 +1185,12 @@ export default function IncomePage() {
                     });
                   }}
                   placeholder="2000"
-                  style={controlStyle}
+                  style={{ ...controlStyle, width: "100%" }}
                 />
               </div>
             </div>
 
-            {scheduleKey === "WEEKLY" || scheduleKey === "BIWEEKLY" ? (
+            {(scheduleKey === "WEEKLY" || scheduleKey === "BIWEEKLY") ? (
               <div>
                 <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>Anchor payday (most recent payday)</div>
                 <input
@@ -1030,14 +1209,16 @@ export default function IncomePage() {
                       viewMonth,
                     });
                   }}
-                  style={controlStyle}
+                  style={{ ...controlStyle, width: "100%" }}
                 />
-                <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>Used to auto-calc paydays inside the month.</div>
+                <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
+                  Used to calculate future paydays in the current month.
+                </div>
               </div>
             ) : null}
 
             <div>
-              <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>Monthly bonus estimate (optional)</div>
+              <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>Monthly bonus estimate</div>
               <input
                 className="input"
                 inputMode="decimal"
@@ -1055,64 +1236,115 @@ export default function IncomePage() {
                   });
                 }}
                 placeholder="0"
-                style={controlStyle}
+                style={{ ...controlStyle, width: "100%" }}
               />
             </div>
 
-            <div className="card" style={{ padding: 12 }}>
+            <div className="card" style={{ ...cardStyle, padding: 12 }}>
               <div style={{ fontWeight: 900 }}>Paydays this month</div>
               <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
                 {computed.paydays.length
                   ? computed.paydays.map((d) => dateToISO(d)).join(" • ")
-                  : "Set schedule + anchor date (weekly/biweekly) to auto-calc."}
+                  : "Set schedule and anchor date to auto-calc paydays."}
               </div>
             </div>
           </div>
         </div>
 
-        <div className="card" style={{ padding: 12 }}>
-          <div style={{ fontWeight: 950, marginBottom: 10 }}>Add Deposit</div>
+        <div className="card" style={{ ...panelStyle, padding: 14 }}>
+          <div style={{ fontWeight: 950, marginBottom: 10 }}>Add deposit</div>
 
-          <form onSubmit={addDeposit} className="grid" style={{ gap: 10 }}>
-            <div className="grid" style={{ gap: 10, gridTemplateColumns: "170px 1fr 180px", alignItems: "center" }}>
-              <input className="input" type="date" value={date} onChange={(e) => setDate(e.target.value)} style={controlStyle} />
-              <input className="input" placeholder="Source (Paycheck, Bonus, Side hustle...)" value={source} onChange={(e) => setSource(e.target.value)} style={controlStyle} />
-              <input className="input" placeholder="Amount" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} style={controlStyle} />
+          <form onSubmit={addDeposit} className="grid" style={{ gap: 12 }}>
+            <div
+              className="grid"
+              style={{
+                gap: 10,
+                gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+                alignItems: "center",
+              }}
+            >
+              <input
+                className="input"
+                type="date"
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+                style={{ ...controlStyle, width: "100%" }}
+              />
+              <input
+                className="input"
+                placeholder="Source (Paycheck, Bonus, Side hustle...)"
+                value={source}
+                onChange={(e) => setSource(e.target.value)}
+                style={{ ...controlStyle, width: "100%" }}
+              />
+              <input
+                className="input"
+                placeholder="Amount"
+                inputMode="decimal"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                style={{ ...controlStyle, width: "100%" }}
+              />
             </div>
 
-            <input className="input" placeholder="Note (optional)" value={note} onChange={(e) => setNote(e.target.value)} style={controlStyle} />
+            <input
+              className="input"
+              placeholder="Note (optional)"
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              style={{ ...controlStyle, width: "100%" }}
+            />
 
             {error ? (
-              <div className="card" style={{ padding: 10 }}>
+              <div className="card" style={{ ...cardStyle, padding: 10, border: "1px solid rgba(239,68,68,.35)" }}>
                 <div style={{ fontWeight: 950 }}>Fix this:</div>
                 <div className="muted" style={{ marginTop: 4 }}>{error}</div>
               </div>
             ) : null}
 
-            <div className="row" style={{ gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-              <button className="btn" type="submit" style={{ height: CONTROL_H }}>Add Deposit</button>
-              <button
-                className="btnGhost"
-                type="button"
-                onClick={() => {
-                  setAmount("");
-                  setNote("");
-                  setError("");
-                }}
-                style={{ height: CONTROL_H }}
-              >
-                Clear
-              </button>
+            <div className="grid" style={{ gap: 10 }}>
+              <div className="row" style={{ gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                <button className="btn" type="submit" style={{ height: CONTROL_H, background: ACCENT, border: "1px solid rgba(255,255,255,.12)" }}>
+                  Add Deposit
+                </button>
+                <button
+                  className="btnGhost"
+                  type="button"
+                  onClick={() => {
+                    setAmount("");
+                    setNote("");
+                    setError("");
+                  }}
+                  style={{ height: CONTROL_H }}
+                >
+                  Clear
+                </button>
+              </div>
 
               <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
-                <button className="btnGhost" type="button" onClick={() => quickPreset("Paycheck", parseMoneyInput(paycheckAmt) || 2000)} style={{ height: CONTROL_H }}>
+                <button
+                  className="btnGhost"
+                  type="button"
+                  onClick={() => quickPreset("Paycheck", parseMoneyInput(paycheckAmt) || 2000)}
+                  style={{ height: CONTROL_H }}
+                >
                   Paycheck
                 </button>
-                <button className="btnGhost" type="button" onClick={() => quickPreset("Bonus", 500)} style={{ height: CONTROL_H }}>
+                <button
+                  className="btnGhost"
+                  type="button"
+                  onClick={() => quickPreset("Bonus", 500)}
+                  style={{ height: CONTROL_H }}
+                >
                   Bonus
                 </button>
-                <button className="btnGhost" type="button" onClick={() => quickPreset("Side Hustle", 200)} style={{ height: CONTROL_H }}>
-                  Side
+                <button
+                  className="btnGhost"
+                  type="button"
+                  onClick={() => quickPreset("Side Hustle", 200)}
+                  style={{ height: CONTROL_H }}
+                >
+                  Side Hustle
                 </button>
               </div>
             </div>
@@ -1124,12 +1356,19 @@ export default function IncomePage() {
         </div>
       </div>
 
-      <div style={{ height: 16 }} />
-
-      <div className="card" style={{ padding: 12 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+      {/* HISTORY */}
+      <div className="card" style={{ ...panelStyle, padding: 14 }}>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            gap: 10,
+            alignItems: "center",
+            flexWrap: "wrap",
+          }}
+        >
           <div>
-            <div style={{ fontWeight: 950 }}>Deposit History</div>
+            <div style={{ fontWeight: 950 }}>Deposit history</div>
             <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
               {computed.rows.length} items • Month: <b>{fmtMonthLabel(computed.thisMonth)}</b>
             </div>
@@ -1158,9 +1397,20 @@ export default function IncomePage() {
               ))}
             </select>
 
-            <input className="input" placeholder="Search source/note/date…" value={q} onChange={(e) => setQ(e.target.value)} style={{ width: 280, ...controlStyle }} />
+            <input
+              className="input"
+              placeholder="Search source / note / date..."
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              style={{ width: 280, ...controlStyle }}
+            />
 
-            <select className="input" value={sortBy} onChange={(e) => setSortBy(e.target.value)} style={{ width: 220, ...controlStyle }}>
+            <select
+              className="input"
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value)}
+              style={{ width: 220, ...controlStyle }}
+            >
               <option value="date_desc">Sort: Date (new → old)</option>
               <option value="amt_desc">Sort: Amount (high → low)</option>
               <option value="source_asc">Sort: Source (A → Z)</option>
@@ -1168,27 +1418,42 @@ export default function IncomePage() {
           </div>
         </div>
 
-        <div style={{ height: 10 }} />
+        <div style={{ height: 12 }} />
 
         {computed.rows.length === 0 ? (
           <div className="muted">No deposits yet.</div>
         ) : (
           <div className="grid" style={{ gap: 10 }}>
             {computed.rows.map((d) => (
-              <div key={d.id} className="card" style={{ padding: 12 }}>
-                <div className="grid" style={{ gap: 10, gridTemplateColumns: "1fr auto", alignItems: "start" }}>
+              <div key={d.id} className="card" style={{ ...cardStyle, padding: 12 }}>
+                <div
+                  className="grid"
+                  style={{
+                    gap: 10,
+                    gridTemplateColumns: "1fr auto",
+                    alignItems: "start",
+                  }}
+                >
                   <div>
                     <div style={{ fontWeight: 950, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "baseline" }}>
                       <span>{money(d.amount)}</span>
                       <span className="muted" style={{ fontWeight: 800 }}>• {d.source}</span>
                       <span className="muted" style={{ fontSize: 12 }}>• {d.date}</span>
                     </div>
-                    {d.note ? <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>Note: {d.note}</div> : null}
+                    {d.note ? (
+                      <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
+                        Note: {d.note}
+                      </div>
+                    ) : null}
                   </div>
 
-                  <div className="row" style={{ gap: 8, justifyContent: "flex-end" }}>
-                    <button className="btnGhost" type="button" onClick={() => openEdit(d)} style={{ height: CONTROL_H }}>Edit</button>
-                    <button className="btnGhost" type="button" onClick={() => deleteDeposit(d.id)} style={{ height: CONTROL_H }}>Delete</button>
+                  <div className="row" style={{ gap: 8, justifyContent: "flex-end", flexWrap: "wrap" }}>
+                    <button className="btnGhost" type="button" onClick={() => openEdit(d)} style={{ height: CONTROL_H }}>
+                      Edit
+                    </button>
+                    <button className="btnGhost" type="button" onClick={() => deleteDeposit(d.id)} style={{ height: CONTROL_H }}>
+                      Delete
+                    </button>
                   </div>
                 </div>
               </div>
@@ -1197,28 +1462,78 @@ export default function IncomePage() {
         )}
       </div>
 
+      {/* EDIT MODAL */}
       {editId ? (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.55)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16, zIndex: 9999 }}>
-          <div className="card" style={{ width: "min(720px, 100%)", padding: 12 }}>
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,.58)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 16,
+            zIndex: 9999,
+          }}
+        >
+          <div className="card" style={{ ...panelStyle, width: "min(760px, 100%)", padding: 14 }}>
             <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
-              <div style={{ fontWeight: 950 }}>Edit Deposit</div>
-              <button className="btnGhost" type="button" onClick={cancelEdit} style={{ height: CONTROL_H }}>Close</button>
+              <div style={{ fontWeight: 950 }}>Edit deposit</div>
+              <button className="btnGhost" type="button" onClick={cancelEdit} style={{ height: CONTROL_H }}>
+                Close
+              </button>
             </div>
 
-            <div style={{ height: 10 }} />
+            <div style={{ height: 12 }} />
 
             <div className="grid" style={{ gap: 10 }}>
-              <div className="grid" style={{ gap: 10, gridTemplateColumns: "170px 1fr 180px", alignItems: "center" }}>
-                <input className="input" type="date" value={eDate} onChange={(e) => setEDate(e.target.value)} style={controlStyle} />
-                <input className="input" value={eSource} onChange={(e) => setESource(e.target.value)} placeholder="Source" style={controlStyle} />
-                <input className="input" value={eAmount} onChange={(e) => setEAmount(e.target.value)} placeholder="Amount" inputMode="decimal" style={controlStyle} />
+              <div
+                className="grid"
+                style={{
+                  gap: 10,
+                  gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+                  alignItems: "center",
+                }}
+              >
+                <input
+                  className="input"
+                  type="date"
+                  value={eDate}
+                  onChange={(e) => setEDate(e.target.value)}
+                  style={{ ...controlStyle, width: "100%" }}
+                />
+                <input
+                  className="input"
+                  value={eSource}
+                  onChange={(e) => setESource(e.target.value)}
+                  placeholder="Source"
+                  style={{ ...controlStyle, width: "100%" }}
+                />
+                <input
+                  className="input"
+                  value={eAmount}
+                  onChange={(e) => setEAmount(e.target.value)}
+                  placeholder="Amount"
+                  inputMode="decimal"
+                  style={{ ...controlStyle, width: "100%" }}
+                />
               </div>
 
-              <input className="input" value={eNote} onChange={(e) => setENote(e.target.value)} placeholder="Note (optional)" style={controlStyle} />
+              <input
+                className="input"
+                value={eNote}
+                onChange={(e) => setENote(e.target.value)}
+                placeholder="Note (optional)"
+                style={{ ...controlStyle, width: "100%" }}
+              />
 
-              <div className="row" style={{ gap: 10 }}>
-                <button className="btn" type="button" onClick={saveEdit} style={{ height: CONTROL_H }}>Save</button>
-                <button className="btnGhost" type="button" onClick={cancelEdit} style={{ height: CONTROL_H }}>Cancel</button>
+              <div className="row" style={{ gap: 10, flexWrap: "wrap" }}>
+                <button className="btn" type="button" onClick={saveEdit} style={{ height: CONTROL_H, background: ACCENT, border: "1px solid rgba(255,255,255,.12)" }}>
+                  Save
+                </button>
+                <button className="btnGhost" type="button" onClick={cancelEdit} style={{ height: CONTROL_H }}>
+                  Cancel
+                </button>
               </div>
             </div>
           </div>
