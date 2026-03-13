@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { supabase } from "@/lib/supabaseClient";
 
 export const dynamic = "force-dynamic";
 
@@ -88,6 +89,7 @@ function Pill({ children, tone = "default", title }) {
     emerald: { bg: "rgba(16,185,129,.14)", bd: "rgba(16,185,129,.28)", tx: "var(--text)" },
     steel: { bg: "rgba(148,163,184,.12)", bd: "rgba(148,163,184,.22)", tx: "var(--text)" },
     danger: { bg: "rgba(239,68,68,.14)", bd: "rgba(239,68,68,.28)", tx: "var(--text)" },
+    accent: { bg: "rgba(59,130,246,.14)", bd: "rgba(59,130,246,.28)", tx: "var(--text)" },
   };
   const t = tones[tone] || tones.default;
 
@@ -144,8 +146,43 @@ function Select({ value, onChange, children, style, title }) {
   );
 }
 
+function mapGoalRow(row) {
+  return {
+    id: row.id,
+    name: String(row.name ?? "").trim(),
+    target: Number(row.target_amount) || 0,
+    current: Number(row.current_amount) || 0,
+    dueDate: row.target_date || "",
+    priority: row.priority || "Medium",
+    archived: !!row.archived,
+    createdAt: row.created_at_ms ?? (row.created_at ? new Date(row.created_at).getTime() : Date.now()),
+    contributions: Array.isArray(row.contributions) ? row.contributions : [],
+  };
+}
+
+function mapGoalToRow(goal, userId) {
+  return {
+    id: goal.id,
+    user_id: userId,
+    name: String(goal.name ?? "").trim(),
+    target_amount: Number(goal.target) || 0,
+    current_amount: Number(goal.current) || 0,
+    target_date: goal.dueDate || null,
+    category: "general",
+    notes: "",
+    priority: goal.priority || "Medium",
+    archived: !!goal.archived,
+    contributions: Array.isArray(goal.contributions) ? goal.contributions : [],
+    created_at_ms: goal.createdAt ?? Date.now(),
+    updated_at: new Date().toISOString(),
+  };
+}
+
 export default function SavingsPage() {
   const [goals, setGoals] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [userId, setUserId] = useState(null);
+  const [savingIds, setSavingIds] = useState({});
 
   // add form
   const [preset, setPreset] = useState(GOAL_PRESETS[0]);
@@ -183,6 +220,10 @@ export default function SavingsPage() {
 
   // responsive
   const [isNarrow, setIsNarrow] = useState(false);
+
+  const didImportRef = useRef(false);
+  const saveTimersRef = useRef({});
+
   useEffect(() => {
     const onResize = () => setIsNarrow(window.innerWidth < 980);
     onResize();
@@ -190,30 +231,121 @@ export default function SavingsPage() {
     return () => window.removeEventListener("resize", onResize);
   }, []);
 
-  // load
+  async function getCurrentUser() {
+    const {
+      data: { user },
+      error,
+    } = await supabase.auth.getUser();
+
+    if (error) {
+      console.error("getUser error:", error);
+      return null;
+    }
+    return user ?? null;
+  }
+
+  async function loadGoals() {
+    setLoading(true);
+
+    const user = await getCurrentUser();
+    if (!user) {
+      setUserId(null);
+      setGoals([]);
+      setLoading(false);
+      return;
+    }
+
+    setUserId(user.id);
+
+    const { data, error } = await supabase
+      .from("savings_goals")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("load savings error:", error);
+      setGoals([]);
+      setLoading(false);
+      return;
+    }
+
+    let mapped = (data || []).map(mapGoalRow);
+
+    if (mapped.length === 0 && !didImportRef.current) {
+      const saved = safeParse(globalThis?.localStorage?.getItem(LS_KEY) || "[]", []);
+      const normalized = Array.isArray(saved) ? saved : [];
+      const fixed = normalized.map((g) => ({
+        id: g.id ?? uid(),
+        name: String(g.name ?? "").trim(),
+        target: Number(g.target) || 0,
+        current: Number(g.current) || 0,
+        dueDate: g.dueDate || "",
+        priority: g.priority || "Medium",
+        archived: !!g.archived,
+        createdAt: g.createdAt ?? Date.now(),
+        contributions: Array.isArray(g.contributions) ? g.contributions : [],
+      }));
+
+      if (fixed.length > 0) {
+        didImportRef.current = true;
+        const rows = fixed.map((g) => mapGoalToRow(g, user.id));
+        const importRes = await supabase.from("savings_goals").upsert(rows, { onConflict: "id" });
+
+        if (importRes.error) {
+          console.error("savings import error:", importRes.error);
+        } else {
+          mapped = fixed;
+          try {
+            localStorage.removeItem(LS_KEY);
+          } catch {}
+        }
+      }
+    }
+
+    setGoals(mapped);
+    setLoading(false);
+  }
+
   useEffect(() => {
-    const saved = safeParse(localStorage.getItem(LS_KEY) || "[]", []);
-    const normalized = Array.isArray(saved) ? saved : [];
-    const fixed = normalized.map((g) => ({
-      id: g.id ?? uid(),
-      name: String(g.name ?? "").trim(),
-      target: Number(g.target) || 0,
-      current: Number(g.current) || 0,
-      dueDate: g.dueDate || "",
-      priority: g.priority || "Medium",
-      archived: !!g.archived,
-      createdAt: g.createdAt ?? Date.now(),
-      contributions: Array.isArray(g.contributions) ? g.contributions : [],
-    }));
-    setGoals(fixed);
+    loadGoals();
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(() => {
+      loadGoals();
+    });
+
+    return () => {
+      subscription?.unsubscribe?.();
+      Object.values(saveTimersRef.current).forEach((t) => clearTimeout(t));
+    };
   }, []);
 
-  // persist
-  useEffect(() => {
-    try {
-      localStorage.setItem(LS_KEY, JSON.stringify(goals));
-    } catch {}
-  }, [goals]);
+  async function persistGoal(goal) {
+    if (!userId) return;
+
+    setSavingIds((prev) => ({ ...prev, [goal.id]: true }));
+
+    const { error } = await supabase.from("savings_goals").upsert(mapGoalToRow(goal, userId), {
+      onConflict: "id",
+    });
+
+    if (error) {
+      console.error("save goal error:", error);
+    }
+
+    setSavingIds((prev) => ({ ...prev, [goal.id]: false }));
+  }
+
+  function scheduleSave(goal) {
+    if (saveTimersRef.current[goal.id]) {
+      clearTimeout(saveTimersRef.current[goal.id]);
+    }
+
+    saveTimersRef.current[goal.id] = setTimeout(() => {
+      persistGoal(goal);
+    }, 300);
+  }
 
   function resolvedName() {
     if (preset && preset !== "Other") return preset;
@@ -230,7 +362,7 @@ export default function SavingsPage() {
     setError("");
   }
 
-  function addGoal(e) {
+  async function addGoal(e) {
     e.preventDefault();
     setError("");
 
@@ -241,25 +373,29 @@ export default function SavingsPage() {
     if (!n) return setError("Goal name is required.");
     if (!Number.isFinite(t) || t <= 0) return setError("Target must be a number greater than 0.");
     if (!Number.isFinite(c) || c < 0) return setError("Current saved must be 0 or more.");
+    if (!userId) return setError("You must be signed in.");
 
     const id = uid();
+    const nextGoal = {
+      id,
+      name: n,
+      target: t,
+      current: c,
+      dueDate: dueDate || "",
+      priority: priority || "Medium",
+      archived: false,
+      createdAt: Date.now(),
+      contributions: c > 0 ? [{ id: uid(), date: todayISO(), amount: c, note: "Starting balance" }] : [],
+    };
 
-    setGoals((prev) => [
-      {
-        id,
-        name: n,
-        target: t,
-        current: c,
-        dueDate: dueDate || "",
-        priority: priority || "Medium",
-        archived: false,
-        createdAt: Date.now(),
-        contributions: c > 0 ? [{ id: uid(), date: todayISO(), amount: c, note: "Starting balance" }] : [],
-      },
-      ...prev,
-    ]);
-
+    setGoals((prev) => [nextGoal, ...prev]);
     clearAddForm();
+
+    const { error: insertError } = await supabase.from("savings_goals").insert(mapGoalToRow(nextGoal, userId));
+    if (insertError) {
+      console.error("add goal error:", insertError);
+      await loadGoals();
+    }
   }
 
   function startEdit(g) {
@@ -291,8 +427,8 @@ export default function SavingsPage() {
     if (!Number.isFinite(t) || t <= 0) return setError("Target must be a number greater than 0.");
     if (!Number.isFinite(c) || c < 0) return setError("Current saved must be 0 or more.");
 
-    setGoals((prev) =>
-      prev.map((g) =>
+    setGoals((prev) => {
+      const next = prev.map((g) =>
         g.id === id
           ? {
               ...g,
@@ -304,20 +440,34 @@ export default function SavingsPage() {
               archived: !!editDraft.archived,
             }
           : g
-      )
-    );
+      );
+      const changed = next.find((g) => g.id === id);
+      if (changed) scheduleSave(changed);
+      return next;
+    });
 
     cancelEdit();
   }
 
-  function removeGoal(id) {
+  async function removeGoal(id) {
     setGoals((prev) => prev.filter((g) => g.id !== id));
     if (openId === id) setOpenId(null);
     if (editingId === id) cancelEdit();
+
+    const { error } = await supabase.from("savings_goals").delete().eq("id", id);
+    if (error) {
+      console.error("delete goal error:", error);
+      await loadGoals();
+    }
   }
 
   function setArchived(goalId, archived) {
-    setGoals((prev) => prev.map((g) => (g.id === goalId ? { ...g, archived: !!archived } : g)));
+    setGoals((prev) => {
+      const next = prev.map((g) => (g.id === goalId ? { ...g, archived: !!archived } : g));
+      const changed = next.find((g) => g.id === goalId);
+      if (changed) scheduleSave(changed);
+      return next;
+    });
   }
 
   function applyContribution(goalId, amount, note) {
@@ -328,8 +478,8 @@ export default function SavingsPage() {
     }
     setError("");
 
-    setGoals((prev) =>
-      prev.map((g) => {
+    setGoals((prev) => {
+      const next = prev.map((g) => {
         if (g.id !== goalId) return g;
         const nextCurrent = (Number(g.current) || 0) + amt;
         const entry = { id: uid(), date: todayISO(), amount: amt, note: String(note || "").trim() };
@@ -338,8 +488,12 @@ export default function SavingsPage() {
           current: nextCurrent,
           contributions: [entry, ...(Array.isArray(g.contributions) ? g.contributions : [])],
         };
-      })
-    );
+      });
+
+      const changed = next.find((g) => g.id === goalId);
+      if (changed) scheduleSave(changed);
+      return next;
+    });
 
     setCustomAdd((m) => ({ ...m, [goalId]: "" }));
     setCustomNote((m) => ({ ...m, [goalId]: "" }));
@@ -347,16 +501,20 @@ export default function SavingsPage() {
 
   function undoLast(goalId) {
     setError("");
-    setGoals((prev) =>
-      prev.map((g) => {
+    setGoals((prev) => {
+      const next = prev.map((g) => {
         if (g.id !== goalId) return g;
         const list = Array.isArray(g.contributions) ? g.contributions : [];
         if (list.length === 0) return g;
         const [last, ...rest] = list;
         const nextCurrent = Math.max(0, (Number(g.current) || 0) - (Number(last.amount) || 0));
         return { ...g, current: nextCurrent, contributions: rest };
-      })
-    );
+      });
+
+      const changed = next.find((g) => g.id === goalId);
+      if (changed) scheduleSave(changed);
+      return next;
+    });
   }
 
   const totals = useMemo(() => {
@@ -416,12 +574,10 @@ export default function SavingsPage() {
 
   const prTone = (p) => (p === "High" ? "danger" : p === "Low" ? "steel" : "emerald");
 
-  // MAIN GRID: minmax(0,1fr) prevents right column overflow.
   const gridWrapStyle = isNarrow
     ? { display: "grid", gridTemplateColumns: "1fr", gap: 12, alignItems: "start" }
     : { display: "grid", gridTemplateColumns: "380px minmax(0, 1fr)", gap: 12, alignItems: "start" };
 
-  // ADD FORM: FIX “New allocation” alignment by using grid (not flex rows)
   const pairGrid = {
     display: "grid",
     gridTemplateColumns: "1fr 1fr",
@@ -429,6 +585,17 @@ export default function SavingsPage() {
     alignItems: "start",
     minWidth: 0,
   };
+
+  if (loading) {
+    return (
+      <main className="container">
+        <div className="card" style={{ padding: 24 }}>
+          <div style={{ fontWeight: 900, fontSize: 20 }}>Loading savings goals...</div>
+          <div className="muted" style={{ marginTop: 8 }}>Pulling your savings data from Supabase.</div>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="container">
@@ -464,7 +631,6 @@ export default function SavingsPage() {
         </div>
       </header>
 
-      {/* KPI strip */}
       <div className="card" style={{ padding: 12, marginBottom: 12 }}>
         <div className="row" style={{ gap: 10, flexWrap: "wrap" }}>
           <div className="card" style={{ padding: 12, flex: 1, minWidth: 170 }}>
@@ -514,14 +680,12 @@ export default function SavingsPage() {
         </div>
       </div>
 
-      {/* MAIN GRID */}
       <div style={gridWrapStyle}>
-        {/* LEFT: New allocation */}
         <div className="card" style={{ padding: 12, minWidth: 0 }}>
           <div className="row" style={{ justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
             <div style={{ fontWeight: 900 }}>New allocation</div>
-            <Pill tone="steel" title="Saved in your browser (localStorage)">
-              LOCAL
+            <Pill tone="accent" title="Saved to Supabase">
+              CLOUD
             </Pill>
           </div>
 
@@ -546,7 +710,6 @@ export default function SavingsPage() {
               )}
             </div>
 
-            {/* FIXED: Target + Starting saved as a real 2-col grid */}
             <div style={pairGrid}>
               <div style={{ minWidth: 0 }}>
                 <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>Target</div>
@@ -573,7 +736,6 @@ export default function SavingsPage() {
               </div>
             </div>
 
-            {/* FIXED: Due date + Priority as a real 2-col grid */}
             <div style={pairGrid}>
               <div style={{ minWidth: 0 }}>
                 <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>Due date (optional)</div>
@@ -621,7 +783,6 @@ export default function SavingsPage() {
           </form>
         </div>
 
-        {/* RIGHT: Allocations */}
         <div
           className="card"
           style={{
@@ -766,6 +927,7 @@ export default function SavingsPage() {
                                 {(g.priority || "Medium").toUpperCase()}
                               </Pill>
                               {archived && <Pill title="Hidden by default">ARCHIVED</Pill>}
+                              {savingIds[g.id] ? <Pill tone="accent">SAVING</Pill> : null}
                             </div>
 
                             <div className="muted" style={{ marginTop: 6, fontSize: 12, lineHeight: 1.35 }}>
@@ -893,7 +1055,6 @@ export default function SavingsPage() {
         </div>
       </div>
 
-      {/* IO panel */}
       {ioOpen && (
         <div className="card" style={{ marginTop: 12, padding: 12 }}>
           <div style={{ fontWeight: 900, marginBottom: 8 }}>Import / Export</div>
@@ -923,13 +1084,14 @@ export default function SavingsPage() {
             <button
               className="btnGhost"
               type="button"
-              onClick={() => {
+              onClick={async () => {
                 setError("");
                 const parsed = safeParse(ioText || "[]", null);
                 if (!Array.isArray(parsed)) {
                   setError("Import failed: JSON must be an array of goals.");
                   return;
                 }
+
                 const fixed = parsed.map((g) => ({
                   id: g.id ?? uid(),
                   name: String(g.name ?? "").trim(),
@@ -941,7 +1103,26 @@ export default function SavingsPage() {
                   createdAt: g.createdAt ?? Date.now(),
                   contributions: Array.isArray(g.contributions) ? g.contributions : [],
                 }));
+
                 setGoals(fixed);
+
+                if (userId) {
+                  const { error: replaceError } = await supabase.from("savings_goals").delete().neq("id", "");
+                  if (replaceError) {
+                    console.error("replace delete error:", replaceError);
+                    await loadGoals();
+                    return;
+                  }
+
+                  const rows = fixed.map((g) => mapGoalToRow(g, userId));
+                  if (rows.length > 0) {
+                    const { error: insertError } = await supabase.from("savings_goals").upsert(rows, { onConflict: "id" });
+                    if (insertError) {
+                      console.error("replace import error:", insertError);
+                      await loadGoals();
+                    }
+                  }
+                }
               }}
             >
               Import (replace)
