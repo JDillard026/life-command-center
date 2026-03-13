@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { supabase } from "@/lib/supabaseClient";
 
 export const dynamic = "force-dynamic";
 
@@ -129,6 +130,8 @@ function createDebt(type = "other") {
     notes: "",
     isActive: true,
     createdAt: Date.now(),
+    termMonths: null,
+    remainingMonths: null,
   };
 }
 
@@ -137,6 +140,84 @@ const defaultSettings = {
   globalExtraPool: 0,
   showInactive: false,
 };
+
+/* =========================
+   DB mappers
+========================= */
+function mapDebtRow(row) {
+  return {
+    id: row.id,
+    name: row.name ?? "",
+    type: row.debt_type ?? "other",
+    lender: row.lender ?? "",
+    balance: safeNum(row.balance, 0),
+    originalBalance: safeNum(row.original_balance, 0),
+    creditLimit: safeNum(row.credit_limit, 0),
+    apr: safeNum(row.interest_rate, 0),
+    minimumPayment: safeNum(row.minimum_payment, 0),
+    extraPayment: safeNum(row.extra_payment, 0),
+    dueDay: row.due_day == null ? "" : String(row.due_day),
+    monthlyPayment: safeNum(row.monthly_payment, 0),
+    principalPortion: safeNum(row.principal_portion, 0),
+    interestPortion: safeNum(row.interest_portion, 0),
+    escrowPortion: safeNum(row.escrow_portion, 0),
+    promoApr: row.promo_apr ?? "",
+    promoEnds: row.promo_ends ?? "",
+    notes: row.notes ?? "",
+    isActive: row.is_active ?? true,
+    createdAt: row.created_at_ms ?? (row.created_at ? new Date(row.created_at).getTime() : Date.now()),
+    termMonths: row.term_months ?? null,
+    remainingMonths: row.remaining_months ?? null,
+  };
+}
+
+function mapDebtToRow(debt, userId) {
+  return {
+    id: debt.id,
+    user_id: userId,
+    name: debt.name ?? "",
+    lender: debt.lender ?? "",
+    debt_type: debt.type ?? "other",
+    balance: safeNum(debt.balance, 0),
+    original_balance: safeNum(debt.originalBalance, 0),
+    credit_limit: safeNum(debt.creditLimit, 0),
+    interest_rate: safeNum(debt.apr, 0),
+    minimum_payment: safeNum(debt.minimumPayment, 0),
+    extra_payment: safeNum(debt.extraPayment, 0),
+    due_day: debt.dueDay === "" ? null : safeNum(debt.dueDay, null),
+    monthly_payment: safeNum(debt.monthlyPayment, 0),
+    principal_portion: safeNum(debt.principalPortion, 0),
+    interest_portion: safeNum(debt.interestPortion, 0),
+    escrow_portion: safeNum(debt.escrowPortion, 0),
+    promo_apr: debt.promoApr ?? "",
+    promo_ends: debt.promoEnds || null,
+    notes: debt.notes ?? "",
+    is_active: !!debt.isActive,
+    created_at_ms: debt.createdAt ?? Date.now(),
+    term_months: debt.termMonths ?? null,
+    remaining_months: debt.remainingMonths ?? null,
+    updated_at: new Date().toISOString(),
+  };
+}
+
+function mapSettingsRow(row) {
+  return {
+    strategy: row?.strategy ?? "avalanche",
+    globalExtraPool: safeNum(row?.global_extra_pool, 0),
+    showInactive: !!row?.show_inactive,
+  };
+}
+
+function mapSettingsToRow(settings, userId, existingId) {
+  return {
+    ...(existingId ? { id: existingId } : {}),
+    user_id: userId,
+    strategy: settings.strategy ?? "avalanche",
+    global_extra_pool: safeNum(settings.globalExtraPool, 0),
+    show_inactive: !!settings.showInactive,
+    updated_at: new Date().toISOString(),
+  };
+}
 
 /* =========================
    debt helpers
@@ -188,14 +269,6 @@ function getMonthlyShown(debt) {
 
 function getAttackPayment(debt) {
   return safeNum(debt.minimumPayment) + safeNum(debt.extraPayment);
-}
-
-function getInterestPressure(debt) {
-  const apr = safeNum(debt.apr);
-  if (apr >= 24) return { label: "High APR", tone: "bad" };
-  if (apr >= 15) return { label: "Moderate APR", tone: "warn" };
-  if (apr > 0) return { label: "Manageable APR", tone: "good" };
-  return { label: "No APR set", tone: "neutral" };
 }
 
 function getDebtProgressPercent(debt) {
@@ -287,37 +360,236 @@ export default function DebtPage() {
   const [settings, setSettings] = useState(defaultSettings);
   const [openId, setOpenId] = useState(null);
   const [search, setSearch] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [savingIds, setSavingIds] = useState({});
+  const [userId, setUserId] = useState(null);
+  const [settingsRowId, setSettingsRowId] = useState(null);
+
+  const didImportRef = useRef(false);
+  const settingsSaveTimer = useRef(null);
+  const rowSaveTimers = useRef({});
+
+  async function getCurrentUser() {
+    const {
+      data: { user },
+      error,
+    } = await supabase.auth.getUser();
+
+    if (error) {
+      console.error("getUser error:", error);
+      return null;
+    }
+    return user ?? null;
+  }
+
+  async function loadDebtPage() {
+    setLoading(true);
+
+    const user = await getCurrentUser();
+    if (!user) {
+      setUserId(null);
+      setDebts([]);
+      setSettings(defaultSettings);
+      setOpenId(null);
+      setLoading(false);
+      return;
+    }
+
+    setUserId(user.id);
+
+    const [debtRes, settingsRes] = await Promise.all([
+      supabase.from("debt").select("*").order("created_at", { ascending: false }),
+      supabase.from("debt_settings").select("*").limit(1).maybeSingle(),
+    ]);
+
+    if (debtRes.error) {
+      console.error("load debt error:", debtRes.error);
+    }
+
+    if (settingsRes.error) {
+      console.error("load debt settings error:", settingsRes.error);
+    }
+
+    let mappedDebts = (debtRes.data || []).map(mapDebtRow);
+    let mappedSettings = settingsRes.data ? mapSettingsRow(settingsRes.data) : defaultSettings;
+
+    if (settingsRes.data?.id) {
+      setSettingsRowId(settingsRes.data.id);
+    }
+
+    if (mappedDebts.length === 0 && !didImportRef.current) {
+      const localDebts = safeParse(globalThis?.localStorage?.getItem(LS_DEBT), []);
+      const localSettings = safeParse(globalThis?.localStorage?.getItem(LS_DEBT_SETTINGS), defaultSettings);
+
+      if (Array.isArray(localDebts) && localDebts.length > 0) {
+        didImportRef.current = true;
+
+        const importRows = localDebts.map((d) => mapDebtToRow(d, user.id));
+        const importResult = await supabase.from("debt").upsert(importRows, { onConflict: "id" });
+
+        if (importResult.error) {
+          console.error("debt import error:", importResult.error);
+        } else {
+          mappedDebts = localDebts;
+          try {
+            localStorage.removeItem(LS_DEBT);
+          } catch {}
+        }
+      }
+
+      if (localSettings) {
+        const upsertSettings = await supabase
+          .from("debt_settings")
+          .upsert(mapSettingsToRow({ ...defaultSettings, ...localSettings }, user.id, settingsRes.data?.id), {
+            onConflict: "user_id",
+          })
+          .select()
+          .single();
+
+        if (upsertSettings.error) {
+          console.error("settings import error:", upsertSettings.error);
+        } else {
+          mappedSettings = mapSettingsRow(upsertSettings.data);
+          setSettingsRowId(upsertSettings.data.id);
+          try {
+            localStorage.removeItem(LS_DEBT_SETTINGS);
+          } catch {}
+        }
+      }
+    }
+
+    setDebts(mappedDebts);
+    setSettings(mappedSettings);
+    setOpenId(mappedDebts[0]?.id ?? null);
+    setLoading(false);
+  }
 
   useEffect(() => {
-    const savedDebts = safeParse(localStorage.getItem(LS_DEBT), []);
-    const savedSettings = safeParse(localStorage.getItem(LS_DEBT_SETTINGS), defaultSettings);
+    loadDebtPage();
 
-    setDebts(Array.isArray(savedDebts) ? savedDebts : []);
-    setSettings({ ...defaultSettings, ...(savedSettings || {}) });
-    setOpenId(Array.isArray(savedDebts) && savedDebts[0] ? savedDebts[0].id : null);
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(() => {
+      loadDebtPage();
+    });
+
+    return () => {
+      subscription?.unsubscribe?.();
+      if (settingsSaveTimer.current) clearTimeout(settingsSaveTimer.current);
+      Object.values(rowSaveTimers.current).forEach((t) => clearTimeout(t));
+    };
   }, []);
 
-  useEffect(() => {
-    localStorage.setItem(LS_DEBT, JSON.stringify(debts));
-  }, [debts]);
+  async function persistDebt(nextDebt) {
+    if (!userId) return;
 
-  useEffect(() => {
-    localStorage.setItem(LS_DEBT_SETTINGS, JSON.stringify(settings));
-  }, [settings]);
+    setSavingIds((prev) => ({ ...prev, [nextDebt.id]: true }));
 
-  function addDebt(type) {
+    const { error } = await supabase.from("debt").upsert(mapDebtToRow(nextDebt, userId), {
+      onConflict: "id",
+    });
+
+    if (error) {
+      console.error("save debt error:", error);
+    }
+
+    setSavingIds((prev) => ({ ...prev, [nextDebt.id]: false }));
+  }
+
+  function scheduleDebtSave(nextDebt) {
+    if (rowSaveTimers.current[nextDebt.id]) {
+      clearTimeout(rowSaveTimers.current[nextDebt.id]);
+    }
+
+    rowSaveTimers.current[nextDebt.id] = setTimeout(() => {
+      persistDebt(nextDebt);
+    }, 350);
+  }
+
+  async function persistSettings(nextSettings) {
+    if (!userId) return;
+
+    const res = await supabase
+      .from("debt_settings")
+      .upsert(mapSettingsToRow(nextSettings, userId, settingsRowId), { onConflict: "user_id" })
+      .select()
+      .single();
+
+    if (res.error) {
+      console.error("save settings error:", res.error);
+      return;
+    }
+
+    setSettingsRowId(res.data.id);
+  }
+
+  function scheduleSettingsSave(nextSettings) {
+    if (settingsSaveTimer.current) clearTimeout(settingsSaveTimer.current);
+    settingsSaveTimer.current = setTimeout(() => {
+      persistSettings(nextSettings);
+    }, 350);
+  }
+
+  async function addDebt(type) {
+    if (!userId) return;
+
     const next = createDebt(type);
     setDebts((prev) => [next, ...prev]);
     setOpenId(next.id);
+
+    const { error } = await supabase.from("debt").insert(mapDebtToRow(next, userId));
+    if (error) {
+      console.error("add debt error:", error);
+      await loadDebtPage();
+    }
   }
 
   function updateDebt(id, patch) {
-    setDebts((prev) => prev.map((d) => (d.id === id ? { ...d, ...patch } : d)));
+    setDebts((prev) => {
+      const nextRows = prev.map((d) => (d.id === id ? { ...d, ...patch } : d));
+      const changed = nextRows.find((d) => d.id === id);
+      if (changed) scheduleDebtSave(changed);
+      return nextRows;
+    });
   }
 
-  function removeDebt(id) {
+  async function removeDebt(id) {
     setDebts((prev) => prev.filter((d) => d.id !== id));
     setOpenId((prev) => (prev === id ? null : prev));
+
+    const { error } = await supabase.from("debt").delete().eq("id", id);
+    if (error) {
+      console.error("delete debt error:", error);
+      await loadDebtPage();
+    }
+  }
+
+  async function duplicateDebt(debt) {
+    if (!userId) return;
+
+    const cloned = {
+      ...debt,
+      id: uid(),
+      name: `${debt.name || "Debt"} Copy`,
+      createdAt: Date.now(),
+    };
+
+    setDebts((prev) => [cloned, ...prev]);
+    setOpenId(cloned.id);
+
+    const { error } = await supabase.from("debt").insert(mapDebtToRow(cloned, userId));
+    if (error) {
+      console.error("duplicate debt error:", error);
+      await loadDebtPage();
+    }
+  }
+
+  function updateSettings(patch) {
+    setSettings((prev) => {
+      const next = { ...prev, ...patch };
+      scheduleSettingsSave(next);
+      return next;
+    });
   }
 
   const visibleDebts = useMemo(() => {
@@ -423,6 +695,17 @@ export default function DebtPage() {
     };
   }, [totals, settings.globalExtraPool, quickStats.totalAccounts]);
 
+  if (loading) {
+    return (
+      <div className="container">
+        <div className="card" style={{ padding: 24 }}>
+          <div style={{ fontWeight: 900, fontSize: 20 }}>Loading debt page...</div>
+          <div className="muted" style={{ marginTop: 8 }}>Pulling your debt data from Supabase.</div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="container">
       <section style={{ marginBottom: 22 }}>
@@ -521,7 +804,7 @@ export default function DebtPage() {
             <select
               className="input"
               value={settings.strategy}
-              onChange={(e) => setSettings((s) => ({ ...s, strategy: e.target.value }))}
+              onChange={(e) => updateSettings({ strategy: e.target.value })}
             >
               <option value="avalanche">Avalanche (highest APR first)</option>
               <option value="snowball">Snowball (smallest balance first)</option>
@@ -536,10 +819,9 @@ export default function DebtPage() {
               className="input"
               value={String(settings.globalExtraPool || "")}
               onChange={(e) =>
-                setSettings((s) => ({
-                  ...s,
+                updateSettings({
                   globalExtraPool: safeNum(parseMoneyInput(e.target.value), 0),
-                }))
+                })
               }
               placeholder="e.g. 300"
             />
@@ -602,7 +884,7 @@ export default function DebtPage() {
                 />
                 <button
                   className="btnGhost"
-                  onClick={() => setSettings((s) => ({ ...s, showInactive: !s.showInactive }))}
+                  onClick={() => updateSettings({ showInactive: !settings.showInactive })}
                 >
                   {settings.showInactive ? "Hide inactive" : "Show inactive"}
                 </button>
@@ -662,6 +944,7 @@ export default function DebtPage() {
                               {priority ? <Tag text={`Target #${priority}`} tone={priority === 1 ? "accent" : "neutral"} /> : null}
                               <Tag text={chip.label} tone={chip.tone} />
                               {promo && promo.tone === "good" ? <Tag text={promo.label} tone="good" /> : null}
+                              {savingIds[debt.id] ? <Tag text="Saving..." tone="accent" /> : null}
                             </div>
 
                             <div className="muted" style={{ marginTop: 8, fontSize: 13 }}>
@@ -951,16 +1234,7 @@ export default function DebtPage() {
 
                               <button
                                 className="btnGhost"
-                                onClick={() => {
-                                  const cloned = {
-                                    ...debt,
-                                    id: uid(),
-                                    name: `${debt.name || "Debt"} Copy`,
-                                    createdAt: Date.now(),
-                                  };
-                                  setDebts((prev) => [cloned, ...prev]);
-                                  setOpenId(cloned.id);
-                                }}
+                                onClick={() => duplicateDebt(debt)}
                               >
                                 Duplicate
                               </button>
