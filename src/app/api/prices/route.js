@@ -15,13 +15,15 @@ export async function GET(req) {
       return NextResponse.json({ error: "Missing FMP API key" }, { status: 500 })
     }
 
-    const url = `https://financialmodelingprep.com/stable/quote?symbol=${encodeURIComponent(symbol)}&apikey=${key}`
+    const url = `https://financialmodelingprep.com/stable/historical-price-eod/light?symbol=${encodeURIComponent(
+      symbol
+    )}&apikey=${key}`
 
     const res = await fetch(url, { cache: "no-store" })
     const data = await res.json()
 
     const row = Array.isArray(data) ? data[0] : null
-    const price = Number(row?.price)
+    const price = Number(row?.close)
 
     if (Number.isFinite(price) && price > 0) {
       return NextResponse.json({ price })
@@ -30,7 +32,7 @@ export async function GET(req) {
     return NextResponse.json(
       {
         price: null,
-        error: "No usable price returned",
+        error: "No usable EOD price returned",
       },
       { status: 200 }
     )
