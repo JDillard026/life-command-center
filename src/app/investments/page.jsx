@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { supabase } from "@/lib/supabaseClient"
 
-export default function InvestmentsPage(){
+export default function InvestmentsPage() {
 
 const [assets,setAssets] = useState([])
 const [txns,setTxns] = useState([])
@@ -11,14 +11,11 @@ const [prices,setPrices] = useState({})
 const [tab,setTab] = useState("overview")
 
 const [symbol,setSymbol] = useState("")
-const [account,setAccount] = useState("Main")
-
 const [txnAsset,setTxnAsset] = useState("")
-const [txnType,setTxnType] = useState("BUY")
 const [txnQty,setTxnQty] = useState("")
 const [txnPrice,setTxnPrice] = useState("")
 
-/* LOAD DATA */
+/* ---------------- LOAD DATA ---------------- */
 
 useEffect(()=>{
 
@@ -37,22 +34,8 @@ const {data:txnRows} = await supabase
 .select("*")
 .eq("user_id",user.id)
 
-const {data:priceRows} = await supabase
-.from("investment_prices")
-.select("*")
-.eq("user_id",user.id)
-
-const priceMap = {}
-
-for(const p of priceRows || []){
-
-priceMap[p.price_key] = Number(p.price)
-
-}
-
 setAssets(assetRows || [])
 setTxns(txnRows || [])
-setPrices(priceMap)
 
 }
 
@@ -60,13 +43,13 @@ load()
 
 },[])
 
-/* ADD ASSET */
+/* ---------------- ADD ASSET ---------------- */
 
 async function addAsset(){
 
-const {data:{user}} = await supabase.auth.getUser()
-
 if(!symbol) return
+
+const {data:{user}} = await supabase.auth.getUser()
 
 const {data} = await supabase
 .from("investment_assets")
@@ -74,20 +57,21 @@ const {data} = await supabase
 user_id:user.id,
 asset_type:"stock",
 symbol:symbol.toUpperCase(),
-account:account
+account:"Main"
 })
 .select()
 .single()
 
 setAssets(prev=>[data,...prev])
-
 setSymbol("")
 
 }
 
-/* ADD TRANSACTION */
+/* ---------------- ADD TRADE ---------------- */
 
-async function addTxn(){
+async function addTrade(){
+
+if(!txnAsset) return
 
 const {data:{user}} = await supabase.auth.getUser()
 
@@ -97,7 +81,7 @@ const {data} = await supabase
 
 user_id:user.id,
 asset_id:txnAsset,
-txn_type:txnType,
+txn_type:"BUY",
 txn_date:new Date().toISOString().slice(0,10),
 qty:Number(txnQty),
 price:Number(txnPrice)
@@ -113,7 +97,7 @@ setTxnPrice("")
 
 }
 
-/* PORTFOLIO CALC */
+/* ---------------- PORTFOLIO CALC ---------------- */
 
 const portfolio = useMemo(()=>{
 
@@ -146,23 +130,16 @@ shares -= Number(t.qty)
 
 }
 
-const key = `${a.asset_type}:${a.symbol}`
-
-const price = prices[key] || 0
-
-const value = shares * price
+const value = shares * 0
 
 totalValue += value
 totalCost += cost
 
 holdings.push({
-
 ...a,
 shares,
-price,
-value,
-cost
-
+cost,
+value
 })
 
 }
@@ -171,17 +148,30 @@ const pnl = totalValue - totalCost
 
 return {holdings,totalValue,totalCost,pnl}
 
-},[assets,txns,prices])
+},[assets,txns])
 
-/* UI */
+/* ---------------- UI ---------------- */
 
 return(
 
-<main className="container">
+<main style={{
+padding:"40px",
+maxWidth:"1100px",
+margin:"0 auto"
+}}>
 
-<h1>Investments</h1>
+{/* HEADER */}
 
-<div style={{display:"flex",gap:10,marginBottom:20}}>
+<div style={{
+display:"flex",
+justifyContent:"space-between",
+alignItems:"center",
+marginBottom:"30px"
+}}>
+
+<h1 style={{fontSize:"28px",fontWeight:"600"}}>Investments</h1>
+
+<div style={{display:"flex",gap:"10px"}}>
 
 <button onClick={()=>setTab("overview")}>Overview</button>
 <button onClick={()=>setTab("holdings")}>Holdings</button>
@@ -189,25 +179,54 @@ return(
 
 </div>
 
+</div>
+
+{/* OVERVIEW */}
+
 {tab==="overview" && (
 
-<div>
+<div style={{
+display:"grid",
+gridTemplateColumns:"repeat(3,1fr)",
+gap:"20px"
+}}>
 
-<h2>Portfolio</h2>
+<div className="card">
 
-<div>Total Value: ${portfolio.totalValue.toFixed(2)}</div>
-<div>Total Cost: ${portfolio.totalCost.toFixed(2)}</div>
-<div>P/L: ${portfolio.pnl.toFixed(2)}</div>
+<h3>Total Value</h3>
+<div>${portfolio.totalValue.toFixed(2)}</div>
+
+</div>
+
+<div className="card">
+
+<h3>Total Cost</h3>
+<div>${portfolio.totalCost.toFixed(2)}</div>
+
+</div>
+
+<div className="card">
+
+<h3>P/L</h3>
+<div>${portfolio.pnl.toFixed(2)}</div>
+
+</div>
 
 </div>
 
 )}
 
+{/* HOLDINGS */}
+
 {tab==="holdings" && (
 
 <div>
 
-<h2>Add Asset</h2>
+<div style={{
+display:"flex",
+gap:"10px",
+marginBottom:"25px"
+}}>
 
 <input
 placeholder="Symbol (VOO, QQQ)"
@@ -219,15 +238,24 @@ onChange={e=>setSymbol(e.target.value)}
 Add Asset
 </button>
 
-<h2 style={{marginTop:40}}>Holdings</h2>
+</div>
+
+<div style={{
+borderTop:"1px solid #2a2a2a"
+}}>
 
 {portfolio.holdings.map(h=>(
 
-<div key={h.id} style={{padding:10,borderBottom:"1px solid #333"}}>
+<div key={h.id} style={{
+display:"grid",
+gridTemplateColumns:"2fr 1fr 1fr",
+padding:"14px 0",
+borderBottom:"1px solid #2a2a2a"
+}}>
 
 <div>{h.symbol}</div>
-<div>Shares: {h.shares}</div>
-<div>Value: ${h.value.toFixed(2)}</div>
+<div>{h.shares} shares</div>
+<div>${h.cost.toFixed(2)}</div>
 
 </div>
 
@@ -235,13 +263,21 @@ Add Asset
 
 </div>
 
+</div>
+
 )}
+
+{/* TRANSACTIONS */}
 
 {tab==="transactions" && (
 
 <div>
 
-<h2>Add Transaction</h2>
+<div style={{
+display:"flex",
+gap:"10px",
+marginBottom:"25px"
+}}>
 
 <select
 value={txnAsset}
@@ -258,16 +294,6 @@ onChange={e=>setTxnAsset(e.target.value)}
 
 </select>
 
-<select
-value={txnType}
-onChange={e=>setTxnType(e.target.value)}
->
-
-<option>BUY</option>
-<option>SELL</option>
-
-</select>
-
 <input
 placeholder="Qty"
 value={txnQty}
@@ -280,24 +306,32 @@ value={txnPrice}
 onChange={e=>setTxnPrice(e.target.value)}
 />
 
-<button onClick={addTxn}>
+<button onClick={addTrade}>
 Add Trade
 </button>
 
-<h2 style={{marginTop:40}}>Transactions</h2>
+</div>
+
+<div>
 
 {txns.map(t=>(
 
-<div key={t.id} style={{padding:10,borderBottom:"1px solid #333"}}>
+<div key={t.id} style={{
+display:"grid",
+gridTemplateColumns:"2fr 1fr 1fr",
+padding:"14px 0",
+borderBottom:"1px solid #2a2a2a"
+}}>
 
 <div>{t.txn_type}</div>
-<div>{t.txn_date}</div>
-<div>Qty: {t.qty}</div>
-<div>Price: {t.price}</div>
+<div>{t.qty}</div>
+<div>${t.price}</div>
 
 </div>
 
 ))}
+
+</div>
 
 </div>
 
