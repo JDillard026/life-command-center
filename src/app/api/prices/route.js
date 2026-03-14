@@ -9,21 +9,19 @@ export async function GET(req) {
       return NextResponse.json({ error: "Missing symbol" }, { status: 400 })
     }
 
-    const key = process.env.ALPHAVANTAGE_API_KEY
+    const key = process.env.FMP_API_KEY
 
     if (!key) {
-      return NextResponse.json({ error: "Missing API key" }, { status: 500 })
+      return NextResponse.json({ error: "Missing FMP API key" }, { status: 500 })
     }
 
-    const url = `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${encodeURIComponent(
-      symbol
-    )}&apikey=${key}`
+    const url = `https://financialmodelingprep.com/stable/quote?symbol=${encodeURIComponent(symbol)}&apikey=${key}`
 
     const res = await fetch(url, { cache: "no-store" })
     const data = await res.json()
 
-    const rawPrice = data?.["Global Quote"]?.["05. price"]
-    const price = Number(rawPrice)
+    const row = Array.isArray(data) ? data[0] : null
+    const price = Number(row?.price)
 
     if (Number.isFinite(price) && price > 0) {
       return NextResponse.json({ price })
@@ -33,7 +31,6 @@ export async function GET(req) {
       {
         price: null,
         error: "No usable price returned",
-        debug: data,
       },
       { status: 200 }
     )
