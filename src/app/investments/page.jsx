@@ -308,10 +308,19 @@ export default function InvestmentsPage() {
           </div>
         </div>
 
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-          <TabBtn active={tab === "overview"} onClick={() => setTab("overview")}>Overview</TabBtn>
-          <TabBtn active={tab === "holdings"} onClick={() => setTab("holdings")}>Holdings</TabBtn>
-          <TabBtn active={tab === "transactions"} onClick={() => setTab("transactions")}>Transactions</TabBtn>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "flex-end" }}>
+          <Link href="/investments/discover" className="btnGhost">
+            Discover
+          </Link>
+          <TabBtn active={tab === "overview"} onClick={() => setTab("overview")}>
+            Overview
+          </TabBtn>
+          <TabBtn active={tab === "holdings"} onClick={() => setTab("holdings")}>
+            Holdings
+          </TabBtn>
+          <TabBtn active={tab === "transactions"} onClick={() => setTab("transactions")}>
+            Transactions
+          </TabBtn>
         </div>
       </div>
 
@@ -372,9 +381,25 @@ export default function InvestmentsPage() {
             }}
           >
             <div className="card" style={{ padding: 18 }}>
-              <div style={{ fontWeight: 950, fontSize: 20 }}>Top Holdings</div>
-              <div className="muted" style={{ marginTop: 6, fontSize: 14 }}>
-                Clean summary here. Detailed charts live on the asset screen.
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  gap: 12,
+                  alignItems: "center",
+                  flexWrap: "wrap",
+                }}
+              >
+                <div>
+                  <div style={{ fontWeight: 950, fontSize: 20 }}>Top Holdings</div>
+                  <div className="muted" style={{ marginTop: 6, fontSize: 14 }}>
+                    Clean summary here. Detailed charts live on the asset screen.
+                  </div>
+                </div>
+
+                <Link href="/investments/discover" className="btnGhost">
+                  Explore Market
+                </Link>
               </div>
 
               <div style={{ height: 16 }} />
@@ -442,11 +467,11 @@ export default function InvestmentsPage() {
                 />
                 <MiniPoint
                   title="Allocation section"
-                  sub="Pie / weight view based on market value."
+                  sub="Pie or weight view based on market value."
                 />
                 <MiniPoint
-                  title="News later"
-                  sub="Add headlines per ticker after the chart engine is stable."
+                  title="Market discovery"
+                  sub="Search public stocks and ETFs on a separate page."
                 />
               </div>
             </div>
@@ -457,7 +482,22 @@ export default function InvestmentsPage() {
       {tab === "holdings" && (
         <>
           <div className="card" style={{ padding: 18, marginBottom: 18 }}>
-            <div style={{ fontWeight: 950, fontSize: 20, marginBottom: 14 }}>Add Asset</div>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                gap: 12,
+                alignItems: "center",
+                flexWrap: "wrap",
+                marginBottom: 14,
+              }}
+            >
+              <div style={{ fontWeight: 950, fontSize: 20 }}>Add Asset</div>
+
+              <Link href="/investments/discover" className="btnGhost">
+                Discover Stocks
+              </Link>
+            </div>
 
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
               <input
@@ -467,7 +507,9 @@ export default function InvestmentsPage() {
                 onChange={(e) => setSymbol(e.target.value)}
                 style={{ minWidth: 240 }}
               />
-              <button className="btn" onClick={addAsset}>Add Asset</button>
+              <button className="btn" onClick={addAsset}>
+                Add Asset
+              </button>
             </div>
           </div>
 
@@ -537,7 +579,7 @@ export default function InvestmentsPage() {
               <div style={{ padding: 18 }}>
                 <EmptyState
                   title="No holdings yet"
-                  sub="Add an asset above to start your portfolio."
+                  sub="Add an asset above or use Discover to find public market assets."
                 />
               </div>
             )}
@@ -581,7 +623,9 @@ export default function InvestmentsPage() {
                 style={{ minWidth: 120 }}
               />
 
-              <button className="btn" onClick={addTrade}>Add Trade</button>
+              <button className="btn" onClick={addTrade}>
+                Add Trade
+              </button>
             </div>
           </div>
 
@@ -649,7 +693,10 @@ function MetricCard({ title, value, sub, valueTone = "default" }) {
 
   return (
     <div className="card" style={{ padding: 18 }}>
-      <div className="muted" style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: "0.12em" }}>
+      <div
+        className="muted"
+        style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: "0.12em" }}
+      >
         {title}
       </div>
       <div style={{ marginTop: 10, fontSize: 20, fontWeight: 950, color: toneColor }}>
