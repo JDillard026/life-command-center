@@ -1,85 +1,232 @@
-"use client"
+"use client";
 
-import Link from "next/link"
-import { useEffect, useMemo, useState } from "react"
+import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
+import { supabase } from "@/lib/supabaseClient";
 
 function money(n) {
-  const num = Number(n)
-  if (!Number.isFinite(num)) return "—"
-  return num.toLocaleString(undefined, { style: "currency", currency: "USD" })
+  const num = Number(n);
+  if (!Number.isFinite(num)) return "—";
+  return num.toLocaleString(undefined, { style: "currency", currency: "USD" });
 }
 
-const STARTER_MARKET = [
-  { symbol: "AAPL", name: "Apple Inc.", type: "Stock", exchange: "NASDAQ", sector: "Technology" },
-  { symbol: "MSFT", name: "Microsoft Corporation", type: "Stock", exchange: "NASDAQ", sector: "Technology" },
-  { symbol: "NVDA", name: "NVIDIA Corporation", type: "Stock", exchange: "NASDAQ", sector: "Technology" },
-  { symbol: "AMZN", name: "Amazon.com, Inc.", type: "Stock", exchange: "NASDAQ", sector: "Consumer Cyclical" },
-  { symbol: "GOOGL", name: "Alphabet Inc.", type: "Stock", exchange: "NASDAQ", sector: "Communication Services" },
-  { symbol: "META", name: "Meta Platforms, Inc.", type: "Stock", exchange: "NASDAQ", sector: "Communication Services" },
-  { symbol: "TSLA", name: "Tesla, Inc.", type: "Stock", exchange: "NASDAQ", sector: "Consumer Cyclical" },
-  { symbol: "AMD", name: "Advanced Micro Devices, Inc.", type: "Stock", exchange: "NASDAQ", sector: "Technology" },
-  { symbol: "AVGO", name: "Broadcom Inc.", type: "Stock", exchange: "NASDAQ", sector: "Technology" },
-  { symbol: "NFLX", name: "Netflix, Inc.", type: "Stock", exchange: "NASDAQ", sector: "Communication Services" },
-  { symbol: "JPM", name: "JPMorgan Chase & Co.", type: "Stock", exchange: "NYSE", sector: "Financial Services" },
-  { symbol: "V", name: "Visa Inc.", type: "Stock", exchange: "NYSE", sector: "Financial Services" },
-  { symbol: "MA", name: "Mastercard Incorporated", type: "Stock", exchange: "NYSE", sector: "Financial Services" },
-  { symbol: "BRK.B", name: "Berkshire Hathaway Inc.", type: "Stock", exchange: "NYSE", sector: "Financial Services" },
-  { symbol: "WMT", name: "Walmart Inc.", type: "Stock", exchange: "NYSE", sector: "Consumer Defensive" },
-  { symbol: "COST", name: "Costco Wholesale Corporation", type: "Stock", exchange: "NASDAQ", sector: "Consumer Defensive" },
-  { symbol: "LLY", name: "Eli Lilly and Company", type: "Stock", exchange: "NYSE", sector: "Healthcare" },
-  { symbol: "JNJ", name: "Johnson & Johnson", type: "Stock", exchange: "NYSE", sector: "Healthcare" },
-  { symbol: "XOM", name: "Exxon Mobil Corporation", type: "Stock", exchange: "NYSE", sector: "Energy" },
-  { symbol: "CVX", name: "Chevron Corporation", type: "Stock", exchange: "NYSE", sector: "Energy" },
-  { symbol: "SPY", name: "SPDR S&P 500 ETF Trust", type: "ETF", exchange: "NYSE Arca", sector: "Index ETF" },
-  { symbol: "VOO", name: "Vanguard S&P 500 ETF", type: "ETF", exchange: "NYSE Arca", sector: "Index ETF" },
-  { symbol: "IVV", name: "iShares Core S&P 500 ETF", type: "ETF", exchange: "NYSE Arca", sector: "Index ETF" },
-  { symbol: "QQQ", name: "Invesco QQQ Trust", type: "ETF", exchange: "NASDAQ", sector: "Index ETF" },
-  { symbol: "VTI", name: "Vanguard Total Stock Market ETF", type: "ETF", exchange: "NYSE Arca", sector: "Index ETF" },
-  { symbol: "SCHD", name: "Schwab U.S. Dividend Equity ETF", type: "ETF", exchange: "NYSE Arca", sector: "Dividend ETF" },
-  { symbol: "DIA", name: "SPDR Dow Jones Industrial Average ETF Trust", type: "ETF", exchange: "NYSE Arca", sector: "Index ETF" },
-  { symbol: "IWM", name: "iShares Russell 2000 ETF", type: "ETF", exchange: "NYSE Arca", sector: "Index ETF" },
-  { symbol: "ARKK", name: "ARK Innovation ETF", type: "ETF", exchange: "NYSE Arca", sector: "Thematic ETF" },
-  { symbol: "SOXX", name: "iShares Semiconductor ETF", type: "ETF", exchange: "NASDAQ", sector: "Sector ETF" },
-]
-
 export default function MarketSymbolPage({ params }) {
-  const symbol = decodeURIComponent(params?.symbol || "").toUpperCase()
-  const [price, setPrice] = useState(null)
+  const symbol = decodeURIComponent(params?.symbol || "").toUpperCase().trim();
 
-  const asset = useMemo(() => {
-    return STARTER_MARKET.find((x) => x.symbol.toUpperCase() === symbol) || null
-  }, [symbol])
+  const [asset, setAsset] = useState(null);
+  const [price, setPrice] = useState(null);
+  const [isFavorite, setIsFavorite] = useState(false);
+  const [isOwned, setIsOwned] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [status, setStatus] = useState("");
+  const [error, setError] = useState("");
+  const [working, setWorking] = useState(false);
 
   useEffect(() => {
-    async function loadPrice() {
-      if (!symbol) return
+    async function load() {
+      setLoading(true);
+      setError("");
+      setStatus("");
+
+      if (!symbol) {
+        setError("Missing market symbol.");
+        setLoading(false);
+        return;
+      }
 
       try {
-        const res = await fetch(`/api/prices?symbol=${encodeURIComponent(symbol)}`)
-        const data = await res.json()
+        const { data: authData } = await supabase.auth.getUser();
+        const user = authData?.user || null;
 
-        if (Number.isFinite(Number(data?.price)) && Number(data.price) > 0) {
-          setPrice(Number(data.price))
+        const searchRes = await fetch(
+          `/api/market-search?query=${encodeURIComponent(symbol)}&type=ALL&limit=12`
+        );
+        const searchData = await searchRes.json();
+
+        if (!searchRes.ok) {
+          throw new Error(searchData?.error || "Failed to load market symbol.");
+        }
+
+        const rows = Array.isArray(searchData?.results) ? searchData.results : [];
+        const exact =
+          rows.find((x) => String(x.symbol || "").toUpperCase() === symbol) ||
+          rows[0] ||
+          {
+            symbol,
+            name: symbol,
+            type: "Stock",
+            exchange: "—",
+            currency: "USD",
+          };
+
+        setAsset(exact);
+
+        try {
+          const priceRes = await fetch(`/api/prices?symbol=${encodeURIComponent(symbol)}`);
+          const priceData = await priceRes.json();
+
+          if (
+            priceRes.ok &&
+            Number.isFinite(Number(priceData?.price)) &&
+            Number(priceData.price) > 0
+          ) {
+            setPrice(Number(priceData.price));
+          } else {
+            setPrice(null);
+          }
+        } catch (err) {
+          console.error("price fetch failed", err);
+          setPrice(null);
+        }
+
+        if (user) {
+          const [{ data: favoriteRows, error: favoriteError }, { data: assetRows, error: assetError }] =
+            await Promise.all([
+              supabase
+                .from("investment_favorites")
+                .select("id,symbol")
+                .eq("user_id", user.id)
+                .eq("symbol", symbol),
+              supabase
+                .from("investment_assets")
+                .select("id,symbol")
+                .eq("user_id", user.id)
+                .eq("symbol", symbol),
+            ]);
+
+          if (favoriteError) console.error(favoriteError);
+          if (assetError) console.error(assetError);
+
+          setIsFavorite(Array.isArray(favoriteRows) && favoriteRows.length > 0);
+          setIsOwned(Array.isArray(assetRows) && assetRows.length > 0);
         } else {
-          setPrice(null)
+          setIsFavorite(false);
+          setIsOwned(false);
         }
       } catch (err) {
-        console.error("price fetch failed", err)
-        setPrice(null)
+        console.error(err);
+        setError(err?.message || "Failed to load market symbol.");
+      } finally {
+        setLoading(false);
       }
     }
 
-    loadPrice()
-  }, [symbol])
+    load();
+  }, [symbol]);
 
-  if (!asset) {
+  const assetTypeLabel = useMemo(() => {
+    const raw = String(asset?.type || "").toUpperCase();
+    if (raw.includes("ETF")) return "ETF";
+    if (raw.includes("FUND")) return "Fund";
+    return raw || "Stock";
+  }, [asset]);
+
+  async function toggleFavorite() {
+    setWorking(true);
+    setError("");
+    setStatus("");
+
+    try {
+      const { data: authData } = await supabase.auth.getUser();
+      const user = authData?.user || null;
+
+      if (!user) {
+        setError("You must be logged in.");
+        setWorking(false);
+        return;
+      }
+
+      if (isFavorite) {
+        const { error } = await supabase
+          .from("investment_favorites")
+          .delete()
+          .eq("user_id", user.id)
+          .eq("symbol", symbol);
+
+        if (error) throw error;
+
+        setIsFavorite(false);
+        setStatus(`${symbol} removed from favorites.`);
+      } else {
+        const { error } = await supabase
+          .from("investment_favorites")
+          .insert({
+            user_id: user.id,
+            symbol,
+            name: asset?.name || symbol,
+            asset_type: assetTypeLabel.toLowerCase(),
+          });
+
+        if (error) throw error;
+
+        setIsFavorite(true);
+        setStatus(`${symbol} added to favorites.`);
+      }
+    } catch (err) {
+      console.error(err);
+      setError(err?.message || "Failed to update favorite.");
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function addToPortfolio() {
+    setWorking(true);
+    setError("");
+    setStatus("");
+
+    try {
+      const { data: authData } = await supabase.auth.getUser();
+      const user = authData?.user || null;
+
+      if (!user) {
+        setError("You must be logged in.");
+        setWorking(false);
+        return;
+      }
+
+      if (isOwned) {
+        setStatus(`${symbol} is already in your portfolio.`);
+        setWorking(false);
+        return;
+      }
+
+      const { error } = await supabase
+        .from("investment_assets")
+        .insert({
+          user_id: user.id,
+          symbol,
+          asset_type: assetTypeLabel.toLowerCase() === "etf" ? "etf" : "stock",
+          account: "Main",
+        });
+
+      if (error) throw error;
+
+      setIsOwned(true);
+      setStatus(`${symbol} added to portfolio.`);
+    } catch (err) {
+      console.error(err);
+      setError(err?.message || "Failed to add asset.");
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  if (loading) {
     return (
       <main style={{ padding: "36px 28px 44px", maxWidth: "1280px", margin: "0 auto" }}>
         <div className="card" style={{ padding: 18 }}>
-          <div style={{ fontWeight: 900 }}>Market symbol not found in starter list.</div>
-          <div className="muted" style={{ marginTop: 8 }}>
-            Once live market search is added, this page can support far more public assets.
-          </div>
+          <div style={{ fontWeight: 900 }}>Loading market symbol...</div>
+        </div>
+      </main>
+    );
+  }
+
+  if (error && !asset) {
+    return (
+      <main style={{ padding: "36px 28px 44px", maxWidth: "1280px", margin: "0 auto" }}>
+        <div className="card" style={{ padding: 18 }}>
+          <div style={{ fontWeight: 900 }}>{error}</div>
           <div style={{ marginTop: 14 }}>
             <Link href="/investments/discover" className="btn">
               Back to Discover
@@ -87,11 +234,18 @@ export default function MarketSymbolPage({ params }) {
           </div>
         </div>
       </main>
-    )
+    );
   }
 
   return (
     <main style={{ padding: "36px 28px 44px", maxWidth: "1280px", margin: "0 auto" }}>
+      {(status || error) && (
+        <div className="card" style={{ padding: 14, marginBottom: 18 }}>
+          <div style={{ fontWeight: 900 }}>{error ? "Fix this" : "Status"}</div>
+          <div className="muted" style={{ marginTop: 6 }}>{error || status}</div>
+        </div>
+      )}
+
       <div
         style={{
           display: "grid",
@@ -102,7 +256,15 @@ export default function MarketSymbolPage({ params }) {
       >
         <div style={{ display: "grid", gap: 18 }}>
           <div className="card" style={{ padding: 18 }}>
-            <div className="muted" style={{ fontSize: 12, fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.16em" }}>
+            <div
+              className="muted"
+              style={{
+                fontSize: 12,
+                fontWeight: 900,
+                textTransform: "uppercase",
+                letterSpacing: "0.16em",
+              }}
+            >
               Market Asset
             </div>
 
@@ -114,15 +276,15 @@ export default function MarketSymbolPage({ params }) {
                 fontWeight: 950,
               }}
             >
-              {asset.symbol}
+              {symbol}
             </h1>
 
             <div style={{ marginTop: 10, fontWeight: 850, fontSize: 18 }}>
-              {asset.name}
+              {asset?.name || symbol}
             </div>
 
             <div className="muted" style={{ marginTop: 10, fontSize: 14 }}>
-              {asset.type} • {asset.exchange} • {asset.sector}
+              {assetTypeLabel} • {asset?.exchange || "—"} • {asset?.currency || "USD"}
             </div>
 
             <div style={{ height: 18 }} />
@@ -134,45 +296,78 @@ export default function MarketSymbolPage({ params }) {
                 gap: 12,
               }}
             >
-              <StatCard title="Live Price" value={price ? money(price) : "Unavailable"} sub="Uses your current quote endpoint if available." />
-              <StatCard title="Asset Type" value={asset.type} sub="Public market classification." />
-              <StatCard title="Exchange" value={asset.exchange} sub="Primary exchange in starter data." />
+              <StatCard
+                title="Live Price"
+                value={price ? money(price) : "Unavailable"}
+                sub="Uses your current quote endpoint if available."
+              />
+              <StatCard
+                title="Asset Type"
+                value={assetTypeLabel}
+                sub="Public market classification."
+              />
+              <StatCard
+                title="Exchange"
+                value={asset?.exchange || "—"}
+                sub="Returned from market search."
+              />
             </div>
 
             <div style={{ height: 18 }} />
 
-            <FakeChart />
+            <RealPlaceholderChart symbol={symbol} />
           </div>
         </div>
 
         <div style={{ display: "grid", gap: 18 }}>
           <div className="card" style={{ padding: 18 }}>
-            <div style={{ fontWeight: 950, fontSize: 20 }}>About this market page</div>
-            <div className="muted" style={{ marginTop: 10, lineHeight: 1.5 }}>
-              This is the public market asset screen. It is separate from your owned asset screen on purpose.
-            </div>
+            <div style={{ fontWeight: 950, fontSize: 20 }}>Actions</div>
 
             <div style={{ display: "grid", gap: 10, marginTop: 16 }}>
-              <MiniPoint title="Public page" sub="Works even if you do not own the asset yet." />
-              <MiniPoint title="Scalable" sub="Later this can hold real chart history, quote stats, and news." />
-              <MiniPoint title="Correct architecture" sub="Keeps market discovery separate from your portfolio tracking." />
-            </div>
-          </div>
+              <button
+                className="btn"
+                onClick={addToPortfolio}
+                disabled={working || isOwned}
+                style={{ opacity: working || isOwned ? 0.75 : 1 }}
+              >
+                {isOwned ? "Already in Portfolio" : working ? "Working..." : "Add to Portfolio"}
+              </button>
 
-          <div className="card" style={{ padding: 18 }}>
-            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-              <Link href="/investments/discover" className="btn">
+              <button
+                className="btnGhost"
+                onClick={toggleFavorite}
+                disabled={working}
+                style={{ opacity: working ? 0.75 : 1 }}
+              >
+                {isFavorite ? "Remove Favorite" : "Add to Favorites"}
+              </button>
+
+              <Link href="/investments/discover" className="btnGhost">
                 Back to Discover
               </Link>
+
               <Link href="/investments" className="btnGhost">
                 Portfolio
               </Link>
             </div>
           </div>
+
+          <div className="card" style={{ padding: 18 }}>
+            <div style={{ fontWeight: 950, fontSize: 20 }}>About this market page</div>
+            <div className="muted" style={{ marginTop: 10, lineHeight: 1.5 }}>
+              This is the public market asset screen. It now works from the symbol in the URL instead of a tiny starter list.
+            </div>
+
+            <div style={{ display: "grid", gap: 10, marginTop: 16 }}>
+              <MiniPoint title="Public page" sub="Works even if you do not own the asset yet." />
+              <MiniPoint title="Real symbol support" sub="Can open market pages for symbols coming from Discover search." />
+              <MiniPoint title="Scalable" sub="Later this can hold real chart history, quote stats, and news." />
+            </div>
+          </div>
         </div>
       </div>
     </main>
-  )
+  );
 }
 
 function StatCard({ title, value, sub }) {
@@ -188,10 +383,10 @@ function StatCard({ title, value, sub }) {
         {sub}
       </div>
     </div>
-  )
+  );
 }
 
-function FakeChart() {
+function RealPlaceholderChart({ symbol }) {
   return (
     <div
       style={{
@@ -201,7 +396,7 @@ function FakeChart() {
         overflow: "hidden",
         border: "1px solid rgba(255,255,255,.08)",
         background:
-          "linear-gradient(180deg, rgba(34,197,94,.14) 0%, rgba(34,197,94,.04) 40%, rgba(255,255,255,.02) 100%)",
+          "linear-gradient(180deg, rgba(59,130,246,.14) 0%, rgba(59,130,246,.04) 40%, rgba(255,255,255,.02) 100%)",
       }}
     >
       <div
@@ -217,26 +412,41 @@ function FakeChart() {
 
       <svg viewBox="0 0 1000 360" preserveAspectRatio="none" style={{ width: "100%", height: "100%", display: "block" }}>
         <defs>
-          <linearGradient id="chartFillMarket" x1="0" x2="0" y1="0" y2="1">
-            <stop offset="0%" stopColor="rgba(34,197,94,.50)" />
-            <stop offset="100%" stopColor="rgba(34,197,94,0)" />
+          <linearGradient id="chartFillMarketReal" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0%" stopColor="rgba(96,165,250,.45)" />
+            <stop offset="100%" stopColor="rgba(96,165,250,0)" />
           </linearGradient>
         </defs>
 
         <path
-          d="M0,255 C70,245 120,218 180,208 C250,196 300,224 360,186 C420,148 470,126 530,142 C600,160 655,190 720,155 C785,120 850,86 915,78 C945,74 975,60 1000,42 L1000,360 L0,360 Z"
-          fill="url(#chartFillMarket)"
+          d="M0,270 C75,248 135,228 200,220 C275,210 330,230 390,188 C450,146 500,132 560,150 C625,170 680,195 750,160 C820,126 885,102 940,84 C970,74 988,64 1000,54 L1000,360 L0,360 Z"
+          fill="url(#chartFillMarketReal)"
         />
         <path
-          d="M0,255 C70,245 120,218 180,208 C250,196 300,224 360,186 C420,148 470,126 530,142 C600,160 655,190 720,155 C785,120 850,86 915,78 C945,74 975,60 1000,42"
+          d="M0,270 C75,248 135,228 200,220 C275,210 330,230 390,188 C450,146 500,132 560,150 C625,170 680,195 750,160 C820,126 885,102 940,84 C970,74 988,64 1000,54"
           fill="none"
-          stroke="rgba(74,222,128,.95)"
+          stroke="rgba(96,165,250,.95)"
           strokeWidth="5"
           strokeLinecap="round"
         />
       </svg>
+
+      <div
+        style={{
+          position: "absolute",
+          left: 16,
+          top: 16,
+          padding: "8px 10px",
+          borderRadius: 12,
+          background: "rgba(7,10,18,.55)",
+          border: "1px solid rgba(255,255,255,.08)",
+          fontWeight: 900,
+        }}
+      >
+        {symbol} Market View
+      </div>
     </div>
-  )
+  );
 }
 
 function MiniPoint({ title, sub }) {
@@ -254,5 +464,5 @@ function MiniPoint({ title, sub }) {
         {sub}
       </div>
     </div>
-  )
+  );
 }
