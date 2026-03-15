@@ -16,6 +16,52 @@ function fmtNumber(n) {
   return num.toLocaleString(undefined, { maximumFractionDigits: 4 });
 }
 
+function compactNumber(n) {
+  const num = Number(n);
+  if (!Number.isFinite(num)) return "—";
+  return new Intl.NumberFormat(undefined, {
+    notation: "compact",
+    maximumFractionDigits: 2,
+  }).format(num);
+}
+
+function toneByValue(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n === 0) return "neutral";
+  return n > 0 ? "good" : "bad";
+}
+
+function glowPanelStyle(tone = "neutral", strong = false) {
+  if (tone === "good") {
+    return {
+      border: "1px solid rgba(34,197,94,.18)",
+      background:
+        "linear-gradient(180deg, rgba(34,197,94,.12) 0%, rgba(255,255,255,.03) 100%)",
+      boxShadow: strong
+        ? "0 0 26px rgba(34,197,94,.12), inset 0 0 0 1px rgba(34,197,94,.06)"
+        : "0 0 18px rgba(34,197,94,.08)",
+    };
+  }
+
+  if (tone === "bad") {
+    return {
+      border: "1px solid rgba(239,68,68,.18)",
+      background:
+        "linear-gradient(180deg, rgba(239,68,68,.12) 0%, rgba(255,255,255,.03) 100%)",
+      boxShadow: strong
+        ? "0 0 26px rgba(239,68,68,.12), inset 0 0 0 1px rgba(239,68,68,.06)"
+        : "0 0 18px rgba(239,68,68,.08)",
+    };
+  }
+
+  return {
+    border: "1px solid rgba(255,255,255,.08)",
+    background:
+      "linear-gradient(180deg, rgba(255,255,255,.04) 0%, rgba(255,255,255,.025) 100%)",
+    boxShadow: strong ? "0 0 18px rgba(96,165,250,.08)" : "none",
+  };
+}
+
 export default function InvestmentsPage() {
   const [assets, setAssets] = useState([]);
   const [txns, setTxns] = useState([]);
@@ -290,36 +336,67 @@ export default function InvestmentsPage() {
   const portfolio = useMemo(() => {
     let totalValue = 0;
     let totalCost = 0;
+    let totalRealizedPnl = 0;
 
     const holdings = assets.map((a) => {
-      const list = txns.filter((t) => t.asset_id === a.id);
+      const list = txns
+        .filter((t) => t.asset_id === a.id)
+        .sort((x, y) => {
+          const xd = new Date(x.txn_date || 0).getTime();
+          const yd = new Date(y.txn_date || 0).getTime();
+          return xd - yd;
+        });
 
       let shares = 0;
       let cost = 0;
+      let realizedPnl = 0;
 
       for (const t of list) {
         const qty = Number(t.qty) || 0;
         const price = Number(t.price) || 0;
         const txnType = String(t.txn_type || "").toUpperCase();
 
+        if (qty <= 0 || price < 0) continue;
+
         if (txnType === "BUY") {
           shares += qty;
           cost += qty * price;
+          continue;
         }
 
         if (txnType === "SELL") {
-          shares -= qty;
+          if (shares <= 0) continue;
+
+          const sellQty = Math.min(qty, shares);
+          const avgCostPerShare = shares > 0 ? cost / shares : 0;
+          const removedCost = sellQty * avgCostPerShare;
+
+          realizedPnl += sellQty * price - removedCost;
+          shares -= sellQty;
+          cost -= removedCost;
+
+          if (shares <= 0 || cost < 0.000001) {
+            shares = 0;
+            cost = 0;
+          }
+
+          continue;
         }
       }
 
-      const livePrice = Number(prices[a.symbol]);
+      const symbolKey = String(a.symbol || "").toUpperCase().trim();
+      const livePrice = Number(prices[symbolKey]);
       const hasLivePrice = Number.isFinite(livePrice) && livePrice > 0;
+
       const value = hasLivePrice ? shares * livePrice : null;
       const pnl = hasLivePrice ? value - cost : null;
+      const pnlPct =
+        hasLivePrice && cost > 0 ? ((value - cost) / cost) * 100 : null;
       const avgCost = shares > 0 ? cost / shares : 0;
 
       if (hasLivePrice) totalValue += value;
       totalCost += cost;
+      totalRealizedPnl += realizedPnl;
 
       return {
         ...a,
@@ -327,10 +404,12 @@ export default function InvestmentsPage() {
         cost,
         value,
         pnl,
+        pnlPct,
         avgCost,
         livePrice,
         hasLivePrice,
         txCount: list.length,
+        realizedPnl,
       };
     });
 
@@ -345,9 +424,61 @@ export default function InvestmentsPage() {
       totalValue,
       totalCost,
       totalPnl: totalValue - totalCost,
+      totalRealizedPnl,
       hasAnyLivePrices: sorted.some((h) => h.hasLivePrice),
     };
   }, [assets, txns, prices]);
+
+  const livePricedHoldings = useMemo(() => {
+    return portfolio.holdings.filter((h) => h.hasLivePrice && Number(h.shares) > 0);
+  }, [portfolio.holdings]);
+
+  const signals = useMemo(() => {
+    const bestHolding =
+      [...livePricedHoldings].sort(
+        (a, b) => (Number(b.pnl) || 0) - (Number(a.pnl) || 0)
+      )[0] || null;
+
+    const worstHolding =
+      [...livePricedHoldings].sort(
+        (a, b) => (Number(a.pnl) || 0) - (Number(b.pnl) || 0)
+      )[0] || null;
+
+    const largestPosition =
+      [...livePricedHoldings].sort(
+        (a, b) => (Number(b.value) || 0) - (Number(a.value) || 0)
+      )[0] || null;
+
+    const liveCoverageCount = portfolio.holdings.filter((h) => h.hasLivePrice).length;
+    const liveCoveragePct =
+      portfolio.holdings.length > 0
+        ? (liveCoverageCount / portfolio.holdings.length) * 100
+        : 0;
+
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    const recentTradeCount = txns.filter((t) => {
+      if (!t?.txn_date) return false;
+      const d = new Date(t.txn_date);
+      return Number.isFinite(d.getTime()) && d >= thirtyDaysAgo;
+    }).length;
+
+    return {
+      bestHolding,
+      worstHolding,
+      largestPosition,
+      liveCoverageCount,
+      liveCoveragePct,
+      recentTradeCount,
+      favoritesCount: favorites.length,
+      totalHoldingsCount: portfolio.holdings.length,
+      largestWeightPct:
+        largestPosition && portfolio.totalValue > 0
+          ? (Number(largestPosition.value) / Number(portfolio.totalValue)) * 100
+          : null,
+    };
+  }, [livePricedHoldings, portfolio.holdings, portfolio.totalValue, txns, favorites.length]);
 
   const allocation = useMemo(() => {
     const total = portfolio.holdings.reduce((sum, h) => sum + (Number(h.value) || 0), 0);
@@ -382,6 +513,10 @@ export default function InvestmentsPage() {
       };
     });
   }, [favorites, prices]);
+
+  const portfolioTone = portfolio.hasAnyLivePrices
+    ? toneByValue(portfolio.totalPnl)
+    : "neutral";
 
   return (
     <main
@@ -459,9 +594,101 @@ export default function InvestmentsPage() {
       {tab === "overview" && (
         <>
           <div
+            className="card"
+            style={{
+              padding: 20,
+              marginBottom: 18,
+              borderRadius: 26,
+              background:
+                portfolioTone === "good"
+                  ? "linear-gradient(180deg, rgba(34,197,94,.10), rgba(255,255,255,.02))"
+                  : portfolioTone === "bad"
+                    ? "linear-gradient(180deg, rgba(239,68,68,.10), rgba(255,255,255,.02))"
+                    : "linear-gradient(180deg, rgba(96,165,250,.10), rgba(255,255,255,.02))",
+              border:
+                portfolioTone === "good"
+                  ? "1px solid rgba(34,197,94,.16)"
+                  : portfolioTone === "bad"
+                    ? "1px solid rgba(239,68,68,.16)"
+                    : "1px solid rgba(255,255,255,.08)",
+            }}
+          >
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1.15fr .85fr",
+                gap: 18,
+                alignItems: "center",
+              }}
+            >
+              <div>
+                <div
+                  className="muted"
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 900,
+                    textTransform: "uppercase",
+                    letterSpacing: "0.16em",
+                  }}
+                >
+                  Portfolio Pulse
+                </div>
+
+                <div style={{ marginTop: 10, fontSize: "clamp(2rem, 4vw, 3.1rem)", fontWeight: 950 }}>
+                  {portfolio.hasAnyLivePrices ? money(portfolio.totalValue) : "Waiting on live data"}
+                </div>
+
+                <div
+                  style={{
+                    marginTop: 10,
+                    fontSize: 16,
+                    fontWeight: 850,
+                    color:
+                      portfolioTone === "good"
+                        ? "#4ade80"
+                        : portfolioTone === "bad"
+                          ? "#f87171"
+                          : "rgba(255,255,255,.85)",
+                  }}
+                >
+                  {portfolio.hasAnyLivePrices
+                    ? `${portfolio.totalPnl >= 0 ? "+" : ""}${money(portfolio.totalPnl)} vs remaining cost basis`
+                    : loadingPrices
+                      ? "Checking live market prices..."
+                      : "Live pricing returns when quote fetch succeeds."}
+                </div>
+              </div>
+
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+                  gap: 12,
+                }}
+              >
+                <PulseMiniCard
+                  label="Holdings"
+                  value={String(portfolio.holdings.length)}
+                  sub="Tracked positions"
+                />
+                <PulseMiniCard
+                  label="Favorites"
+                  value={String(favoriteCards.length)}
+                  sub="Pinned symbols"
+                />
+                <PulseMiniCard
+                  label="Trades"
+                  value={String(txns.length)}
+                  sub="Recorded transactions"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div
             style={{
               display: "grid",
-              gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+              gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
               gap: 16,
               marginBottom: 18,
             }}
@@ -470,32 +697,159 @@ export default function InvestmentsPage() {
               title="Tracked Value"
               value={portfolio.hasAnyLivePrices ? money(portfolio.totalValue) : "Price unavailable"}
               sub={loadingPrices ? "Checking live prices..." : "Live values show when pricing returns."}
+              tone="neutral"
+              strong
             />
 
             <MetricCard
-              title="Total Cost Basis"
+              title="Remaining Cost Basis"
               value={money(portfolio.totalCost)}
-              sub="Built from your recorded buy trades."
+              sub="Active basis after accounting for sells."
+              tone="neutral"
+              strong
             />
 
             <MetricCard
-              title="Portfolio P/L"
+              title="Unrealized P/L"
               value={portfolio.hasAnyLivePrices ? money(portfolio.totalPnl) : "Pending live data"}
               sub={
                 portfolio.hasAnyLivePrices
                   ? portfolio.totalPnl >= 0
-                    ? "Portfolio above cost basis."
-                    : "Portfolio below cost basis."
+                    ? "Portfolio above remaining basis."
+                    : "Portfolio below remaining basis."
                   : "P/L shows once live prices are available."
               }
-              valueTone={
-                portfolio.hasAnyLivePrices
-                  ? portfolio.totalPnl >= 0
-                    ? "good"
-                    : "bad"
-                  : "default"
-              }
+              tone={portfolioTone}
+              valueTone={portfolioTone}
+              strong
             />
+
+            <MetricCard
+              title="Realized P/L"
+              value={money(portfolio.totalRealizedPnl)}
+              sub="Closed gain/loss from recorded sells."
+              tone={toneByValue(portfolio.totalRealizedPnl)}
+              valueTone={toneByValue(portfolio.totalRealizedPnl)}
+              strong
+            />
+          </div>
+
+          <div className="card" style={{ padding: 18, marginBottom: 18 }}>
+            <div style={{ fontWeight: 950, fontSize: 22 }}>Portfolio Signals</div>
+            <div className="muted" style={{ marginTop: 6, fontSize: 14 }}>
+              Live portfolio intelligence. No fake history. Just what is true right now.
+            </div>
+
+            <div style={{ height: 16 }} />
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+                gap: 12,
+              }}
+            >
+              <SignalCard
+                label="Best Holding"
+                title={signals.bestHolding?.symbol || "None"}
+                value={
+                  signals.bestHolding?.hasLivePrice
+                    ? money(signals.bestHolding.pnl)
+                    : "No live data"
+                }
+                secondary={
+                  signals.bestHolding?.pnlPct != null
+                    ? `${signals.bestHolding.pnlPct >= 0 ? "+" : ""}${signals.bestHolding.pnlPct.toFixed(2)}%`
+                    : null
+                }
+                sub={
+                  signals.bestHolding?.hasLivePrice
+                    ? `${fmtNumber(signals.bestHolding.shares)} shares • ${money(
+                        signals.bestHolding.value
+                      )} value`
+                    : "Shows top unrealized winner."
+                }
+                tone={signals.bestHolding ? "good" : "neutral"}
+              />
+
+              <SignalCard
+                label="Worst Holding"
+                title={signals.worstHolding?.symbol || "None"}
+                value={
+                  signals.worstHolding?.hasLivePrice
+                    ? money(signals.worstHolding.pnl)
+                    : "No live data"
+                }
+                secondary={
+                  signals.worstHolding?.pnlPct != null
+                    ? `${signals.worstHolding.pnlPct >= 0 ? "+" : ""}${signals.worstHolding.pnlPct.toFixed(2)}%`
+                    : null
+                }
+                sub={
+                  signals.worstHolding?.hasLivePrice
+                    ? `${fmtNumber(signals.worstHolding.shares)} shares • ${money(
+                        signals.worstHolding.value
+                      )} value`
+                    : "Shows biggest unrealized drag."
+                }
+                tone={signals.worstHolding ? "bad" : "neutral"}
+              />
+
+              <SignalCard
+                label="Largest Position"
+                title={signals.largestPosition?.symbol || "None"}
+                value={
+                  signals.largestPosition?.hasLivePrice
+                    ? money(signals.largestPosition.value)
+                    : "No live data"
+                }
+                secondary={
+                  signals.largestWeightPct != null
+                    ? `${signals.largestWeightPct.toFixed(1)}% of portfolio`
+                    : null
+                }
+                sub={
+                  signals.largestPosition?.hasLivePrice
+                    ? `${fmtNumber(signals.largestPosition.shares)} shares at ${money(
+                        signals.largestPosition.livePrice
+                      )}`
+                    : "Largest live-priced position."
+                }
+                tone="neutral"
+              />
+
+              <SignalCard
+                label="Live Price Coverage"
+                title={`${signals.liveCoverageCount}/${signals.totalHoldingsCount}`}
+                value={
+                  signals.totalHoldingsCount
+                    ? `${signals.liveCoveragePct.toFixed(0)}%`
+                    : "0%"
+                }
+                sub={
+                  loadingPrices
+                    ? "Checking quote coverage now."
+                    : "How much of the portfolio has live prices."
+                }
+                tone="neutral"
+              />
+
+              <SignalCard
+                label="Favorites Count"
+                title={String(signals.favoritesCount)}
+                value={signals.favoritesCount ? "Active" : "Empty"}
+                sub="Pinned symbols in your watch section."
+                tone="neutral"
+              />
+
+              <SignalCard
+                label="Recent Trade Count"
+                title={String(signals.recentTradeCount)}
+                value="Last 30 days"
+                sub="How active the account has been lately."
+                tone="neutral"
+              />
+            </div>
           </div>
 
           <div className="card" style={{ padding: 18, marginBottom: 18 }}>
@@ -509,7 +863,7 @@ export default function InvestmentsPage() {
               }}
             >
               <div>
-                <div style={{ fontWeight: 950, fontSize: 20 }}>Favorites</div>
+                <div style={{ fontWeight: 950, fontSize: 22 }}>Favorites</div>
                 <div className="muted" style={{ marginTop: 6, fontSize: 14 }}>
                   Quick-access symbols you want to keep close.
                 </div>
@@ -529,16 +883,15 @@ export default function InvestmentsPage() {
                 {favoriteCards.map((f) => (
                   <div
                     key={f.id}
-                    className="card"
                     style={{
-                      padding: 14,
-                      border: "1px solid rgba(255,255,255,.08)",
-                      background: "rgba(255,255,255,.03)",
+                      borderRadius: 20,
+                      padding: 16,
+                      ...glowPanelStyle("neutral", true),
                     }}
                   >
                     <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
                       <div>
-                        <div style={{ fontWeight: 900, fontSize: 18 }}>{f.symbol}</div>
+                        <div style={{ fontWeight: 950, fontSize: 18 }}>{f.symbol}</div>
                         <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
                           {f.asset_type || "stock"}
                         </div>
@@ -547,15 +900,19 @@ export default function InvestmentsPage() {
                       <button
                         className="btnGhost"
                         onClick={() => removeFavorite(f.id)}
-                        style={{ minWidth: 70 }}
+                        style={{ minWidth: 82 }}
                       >
                         Remove
                       </button>
                     </div>
 
+                    <div style={{ marginTop: 12, fontWeight: 800, minHeight: 22 }}>
+                      {f.name || f.symbol}
+                    </div>
+
                     <div style={{ marginTop: 14 }}>
                       <div className="muted" style={{ fontSize: 12 }}>Live Price</div>
-                      <div style={{ marginTop: 4, fontWeight: 900, fontSize: 20 }}>
+                      <div style={{ marginTop: 4, fontWeight: 950, fontSize: 22 }}>
                         {f.hasLivePrice ? money(f.livePrice) : "Pending"}
                       </div>
                     </div>
@@ -585,7 +942,7 @@ export default function InvestmentsPage() {
             }}
           >
             <div className="card" style={{ padding: 18 }}>
-              <div style={{ fontWeight: 950, fontSize: 20 }}>Top Holdings</div>
+              <div style={{ fontWeight: 950, fontSize: 22 }}>Top Holdings</div>
               <div className="muted" style={{ marginTop: 6, fontSize: 14 }}>
                 Clean account summary. Open an asset only when you want chart detail.
               </div>
@@ -598,66 +955,58 @@ export default function InvestmentsPage() {
                   sub="Add your first asset, then log a trade to start building your portfolio."
                 />
               ) : (
-                <div style={{ display: "grid", gap: 10 }}>
+                <div style={{ display: "grid", gap: 12 }}>
                   {portfolio.holdings.slice(0, 8).map((h) => {
                     const isFavorite = favorites.some(
-                      (f) => String(f.symbol || "").toUpperCase() === String(h.symbol || "").toUpperCase()
+                      (f) =>
+                        String(f.symbol || "").toUpperCase() ===
+                        String(h.symbol || "").toUpperCase()
                     );
 
                     return (
                       <div
                         key={h.id}
-                        className="card"
                         style={{
-                          padding: 14,
-                          border: "1px solid rgba(255,255,255,.08)",
-                          background: "rgba(255,255,255,.03)",
+                          borderRadius: 20,
+                          padding: 16,
+                          ...glowPanelStyle(toneByValue(h.pnl), false),
                         }}
                       >
                         <div
                           style={{
                             display: "grid",
-                            gridTemplateColumns: "1.1fr .75fr .9fr .85fr auto auto",
+                            gridTemplateColumns: "1.25fr .75fr .95fr .95fr auto auto",
                             gap: 12,
                             alignItems: "center",
                           }}
                         >
                           <div>
-                            <div style={{ fontWeight: 900, fontSize: 16 }}>{h.symbol}</div>
-                            <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
-                              {h.account || "Main"} • {h.asset_type || "stock"} • {h.txCount} trade{h.txCount === 1 ? "" : "s"}
+                            <div style={{ fontWeight: 950, fontSize: 17 }}>{h.symbol}</div>
+                            <div className="muted" style={{ fontSize: 12, marginTop: 5 }}>
+                              {h.account || "Main"} • {h.asset_type || "stock"} • {h.txCount} trade
+                              {h.txCount === 1 ? "" : "s"}
                             </div>
                           </div>
 
-                          <div>
-                            <div className="muted" style={{ fontSize: 12 }}>Shares</div>
-                            <div style={{ fontWeight: 850, marginTop: 4 }}>{fmtNumber(h.shares)}</div>
-                          </div>
-
-                          <div>
-                            <div className="muted" style={{ fontSize: 12 }}>Value</div>
-                            <div style={{ fontWeight: 850, marginTop: 4 }}>
-                              {h.hasLivePrice ? money(h.value) : "Pending"}
-                            </div>
-                          </div>
-
-                          <div>
-                            <div className="muted" style={{ fontSize: 12 }}>P/L</div>
-                            <div
-                              style={{
-                                fontWeight: 850,
-                                marginTop: 4,
-                                color: h.hasLivePrice ? (h.pnl >= 0 ? "#4ade80" : "#f87171") : "inherit",
-                              }}
-                            >
-                              {h.hasLivePrice ? money(h.pnl) : "Pending"}
-                            </div>
-                          </div>
+                          <HoldingMiniStat label="Shares" value={fmtNumber(h.shares)} />
+                          <HoldingMiniStat
+                            label="Value"
+                            value={h.hasLivePrice ? money(h.value) : "Pending"}
+                          />
+                          <HoldingMiniStat
+                            label="P/L"
+                            value={
+                              h.hasLivePrice
+                                ? `${money(h.pnl)}${h.pnlPct != null ? ` • ${h.pnlPct >= 0 ? "+" : ""}${h.pnlPct.toFixed(2)}%` : ""}`
+                                : "Pending"
+                            }
+                            tone={h.hasLivePrice ? toneByValue(h.pnl) : "neutral"}
+                          />
 
                           <button
-                            className={isFavorite ? "btnGhost" : "btnGhost"}
+                            className="btnGhost"
                             onClick={() => addFavoriteFromHolding(h)}
-                            style={{ minWidth: 92 }}
+                            style={{ minWidth: 98 }}
                           >
                             {isFavorite ? "Favorited" : "Favorite"}
                           </button>
@@ -674,7 +1023,7 @@ export default function InvestmentsPage() {
             </div>
 
             <div className="card" style={{ padding: 18 }}>
-              <div style={{ fontWeight: 950, fontSize: 20 }}>Allocation View</div>
+              <div style={{ fontWeight: 950, fontSize: 22 }}>Allocation View</div>
               <div className="muted" style={{ marginTop: 6, fontSize: 14 }}>
                 Portfolio weights by live market value.
               </div>
@@ -682,7 +1031,7 @@ export default function InvestmentsPage() {
               <div style={{ height: 16 }} />
 
               {allocation.length ? (
-                <div style={{ display: "grid", gap: 12 }}>
+                <div style={{ display: "grid", gap: 14 }}>
                   {allocation.map((h) => (
                     <div key={h.id}>
                       <div
@@ -691,9 +1040,10 @@ export default function InvestmentsPage() {
                           justifyContent: "space-between",
                           gap: 10,
                           marginBottom: 8,
+                          alignItems: "center",
                         }}
                       >
-                        <div style={{ fontWeight: 850 }}>{h.symbol}</div>
+                        <div style={{ fontWeight: 900 }}>{h.symbol}</div>
                         <div className="muted" style={{ fontSize: 13 }}>
                           {h.weight.toFixed(1)}%
                         </div>
@@ -705,6 +1055,7 @@ export default function InvestmentsPage() {
                           borderRadius: 999,
                           background: "rgba(255,255,255,.06)",
                           overflow: "hidden",
+                          position: "relative",
                         }}
                       >
                         <div
@@ -712,13 +1063,27 @@ export default function InvestmentsPage() {
                             width: `${Math.max(4, Math.min(100, h.weight))}%`,
                             height: "100%",
                             borderRadius: 999,
-                            background: "linear-gradient(90deg, rgba(96,165,250,.95), rgba(59,130,246,.55))",
+                            background:
+                              "linear-gradient(90deg, rgba(96,165,250,.95), rgba(59,130,246,.55))",
+                            boxShadow: "0 0 18px rgba(96,165,250,.20)",
                           }}
                         />
                       </div>
 
-                      <div className="muted" style={{ marginTop: 6, fontSize: 12 }}>
-                        {money(h.value)}
+                      <div
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          gap: 10,
+                          marginTop: 6,
+                        }}
+                      >
+                        <div className="muted" style={{ fontSize: 12 }}>
+                          {money(h.value)}
+                        </div>
+                        <div className="muted" style={{ fontSize: 12 }}>
+                          {compactNumber(h.shares)} shares
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -740,7 +1105,7 @@ export default function InvestmentsPage() {
             }}
           >
             <div className="card" style={{ padding: 18 }}>
-              <div style={{ fontWeight: 950, fontSize: 20 }}>Recent Activity</div>
+              <div style={{ fontWeight: 950, fontSize: 22 }}>Recent Activity</div>
               <div className="muted" style={{ marginTop: 6, fontSize: 14 }}>
                 Latest buys and sells across your portfolio.
               </div>
@@ -751,15 +1116,17 @@ export default function InvestmentsPage() {
                 <div style={{ display: "grid", gap: 10 }}>
                   {recentTxns.map((t) => {
                     const asset = assets.find((a) => a.id === t.asset_id);
+                    const txnType = String(t.txn_type || "").toUpperCase();
+                    const tone =
+                      txnType === "BUY" ? "good" : txnType === "SELL" ? "bad" : "neutral";
 
                     return (
                       <div
                         key={t.id}
                         style={{
-                          border: "1px solid rgba(255,255,255,.08)",
-                          background: "rgba(255,255,255,.03)",
-                          borderRadius: 16,
+                          borderRadius: 18,
                           padding: 14,
+                          ...glowPanelStyle(tone, false),
                         }}
                       >
                         <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
@@ -787,16 +1154,16 @@ export default function InvestmentsPage() {
             </div>
 
             <div className="card" style={{ padding: 18 }}>
-              <div style={{ fontWeight: 950, fontSize: 20 }}>Next Upgrade Stack</div>
+              <div style={{ fontWeight: 950, fontSize: 22 }}>What Actually Comes Next</div>
               <div className="muted" style={{ marginTop: 8, lineHeight: 1.5 }}>
-                Now that favorites, allocation, and recent activity are live, the strongest next upgrades are:
+                The next real backend upgrade is daily portfolio snapshots. That is what unlocks honest performance charts.
               </div>
 
               <div style={{ display: "grid", gap: 10, marginTop: 16 }}>
-                <MiniPoint title="Performance cards" sub="1D / 1W / 1M / YTD account change metrics." />
-                <MiniPoint title="Watchlist depth" sub="Notes, tags, and grouped favorite lists." />
-                <MiniPoint title="Account snapshots" sub="Daily portfolio history for real account performance." />
-                <MiniPoint title="Market movers" sub="Top gainers, losers, and trending names." />
+                <MiniPoint title="Daily snapshots" sub="Store total portfolio value once per day." />
+                <MiniPoint title="Real performance cards" sub="1D / 1W / 1M / YTD based on stored history." />
+                <MiniPoint title="Portfolio chart" sub="Actual account curve, not fake reconstructed history." />
+                <MiniPoint title="Signal expansion" sub="Add % gainers, losers, and watchlist alerts after snapshots." />
               </div>
             </div>
           </div>
@@ -841,7 +1208,7 @@ export default function InvestmentsPage() {
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: "1.05fr .75fr .9fr .9fr .9fr .85fr 110px 120px",
+                gridTemplateColumns: "1.05fr .75fr .9fr .9fr .9fr .95fr 110px 120px",
                 gap: 12,
                 padding: "16px 18px",
                 borderBottom: "1px solid rgba(255,255,255,.08)",
@@ -862,7 +1229,9 @@ export default function InvestmentsPage() {
             {portfolio.holdings.length ? (
               portfolio.holdings.map((h) => {
                 const isFavorite = favorites.some(
-                  (f) => String(f.symbol || "").toUpperCase() === String(h.symbol || "").toUpperCase()
+                  (f) =>
+                    String(f.symbol || "").toUpperCase() ===
+                    String(h.symbol || "").toUpperCase()
                 );
 
                 return (
@@ -870,11 +1239,17 @@ export default function InvestmentsPage() {
                     key={h.id}
                     style={{
                       display: "grid",
-                      gridTemplateColumns: "1.05fr .75fr .9fr .9fr .9fr .85fr 110px 120px",
+                      gridTemplateColumns: "1.05fr .75fr .9fr .9fr .9fr .95fr 110px 120px",
                       gap: 12,
                       padding: "16px 18px",
                       borderBottom: "1px solid rgba(255,255,255,.08)",
                       alignItems: "center",
+                      background:
+                        h.hasLivePrice && Number.isFinite(h.pnl)
+                          ? h.pnl >= 0
+                            ? "linear-gradient(90deg, rgba(34,197,94,.05), transparent 35%)"
+                            : "linear-gradient(90deg, rgba(239,68,68,.05), transparent 35%)"
+                          : "transparent",
                     }}
                   >
                     <div>
@@ -895,7 +1270,9 @@ export default function InvestmentsPage() {
                         fontWeight: 850,
                       }}
                     >
-                      {h.hasLivePrice ? money(h.pnl) : "Pending"}
+                      {h.hasLivePrice
+                        ? `${money(h.pnl)}${h.pnlPct != null ? ` • ${h.pnlPct >= 0 ? "+" : ""}${h.pnlPct.toFixed(2)}%` : ""}`
+                        : "Pending"}
                     </div>
 
                     <div>
@@ -979,6 +1356,7 @@ export default function InvestmentsPage() {
               {txns.length ? (
                 txns.map((t) => {
                   const asset = assets.find((a) => a.id === t.asset_id);
+                  const txnType = String(t.txn_type || "").toUpperCase();
 
                   return (
                     <div
@@ -990,9 +1368,27 @@ export default function InvestmentsPage() {
                         padding: "16px 18px",
                         borderBottom: "1px solid rgba(255,255,255,.08)",
                         alignItems: "center",
+                        background:
+                          txnType === "BUY"
+                            ? "linear-gradient(90deg, rgba(34,197,94,.05), transparent 32%)"
+                            : txnType === "SELL"
+                              ? "linear-gradient(90deg, rgba(239,68,68,.05), transparent 32%)"
+                              : "transparent",
                       }}
                     >
-                      <div style={{ fontWeight: 850 }}>{t.txn_type}</div>
+                      <div
+                        style={{
+                          fontWeight: 850,
+                          color:
+                            txnType === "BUY"
+                              ? "#4ade80"
+                              : txnType === "SELL"
+                                ? "#f87171"
+                                : "inherit",
+                        }}
+                      >
+                        {t.txn_type}
+                      </div>
                       <div>{asset?.symbol || "—"}</div>
                       <div>{fmtNumber(t.qty)}</div>
                       <div>{money(t.price)}</div>
@@ -1020,15 +1416,17 @@ export default function InvestmentsPage() {
                 {recentTxns.length ? (
                   recentTxns.map((t) => {
                     const asset = assets.find((a) => a.id === t.asset_id);
+                    const txnType = String(t.txn_type || "").toUpperCase();
+                    const tone =
+                      txnType === "BUY" ? "good" : txnType === "SELL" ? "bad" : "neutral";
 
                     return (
                       <div
                         key={t.id}
                         style={{
-                          border: "1px solid rgba(255,255,255,.08)",
-                          background: "rgba(255,255,255,.03)",
-                          borderRadius: 16,
+                          borderRadius: 18,
                           padding: 14,
+                          ...glowPanelStyle(tone, false),
                         }}
                       >
                         <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
@@ -1066,23 +1464,39 @@ function TabBtn({ active, children, onClick }) {
     <button
       className={active ? "btn" : "btnGhost"}
       onClick={onClick}
-      style={{ minWidth: 110 }}
+      style={{
+        minWidth: 110,
+        boxShadow: active ? "0 0 18px rgba(96,165,250,.18)" : "none",
+      }}
     >
       {children}
     </button>
   );
 }
 
-function MetricCard({ title, value, sub, valueTone = "default" }) {
+function MetricCard({
+  title,
+  value,
+  sub,
+  valueTone = "default",
+  tone = "neutral",
+  strong = false,
+}) {
   const toneColor =
     valueTone === "good"
       ? "#4ade80"
       : valueTone === "bad"
-      ? "#f87171"
-      : "inherit";
+        ? "#f87171"
+        : "inherit";
 
   return (
-    <div className="card" style={{ padding: 18 }}>
+    <div
+      style={{
+        borderRadius: 22,
+        padding: 18,
+        ...glowPanelStyle(tone, strong),
+      }}
+    >
       <div
         className="muted"
         style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: "0.12em" }}
@@ -1093,6 +1507,88 @@ function MetricCard({ title, value, sub, valueTone = "default" }) {
         {value}
       </div>
       <div className="muted" style={{ marginTop: 10, fontSize: 13, lineHeight: 1.45 }}>
+        {sub}
+      </div>
+    </div>
+  );
+}
+
+function PulseMiniCard({ label, value, sub }) {
+  return (
+    <div
+      style={{
+        borderRadius: 18,
+        padding: 14,
+        border: "1px solid rgba(255,255,255,.08)",
+        background: "rgba(255,255,255,.035)",
+      }}
+    >
+      <div
+        className="muted"
+        style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.12em" }}
+      >
+        {label}
+      </div>
+      <div style={{ marginTop: 8, fontWeight: 950, fontSize: 22 }}>{value}</div>
+      <div className="muted" style={{ marginTop: 6, fontSize: 12 }}>{sub}</div>
+    </div>
+  );
+}
+
+function HoldingMiniStat({ label, value, tone = "neutral" }) {
+  const color =
+    tone === "good"
+      ? "#4ade80"
+      : tone === "bad"
+        ? "#f87171"
+        : "rgba(255,255,255,.92)";
+
+  return (
+    <div>
+      <div className="muted" style={{ fontSize: 12 }}>{label}</div>
+      <div style={{ fontWeight: 850, marginTop: 4, color }}>{value}</div>
+    </div>
+  );
+}
+
+function SignalCard({ label, title, value, secondary = null, sub, tone = "neutral" }) {
+  const valueColor =
+    tone === "good"
+      ? "#4ade80"
+      : tone === "bad"
+        ? "#f87171"
+        : "rgba(255,255,255,.92)";
+
+  return (
+    <div
+      style={{
+        borderRadius: 20,
+        padding: 16,
+        ...glowPanelStyle(tone, true),
+      }}
+    >
+      <div
+        className="muted"
+        style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.12em" }}
+      >
+        {label}
+      </div>
+
+      <div style={{ marginTop: 10, fontSize: 18, fontWeight: 950 }}>
+        {title}
+      </div>
+
+      <div style={{ marginTop: 8, fontSize: 22, fontWeight: 950, color: valueColor }}>
+        {value}
+      </div>
+
+      {secondary ? (
+        <div className="muted" style={{ marginTop: 4, fontSize: 13, fontWeight: 700 }}>
+          {secondary}
+        </div>
+      ) : null}
+
+      <div className="muted" style={{ marginTop: 8, fontSize: 12, lineHeight: 1.45 }}>
         {sub}
       </div>
     </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   createChart,
   createSeriesMarkers,
@@ -152,6 +152,44 @@ function normalizePriceLines(lines = []) {
     .filter(Boolean);
 }
 
+function formatCompactNumber(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return "—";
+
+  return new Intl.NumberFormat(undefined, {
+    notation: "compact",
+    maximumFractionDigits: 2,
+  }).format(n);
+}
+
+function formatPrice(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return "—";
+  return n.toFixed(2);
+}
+
+function formatTooltipTime(time) {
+  if (!time) return "—";
+
+  if (typeof time === "string") {
+    return time;
+  }
+
+  if (typeof time === "number") {
+    const d = new Date(time * 1000);
+    if (Number.isNaN(d.getTime())) return String(time);
+
+    return d.toLocaleString(undefined, {
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  }
+
+  return String(time);
+}
+
 export default function InvestmentChart({
   data = [],
   volumeData = [],
@@ -161,6 +199,7 @@ export default function InvestmentChart({
   priceLines = [],
 }) {
   const chartContainerRef = useRef(null);
+  const [hoverData, setHoverData] = useState(null);
 
   useEffect(() => {
     if (!chartContainerRef.current) return;
@@ -189,8 +228,16 @@ export default function InvestmentChart({
         secondsVisible: false,
       },
       crosshair: {
-        vertLine: { color: "rgba(255,255,255,0.18)" },
-        horzLine: { color: "rgba(255,255,255,0.18)" },
+        vertLine: {
+          color: "rgba(255,255,255,0.18)",
+          width: 1,
+          style: 2,
+        },
+        horzLine: {
+          color: "rgba(255,255,255,0.18)",
+          width: 1,
+          style: 2,
+        },
       },
       handleScroll: {
         mouseWheel: true,
@@ -209,10 +256,15 @@ export default function InvestmentChart({
     let volumeSeries;
     const appliedPriceLines = [];
 
-    if (mode === "candles") {
-      const candleData = normalizeCandleData(data);
+    const normalizedLineData = normalizeLineData(data);
+    const normalizedCandleData = normalizeCandleData(data);
+    const normalizedVolume =
+      Array.isArray(volumeData) && volumeData.length > 0
+        ? normalizeVolumeData(volumeData)
+        : [];
 
-      if (candleData.length > 0) {
+    if (mode === "candles") {
+      if (normalizedCandleData.length > 0) {
         series = chart.addSeries(CandlestickSeries, {
           upColor: "#22c55e",
           downColor: "#ef4444",
@@ -222,13 +274,13 @@ export default function InvestmentChart({
           wickDownColor: "#ef4444",
         });
 
-        series.setData(candleData);
+        series.setData(normalizedCandleData);
 
-        const normalizedVolume =
-          Array.isArray(volumeData) && volumeData.length > 0
-            ? normalizeVolumeData(volumeData)
+        const volumeToUse =
+          normalizedVolume.length > 0
+            ? normalizedVolume
             : normalizeVolumeData(
-                candleData.map((c) => ({
+                normalizedCandleData.map((c) => ({
                   time: c.time,
                   value: 0,
                   open: c.open,
@@ -236,7 +288,7 @@ export default function InvestmentChart({
                 }))
               );
 
-        if (normalizedVolume.length > 0) {
+        if (volumeToUse.length > 0) {
           volumeSeries = chart.addSeries(HistogramSeries, {
             priceFormat: { type: "volume" },
             priceScaleId: "",
@@ -249,13 +301,11 @@ export default function InvestmentChart({
             },
           });
 
-          volumeSeries.setData(normalizedVolume);
+          volumeSeries.setData(volumeToUse);
         }
       }
     } else {
-      const lineData = normalizeLineData(data);
-
-      if (lineData.length > 0) {
+      if (normalizedLineData.length > 0) {
         series = chart.addSeries(LineSeries, {
           color: "#60a5fa",
           lineWidth: 3,
@@ -264,22 +314,17 @@ export default function InvestmentChart({
           crosshairMarkerVisible: true,
         });
 
-        series.setData(lineData);
+        series.setData(normalizedLineData);
       }
     }
 
     if (series) {
       const normalizedMarkers = normalizeMarkers(markers);
-      if (normalizedMarkers.length > 0) {
-        try {
-          createSeriesMarkers(series, normalizedMarkers);
-        } catch (err) {
-          console.error("marker render failed", err);
-        }
-      } else {
-        try {
-          createSeriesMarkers(series, []);
-        } catch {}
+
+      try {
+        createSeriesMarkers(series, normalizedMarkers);
+      } catch (err) {
+        console.error("marker render failed", err);
       }
 
       const normalizedPriceLines = normalizePriceLines(priceLines);
@@ -295,9 +340,73 @@ export default function InvestmentChart({
       }
     }
 
+    const candleMap = new Map(
+      normalizedCandleData.map((row) => [String(row.time), row])
+    );
+    const volumeMap = new Map(
+      normalizedVolume.map((row) => [String(row.time), row])
+    );
+    const lineMap = new Map(
+      normalizedLineData.map((row) => [String(row.time), row])
+    );
+
+    chart.subscribeCrosshairMove((param) => {
+      if (!param || !param.time) {
+        setHoverData(null);
+        return;
+      }
+
+      const key = String(param.time);
+
+      if (mode === "candles") {
+        const candle = candleMap.get(key);
+
+        if (!candle) {
+          setHoverData(null);
+          return;
+        }
+
+        const vol = volumeMap.get(key);
+        const change =
+          Number.isFinite(candle.open) && Number.isFinite(candle.close)
+            ? candle.close - candle.open
+            : null;
+        const changePct =
+          Number.isFinite(candle.open) && candle.open !== 0 && Number.isFinite(candle.close)
+            ? ((candle.close - candle.open) / candle.open) * 100
+            : null;
+
+        setHoverData({
+          mode: "candles",
+          time: param.time,
+          open: candle.open,
+          high: candle.high,
+          low: candle.low,
+          close: candle.close,
+          volume: vol?.value ?? null,
+          change,
+          changePct,
+        });
+      } else {
+        const line = lineMap.get(key);
+
+        if (!line) {
+          setHoverData(null);
+          return;
+        }
+
+        setHoverData({
+          mode: "line",
+          time: param.time,
+          close: line.value,
+        });
+      }
+    });
+
     chart.timeScale().fitContent();
 
     const handleResize = () => {
+      if (!container) return;
       chart.applyOptions({
         width: container.clientWidth || 900,
       });
@@ -321,15 +430,132 @@ export default function InvestmentChart({
     };
   }, [data, volumeData, mode, height, markers, priceLines]);
 
+  const hoverTone =
+    hoverData?.change !== null && Number.isFinite(hoverData?.change)
+      ? hoverData.change >= 0
+        ? "#4ade80"
+        : "#f87171"
+      : "rgba(255,255,255,.92)";
+
   return (
     <div
-      ref={chartContainerRef}
       style={{
+        position: "relative",
         width: "100%",
         height: `${height}px`,
         borderRadius: "18px",
         overflow: "hidden",
       }}
-    />
+    >
+      <div
+        ref={chartContainerRef}
+        style={{
+          width: "100%",
+          height: "100%",
+          borderRadius: "18px",
+          overflow: "hidden",
+        }}
+      />
+
+      <div
+        style={{
+          position: "absolute",
+          top: 12,
+          left: 12,
+          zIndex: 3,
+          minWidth: 210,
+          maxWidth: 260,
+          padding: "10px 12px",
+          borderRadius: 14,
+          border: "1px solid rgba(255,255,255,.08)",
+          background: "rgba(8,12,20,.84)",
+          backdropFilter: "blur(10px)",
+          boxShadow: "0 12px 30px rgba(0,0,0,.28)",
+          pointerEvents: "none",
+        }}
+      >
+        <div
+          className="muted"
+          style={{
+            fontSize: 11,
+            textTransform: "uppercase",
+            letterSpacing: "0.12em",
+            marginBottom: 8,
+          }}
+        >
+          Hover Stats
+        </div>
+
+        {hoverData ? (
+          <div style={{ display: "grid", gap: 6 }}>
+            <div style={{ fontWeight: 800, fontSize: 12 }}>
+              {formatTooltipTime(hoverData.time)}
+            </div>
+
+            {hoverData.mode === "candles" ? (
+              <>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 6 }}>
+                  <MiniHover label="O" value={formatPrice(hoverData.open)} />
+                  <MiniHover label="H" value={formatPrice(hoverData.high)} />
+                  <MiniHover label="L" value={formatPrice(hoverData.low)} />
+                  <MiniHover label="C" value={formatPrice(hoverData.close)} />
+                </div>
+
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+                  <span className="muted" style={{ fontSize: 12 }}>Vol</span>
+                  <span style={{ fontWeight: 800, fontSize: 12 }}>
+                    {hoverData.volume !== null ? formatCompactNumber(hoverData.volume) : "—"}
+                  </span>
+                </div>
+
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+                  <span className="muted" style={{ fontSize: 12 }}>Change</span>
+                  <span style={{ fontWeight: 900, fontSize: 12, color: hoverTone }}>
+                    {hoverData.change !== null ? `${hoverData.change >= 0 ? "+" : ""}${formatPrice(hoverData.change)}` : "—"}
+                    {hoverData.changePct !== null ? ` • ${hoverData.changePct >= 0 ? "+" : ""}${hoverData.changePct.toFixed(2)}%` : ""}
+                  </span>
+                </div>
+              </>
+            ) : (
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+                <span className="muted" style={{ fontSize: 12 }}>Price</span>
+                <span style={{ fontWeight: 900, fontSize: 12 }}>
+                  {formatPrice(hoverData.close)}
+                </span>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="muted" style={{ fontSize: 12, lineHeight: 1.45 }}>
+            Move the crosshair over the chart to inspect OHLC, volume, and candle change.
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function MiniHover({ label, value }) {
+  return (
+    <div
+      style={{
+        borderRadius: 10,
+        border: "1px solid rgba(255,255,255,.06)",
+        background: "rgba(255,255,255,.03)",
+        padding: "6px 8px",
+      }}
+    >
+      <div
+        className="muted"
+        style={{
+          fontSize: 10,
+          textTransform: "uppercase",
+          letterSpacing: "0.1em",
+        }}
+      >
+        {label}
+      </div>
+      <div style={{ marginTop: 4, fontWeight: 800, fontSize: 12 }}>{value}</div>
+    </div>
   );
 }
