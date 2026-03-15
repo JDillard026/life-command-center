@@ -48,10 +48,61 @@ function money(n) {
   return num.toLocaleString(undefined, { style: "currency", currency: "USD" });
 }
 
-function chunk(arr, size) {
-  const out = [];
-  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
-  return out;
+function toNum(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+function changeTone(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n === 0) return null;
+  return n > 0 ? "up" : "down";
+}
+
+function glowCardStyle(changeValue) {
+  const tone = changeTone(changeValue);
+
+  if (tone === "up") {
+    return {
+      border: "1px solid rgba(34,197,94,.16)",
+      background:
+        "linear-gradient(180deg, rgba(34,197,94,.09) 0%, rgba(255,255,255,.03) 100%)",
+      boxShadow: "0 0 24px rgba(34,197,94,.08), inset 0 0 0 1px rgba(34,197,94,.04)",
+    };
+  }
+
+  if (tone === "down") {
+    return {
+      border: "1px solid rgba(239,68,68,.16)",
+      background:
+        "linear-gradient(180deg, rgba(239,68,68,.09) 0%, rgba(255,255,255,.03) 100%)",
+      boxShadow: "0 0 24px rgba(239,68,68,.08), inset 0 0 0 1px rgba(239,68,68,.04)",
+    };
+  }
+
+  return {
+    border: "1px solid rgba(255,255,255,.08)",
+    background: "rgba(255,255,255,.03)",
+  };
+}
+
+function priceTextFromQuote(quote) {
+  if (!quote) return "Loading";
+  const price = toNum(quote.price);
+  if (!Number.isFinite(price) || price <= 0) return "Pending";
+  return money(price);
+}
+
+function changeTextFromQuote(quote) {
+  if (!quote) return "Waiting on quote";
+  const change = toNum(quote.change);
+  const pct = toNum(quote.changesPercentage);
+
+  if (!Number.isFinite(change) && !Number.isFinite(pct)) return "Live quote";
+  if (!Number.isFinite(change) && Number.isFinite(pct)) return `${pct > 0 ? "+" : ""}${pct.toFixed(2)}%`;
+  if (Number.isFinite(change) && !Number.isFinite(pct)) return `${change > 0 ? "+" : ""}${money(change)}`;
+
+  return `${change > 0 ? "+" : ""}${money(change)} • ${pct > 0 ? "+" : ""}${pct.toFixed(2)}%`;
 }
 
 export default function DiscoverInvestmentsPage() {
@@ -153,38 +204,108 @@ export default function DiscoverInvestmentsPage() {
           ...activeRows.map((x) => String(x.symbol || "").toUpperCase()),
           ...favorites.map((x) => String(x.symbol || "").toUpperCase()),
         ]),
-      ];
+      ].filter(Boolean);
 
       if (!symbols.length) {
         setPrices({});
         return;
       }
 
-      try {
-        const res = await fetch(
-          `/api/prices-batch?symbols=${encodeURIComponent(symbols.join(","))}`
-        );
-        const data = await res.json();
+      const nextPrices = {};
 
-        if (res.ok && data?.prices) {
-          setPrices(data.prices);
+      try {
+        const batchRes = await fetch(
+          `/api/prices-batch?symbols=${encodeURIComponent(symbols.join(","))}`,
+          { cache: "no-store" }
+        );
+
+        const batchData = await batchRes.json();
+
+        if (batchRes.ok && batchData?.prices && typeof batchData.prices === "object") {
+          for (const sym of Object.keys(batchData.prices)) {
+            const raw = batchData.prices[sym];
+
+            if (raw && typeof raw === "object") {
+              nextPrices[sym] = {
+                price: toNum(raw.price),
+                change: toNum(raw.change),
+                changesPercentage: toNum(
+                  raw.changesPercentage ?? raw.changePercent ?? raw.percent_change
+                ),
+              };
+            } else {
+              nextPrices[sym] = {
+                price: toNum(raw),
+                change: null,
+                changesPercentage: null,
+              };
+            }
+          }
         }
       } catch (err) {
         console.error("batch price fetch failed", err);
       }
+
+      const missing = symbols.filter((sym) => {
+        const row = nextPrices[sym];
+        return !row || !Number.isFinite(Number(row.price)) || Number(row.price) <= 0;
+      });
+
+      if (missing.length) {
+        await Promise.all(
+          missing.map(async (sym) => {
+            try {
+              const singleRes = await fetch(`/api/prices?symbol=${encodeURIComponent(sym)}`, {
+                cache: "no-store",
+              });
+              const singleData = await singleRes.json();
+
+              if (singleRes.ok) {
+                nextPrices[sym] = {
+                  price: toNum(singleData?.price),
+                  change: toNum(singleData?.change),
+                  changesPercentage: toNum(
+                    singleData?.changesPercentage ??
+                      singleData?.changePercent ??
+                      singleData?.percent_change
+                  ),
+                };
+              }
+            } catch (err) {
+              console.error(`single price fetch failed for ${sym}`, err);
+            }
+          })
+        );
+      }
+
+      setPrices((prev) => ({
+        ...prev,
+        ...nextPrices,
+      }));
     }
 
     loadPrices();
   }, [activeRows, favorites]);
 
   const stats = useMemo(() => {
-    const ownedMatches = activeRows.filter((x) => savedSymbols.includes(String(x.symbol || "").toUpperCase())).length;
-    const favoriteMatches = activeRows.filter((x) =>
-      favorites.some((f) => String(f.symbol || "").toUpperCase() === String(x.symbol || "").toUpperCase())
+    const ownedMatches = activeRows.filter((x) =>
+      savedSymbols.includes(String(x.symbol || "").toUpperCase())
     ).length;
 
-    const stocks = activeRows.filter((x) => String(x.type || "").toUpperCase() === "STOCK").length;
-    const etfs = activeRows.filter((x) => String(x.type || "").toUpperCase() === "ETF").length;
+    const favoriteMatches = activeRows.filter((x) =>
+      favorites.some(
+        (f) =>
+          String(f.symbol || "").toUpperCase() === String(x.symbol || "").toUpperCase()
+      )
+    ).length;
+
+    const stocks = activeRows.filter(
+      (x) => String(x.type || "").toUpperCase() === "STOCK"
+    ).length;
+
+    const etfs = activeRows.filter(
+      (x) => String(x.type || "").toUpperCase() === "ETF"
+    ).length;
 
     return {
       showing: activeRows.length,
@@ -421,7 +542,9 @@ export default function DiscoverInvestmentsPage() {
             {searchMode ? "Search Market" : "Market Universe"}
           </div>
           <div className="muted" style={{ marginTop: 6, fontSize: 14 }}>
-            {searchMode ? "Live search by symbol or company name." : "Curated default universe loaded on first open."}
+            {searchMode
+              ? "Live search by symbol or company name."
+              : "Curated default universe loaded on first open."}
           </div>
 
           <div style={{ height: 16 }} />
@@ -480,8 +603,7 @@ export default function DiscoverInvestmentsPage() {
           >
             {favorites.slice(0, 8).map((f) => {
               const sym = String(f.symbol || "").toUpperCase();
-              const livePrice = Number(prices[sym]);
-              const hasLivePrice = Number.isFinite(livePrice) && livePrice > 0;
+              const quote = prices[sym] || null;
 
               return (
                 <AssetCard
@@ -492,7 +614,7 @@ export default function DiscoverInvestmentsPage() {
                     type: String(f.asset_type || "stock").toUpperCase() === "ETF" ? "ETF" : "Stock",
                     exchange: "Saved",
                   }}
-                  livePrice={hasLivePrice ? livePrice : null}
+                  quote={quote}
                   owned={savedSymbols.includes(sym)}
                   favorited={true}
                   busy={favoriteSymbol === sym}
@@ -591,14 +713,13 @@ export default function DiscoverInvestmentsPage() {
                 );
                 const isAdding = addingSymbol === sym;
                 const isFavBusy = favoriteSymbol === sym;
-                const livePrice = Number(prices[sym]);
-                const hasLivePrice = Number.isFinite(livePrice) && livePrice > 0;
+                const quote = prices[sym] || null;
 
                 return (
                   <SearchRow
                     key={`${item.symbol}-${item.exchange}`}
                     item={item}
-                    livePrice={hasLivePrice ? livePrice : null}
+                    quote={quote}
                     owned={alreadyOwned}
                     favorited={alreadyFavorite}
                     addBusy={isAdding}
@@ -661,14 +782,13 @@ function UniverseSection({
           const alreadyFavorite = favorites.some(
             (f) => String(f.symbol || "").toUpperCase() === sym
           );
-          const livePrice = Number(prices[sym]);
-          const hasLivePrice = Number.isFinite(livePrice) && livePrice > 0;
+          const quote = prices[sym] || null;
 
           return (
             <AssetCard
               key={sym}
               item={item}
-              livePrice={hasLivePrice ? livePrice : null}
+              quote={quote}
               owned={alreadyOwned}
               favorited={alreadyFavorite}
               busy={addingSymbol === sym || favoriteSymbol === sym}
@@ -687,7 +807,7 @@ function UniverseSection({
 
 function SearchRow({
   item,
-  livePrice,
+  quote,
   owned,
   favorited,
   addBusy,
@@ -695,11 +815,18 @@ function SearchRow({
   onAddAsset,
   onToggleFavorite,
 }) {
+  const tone = changeTone(quote?.change);
+
   return (
     <div
       style={{
         border: "1px solid rgba(255,255,255,.08)",
-        background: "linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02))",
+        background:
+          tone === "up"
+            ? "linear-gradient(180deg, rgba(34,197,94,.08), rgba(255,255,255,.02))"
+            : tone === "down"
+              ? "linear-gradient(180deg, rgba(239,68,68,.08), rgba(255,255,255,.02))"
+              : "linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02))",
         borderRadius: 22,
         padding: 16,
       }}
@@ -732,7 +859,7 @@ function SearchRow({
           </div>
 
           <div className="muted" style={{ marginTop: 8, fontSize: 13 }}>
-            Real market search result
+            {changeTextFromQuote(quote)}
           </div>
         </div>
 
@@ -743,7 +870,7 @@ function SearchRow({
             gap: 10,
           }}
         >
-          <MiniBox label="Live Price" value={livePrice !== null ? money(livePrice) : "Pending"} />
+          <MiniBox label="Live Price" value={priceTextFromQuote(quote)} />
           <MiniBox label="Status" value={owned ? "Owned" : favorited ? "Favorite" : "Available"} />
         </div>
 
@@ -781,7 +908,7 @@ function SearchRow({
 
 function AssetCard({
   item,
-  livePrice,
+  quote,
   owned,
   favorited,
   busy,
@@ -794,10 +921,9 @@ function AssetCard({
   return (
     <div
       style={{
-        border: "1px solid rgba(255,255,255,.08)",
-        background: "rgba(255,255,255,.03)",
         borderRadius: 18,
         padding: 14,
+        ...glowCardStyle(quote?.change),
       }}
     >
       <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
@@ -824,7 +950,17 @@ function AssetCard({
       <div style={{ marginTop: 12 }}>
         <div className="muted" style={{ fontSize: 12 }}>Live Price</div>
         <div style={{ marginTop: 4, fontWeight: 900, fontSize: 20 }}>
-          {livePrice !== null ? money(livePrice) : "Pending"}
+          {priceTextFromQuote(quote)}
+        </div>
+        <div
+          className="muted"
+          style={{
+            marginTop: 6,
+            fontSize: 12,
+            minHeight: 18,
+          }}
+        >
+          {changeTextFromQuote(quote)}
         </div>
       </div>
 

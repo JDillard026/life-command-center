@@ -1,5 +1,10 @@
 import { NextResponse } from "next/server";
 
+function toNum(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
 export async function GET(req) {
   try {
     const { searchParams } = new URL(req.url);
@@ -44,16 +49,51 @@ export async function GET(req) {
     }
 
     const row = Array.isArray(data) ? data[0] : data;
-    const price = Number(row?.price);
 
-    if (!Number.isFinite(price) || price <= 0) {
+    const price = toNum(row?.price);
+    const change = toNum(row?.change);
+    const changesPercentage =
+      toNum(row?.changesPercentage) ??
+      toNum(row?.changePercent) ??
+      toNum(row?.percent_change);
+
+    const open = toNum(row?.open);
+    const dayLow = toNum(row?.dayLow);
+    const dayHigh = toNum(row?.dayHigh);
+    const yearHigh = toNum(row?.yearHigh);
+    const yearLow = toNum(row?.yearLow);
+    const volume = toNum(row?.volume);
+    const avgVolume = toNum(row?.avgVolume);
+    const marketCap = toNum(row?.marketCap);
+    const previousClose = toNum(row?.previousClose);
+    const exchange = row?.exchangeShortName || row?.exchange || null;
+    const name = row?.name || null;
+
+    if (price === null || price <= 0) {
       return NextResponse.json(
         { error: "Price unavailable", details: data },
         { status: 404 }
       );
     }
 
-    return NextResponse.json({ symbol, price });
+    return NextResponse.json({
+      symbol,
+      name,
+      exchange,
+      price,
+      change,
+      changesPercentage,
+      open,
+      previousClose,
+      dayLow,
+      dayHigh,
+      yearLow,
+      yearHigh,
+      volume,
+      avgVolume,
+      marketCap,
+      raw: row,
+    });
   } catch (err) {
     console.error("PRICES ROUTE ERROR:", err);
     return NextResponse.json(

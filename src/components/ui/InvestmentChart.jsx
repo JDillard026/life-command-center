@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import {
   createChart,
+  createSeriesMarkers,
   LineSeries,
   CandlestickSeries,
   HistogramSeries,
@@ -39,6 +40,12 @@ function num(value) {
   return Number.isFinite(n) ? n : null;
 }
 
+function sortByTime(a, b) {
+  const at = typeof a.time === "string" ? Date.parse(a.time) : a.time;
+  const bt = typeof b.time === "string" ? Date.parse(b.time) : b.time;
+  return at - bt;
+}
+
 function normalizeLineData(data = []) {
   if (!Array.isArray(data)) return [];
 
@@ -52,11 +59,7 @@ function normalizeLineData(data = []) {
       return { time, value };
     })
     .filter(Boolean)
-    .sort((a, b) => {
-      const at = typeof a.time === "string" ? Date.parse(a.time) : a.time;
-      const bt = typeof b.time === "string" ? Date.parse(b.time) : b.time;
-      return at - bt;
-    });
+    .sort(sortByTime);
 }
 
 function normalizeCandleData(data = []) {
@@ -75,20 +78,10 @@ function normalizeCandleData(data = []) {
         return null;
       }
 
-      return {
-        time,
-        open,
-        high,
-        low,
-        close,
-      };
+      return { time, open, high, low, close };
     })
     .filter(Boolean)
-    .sort((a, b) => {
-      const at = typeof a.time === "string" ? Date.parse(a.time) : a.time;
-      const bt = typeof b.time === "string" ? Date.parse(b.time) : b.time;
-      return at - bt;
-    });
+    .sort(sortByTime);
 }
 
 function normalizeVolumeData(data = []) {
@@ -116,11 +109,47 @@ function normalizeVolumeData(data = []) {
       };
     })
     .filter(Boolean)
-    .sort((a, b) => {
-      const at = typeof a.time === "string" ? Date.parse(a.time) : a.time;
-      const bt = typeof b.time === "string" ? Date.parse(b.time) : b.time;
-      return at - bt;
-    });
+    .sort(sortByTime);
+}
+
+function normalizeMarkers(markers = []) {
+  if (!Array.isArray(markers)) return [];
+
+  return markers
+    .map((m) => {
+      const time = toChartTime(m?.time);
+      if (!time) return null;
+
+      return {
+        time,
+        position: m?.position || "aboveBar",
+        color: m?.color || "#60a5fa",
+        shape: m?.shape || "circle",
+        text: m?.text || "",
+      };
+    })
+    .filter(Boolean)
+    .sort(sortByTime);
+}
+
+function normalizePriceLines(lines = []) {
+  if (!Array.isArray(lines)) return [];
+
+  return lines
+    .map((line) => {
+      const price = num(line?.price);
+      if (price === null) return null;
+
+      return {
+        price,
+        color: line?.color || "rgba(255,255,255,.55)",
+        lineWidth: Number.isFinite(Number(line?.lineWidth)) ? Number(line.lineWidth) : 1,
+        lineStyle: Number.isFinite(Number(line?.lineStyle)) ? Number(line.lineStyle) : 0,
+        axisLabelVisible: line?.axisLabelVisible !== false,
+        title: line?.title || "",
+      };
+    })
+    .filter(Boolean);
 }
 
 export default function InvestmentChart({
@@ -128,6 +157,8 @@ export default function InvestmentChart({
   volumeData = [],
   mode = "line",
   height = 540,
+  markers = [],
+  priceLines = [],
 }) {
   const chartContainerRef = useRef(null);
 
@@ -141,12 +172,13 @@ export default function InvestmentChart({
       width: container.clientWidth || 900,
       height,
       layout: {
-        background: { color: "#09111f" },
+        background: { color: "#07101d" },
         textColor: "#cbd5e1",
+        attributionLogo: false,
       },
       grid: {
-        vertLines: { color: "rgba(255,255,255,0.05)" },
-        horzLines: { color: "rgba(255,255,255,0.05)" },
+        vertLines: { color: "rgba(255,255,255,0.045)" },
+        horzLines: { color: "rgba(255,255,255,0.045)" },
       },
       rightPriceScale: {
         borderColor: "rgba(255,255,255,0.10)",
@@ -157,8 +189,8 @@ export default function InvestmentChart({
         secondsVisible: false,
       },
       crosshair: {
-        vertLine: { color: "rgba(255,255,255,0.16)" },
-        horzLine: { color: "rgba(255,255,255,0.16)" },
+        vertLine: { color: "rgba(255,255,255,0.18)" },
+        horzLine: { color: "rgba(255,255,255,0.18)" },
       },
       handleScroll: {
         mouseWheel: true,
@@ -175,6 +207,7 @@ export default function InvestmentChart({
 
     let series;
     let volumeSeries;
+    const appliedPriceLines = [];
 
     if (mode === "candles") {
       const candleData = normalizeCandleData(data);
@@ -226,16 +259,45 @@ export default function InvestmentChart({
         series = chart.addSeries(LineSeries, {
           color: "#60a5fa",
           lineWidth: 3,
+          priceLineColor: "rgba(96,165,250,.8)",
+          lastValueVisible: true,
+          crosshairMarkerVisible: true,
         });
 
         series.setData(lineData);
       }
     }
 
+    if (series) {
+      const normalizedMarkers = normalizeMarkers(markers);
+      if (normalizedMarkers.length > 0) {
+        try {
+          createSeriesMarkers(series, normalizedMarkers);
+        } catch (err) {
+          console.error("marker render failed", err);
+        }
+      } else {
+        try {
+          createSeriesMarkers(series, []);
+        } catch {}
+      }
+
+      const normalizedPriceLines = normalizePriceLines(priceLines);
+      if (normalizedPriceLines.length > 0 && typeof series.createPriceLine === "function") {
+        for (const line of normalizedPriceLines) {
+          try {
+            const created = series.createPriceLine(line);
+            appliedPriceLines.push(created);
+          } catch (err) {
+            console.error("price line failed", err);
+          }
+        }
+      }
+    }
+
     chart.timeScale().fitContent();
 
     const handleResize = () => {
-      if (!container) return;
       chart.applyOptions({
         width: container.clientWidth || 900,
       });
@@ -246,9 +308,18 @@ export default function InvestmentChart({
 
     return () => {
       window.removeEventListener("resize", handleResize);
+
+      if (series && typeof series.removePriceLine === "function") {
+        for (const line of appliedPriceLines) {
+          try {
+            series.removePriceLine(line);
+          } catch {}
+        }
+      }
+
       chart.remove();
     };
-  }, [data, volumeData, mode, height]);
+  }, [data, volumeData, mode, height, markers, priceLines]);
 
   return (
     <div

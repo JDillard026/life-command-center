@@ -35,6 +35,45 @@ function pct(n) {
   return `${num >= 0 ? "+" : ""}${num.toFixed(2)}%`;
 }
 
+function toNum(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+function toMarkerTime(value) {
+  if (!value) return null;
+
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+
+    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+      return trimmed;
+    }
+
+    const ts = Date.parse(trimmed);
+    if (!Number.isNaN(ts)) {
+      return Math.floor(ts / 1000);
+    }
+  }
+
+  if (value instanceof Date) {
+    return Math.floor(value.getTime() / 1000);
+  }
+
+  if (typeof value === "number") return value;
+
+  return null;
+}
+
+function timeToSortable(time) {
+  if (typeof time === "string") {
+    const parsed = Date.parse(time);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  return Number(time) || 0;
+}
+
 export default function InvestmentAssetDetailPage({ params }) {
   const assetId = params?.id;
 
@@ -173,34 +212,48 @@ export default function InvestmentAssetDetailPage({ params }) {
 
   const position = useMemo(() => {
     let shares = 0;
-    let cost = 0;
+    let activeCost = 0;
+    let realizedPnl = 0;
 
-    for (const t of txns) {
+    const ordered = [...txns].sort((a, b) => {
+      const at = Date.parse(String(a.txn_date || "")) || 0;
+      const bt = Date.parse(String(b.txn_date || "")) || 0;
+      return at - bt;
+    });
+
+    for (const t of ordered) {
       const qty = Number(t.qty) || 0;
       const px = Number(t.price) || 0;
       const txnType = String(t.txn_type || "").toUpperCase();
 
       if (txnType === "BUY") {
         shares += qty;
-        cost += qty * px;
+        activeCost += qty * px;
       }
 
       if (txnType === "SELL") {
+        const avgBeforeSell = shares > 0 ? activeCost / shares : 0;
+        realizedPnl += qty * (px - avgBeforeSell);
         shares -= qty;
+        activeCost -= qty * avgBeforeSell;
+
+        if (shares < 0) shares = 0;
+        if (activeCost < 0) activeCost = 0;
       }
     }
 
-    const avgCost = shares > 0 ? cost / shares : 0;
+    const avgCost = shares > 0 ? activeCost / shares : 0;
     const hasLivePrice = Number.isFinite(price) && price > 0;
     const marketValue = hasLivePrice ? shares * price : null;
-    const pnl = hasLivePrice ? marketValue - cost : null;
+    const pnl = hasLivePrice ? marketValue - activeCost : null;
     const pnlPct =
-      hasLivePrice && cost > 0 ? ((marketValue - cost) / cost) * 100 : null;
+      hasLivePrice && activeCost > 0 ? ((marketValue - activeCost) / activeCost) * 100 : null;
 
     return {
       shares,
-      cost,
+      cost: activeCost,
       avgCost,
+      realizedPnl,
       hasLivePrice,
       marketValue,
       pnl,
@@ -264,6 +317,72 @@ export default function InvestmentAssetDetailPage({ params }) {
       changePct,
     };
   }, [chartData, chartVolume]);
+
+  const tradeMarkers = useMemo(() => {
+    if (!Array.isArray(txns) || txns.length === 0) return [];
+
+    return [...txns]
+      .map((t) => {
+        const txnType = String(t.txn_type || "").toUpperCase();
+        const qty = toNum(t.qty);
+        const px = toNum(t.price);
+        const txnDate = t.txn_date;
+        const time = toMarkerTime(txnDate);
+
+        if (!time) return null;
+        if (txnType !== "BUY" && txnType !== "SELL") return null;
+
+        const isBuy = txnType === "BUY";
+
+        return {
+          time,
+          position: isBuy ? "belowBar" : "aboveBar",
+          color: isBuy ? "#22c55e" : "#ef4444",
+          shape: isBuy ? "arrowUp" : "arrowDown",
+          text: `${isBuy ? "B" : "S"} ${qty !== null ? fmtNumber(qty) : ""}${px !== null ? ` @ ${money(px)}` : ""}`,
+        };
+      })
+      .filter(Boolean)
+      .sort((a, b) => timeToSortable(a.time) - timeToSortable(b.time));
+  }, [txns]);
+
+  const chartPriceLines = useMemo(() => {
+    const lines = [];
+
+    if (position.shares > 0 && Number.isFinite(position.avgCost) && position.avgCost > 0) {
+      lines.push({
+        price: position.avgCost,
+        color: "rgba(96,165,250,.95)",
+        lineWidth: 2,
+        lineStyle: 2,
+        axisLabelVisible: true,
+        title: "Avg Cost",
+      });
+    }
+
+    if (Number.isFinite(price) && price > 0) {
+      lines.push({
+        price,
+        color: "rgba(255,255,255,.55)",
+        lineWidth: 1,
+        lineStyle: 0,
+        axisLabelVisible: true,
+        title: "Live",
+      });
+    }
+
+    return lines;
+  }, [position.avgCost, position.shares, price]);
+
+  const buyCount = useMemo(
+    () => txns.filter((t) => String(t.txn_type || "").toUpperCase() === "BUY").length,
+    [txns]
+  );
+
+  const sellCount = useMemo(
+    () => txns.filter((t) => String(t.txn_type || "").toUpperCase() === "SELL").length,
+    [txns]
+  );
 
   const allowedIntervals = INTERVALS_BY_RANGE[chartRange] || ["1D"];
 
@@ -511,6 +630,8 @@ export default function InvestmentAssetDetailPage({ params }) {
                     volumeData={chartVolume}
                     mode="candles"
                     height={590}
+                    markers={tradeMarkers}
+                    priceLines={chartPriceLines}
                   />
                 ) : chartMode === "line" && lineData.length >= 2 ? (
                   <InvestmentChart
@@ -518,6 +639,8 @@ export default function InvestmentAssetDetailPage({ params }) {
                     volumeData={[]}
                     mode="line"
                     height={590}
+                    markers={tradeMarkers}
+                    priceLines={chartPriceLines}
                   />
                 ) : (
                   <div style={{ padding: 16 }}>
@@ -598,6 +721,19 @@ export default function InvestmentAssetDetailPage({ params }) {
               }
             />
 
+            <MetricCard
+              title="Realized P/L"
+              value={money(position.realizedPnl)}
+              sub="Profit or loss already locked in from sell transactions."
+              valueTone={
+                Number.isFinite(position.realizedPnl)
+                  ? position.realizedPnl >= 0
+                    ? "good"
+                    : "bad"
+                  : "default"
+              }
+            />
+
             <div className="card" style={{ padding: 16 }}>
               <div style={{ fontWeight: 900, fontSize: 16, marginBottom: 12 }}>Position Detail</div>
 
@@ -617,7 +753,7 @@ export default function InvestmentAssetDetailPage({ params }) {
                   value={position.hasLivePrice ? money(position.marketValue) : "Pending"}
                 />
                 <InfoRow
-                  label="P/L"
+                  label="Unrealized P/L"
                   value={position.hasLivePrice ? money(position.pnl) : "Pending"}
                   tone={
                     position.hasLivePrice
@@ -627,14 +763,55 @@ export default function InvestmentAssetDetailPage({ params }) {
                       : "default"
                   }
                 />
+                <InfoRow
+                  label="Realized P/L"
+                  value={money(position.realizedPnl)}
+                  tone={
+                    Number.isFinite(position.realizedPnl)
+                      ? position.realizedPnl >= 0
+                        ? "good"
+                        : "bad"
+                      : "default"
+                  }
+                />
               </div>
             </div>
 
             <div className="card" style={{ padding: 16 }}>
-              <div style={{ fontWeight: 900, fontSize: 16, marginBottom: 12 }}>Planned Upgrades</div>
-              <div className="muted" style={{ fontSize: 13, lineHeight: 1.55 }}>
-                Next real trader upgrades are entry and exit markers, OHLC hover stats,
-                EMA overlays, RSI/MACD panels, and eventually broker-connected order entry.
+              <div style={{ fontWeight: 900, fontSize: 16, marginBottom: 12 }}>Trade Overlay</div>
+              <div style={{ display: "grid", gap: 10 }}>
+                <InfoRow label="Buy Markers" value={String(buyCount)} />
+                <InfoRow label="Sell Markers" value={String(sellCount)} />
+                <InfoRow
+                  label="Avg Cost Line"
+                  value={position.shares > 0 ? money(position.avgCost) : "—"}
+                />
+              </div>
+            </div>
+
+            <div className="card" style={{ padding: 16 }}>
+              <div style={{ fontWeight: 900, fontSize: 16, marginBottom: 12 }}>Coming Soon • Buy / Sell</div>
+              <div className="muted" style={{ fontSize: 13, lineHeight: 1.55, marginBottom: 14 }}>
+                This area is reserved for future order entry. Later you will be able to place a buy or sale, review quantity, estimated cost, and confirm before saving the trade.
+              </div>
+
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                  gap: 10,
+                }}
+              >
+                <DisabledActionCard
+                  title="Buy Order"
+                  sub="Coming soon"
+                  tone="good"
+                />
+                <DisabledActionCard
+                  title="Sell Order"
+                  sub="Coming soon"
+                  tone="bad"
+                />
               </div>
             </div>
           </div>
@@ -658,46 +835,73 @@ export default function InvestmentAssetDetailPage({ params }) {
 
           {txns.length ? (
             <div style={{ display: "grid", gap: 10 }}>
-              {txns.map((t) => (
-                <div
-                  key={t.id}
-                  style={{
-                    border: "1px solid rgba(255,255,255,.08)",
-                    background: "rgba(255,255,255,.03)",
-                    borderRadius: 16,
-                    padding: 14,
-                  }}
-                >
+              {txns.map((t) => {
+                const txnType = String(t.txn_type || "").toUpperCase();
+                const isBuy = txnType === "BUY";
+
+                return (
                   <div
+                    key={t.id}
                     style={{
-                      display: "grid",
-                      gridTemplateColumns: "1fr 1fr 1fr 1fr",
-                      gap: 12,
-                      alignItems: "center",
+                      border: `1px solid ${
+                        isBuy
+                          ? "rgba(34,197,94,.16)"
+                          : txnType === "SELL"
+                            ? "rgba(239,68,68,.16)"
+                            : "rgba(255,255,255,.08)"
+                      }`,
+                      background: isBuy
+                        ? "linear-gradient(180deg, rgba(34,197,94,.08), rgba(255,255,255,.03))"
+                        : txnType === "SELL"
+                          ? "linear-gradient(180deg, rgba(239,68,68,.08), rgba(255,255,255,.03))"
+                          : "rgba(255,255,255,.03)",
+                      borderRadius: 16,
+                      padding: 14,
                     }}
                   >
-                    <div>
-                      <div className="muted" style={{ fontSize: 12 }}>Type</div>
-                      <div style={{ marginTop: 4, fontWeight: 900 }}>{t.txn_type}</div>
-                    </div>
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "1fr 1fr 1fr 1fr",
+                        gap: 12,
+                        alignItems: "center",
+                      }}
+                    >
+                      <div>
+                        <div className="muted" style={{ fontSize: 12 }}>Type</div>
+                        <div
+                          style={{
+                            marginTop: 4,
+                            fontWeight: 900,
+                            color: isBuy
+                              ? "#4ade80"
+                              : txnType === "SELL"
+                                ? "#f87171"
+                                : "rgba(255,255,255,.92)",
+                          }}
+                        >
+                          {t.txn_type}
+                        </div>
+                      </div>
 
-                    <div>
-                      <div className="muted" style={{ fontSize: 12 }}>Qty</div>
-                      <div style={{ marginTop: 4, fontWeight: 900 }}>{fmtNumber(t.qty)}</div>
-                    </div>
+                      <div>
+                        <div className="muted" style={{ fontSize: 12 }}>Qty</div>
+                        <div style={{ marginTop: 4, fontWeight: 900 }}>{fmtNumber(t.qty)}</div>
+                      </div>
 
-                    <div>
-                      <div className="muted" style={{ fontSize: 12 }}>Price</div>
-                      <div style={{ marginTop: 4, fontWeight: 900 }}>{money(t.price)}</div>
-                    </div>
+                      <div>
+                        <div className="muted" style={{ fontSize: 12 }}>Price</div>
+                        <div style={{ marginTop: 4, fontWeight: 900 }}>{money(t.price)}</div>
+                      </div>
 
-                    <div>
-                      <div className="muted" style={{ fontSize: 12 }}>Date</div>
-                      <div style={{ marginTop: 4, fontWeight: 900 }}>{t.txn_date}</div>
+                      <div>
+                        <div className="muted" style={{ fontSize: 12 }}>Date</div>
+                        <div style={{ marginTop: 4, fontWeight: 900 }}>{t.txn_date}</div>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <EmptyState
@@ -714,10 +918,10 @@ export default function InvestmentAssetDetailPage({ params }) {
           </div>
 
           <div style={{ display: "grid", gap: 10, marginTop: 16 }}>
-            <MiniPoint title="Entry / exit markers" sub="Plot buys and sells directly on the chart." />
-            <MiniPoint title="OHLC hover stats" sub="Open, high, low, close, and volume under the crosshair." />
-            <MiniPoint title="Indicators" sub="EMA, SMA, RSI, MACD, VWAP, and more." />
-            <MiniPoint title="Trading terminal" sub="Order ticket and broker connection later." />
+            <MiniPoint title="Entry / exit markers" sub="Buys and sells now plot directly on the chart." />
+            <MiniPoint title="Average cost line" sub="See your average entry price against current market action." />
+            <MiniPoint title="OHLC hover stats" sub="Next step is live hover values under the crosshair." />
+            <MiniPoint title="Trading terminal" sub="Buy and sell controls are staged with a coming soon section." />
           </div>
         </div>
       </div>
@@ -756,8 +960,8 @@ function ChartMiniStat({ label, value, tone = "default" }) {
     tone === "good"
       ? "#4ade80"
       : tone === "bad"
-      ? "#f87171"
-      : "rgba(255,255,255,.92)";
+        ? "#f87171"
+        : "rgba(255,255,255,.92)";
 
   return (
     <div
@@ -776,6 +980,39 @@ function ChartMiniStat({ label, value, tone = "default" }) {
       </div>
       <div style={{ marginTop: 8, fontWeight: 900, color }}>
         {value}
+      </div>
+    </div>
+  );
+}
+
+function DisabledActionCard({ title, sub, tone = "default" }) {
+  const border =
+    tone === "good"
+      ? "1px solid rgba(34,197,94,.16)"
+      : tone === "bad"
+        ? "1px solid rgba(239,68,68,.16)"
+        : "1px solid rgba(255,255,255,.08)";
+
+  const background =
+    tone === "good"
+      ? "linear-gradient(180deg, rgba(34,197,94,.08), rgba(255,255,255,.03))"
+      : tone === "bad"
+        ? "linear-gradient(180deg, rgba(239,68,68,.08), rgba(255,255,255,.03))"
+        : "rgba(255,255,255,.03)";
+
+  return (
+    <div
+      style={{
+        border,
+        background,
+        borderRadius: 16,
+        padding: 14,
+        opacity: 0.9,
+      }}
+    >
+      <div style={{ fontWeight: 900 }}>{title}</div>
+      <div className="muted" style={{ marginTop: 6, fontSize: 13 }}>
+        {sub}
       </div>
     </div>
   );
@@ -823,8 +1060,8 @@ function InfoRow({ label, value, tone = "default" }) {
     tone === "good"
       ? "#4ade80"
       : tone === "bad"
-      ? "#f87171"
-      : "rgba(255,255,255,.92)";
+        ? "#f87171"
+        : "rgba(255,255,255,.92)";
 
   return (
     <div
