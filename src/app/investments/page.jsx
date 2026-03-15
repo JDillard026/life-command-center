@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import { useEffect, useMemo, useState } from "react"
 import { supabase } from "@/lib/supabaseClient"
 
@@ -41,13 +42,16 @@ export default function InvestmentsPage() {
         .from("investment_assets")
         .select("*")
         .eq("user_id", user.id)
+        .order("created_at", { ascending: false })
 
       const { data: txnRows, error: txnError } = await supabase
         .from("investment_transactions")
         .select("*")
         .eq("user_id", user.id)
+        .order("txn_date", { ascending: false })
 
       if (assetError || txnError) {
+        console.error(assetError || txnError)
         setError("Failed loading investments data.")
         return
       }
@@ -67,14 +71,13 @@ export default function InvestmentsPage() {
       }
 
       setLoadingPrices(true)
-
       const nextPrices = {}
 
       for (const a of assets) {
         if (!a.symbol || a.asset_type === "cash") continue
 
         try {
-          const res = await fetch(`/api/prices?symbol=${a.symbol}`)
+          const res = await fetch(`/api/prices?symbol=${encodeURIComponent(a.symbol)}`)
           const data = await res.json()
 
           if (Number.isFinite(Number(data?.price)) && Number(data.price) > 0) {
@@ -96,7 +99,9 @@ export default function InvestmentsPage() {
     setError("")
     setStatus("")
 
-    if (!symbol.trim()) {
+    const cleanSymbol = symbol.toUpperCase().trim()
+
+    if (!cleanSymbol) {
       setError("Enter a symbol first.")
       return
     }
@@ -105,12 +110,23 @@ export default function InvestmentsPage() {
       data: { user },
     } = await supabase.auth.getUser()
 
+    if (!user) {
+      setError("You must be logged in.")
+      return
+    }
+
+    const alreadyExists = assets.some((a) => (a.symbol || "").toUpperCase() === cleanSymbol)
+    if (alreadyExists) {
+      setError("That asset already exists.")
+      return
+    }
+
     const { data, error } = await supabase
       .from("investment_assets")
       .insert({
         user_id: user.id,
         asset_type: "stock",
-        symbol: symbol.toUpperCase().trim(),
+        symbol: cleanSymbol,
         account: "Main",
       })
       .select()
@@ -136,9 +152,27 @@ export default function InvestmentsPage() {
       return
     }
 
+    const qtyNum = Number(txnQty)
+    const priceNum = Number(txnPrice)
+
+    if (!Number.isFinite(qtyNum) || qtyNum <= 0) {
+      setError("Quantity must be greater than 0.")
+      return
+    }
+
+    if (!Number.isFinite(priceNum) || priceNum <= 0) {
+      setError("Price must be greater than 0.")
+      return
+    }
+
     const {
       data: { user },
     } = await supabase.auth.getUser()
+
+    if (!user) {
+      setError("You must be logged in.")
+      return
+    }
 
     const { data, error } = await supabase
       .from("investment_transactions")
@@ -147,8 +181,8 @@ export default function InvestmentsPage() {
         asset_id: txnAsset,
         txn_type: "BUY",
         txn_date: new Date().toISOString().slice(0, 10),
-        qty: Number(txnQty),
-        price: Number(txnPrice),
+        qty: qtyNum,
+        price: priceNum,
       })
       .select()
       .single()
@@ -169,22 +203,23 @@ export default function InvestmentsPage() {
     let totalValue = 0
     let totalCost = 0
 
-    const holdings = []
-
-    for (const a of assets) {
+    const holdings = assets.map((a) => {
       const list = txns.filter((t) => t.asset_id === a.id)
 
       let shares = 0
       let cost = 0
 
       for (const t of list) {
+        const qty = Number(t.qty) || 0
+        const price = Number(t.price) || 0
+
         if (t.txn_type === "BUY") {
-          shares += Number(t.qty)
-          cost += Number(t.qty) * Number(t.price)
+          shares += qty
+          cost += qty * price
         }
 
         if (t.txn_type === "SELL") {
-          shares -= Number(t.qty)
+          shares -= qty
         }
       }
 
@@ -192,32 +227,44 @@ export default function InvestmentsPage() {
       const hasLivePrice = Number.isFinite(livePrice) && livePrice > 0
       const value = hasLivePrice ? shares * livePrice : null
       const pnl = hasLivePrice ? value - cost : null
+      const avgCost = shares > 0 ? cost / shares : 0
 
       if (hasLivePrice) totalValue += value
       totalCost += cost
 
-      holdings.push({
+      return {
         ...a,
         shares,
         cost,
         value,
         pnl,
+        avgCost,
         livePrice,
         hasLivePrice,
-      })
+        txCount: list.length,
+      }
+    })
+
+    const sorted = [...holdings].sort((a, b) => {
+      const aVal = Number(a.value) || 0
+      const bVal = Number(b.value) || 0
+      return bVal - aVal
+    })
+
+    return {
+      holdings: sorted,
+      totalValue,
+      totalCost,
+      totalPnl: totalValue - totalCost,
+      hasAnyLivePrices: sorted.some((h) => h.hasLivePrice),
     }
-
-    const totalPnl = totalValue - totalCost
-    const hasAnyLivePrices = holdings.some((h) => h.hasLivePrice)
-
-    return { holdings, totalValue, totalCost, totalPnl, hasAnyLivePrices }
   }, [assets, txns, prices])
 
   return (
     <main
       style={{
         padding: "36px 28px 44px",
-        maxWidth: "1180px",
+        maxWidth: "1280px",
         margin: "0 auto",
       }}
     >
@@ -256,7 +303,8 @@ export default function InvestmentsPage() {
           </h1>
 
           <div className="muted" style={{ marginTop: 10, fontSize: 15, maxWidth: 760 }}>
-            Clean portfolio tracking with Supabase-backed assets and trades. Live pricing can be layered back in later.
+            Keep the main portfolio clean. Open each holding on its own detail screen for chart,
+            position data, cost basis, gain/loss, and transaction history.
           </div>
         </div>
 
@@ -287,66 +335,121 @@ export default function InvestmentsPage() {
             <MetricCard
               title="Tracked Value"
               value={portfolio.hasAnyLivePrices ? money(portfolio.totalValue) : "Price unavailable"}
-              sub={loadingPrices ? "Checking prices..." : "Will update once usable price data is available."}
+              sub={loadingPrices ? "Checking prices..." : "Live values appear when usable pricing is returned."}
             />
 
             <MetricCard
               title="Total Cost Basis"
               value={money(portfolio.totalCost)}
-              sub="Based on your recorded buy trades."
+              sub="Built from your recorded buy trades."
             />
 
             <MetricCard
               title="Portfolio P/L"
               value={portfolio.hasAnyLivePrices ? money(portfolio.totalPnl) : "Pending live data"}
-              sub={portfolio.hasAnyLivePrices ? (portfolio.totalPnl >= 0 ? "Portfolio above cost basis." : "Portfolio below cost basis.") : "P/L will calculate when pricing is active."}
-              valueTone={portfolio.hasAnyLivePrices ? (portfolio.totalPnl >= 0 ? "good" : "bad") : "default"}
+              sub={
+                portfolio.hasAnyLivePrices
+                  ? portfolio.totalPnl >= 0
+                    ? "Portfolio above cost basis."
+                    : "Portfolio below cost basis."
+                  : "P/L shows once live prices are available."
+              }
+              valueTone={
+                portfolio.hasAnyLivePrices
+                  ? portfolio.totalPnl >= 0
+                    ? "good"
+                    : "bad"
+                  : "default"
+              }
             />
           </div>
 
-          <div className="card" style={{ padding: 18 }}>
-            <div style={{ fontWeight: 950, fontSize: 20 }}>Portfolio Snapshot</div>
-            <div className="muted" style={{ marginTop: 6, fontSize: 14 }}>
-              This section is intentionally clean right now. Next pass can add charts, allocation, and daily movement.
-            </div>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1.5fr .95fr",
+              gap: 18,
+            }}
+          >
+            <div className="card" style={{ padding: 18 }}>
+              <div style={{ fontWeight: 950, fontSize: 20 }}>Top Holdings</div>
+              <div className="muted" style={{ marginTop: 6, fontSize: 14 }}>
+                Clean summary here. Detailed charts live on the asset screen.
+              </div>
 
-            <div style={{ height: 16 }} />
+              <div style={{ height: 16 }} />
 
-            {!portfolio.holdings.length ? (
-              <EmptyState
-                title="No investments yet"
-                sub="Add your first asset, then log a trade to start building your portfolio."
-              />
-            ) : (
-              <div style={{ display: "grid", gap: 10 }}>
-                {portfolio.holdings.slice(0, 5).map((h) => (
-                  <div key={h.id} className="card" style={{ padding: 14 }}>
-                    <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr 1fr 1fr", gap: 12 }}>
-                      <div>
-                        <div style={{ fontWeight: 900 }}>{h.symbol}</div>
-                        <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
-                          {h.account || "Main"} • {h.asset_type || "stock"}
+              {!portfolio.holdings.length ? (
+                <EmptyState
+                  title="No investments yet"
+                  sub="Add your first asset, then log a trade to start building your portfolio."
+                />
+              ) : (
+                <div style={{ display: "grid", gap: 10 }}>
+                  {portfolio.holdings.slice(0, 5).map((h) => (
+                    <div key={h.id} className="card" style={{ padding: 14 }}>
+                      <div
+                        style={{
+                          display: "grid",
+                          gridTemplateColumns: "1.2fr 1fr 1fr auto",
+                          gap: 12,
+                          alignItems: "center",
+                        }}
+                      >
+                        <div>
+                          <div style={{ fontWeight: 900, fontSize: 16 }}>{h.symbol}</div>
+                          <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+                            {h.account || "Main"} • {h.asset_type || "stock"} • {h.txCount} trade{h.txCount === 1 ? "" : "s"}
+                          </div>
                         </div>
-                      </div>
-                      <div>
-                        <div className="muted" style={{ fontSize: 12 }}>Shares</div>
-                        <div style={{ fontWeight: 850, marginTop: 4 }}>{fmtNumber(h.shares)}</div>
-                      </div>
-                      <div>
-                        <div className="muted" style={{ fontSize: 12 }}>Cost</div>
-                        <div style={{ fontWeight: 850, marginTop: 4 }}>{money(h.cost)}</div>
-                      </div>
-                      <div>
-                        <div className="muted" style={{ fontSize: 12 }}>Live Value</div>
-                        <div style={{ fontWeight: 850, marginTop: 4 }}>
-                          {h.hasLivePrice ? money(h.value) : "Pending"}
+
+                        <div>
+                          <div className="muted" style={{ fontSize: 12 }}>Shares</div>
+                          <div style={{ fontWeight: 850, marginTop: 4 }}>{fmtNumber(h.shares)}</div>
                         </div>
+
+                        <div>
+                          <div className="muted" style={{ fontSize: 12 }}>Live Value</div>
+                          <div style={{ fontWeight: 850, marginTop: 4 }}>
+                            {h.hasLivePrice ? money(h.value) : "Pending"}
+                          </div>
+                        </div>
+
+                        <Link href={`/investments/${h.id}`} className="btn">
+                          Live Chart
+                        </Link>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="card" style={{ padding: 18 }}>
+              <div style={{ fontWeight: 950, fontSize: 20 }}>Next Upgrade</div>
+              <div className="muted" style={{ marginTop: 8, lineHeight: 1.5 }}>
+                This setup is now ready for:
               </div>
-            )}
+
+              <div style={{ display: "grid", gap: 10, marginTop: 16 }}>
+                <MiniPoint
+                  title="Asset detail screen"
+                  sub="Already added below with Live Chart buttons."
+                />
+                <MiniPoint
+                  title="Historical chart API"
+                  sub="Needed for real line charts like Robinhood/Webull."
+                />
+                <MiniPoint
+                  title="Allocation section"
+                  sub="Pie / weight view based on market value."
+                />
+                <MiniPoint
+                  title="News later"
+                  sub="Add headlines per ticker after the chart engine is stable."
+                />
+              </div>
+            </div>
           </div>
         </>
       )}
@@ -369,7 +472,25 @@ export default function InvestmentsPage() {
           </div>
 
           <div className="card" style={{ padding: 0, overflow: "hidden" }}>
-            <TableHeader cols={["Symbol", "Shares", "Cost Basis", "Live Price", "Value", "P/L"]} />
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1.15fr .8fr .9fr .9fr .9fr .9fr 180px",
+                gap: 12,
+                padding: "16px 18px",
+                borderBottom: "1px solid rgba(255,255,255,.08)",
+                fontWeight: 900,
+                color: "rgba(255,255,255,.75)",
+              }}
+            >
+              <div>Symbol</div>
+              <div>Shares</div>
+              <div>Cost Basis</div>
+              <div>Avg Cost</div>
+              <div>Live Price</div>
+              <div>P/L</div>
+              <div>Action</div>
+            </div>
 
             {portfolio.holdings.length ? (
               portfolio.holdings.map((h) => (
@@ -377,20 +498,38 @@ export default function InvestmentsPage() {
                   key={h.id}
                   style={{
                     display: "grid",
-                    gridTemplateColumns: "1.3fr 1fr 1fr 1fr 1fr 1fr",
+                    gridTemplateColumns: "1.15fr .8fr .9fr .9fr .9fr .9fr 180px",
                     gap: 12,
                     padding: "16px 18px",
                     borderBottom: "1px solid rgba(255,255,255,.08)",
                     alignItems: "center",
                   }}
                 >
-                  <div style={{ fontWeight: 900 }}>{h.symbol}</div>
+                  <div>
+                    <div style={{ fontWeight: 900 }}>{h.symbol}</div>
+                    <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+                      {h.account || "Main"}
+                    </div>
+                  </div>
+
                   <div>{fmtNumber(h.shares)}</div>
                   <div>{money(h.cost)}</div>
+                  <div>{h.shares > 0 ? money(h.avgCost) : "—"}</div>
                   <div>{h.hasLivePrice ? money(h.livePrice) : "Unavailable"}</div>
-                  <div>{h.hasLivePrice ? money(h.value) : "Pending"}</div>
-                  <div style={{ color: h.hasLivePrice ? (h.pnl >= 0 ? "#4ade80" : "#f87171") : "inherit", fontWeight: 850 }}>
+
+                  <div
+                    style={{
+                      color: h.hasLivePrice ? (h.pnl >= 0 ? "#4ade80" : "#f87171") : "inherit",
+                      fontWeight: 850,
+                    }}
+                  >
                     {h.hasLivePrice ? money(h.pnl) : "Pending"}
+                  </div>
+
+                  <div>
+                    <Link href={`/investments/${h.id}`} className="btn">
+                      Live Chart
+                    </Link>
                   </div>
                 </div>
               ))
@@ -452,6 +591,7 @@ export default function InvestmentsPage() {
             {txns.length ? (
               txns.map((t) => {
                 const asset = assets.find((a) => a.id === t.asset_id)
+
                 return (
                   <div
                     key={t.id}
@@ -501,9 +641,11 @@ function TabBtn({ active, children, onClick }) {
 
 function MetricCard({ title, value, sub, valueTone = "default" }) {
   const toneColor =
-    valueTone === "good" ? "#4ade80" :
-    valueTone === "bad" ? "#f87171" :
-    "inherit"
+    valueTone === "good"
+      ? "#4ade80"
+      : valueTone === "bad"
+        ? "#f87171"
+        : "inherit"
 
   return (
     <div className="card" style={{ padding: 18 }}>
@@ -553,6 +695,24 @@ function EmptyState({ title, sub }) {
     >
       <div style={{ fontWeight: 900, fontSize: 16 }}>{title}</div>
       <div className="muted" style={{ marginTop: 8, fontSize: 14, lineHeight: 1.45 }}>
+        {sub}
+      </div>
+    </div>
+  )
+}
+
+function MiniPoint({ title, sub }) {
+  return (
+    <div
+      style={{
+        border: "1px solid rgba(255,255,255,.08)",
+        background: "rgba(255,255,255,.03)",
+        borderRadius: 16,
+        padding: 14,
+      }}
+    >
+      <div style={{ fontWeight: 850 }}>{title}</div>
+      <div className="muted" style={{ marginTop: 6, fontSize: 13, lineHeight: 1.45 }}>
         {sub}
       </div>
     </div>
