@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
+import InvestmentChart from "@/components/ui/InvestmentChart";
 
 export const dynamic = "force-dynamic";
 
@@ -246,7 +247,7 @@ export default function DashboardPage() {
             .eq("user_id", currentUser.id)
             .gte("tx_date", monthStart)
             .lte("tx_date", monthEnd)
-            .order("tx_date", { ascending: false }),
+            .order("tx_date", { ascending: true }),
 
           supabase
             .from("spending_planned_items")
@@ -254,7 +255,7 @@ export default function DashboardPage() {
             .eq("user_id", currentUser.id)
             .gte("planned_date", monthStart)
             .lte("planned_date", monthEnd)
-            .order("planned_date", { ascending: false }),
+            .order("planned_date", { ascending: true }),
 
           supabase
             .from("income_deposits")
@@ -262,7 +263,7 @@ export default function DashboardPage() {
             .eq("user_id", currentUser.id)
             .gte("deposit_date", monthStart)
             .lte("deposit_date", monthEnd)
-            .order("deposit_date", { ascending: false }),
+            .order("deposit_date", { ascending: true }),
         ]);
 
         if (accRes.error) throw accRes.error;
@@ -416,7 +417,13 @@ export default function DashboardPage() {
     if (urgentBill) {
       attention.push({
         title: "Bill due now",
-        body: `${urgentBill.name} is due ${urgentBill.dueIn < 0 ? `${Math.abs(urgentBill.dueIn)} day(s) late` : urgentBill.dueIn === 0 ? "today" : `in ${urgentBill.dueIn} day(s)`}.`,
+        body: `${urgentBill.name} is due ${
+          urgentBill.dueIn < 0
+            ? `${Math.abs(urgentBill.dueIn)} day(s) late`
+            : urgentBill.dueIn === 0
+            ? "today"
+            : `in ${urgentBill.dueIn} day(s)`
+        }.`,
         tone: urgentBill.dueIn <= 0 ? "bad" : "warn",
       });
     }
@@ -429,27 +436,55 @@ export default function DashboardPage() {
       });
     }
 
-    const biggestBill = activeBills
-      .map((b) => ({
-        ...b,
-        monthlyValue:
-          b.type === "controllable"
-            ? safeNum(b.minPay, 0) + safeNum(b.extraPay, 0)
-            : safeNum(b.amount, 0) * freqToMonthlyMult(b.frequency),
-      }))
-      .sort((a, b) => safeNum(b.monthlyValue, 0) - safeNum(a.monthlyValue, 0))[0] || null;
+    const biggestBill =
+      activeBills
+        .map((b) => ({
+          ...b,
+          monthlyValue:
+            b.type === "controllable"
+              ? safeNum(b.minPay, 0) + safeNum(b.extraPay, 0)
+              : safeNum(b.amount, 0) * freqToMonthlyMult(b.frequency),
+        }))
+        .sort((a, b) => safeNum(b.monthlyValue, 0) - safeNum(a.monthlyValue, 0))[0] || null;
 
-    const incomeSources = [...incomeDeposits]
-      .reduce((map, row) => {
-        const key = String(row.source || "Income").trim() || "Income";
-        map.set(key, (map.get(key) || 0) + safeNum(row.amount, 0));
-        return map;
-      }, new Map());
+    const incomeSources = [...incomeDeposits].reduce((map, row) => {
+      const key = String(row.source || "Income").trim() || "Income";
+      map.set(key, (map.get(key) || 0) + safeNum(row.amount, 0));
+      return map;
+    }, new Map());
 
     const topIncomeSources = Array.from(incomeSources.entries())
       .map(([source, total]) => ({ source, total }))
       .sort((a, b) => b.total - a.total)
       .slice(0, 4);
+
+    const dayMap = new Map();
+
+    incomeDeposits.forEach((d) => {
+      const key = d.date || today;
+      dayMap.set(key, (dayMap.get(key) || 0) + safeNum(d.amount, 0));
+    });
+
+    spendingTx.forEach((t) => {
+      const key = t.date || today;
+      const amt = safeNum(t.amount, 0);
+      if (String(t.type || "").toLowerCase() === "income") {
+        dayMap.set(key, (dayMap.get(key) || 0) + amt);
+      } else {
+        dayMap.set(key, (dayMap.get(key) || 0) - amt);
+      }
+    });
+
+    const cashFlowChartData = Array.from(dayMap.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .reduce((arr, [time, delta]) => {
+        const prev = arr.length ? arr[arr.length - 1].value : 0;
+        arr.push({
+          time,
+          value: Number((prev + safeNum(delta, 0)).toFixed(2)),
+        });
+        return arr;
+      }, []);
 
     return {
       today,
@@ -473,6 +508,7 @@ export default function DashboardPage() {
       attention,
       biggestBill,
       topIncomeSources,
+      cashFlowChartData,
     };
   }, [accounts, primaryId, bills, spendingTx, plannedSpending, incomeDeposits]);
 
@@ -641,6 +677,8 @@ export default function DashboardPage() {
               Net worth <b>{money(computed.netWorth)}</b>
               {" • "}
               Credit debt <b>{money(computed.debtTotal)}</b>
+              {" • "}
+              Investments <b>{money(computed.investTotal)}</b>
             </div>
           </div>
 
@@ -692,6 +730,52 @@ export default function DashboardPage() {
             </div>
           </div>
         </div>
+      </section>
+
+      <section
+        className="card"
+        style={{ padding: 16, borderRadius: 24, marginBottom: 16 }}
+      >
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            gap: 12,
+            alignItems: "baseline",
+            flexWrap: "wrap",
+            marginBottom: 12,
+          }}
+        >
+          <div>
+            <div style={{ fontWeight: 900, fontSize: 18 }}>Cash flow trend</div>
+            <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
+              Real chart from this month’s income and spending activity.
+            </div>
+          </div>
+
+          <div className="muted" style={{ fontSize: 12 }}>
+            Current net month cash flow <b>{money(computed.netMonthCashFlow)}</b>
+          </div>
+        </div>
+
+        {computed.cashFlowChartData.length >= 2 ? (
+          <InvestmentChart data={computed.cashFlowChartData} />
+        ) : (
+          <div
+            className="card"
+            style={{
+              padding: 16,
+              borderRadius: 18,
+              background: "rgba(255,255,255,.03)",
+              border: "1px solid rgba(255,255,255,.06)",
+            }}
+          >
+            <div style={{ fontWeight: 900 }}>Not enough chart data yet</div>
+            <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
+              Add at least a couple income or spending entries this month and the chart will populate.
+            </div>
+          </div>
+        )}
       </section>
 
       <section
@@ -811,10 +895,7 @@ export default function DashboardPage() {
                 {
                   label: "Income",
                   value: computed.incomeMonth,
-                  pct:
-                    computed.incomeMonth > 0
-                      ? 100
-                      : 0,
+                  pct: computed.incomeMonth > 0 ? 100 : 0,
                   fill: "rgba(34,197,94,.70)",
                 },
                 {

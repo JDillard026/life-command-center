@@ -1,48 +1,64 @@
-import { NextResponse } from "next/server"
+import { NextResponse } from "next/server";
 
 export async function GET(req) {
   try {
-    const { searchParams } = new URL(req.url)
-    const symbol = searchParams.get("symbol")
+    const { searchParams } = new URL(req.url);
+    const symbol = String(searchParams.get("symbol") || "").trim().toUpperCase();
 
     if (!symbol) {
-      return NextResponse.json({ error: "Missing symbol" }, { status: 400 })
+      return NextResponse.json({ error: "Missing symbol" }, { status: 400 });
     }
 
-    const key = process.env.FMP_API_KEY
+    const apiKey = process.env.FMP_API_KEY;
 
-    if (!key) {
-      return NextResponse.json({ error: "Missing FMP API key" }, { status: 500 })
+    if (!apiKey) {
+      return NextResponse.json({ error: "Missing FMP_API_KEY" }, { status: 500 });
     }
 
-    const url = `https://financialmodelingprep.com/stable/historical-price-eod/light?symbol=${encodeURIComponent(
-      symbol
-    )}&apikey=${key}`
+    const url =
+      `https://financialmodelingprep.com/stable/quote` +
+      `?symbol=${encodeURIComponent(symbol)}` +
+      `&apikey=${encodeURIComponent(apiKey)}`;
 
-    const res = await fetch(url, { cache: "no-store" })
-    const data = await res.json()
+    const res = await fetch(url, { cache: "no-store" });
+    const text = await res.text();
 
-    const row = Array.isArray(data) ? data[0] : null
-    const price = Number(row?.close)
+    console.log("FMP STATUS:", res.status);
+    console.log("FMP RAW:", text);
 
-    if (Number.isFinite(price) && price > 0) {
-      return NextResponse.json({ price })
+    if (!res.ok) {
+      return NextResponse.json(
+        { error: `FMP request failed: ${res.status}`, details: text },
+        { status: 502 }
+      );
     }
 
-    return NextResponse.json(
-      {
-        price: null,
-        error: "No usable EOD price returned",
-      },
-      { status: 200 }
-    )
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      return NextResponse.json(
+        { error: "FMP returned non-JSON", details: text },
+        { status: 502 }
+      );
+    }
+
+    const row = Array.isArray(data) ? data[0] : data;
+    const price = Number(row?.price);
+
+    if (!Number.isFinite(price) || price <= 0) {
+      return NextResponse.json(
+        { error: "Price unavailable", details: data },
+        { status: 404 }
+      );
+    }
+
+    return NextResponse.json({ symbol, price });
   } catch (err) {
+    console.error("PRICES ROUTE ERROR:", err);
     return NextResponse.json(
-      {
-        price: null,
-        error: err?.message || "Unknown error",
-      },
+      { error: err?.message || "Price fetch failed" },
       { status: 500 }
-    )
+    );
   }
 }
