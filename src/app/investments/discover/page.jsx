@@ -1,144 +1,228 @@
-"use client"
+"use client";
 
-import Link from "next/link"
-import { useEffect, useMemo, useState } from "react"
-import { supabase } from "@/lib/supabaseClient"
+import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
+import { supabase } from "@/lib/supabaseClient";
 
-const STARTER_MARKET = [
-  { symbol: "AAPL", name: "Apple Inc.", type: "Stock", exchange: "NASDAQ", sector: "Technology" },
-  { symbol: "MSFT", name: "Microsoft Corporation", type: "Stock", exchange: "NASDAQ", sector: "Technology" },
-  { symbol: "NVDA", name: "NVIDIA Corporation", type: "Stock", exchange: "NASDAQ", sector: "Technology" },
-  { symbol: "AMZN", name: "Amazon.com, Inc.", type: "Stock", exchange: "NASDAQ", sector: "Consumer Cyclical" },
-  { symbol: "GOOGL", name: "Alphabet Inc.", type: "Stock", exchange: "NASDAQ", sector: "Communication Services" },
-  { symbol: "META", name: "Meta Platforms, Inc.", type: "Stock", exchange: "NASDAQ", sector: "Communication Services" },
-  { symbol: "TSLA", name: "Tesla, Inc.", type: "Stock", exchange: "NASDAQ", sector: "Consumer Cyclical" },
-  { symbol: "AMD", name: "Advanced Micro Devices, Inc.", type: "Stock", exchange: "NASDAQ", sector: "Technology" },
-  { symbol: "AVGO", name: "Broadcom Inc.", type: "Stock", exchange: "NASDAQ", sector: "Technology" },
-  { symbol: "NFLX", name: "Netflix, Inc.", type: "Stock", exchange: "NASDAQ", sector: "Communication Services" },
-  { symbol: "JPM", name: "JPMorgan Chase & Co.", type: "Stock", exchange: "NYSE", sector: "Financial Services" },
-  { symbol: "V", name: "Visa Inc.", type: "Stock", exchange: "NYSE", sector: "Financial Services" },
-  { symbol: "MA", name: "Mastercard Incorporated", type: "Stock", exchange: "NYSE", sector: "Financial Services" },
-  { symbol: "BRK.B", name: "Berkshire Hathaway Inc.", type: "Stock", exchange: "NYSE", sector: "Financial Services" },
-  { symbol: "WMT", name: "Walmart Inc.", type: "Stock", exchange: "NYSE", sector: "Consumer Defensive" },
-  { symbol: "COST", name: "Costco Wholesale Corporation", type: "Stock", exchange: "NASDAQ", sector: "Consumer Defensive" },
-  { symbol: "LLY", name: "Eli Lilly and Company", type: "Stock", exchange: "NYSE", sector: "Healthcare" },
-  { symbol: "JNJ", name: "Johnson & Johnson", type: "Stock", exchange: "NYSE", sector: "Healthcare" },
-  { symbol: "XOM", name: "Exxon Mobil Corporation", type: "Stock", exchange: "NYSE", sector: "Energy" },
-  { symbol: "CVX", name: "Chevron Corporation", type: "Stock", exchange: "NYSE", sector: "Energy" },
-  { symbol: "SPY", name: "SPDR S&P 500 ETF Trust", type: "ETF", exchange: "NYSE Arca", sector: "Index ETF" },
-  { symbol: "VOO", name: "Vanguard S&P 500 ETF", type: "ETF", exchange: "NYSE Arca", sector: "Index ETF" },
-  { symbol: "IVV", name: "iShares Core S&P 500 ETF", type: "ETF", exchange: "NYSE Arca", sector: "Index ETF" },
-  { symbol: "QQQ", name: "Invesco QQQ Trust", type: "ETF", exchange: "NASDAQ", sector: "Index ETF" },
-  { symbol: "VTI", name: "Vanguard Total Stock Market ETF", type: "ETF", exchange: "NYSE Arca", sector: "Index ETF" },
-  { symbol: "SCHD", name: "Schwab U.S. Dividend Equity ETF", type: "ETF", exchange: "NYSE Arca", sector: "Dividend ETF" },
-  { symbol: "DIA", name: "SPDR Dow Jones Industrial Average ETF Trust", type: "ETF", exchange: "NYSE Arca", sector: "Index ETF" },
-  { symbol: "IWM", name: "iShares Russell 2000 ETF", type: "ETF", exchange: "NYSE Arca", sector: "Index ETF" },
-  { symbol: "ARKK", name: "ARK Innovation ETF", type: "ETF", exchange: "NYSE Arca", sector: "Thematic ETF" },
-  { symbol: "SOXX", name: "iShares Semiconductor ETF", type: "ETF", exchange: "NASDAQ", sector: "Sector ETF" },
-]
+const DEFAULT_UNIVERSE = {
+  popularStocks: [
+    { symbol: "AAPL", name: "Apple Inc.", type: "Stock", exchange: "NASDAQ", currency: "USD" },
+    { symbol: "MSFT", name: "Microsoft Corporation", type: "Stock", exchange: "NASDAQ", currency: "USD" },
+    { symbol: "NVDA", name: "NVIDIA Corporation", type: "Stock", exchange: "NASDAQ", currency: "USD" },
+    { symbol: "AMZN", name: "Amazon.com, Inc.", type: "Stock", exchange: "NASDAQ", currency: "USD" },
+    { symbol: "GOOGL", name: "Alphabet Inc.", type: "Stock", exchange: "NASDAQ", currency: "USD" },
+    { symbol: "META", name: "Meta Platforms, Inc.", type: "Stock", exchange: "NASDAQ", currency: "USD" },
+    { symbol: "TSLA", name: "Tesla, Inc.", type: "Stock", exchange: "NASDAQ", currency: "USD" },
+    { symbol: "AVGO", name: "Broadcom Inc.", type: "Stock", exchange: "NASDAQ", currency: "USD" },
+    { symbol: "JPM", name: "JPMorgan Chase & Co.", type: "Stock", exchange: "NYSE", currency: "USD" },
+    { symbol: "COST", name: "Costco Wholesale Corporation", type: "Stock", exchange: "NASDAQ", currency: "USD" },
+    { symbol: "AMD", name: "Advanced Micro Devices, Inc.", type: "Stock", exchange: "NASDAQ", currency: "USD" },
+    { symbol: "NFLX", name: "Netflix, Inc.", type: "Stock", exchange: "NASDAQ", currency: "USD" },
+  ],
+  popularEtfs: [
+    { symbol: "SPY", name: "SPDR S&P 500 ETF Trust", type: "ETF", exchange: "NYSE Arca", currency: "USD" },
+    { symbol: "VOO", name: "Vanguard S&P 500 ETF", type: "ETF", exchange: "NYSE Arca", currency: "USD" },
+    { symbol: "IVV", name: "iShares Core S&P 500 ETF", type: "ETF", exchange: "NYSE Arca", currency: "USD" },
+    { symbol: "QQQ", name: "Invesco QQQ Trust", type: "ETF", exchange: "NASDAQ", currency: "USD" },
+    { symbol: "VTI", name: "Vanguard Total Stock Market ETF", type: "ETF", exchange: "NYSE Arca", currency: "USD" },
+    { symbol: "SCHD", name: "Schwab U.S. Dividend Equity ETF", type: "ETF", exchange: "NYSE Arca", currency: "USD" },
+    { symbol: "DIA", name: "SPDR Dow Jones Industrial Average ETF Trust", type: "ETF", exchange: "NYSE Arca", currency: "USD" },
+    { symbol: "IWM", name: "iShares Russell 2000 ETF", type: "ETF", exchange: "NYSE Arca", currency: "USD" },
+    { symbol: "SOXX", name: "iShares Semiconductor ETF", type: "ETF", exchange: "NASDAQ", currency: "USD" },
+  ],
+  sectorEtfs: [
+    { symbol: "XLK", name: "Technology Select Sector SPDR Fund", type: "ETF", exchange: "NYSE Arca", currency: "USD" },
+    { symbol: "XLF", name: "Financial Select Sector SPDR Fund", type: "ETF", exchange: "NYSE Arca", currency: "USD" },
+    { symbol: "XLE", name: "Energy Select Sector SPDR Fund", type: "ETF", exchange: "NYSE Arca", currency: "USD" },
+    { symbol: "XLV", name: "Health Care Select Sector SPDR Fund", type: "ETF", exchange: "NYSE Arca", currency: "USD" },
+    { symbol: "XLY", name: "Consumer Discretionary Select Sector SPDR Fund", type: "ETF", exchange: "NYSE Arca", currency: "USD" },
+    { symbol: "XLP", name: "Consumer Staples Select Sector SPDR Fund", type: "ETF", exchange: "NYSE Arca", currency: "USD" },
+    { symbol: "XLI", name: "Industrial Select Sector SPDR Fund", type: "ETF", exchange: "NYSE Arca", currency: "USD" },
+    { symbol: "XLU", name: "Utilities Select Sector SPDR Fund", type: "ETF", exchange: "NYSE Arca", currency: "USD" },
+  ],
+};
+
+function money(n) {
+  const num = Number(n);
+  if (!Number.isFinite(num)) return "—";
+  return num.toLocaleString(undefined, { style: "currency", currency: "USD" });
+}
+
+function chunk(arr, size) {
+  const out = [];
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+  return out;
+}
 
 export default function DiscoverInvestmentsPage() {
-  const [query, setQuery] = useState("")
-  const [typeFilter, setTypeFilter] = useState("ALL")
-  const [savedSymbols, setSavedSymbols] = useState([])
-  const [status, setStatus] = useState("")
-  const [error, setError] = useState("")
-  const [addingSymbol, setAddingSymbol] = useState("")
+  const [query, setQuery] = useState("");
+  const [savedSymbols, setSavedSymbols] = useState([]);
+  const [favorites, setFavorites] = useState([]);
+  const [results, setResults] = useState([]);
+  const [prices, setPrices] = useState({});
+  const [loadingResults, setLoadingResults] = useState(false);
+  const [status, setStatus] = useState("");
+  const [error, setError] = useState("");
+  const [addingSymbol, setAddingSymbol] = useState("");
+  const [favoriteSymbol, setFavoriteSymbol] = useState("");
+
+  const defaultUniverse = useMemo(() => {
+    return [
+      ...DEFAULT_UNIVERSE.popularStocks,
+      ...DEFAULT_UNIVERSE.popularEtfs,
+      ...DEFAULT_UNIVERSE.sectorEtfs,
+    ];
+  }, []);
+
+  const searchMode = query.trim().length >= 2;
 
   useEffect(() => {
-    async function loadOwnedAssets() {
+    async function loadData() {
       const {
         data: { user },
-      } = await supabase.auth.getUser()
+      } = await supabase.auth.getUser();
 
-      if (!user) return
+      if (!user) return;
 
-      const { data, error } = await supabase
+      const { data: assetData, error: assetError } = await supabase
         .from("investment_assets")
         .select("symbol")
-        .eq("user_id", user.id)
+        .eq("user_id", user.id);
 
-      if (error) {
-        console.error(error)
-        return
+      const { data: favoriteData, error: favoriteError } = await supabase
+        .from("investment_favorites")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false });
+
+      if (assetError || favoriteError) {
+        console.error(assetError || favoriteError);
+        setError("Failed loading discover data.");
+        return;
       }
 
-      setSavedSymbols((data || []).map((x) => String(x.symbol || "").toUpperCase()))
+      setSavedSymbols((assetData || []).map((x) => String(x.symbol || "").toUpperCase()));
+      setFavorites(favoriteData || []);
     }
 
-    loadOwnedAssets()
-  }, [])
+    loadData();
+  }, []);
 
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase()
-
-    let list = STARTER_MARKET
-
-    if (typeFilter !== "ALL") {
-      list = list.filter((item) => item.type === typeFilter)
+  useEffect(() => {
+    if (!searchMode) {
+      setResults([]);
+      setLoadingResults(false);
+      return;
     }
 
-    if (q) {
-      list = list.filter((item) => {
-        return (
-          item.symbol.toLowerCase().includes(q) ||
-          item.name.toLowerCase().includes(q) ||
-          item.exchange.toLowerCase().includes(q) ||
-          item.sector.toLowerCase().includes(q)
-        )
-      })
+    const timer = setTimeout(async () => {
+      setLoadingResults(true);
+      setError("");
+
+      try {
+        const res = await fetch(
+          `/api/market-search?query=${encodeURIComponent(query)}&type=ALL&limit=24`
+        );
+        const data = await res.json();
+
+        if (!res.ok) {
+          throw new Error(data?.error || "Failed to search market.");
+        }
+
+        setResults(Array.isArray(data?.results) ? data.results : []);
+      } catch (err) {
+        console.error(err);
+        setResults([]);
+        setError(err?.message || "Failed to search market.");
+      } finally {
+        setLoadingResults(false);
+      }
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [query, searchMode]);
+
+  const activeRows = useMemo(() => {
+    return searchMode ? results : defaultUniverse;
+  }, [searchMode, results, defaultUniverse]);
+
+  useEffect(() => {
+    async function loadPrices() {
+      const symbols = [
+        ...new Set([
+          ...activeRows.map((x) => String(x.symbol || "").toUpperCase()),
+          ...favorites.map((x) => String(x.symbol || "").toUpperCase()),
+        ]),
+      ];
+
+      if (!symbols.length) {
+        setPrices({});
+        return;
+      }
+
+      try {
+        const res = await fetch(
+          `/api/prices-batch?symbols=${encodeURIComponent(symbols.join(","))}`
+        );
+        const data = await res.json();
+
+        if (res.ok && data?.prices) {
+          setPrices(data.prices);
+        }
+      } catch (err) {
+        console.error("batch price fetch failed", err);
+      }
     }
 
-    return list.slice(0, 24)
-  }, [query, typeFilter])
+    loadPrices();
+  }, [activeRows, favorites]);
 
   const stats = useMemo(() => {
-    const stocks = STARTER_MARKET.filter((x) => x.type === "Stock").length
-    const etfs = STARTER_MARKET.filter((x) => x.type === "ETF").length
-    const ownedMatches = filtered.filter((x) => savedSymbols.includes(x.symbol)).length
+    const ownedMatches = activeRows.filter((x) => savedSymbols.includes(String(x.symbol || "").toUpperCase())).length;
+    const favoriteMatches = activeRows.filter((x) =>
+      favorites.some((f) => String(f.symbol || "").toUpperCase() === String(x.symbol || "").toUpperCase())
+    ).length;
+
+    const stocks = activeRows.filter((x) => String(x.type || "").toUpperCase() === "STOCK").length;
+    const etfs = activeRows.filter((x) => String(x.type || "").toUpperCase() === "ETF").length;
 
     return {
-      total: STARTER_MARKET.length,
+      showing: activeRows.length,
+      ownedMatches,
+      favoriteMatches,
       stocks,
       etfs,
-      showing: filtered.length,
-      ownedMatches,
-    }
-  }, [filtered, savedSymbols])
-
-  const quickPicks = useMemo(() => {
-    const picks = ["AAPL", "NVDA", "TSLA", "VOO", "QQQ", "AVGO", "SPY", "SCHD"]
-    return STARTER_MARKET.filter((x) => picks.includes(x.symbol))
-  }, [])
+    };
+  }, [activeRows, savedSymbols, favorites]);
 
   async function addAsset(item) {
-    setStatus("")
-    setError("")
-    setAddingSymbol(item.symbol)
+    setStatus("");
+    setError("");
+    setAddingSymbol(item.symbol);
 
     try {
       const {
         data: { user },
-      } = await supabase.auth.getUser()
+      } = await supabase.auth.getUser();
 
       if (!user) {
-        setError("You must be logged in.")
-        setAddingSymbol("")
-        return
+        setError("You must be logged in.");
+        setAddingSymbol("");
+        return;
       }
 
-      const symbol = String(item.symbol || "").toUpperCase().trim()
+      const symbol = String(item.symbol || "").toUpperCase().trim();
 
       if (!symbol) {
-        setError("Invalid symbol.")
-        setAddingSymbol("")
-        return
+        setError("Invalid symbol.");
+        setAddingSymbol("");
+        return;
       }
 
       if (savedSymbols.includes(symbol)) {
-        setError(`${symbol} is already in your portfolio.`)
-        setAddingSymbol("")
-        return
+        setError(`${symbol} is already in your portfolio.`);
+        setAddingSymbol("");
+        return;
       }
 
       const { data, error } = await supabase
@@ -146,31 +230,120 @@ export default function DiscoverInvestmentsPage() {
         .insert({
           user_id: user.id,
           symbol,
-          asset_type: item.type === "ETF" ? "etf" : "stock",
+          asset_type: String(item.type || "").toUpperCase() === "ETF" ? "etf" : "stock",
           account: "Main",
         })
         .select()
-        .single()
+        .single();
 
       if (error) {
-        console.error(error)
-        setError(`Could not add ${symbol}.`)
-        setAddingSymbol("")
-        return
+        console.error(error);
+        setError(`Could not add ${symbol}.`);
+        setAddingSymbol("");
+        return;
       }
 
-      setSavedSymbols((prev) => [...prev, symbol])
-      setStatus(`${data.symbol} added to portfolio.`)
+      setSavedSymbols((prev) => [...prev, symbol]);
+      setStatus(`${data.symbol} added to portfolio.`);
     } catch (err) {
-      console.error(err)
-      setError("Something went wrong adding the asset.")
+      console.error(err);
+      setError("Something went wrong adding the asset.");
     }
 
-    setAddingSymbol("")
+    setAddingSymbol("");
   }
 
-  function setQuickQuery(next) {
-    setQuery(next)
+  async function addFavorite(item) {
+    setStatus("");
+    setError("");
+    setFavoriteSymbol(item.symbol);
+
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) {
+        setError("You must be logged in.");
+        setFavoriteSymbol("");
+        return;
+      }
+
+      const symbol = String(item.symbol || "").toUpperCase().trim();
+
+      if (!symbol) {
+        setError("Invalid symbol.");
+        setFavoriteSymbol("");
+        return;
+      }
+
+      const alreadyFavorite = favorites.some(
+        (f) => String(f.symbol || "").toUpperCase() === symbol
+      );
+
+      if (alreadyFavorite) {
+        setError(`${symbol} is already in favorites.`);
+        setFavoriteSymbol("");
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from("investment_favorites")
+        .insert({
+          user_id: user.id,
+          symbol,
+          name: item.name,
+          asset_type: String(item.type || "").toUpperCase() === "ETF" ? "etf" : "stock",
+        })
+        .select()
+        .single();
+
+      if (error) {
+        console.error(error);
+        setError(`Could not favorite ${symbol}.`);
+        setFavoriteSymbol("");
+        return;
+      }
+
+      setFavorites((prev) => [data, ...prev]);
+      setStatus(`${data.symbol} added to favorites.`);
+    } catch (err) {
+      console.error(err);
+      setError("Something went wrong adding the favorite.");
+    }
+
+    setFavoriteSymbol("");
+  }
+
+  async function removeFavoriteBySymbol(symbol) {
+    setStatus("");
+    setError("");
+    setFavoriteSymbol(symbol);
+
+    const favorite = favorites.find(
+      (f) => String(f.symbol || "").toUpperCase() === String(symbol || "").toUpperCase()
+    );
+
+    if (!favorite) {
+      setFavoriteSymbol("");
+      return;
+    }
+
+    const { error } = await supabase
+      .from("investment_favorites")
+      .delete()
+      .eq("id", favorite.id);
+
+    if (error) {
+      console.error(error);
+      setError(`Could not remove ${symbol} from favorites.`);
+      setFavoriteSymbol("");
+      return;
+    }
+
+    setFavorites((prev) => prev.filter((f) => f.id !== favorite.id));
+    setStatus(`${symbol} removed from favorites.`);
+    setFavoriteSymbol("");
   }
 
   return (
@@ -216,8 +389,7 @@ export default function DiscoverInvestmentsPage() {
           </h1>
 
           <div className="muted" style={{ marginTop: 10, fontSize: 15, maxWidth: 860 }}>
-            Search public stocks and ETFs, scan stronger names fast, and add them straight into your portfolio.
-            This version uses a premium starter market list now and is ready to be upgraded into live symbol search later.
+            Loaded market universe first. Live search when you type. Add holdings or pin favorites fast.
           </div>
         </div>
 
@@ -245,48 +417,29 @@ export default function DiscoverInvestmentsPage() {
         }}
       >
         <div className="card" style={{ padding: 20 }}>
-          <div style={{ fontWeight: 950, fontSize: 22 }}>Search Market</div>
+          <div style={{ fontWeight: 950, fontSize: 22 }}>
+            {searchMode ? "Search Market" : "Market Universe"}
+          </div>
           <div className="muted" style={{ marginTop: 6, fontSize: 14 }}>
-            Search by ticker, company, exchange, or sector.
+            {searchMode ? "Live search by symbol or company name." : "Curated default universe loaded on first open."}
           </div>
 
           <div style={{ height: 16 }} />
 
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-            <input
-              className="input"
-              placeholder="Search AAPL, Apple, VOO, Nvidia, ETF, NASDAQ..."
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              style={{ minWidth: 320, flex: 1 }}
-            />
+          <input
+            className="input"
+            placeholder="Search AAPL, Apple, VOO, Nvidia..."
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            style={{ width: "100%" }}
+          />
 
-            <select
-              className="input"
-              value={typeFilter}
-              onChange={(e) => setTypeFilter(e.target.value)}
-              style={{ minWidth: 160 }}
-            >
-              <option value="ALL">All Types</option>
-              <option value="Stock">Stocks</option>
-              <option value="ETF">ETFs</option>
-            </select>
-          </div>
-
-          <div style={{ height: 14 }} />
-
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <QuickChip label="AAPL" onClick={() => setQuickQuery("AAPL")} />
-            <QuickChip label="NVDA" onClick={() => setQuickQuery("NVDA")} />
-            <QuickChip label="VOO" onClick={() => setQuickQuery("VOO")} />
-            <QuickChip label="QQQ" onClick={() => setQuickQuery("QQQ")} />
-            <QuickChip label="Technology" onClick={() => setQuickQuery("Technology")} />
-            <QuickChip label="Dividend ETF" onClick={() => setQuickQuery("Dividend ETF")} />
-            <QuickChip label="NYSE" onClick={() => setQuickQuery("NYSE")} />
-            <QuickChip label="Reset" onClick={() => {
-              setQuery("")
-              setTypeFilter("ALL")
-            }} />
+          <div className="muted" style={{ marginTop: 10, fontSize: 12 }}>
+            {loadingResults
+              ? "Searching live market symbols..."
+              : searchMode
+                ? "Showing live search results."
+                : "Showing your default market universe."}
           </div>
         </div>
 
@@ -301,254 +454,398 @@ export default function DiscoverInvestmentsPage() {
               marginTop: 16,
             }}
           >
-            <MiniStat title="Loaded" value={String(stats.total)} />
             <MiniStat title="Showing" value={String(stats.showing)} />
-            <MiniStat title="Stocks" value={String(stats.stocks)} />
+            <MiniStat title="Owned" value={String(stats.ownedMatches)} />
+            <MiniStat title="Favs" value={String(stats.favoriteMatches)} />
             <MiniStat title="ETFs" value={String(stats.etfs)} />
-          </div>
-
-          <div style={{ height: 14 }} />
-
-          <div style={{ display: "grid", gap: 10 }}>
-            <MiniPoint
-              title="Fast scanning"
-              sub="Search flow is built for fast symbol hunting instead of a boring spreadsheet feel."
-            />
-            <MiniPoint
-              title="Portfolio aware"
-              sub="Already-owned symbols are recognized immediately."
-            />
-            <MiniPoint
-              title="Live-ready architecture"
-              sub="Swap starter data for real provider search later without redoing the whole UI."
-            />
           </div>
         </div>
       </div>
 
       <div className="card" style={{ padding: 20, marginBottom: 18 }}>
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            gap: 12,
-            flexWrap: "wrap",
-            alignItems: "center",
-            marginBottom: 16,
-          }}
-        >
-          <div>
-            <div style={{ fontWeight: 950, fontSize: 22 }}>Quick Picks</div>
-            <div className="muted" style={{ marginTop: 6, fontSize: 14 }}>
-              Fast access to popular names and ETFs traders usually care about first.
+        <div style={{ fontWeight: 950, fontSize: 22 }}>Favorites</div>
+        <div className="muted" style={{ marginTop: 6, fontSize: 14 }}>
+          Quick-access symbols pinned from Discover.
+        </div>
+
+        <div style={{ height: 16 }} />
+
+        {favorites.length ? (
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+              gap: 12,
+            }}
+          >
+            {favorites.slice(0, 8).map((f) => {
+              const sym = String(f.symbol || "").toUpperCase();
+              const livePrice = Number(prices[sym]);
+              const hasLivePrice = Number.isFinite(livePrice) && livePrice > 0;
+
+              return (
+                <AssetCard
+                  key={f.id}
+                  item={{
+                    symbol: sym,
+                    name: f.name || sym,
+                    type: String(f.asset_type || "stock").toUpperCase() === "ETF" ? "ETF" : "Stock",
+                    exchange: "Saved",
+                  }}
+                  livePrice={hasLivePrice ? livePrice : null}
+                  owned={savedSymbols.includes(sym)}
+                  favorited={true}
+                  busy={favoriteSymbol === sym}
+                  onToggleFavorite={() => removeFavoriteBySymbol(sym)}
+                  onAddAsset={() => {}}
+                  onOpenMarket={`/market/${encodeURIComponent(sym)}`}
+                  addDisabled
+                  favoriteLabel="Remove"
+                />
+              );
+            })}
+          </div>
+        ) : (
+          <EmptyState
+            title="No favorites yet"
+            sub="Favorite any symbol below to pin it here."
+          />
+        )}
+      </div>
+
+      {!searchMode ? (
+        <div style={{ display: "grid", gap: 18 }}>
+          <UniverseSection
+            title="Popular Stocks"
+            sub="Big names most people actually care about first."
+            items={DEFAULT_UNIVERSE.popularStocks}
+            prices={prices}
+            savedSymbols={savedSymbols}
+            favorites={favorites}
+            addingSymbol={addingSymbol}
+            favoriteSymbol={favoriteSymbol}
+            onAddAsset={addAsset}
+            onAddFavorite={addFavorite}
+            onRemoveFavorite={removeFavoriteBySymbol}
+          />
+
+          <UniverseSection
+            title="Popular ETFs"
+            sub="Core index funds and broad market favorites."
+            items={DEFAULT_UNIVERSE.popularEtfs}
+            prices={prices}
+            savedSymbols={savedSymbols}
+            favorites={favorites}
+            addingSymbol={addingSymbol}
+            favoriteSymbol={favoriteSymbol}
+            onAddAsset={addAsset}
+            onAddFavorite={addFavorite}
+            onRemoveFavorite={removeFavoriteBySymbol}
+          />
+
+          <UniverseSection
+            title="Sector ETFs"
+            sub="Fast sector exposure without picking individual names."
+            items={DEFAULT_UNIVERSE.sectorEtfs}
+            prices={prices}
+            savedSymbols={savedSymbols}
+            favorites={favorites}
+            addingSymbol={addingSymbol}
+            favoriteSymbol={favoriteSymbol}
+            onAddAsset={addAsset}
+            onAddFavorite={addFavorite}
+            onRemoveFavorite={removeFavoriteBySymbol}
+          />
+        </div>
+      ) : (
+        <div className="card" style={{ padding: 20 }}>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              gap: 12,
+              flexWrap: "wrap",
+              alignItems: "center",
+              marginBottom: 16,
+            }}
+          >
+            <div>
+              <div style={{ fontWeight: 950, fontSize: 22 }}>Search Results</div>
+              <div className="muted" style={{ marginTop: 6, fontSize: 14 }}>
+                Live market results for your query.
+              </div>
+            </div>
+
+            <div className="muted" style={{ fontSize: 13 }}>
+              Matches: {results.length}
             </div>
           </div>
 
-          <div className="muted" style={{ fontSize: 13 }}>
-            Click a chip to search faster.
+          {results.length ? (
+            <div style={{ display: "grid", gap: 12 }}>
+              {results.map((item) => {
+                const sym = String(item.symbol || "").toUpperCase();
+                const alreadyOwned = savedSymbols.includes(sym);
+                const alreadyFavorite = favorites.some(
+                  (f) => String(f.symbol || "").toUpperCase() === sym
+                );
+                const isAdding = addingSymbol === sym;
+                const isFavBusy = favoriteSymbol === sym;
+                const livePrice = Number(prices[sym]);
+                const hasLivePrice = Number.isFinite(livePrice) && livePrice > 0;
+
+                return (
+                  <SearchRow
+                    key={`${item.symbol}-${item.exchange}`}
+                    item={item}
+                    livePrice={hasLivePrice ? livePrice : null}
+                    owned={alreadyOwned}
+                    favorited={alreadyFavorite}
+                    addBusy={isAdding}
+                    favoriteBusy={isFavBusy}
+                    onAddAsset={() => addAsset(item)}
+                    onToggleFavorite={() =>
+                      alreadyFavorite ? removeFavoriteBySymbol(sym) : addFavorite(item)
+                    }
+                  />
+                );
+              })}
+            </div>
+          ) : loadingResults ? (
+            <EmptyState
+              title="Searching..."
+              sub="Pulling live symbols from your market provider."
+            />
+          ) : (
+            <EmptyState
+              title="No matches found"
+              sub="Try a ticker or company name."
+            />
+          )}
+        </div>
+      )}
+    </main>
+  );
+}
+
+function UniverseSection({
+  title,
+  sub,
+  items,
+  prices,
+  savedSymbols,
+  favorites,
+  addingSymbol,
+  favoriteSymbol,
+  onAddAsset,
+  onAddFavorite,
+  onRemoveFavorite,
+}) {
+  return (
+    <div className="card" style={{ padding: 20 }}>
+      <div style={{ fontWeight: 950, fontSize: 22 }}>{title}</div>
+      <div className="muted" style={{ marginTop: 6, fontSize: 14 }}>{sub}</div>
+
+      <div style={{ height: 16 }} />
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+          gap: 12,
+        }}
+      >
+        {items.map((item) => {
+          const sym = String(item.symbol || "").toUpperCase();
+          const alreadyOwned = savedSymbols.includes(sym);
+          const alreadyFavorite = favorites.some(
+            (f) => String(f.symbol || "").toUpperCase() === sym
+          );
+          const livePrice = Number(prices[sym]);
+          const hasLivePrice = Number.isFinite(livePrice) && livePrice > 0;
+
+          return (
+            <AssetCard
+              key={sym}
+              item={item}
+              livePrice={hasLivePrice ? livePrice : null}
+              owned={alreadyOwned}
+              favorited={alreadyFavorite}
+              busy={addingSymbol === sym || favoriteSymbol === sym}
+              onToggleFavorite={() =>
+                alreadyFavorite ? onRemoveFavorite(sym) : onAddFavorite(item)
+              }
+              onAddAsset={() => onAddAsset(item)}
+              onOpenMarket={`/market/${encodeURIComponent(sym)}`}
+            />
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function SearchRow({
+  item,
+  livePrice,
+  owned,
+  favorited,
+  addBusy,
+  favoriteBusy,
+  onAddAsset,
+  onToggleFavorite,
+}) {
+  return (
+    <div
+      style={{
+        border: "1px solid rgba(255,255,255,.08)",
+        background: "linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02))",
+        borderRadius: 22,
+        padding: 16,
+      }}
+    >
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "1.2fr .9fr auto",
+          gap: 16,
+          alignItems: "center",
+        }}
+      >
+        <div>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+            <div style={{ fontWeight: 950, fontSize: 22 }}>{item.symbol}</div>
+            <span style={pillStyle()}>{item.type || "Stock"}</span>
+            <span style={pillStyle()}>{item.exchange || "—"}</span>
+            <span
+              style={pillStyle(
+                favorited ? "#86efac" : "rgba(255,255,255,.82)",
+                favorited ? "rgba(74,222,128,.14)" : "rgba(255,255,255,.06)"
+              )}
+            >
+              {favorited ? "Favorited" : item.currency || "USD"}
+            </span>
+          </div>
+
+          <div style={{ marginTop: 10, fontWeight: 800, fontSize: 16 }}>
+            {item.name}
+          </div>
+
+          <div className="muted" style={{ marginTop: 8, fontSize: 13 }}>
+            Real market search result
           </div>
         </div>
 
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
-            gap: 12,
+            gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+            gap: 10,
           }}
         >
-          {quickPicks.map((item) => {
-            const alreadyOwned = savedSymbols.includes(item.symbol)
+          <MiniBox label="Live Price" value={livePrice !== null ? money(livePrice) : "Pending"} />
+          <MiniBox label="Status" value={owned ? "Owned" : favorited ? "Favorite" : "Available"} />
+        </div>
 
-            return (
-              <button
-                key={item.symbol}
-                onClick={() => setQuickQuery(item.symbol)}
-                style={{
-                  textAlign: "left",
-                  borderRadius: 18,
-                  border: "1px solid rgba(255,255,255,.08)",
-                  background: "linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,.025))",
-                  padding: "14px 16px",
-                  cursor: "pointer",
-                }}
-              >
-                <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
-                  <div style={{ fontWeight: 950, fontSize: 18 }}>{item.symbol}</div>
-                  <span
-                    style={{
-                      fontSize: 11,
-                      fontWeight: 900,
-                      padding: "4px 8px",
-                      borderRadius: 999,
-                      background: alreadyOwned ? "rgba(74,222,128,.14)" : "rgba(255,255,255,.06)",
-                      color: alreadyOwned ? "#86efac" : "rgba(255,255,255,.82)",
-                      border: "1px solid rgba(255,255,255,.08)",
-                    }}
-                  >
-                    {alreadyOwned ? "Owned" : item.type}
-                  </span>
-                </div>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "flex-end" }}>
+          <Link href={`/market/${encodeURIComponent(item.symbol)}`} className="btnGhost">
+            View Market
+          </Link>
 
-                <div style={{ marginTop: 8, fontWeight: 700 }}>
-                  {item.name}
-                </div>
+          <button
+            className="btnGhost"
+            onClick={onToggleFavorite}
+            disabled={favoriteBusy}
+            style={{ minWidth: 110, opacity: favoriteBusy ? 0.75 : 1 }}
+          >
+            {favoriteBusy ? "Working..." : favorited ? "Unfavorite" : "Favorite"}
+          </button>
 
-                <div className="muted" style={{ marginTop: 8, fontSize: 12 }}>
-                  {item.exchange} • {item.sector}
-                </div>
-              </button>
-            )
-          })}
+          <button
+            className={owned ? "btnGhost" : "btn"}
+            onClick={onAddAsset}
+            disabled={owned || addBusy}
+            style={{
+              minWidth: 110,
+              opacity: owned || addBusy ? 0.75 : 1,
+              cursor: owned || addBusy ? "not-allowed" : "pointer",
+            }}
+          >
+            {owned ? "Added" : addBusy ? "Adding..." : "Add Asset"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AssetCard({
+  item,
+  livePrice,
+  owned,
+  favorited,
+  busy,
+  onToggleFavorite,
+  onAddAsset,
+  onOpenMarket,
+  addDisabled = false,
+  favoriteLabel,
+}) {
+  return (
+    <div
+      style={{
+        border: "1px solid rgba(255,255,255,.08)",
+        background: "rgba(255,255,255,.03)",
+        borderRadius: 18,
+        padding: 14,
+      }}
+    >
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+        <div>
+          <div style={{ fontWeight: 950, fontSize: 18 }}>{item.symbol}</div>
+          <div className="muted" style={{ marginTop: 4, fontSize: 12 }}>
+            {item.type} • {item.exchange}
+          </div>
+        </div>
+
+        <button
+          className="btnGhost"
+          onClick={onToggleFavorite}
+          disabled={busy}
+        >
+          {busy ? "..." : favoriteLabel || (favorited ? "Saved" : "Favorite")}
+        </button>
+      </div>
+
+      <div style={{ marginTop: 10, fontWeight: 800, minHeight: 42 }}>
+        {item.name}
+      </div>
+
+      <div style={{ marginTop: 12 }}>
+        <div className="muted" style={{ fontSize: 12 }}>Live Price</div>
+        <div style={{ marginTop: 4, fontWeight: 900, fontSize: 20 }}>
+          {livePrice !== null ? money(livePrice) : "Pending"}
         </div>
       </div>
 
-      <div className="card" style={{ padding: 20 }}>
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            gap: 12,
-            flexWrap: "wrap",
-            alignItems: "center",
-            marginBottom: 16,
-          }}
-        >
-          <div>
-            <div style={{ fontWeight: 950, fontSize: 22 }}>Market Results</div>
-            <div className="muted" style={{ marginTop: 6, fontSize: 14 }}>
-              Clean scan results with fast actions.
-            </div>
-          </div>
+      <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <Link href={onOpenMarket} className="btnGhost">
+          Market
+        </Link>
 
-          <div className="muted" style={{ fontSize: 13 }}>
-            Owned matches in current results: {stats.ownedMatches}
-          </div>
-        </div>
-
-        {filtered.length ? (
-          <div style={{ display: "grid", gap: 12 }}>
-            {filtered.map((item) => {
-              const alreadyOwned = savedSymbols.includes(item.symbol)
-              const isAdding = addingSymbol === item.symbol
-
-              return (
-                <div
-                  key={item.symbol}
-                  style={{
-                    border: "1px solid rgba(255,255,255,.08)",
-                    background: "linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02))",
-                    borderRadius: 22,
-                    padding: 16,
-                  }}
-                >
-                  <div
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "1.2fr 1fr auto",
-                      gap: 16,
-                      alignItems: "center",
-                    }}
-                  >
-                    <div>
-                      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-                        <div style={{ fontWeight: 950, fontSize: 22 }}>{item.symbol}</div>
-
-                        <span style={pillStyle()}>
-                          {item.type}
-                        </span>
-
-                        <span style={pillStyle()}>
-                          {item.exchange}
-                        </span>
-
-                        <span style={pillStyle(alreadyOwned ? "#86efac" : undefined, alreadyOwned ? "rgba(74,222,128,.14)" : undefined)}>
-                          {alreadyOwned ? "Already in Portfolio" : item.sector}
-                        </span>
-                      </div>
-
-                      <div style={{ marginTop: 10, fontWeight: 800, fontSize: 16 }}>
-                        {item.name}
-                      </div>
-
-                      <div className="muted" style={{ marginTop: 8, fontSize: 13 }}>
-                        Public market asset • ready for market page view and one-click portfolio add
-                      </div>
-                    </div>
-
-                    <div
-                      style={{
-                        display: "grid",
-                        gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-                        gap: 10,
-                      }}
-                    >
-                      <MiniBox label="Type" value={item.type} />
-                      <MiniBox label="Sector" value={item.sector} />
-                    </div>
-
-                    <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "flex-end" }}>
-                      <Link href={`/market/${encodeURIComponent(item.symbol)}`} className="btnGhost">
-                        View Market
-                      </Link>
-
-                      <button
-                        className={alreadyOwned ? "btnGhost" : "btn"}
-                        onClick={() => addAsset(item)}
-                        disabled={alreadyOwned || isAdding}
-                        style={{
-                          minWidth: 140,
-                          opacity: alreadyOwned || isAdding ? 0.78 : 1,
-                          cursor: alreadyOwned || isAdding ? "not-allowed" : "pointer",
-                        }}
-                      >
-                        {alreadyOwned ? "Added" : isAdding ? "Adding..." : "Add Asset"}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        ) : (
-          <EmptyState
-            title="No matches found"
-            sub="Try a ticker, company name, ETF, exchange, or sector."
-          />
+        {!addDisabled && (
+          <button
+            className={owned ? "btnGhost" : "btn"}
+            onClick={onAddAsset}
+            disabled={owned || busy}
+            style={{ opacity: owned || busy ? 0.75 : 1 }}
+          >
+            {owned ? "Added" : busy ? "..." : "Add"}
+          </button>
         )}
       </div>
-
-      <div style={{ height: 18 }} />
-
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
-          gap: 16,
-        }}
-      >
-        <MetricCard
-          title="Loaded Universe"
-          value={String(stats.total)}
-          sub="Starter symbols currently loaded into this local scanner."
-        />
-        <MetricCard
-          title="Results Showing"
-          value={String(stats.showing)}
-          sub="Filtered from your current query and type filter."
-        />
-        <MetricCard
-          title="Owned Matches"
-          value={String(stats.ownedMatches)}
-          sub="Symbols in your filtered results already in portfolio."
-        />
-        <MetricCard
-          title="Scanner Mode"
-          value="Ready"
-          sub="Built to switch into real live market symbol search later."
-        />
-      </div>
-    </main>
-  )
+    </div>
+  );
 }
 
 function pillStyle(color = "rgba(255,255,255,.82)", background = "rgba(255,255,255,.06)") {
@@ -561,48 +858,7 @@ function pillStyle(color = "rgba(255,255,255,.82)", background = "rgba(255,255,2
     color,
     border: "1px solid rgba(255,255,255,.08)",
     whiteSpace: "nowrap",
-  }
-}
-
-function QuickChip({ label, onClick }) {
-  return (
-    <button
-      onClick={onClick}
-      style={{
-        borderRadius: 999,
-        border: "1px solid rgba(255,255,255,.08)",
-        background: "rgba(255,255,255,.04)",
-        padding: "8px 12px",
-        fontWeight: 800,
-        cursor: "pointer",
-      }}
-    >
-      {label}
-    </button>
-  )
-}
-
-function MetricCard({ title, value, sub }) {
-  return (
-    <div className="card" style={{ padding: 18 }}>
-      <div
-        className="muted"
-        style={{
-          fontSize: 12,
-          textTransform: "uppercase",
-          letterSpacing: "0.12em",
-        }}
-      >
-        {title}
-      </div>
-      <div style={{ marginTop: 10, fontSize: 22, fontWeight: 950 }}>
-        {value}
-      </div>
-      <div className="muted" style={{ marginTop: 10, fontSize: 13, lineHeight: 1.45 }}>
-        {sub}
-      </div>
-    </div>
-  )
+  };
 }
 
 function MiniStat({ title, value }) {
@@ -622,7 +878,7 @@ function MiniStat({ title, value }) {
         {value}
       </div>
     </div>
-  )
+  );
 }
 
 function MiniBox({ label, value }) {
@@ -642,7 +898,7 @@ function MiniBox({ label, value }) {
         {value}
       </div>
     </div>
-  )
+  );
 }
 
 function EmptyState({ title, sub }) {
@@ -661,23 +917,5 @@ function EmptyState({ title, sub }) {
         {sub}
       </div>
     </div>
-  )
-}
-
-function MiniPoint({ title, sub }) {
-  return (
-    <div
-      style={{
-        border: "1px solid rgba(255,255,255,.08)",
-        background: "rgba(255,255,255,.03)",
-        borderRadius: 16,
-        padding: 14,
-      }}
-    >
-      <div style={{ fontWeight: 850 }}>{title}</div>
-      <div className="muted" style={{ marginTop: 6, fontSize: 13, lineHeight: 1.45 }}>
-        {sub}
-      </div>
-    </div>
-  )
+  );
 }

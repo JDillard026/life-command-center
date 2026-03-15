@@ -20,6 +20,7 @@ export default function InvestmentsPage() {
   const [assets, setAssets] = useState([]);
   const [txns, setTxns] = useState([]);
   const [prices, setPrices] = useState({});
+  const [favorites, setFavorites] = useState([]);
   const [tab, setTab] = useState("overview");
   const [loadingPrices, setLoadingPrices] = useState(false);
   const [status, setStatus] = useState("");
@@ -52,14 +53,21 @@ export default function InvestmentsPage() {
         .eq("user_id", user.id)
         .order("txn_date", { ascending: false });
 
-      if (assetError || txnError) {
-        console.error(assetError || txnError);
+      const { data: favoriteRows, error: favoriteError } = await supabase
+        .from("investment_favorites")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false });
+
+      if (assetError || txnError || favoriteError) {
+        console.error(assetError || txnError || favoriteError);
         setError("Failed loading investments data.");
         return;
       }
 
       setAssets(assetRows || []);
       setTxns(txnRows || []);
+      setFavorites(favoriteRows || []);
     }
 
     load();
@@ -67,7 +75,16 @@ export default function InvestmentsPage() {
 
   useEffect(() => {
     async function loadPrices() {
-      if (!assets.length) {
+      const symbolsToLoad = [
+        ...new Set(
+          [
+            ...assets.map((a) => String(a.symbol || "").toUpperCase().trim()),
+            ...favorites.map((f) => String(f.symbol || "").toUpperCase().trim()),
+          ].filter(Boolean)
+        ),
+      ];
+
+      if (!symbolsToLoad.length) {
         setPrices({});
         return;
       }
@@ -75,18 +92,16 @@ export default function InvestmentsPage() {
       setLoadingPrices(true);
       const nextPrices = {};
 
-      for (const a of assets) {
-        if (!a.symbol || a.asset_type === "cash") continue;
-
+      for (const sym of symbolsToLoad) {
         try {
-          const res = await fetch(`/api/prices?symbol=${encodeURIComponent(a.symbol)}`);
+          const res = await fetch(`/api/prices?symbol=${encodeURIComponent(sym)}`);
           const data = await res.json();
 
           if (res.ok && Number.isFinite(Number(data?.price)) && Number(data.price) > 0) {
-            nextPrices[a.symbol] = Number(data.price);
+            nextPrices[sym] = Number(data.price);
           }
         } catch (err) {
-          console.error("price fetch failed for", a.symbol, err);
+          console.error("price fetch failed for", sym, err);
         }
       }
 
@@ -95,7 +110,7 @@ export default function InvestmentsPage() {
     }
 
     loadPrices();
-  }, [assets]);
+  }, [assets, favorites]);
 
   async function addAsset() {
     setError("");
@@ -204,6 +219,74 @@ export default function InvestmentsPage() {
     setStatus("Trade added.");
   }
 
+  async function addFavoriteFromHolding(holding) {
+    setError("");
+    setStatus("");
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      setError("You must be logged in.");
+      return;
+    }
+
+    const cleanSymbol = String(holding.symbol || "").toUpperCase().trim();
+    if (!cleanSymbol) {
+      setError("Invalid symbol.");
+      return;
+    }
+
+    const alreadyExists = favorites.some(
+      (f) => String(f.symbol || "").toUpperCase() === cleanSymbol
+    );
+
+    if (alreadyExists) {
+      setError(`${cleanSymbol} is already in favorites.`);
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from("investment_favorites")
+      .insert({
+        user_id: user.id,
+        symbol: cleanSymbol,
+        name: holding.name || holding.symbol || cleanSymbol,
+        asset_type: holding.asset_type || "stock",
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error(error);
+      setError("Could not add favorite.");
+      return;
+    }
+
+    setFavorites((prev) => [data, ...prev]);
+    setStatus(`${cleanSymbol} added to favorites.`);
+  }
+
+  async function removeFavorite(id) {
+    setError("");
+    setStatus("");
+
+    const { error } = await supabase
+      .from("investment_favorites")
+      .delete()
+      .eq("id", id);
+
+    if (error) {
+      console.error(error);
+      setError("Could not remove favorite.");
+      return;
+    }
+
+    setFavorites((prev) => prev.filter((f) => f.id !== id));
+    setStatus("Favorite removed.");
+  }
+
   const portfolio = useMemo(() => {
     let totalValue = 0;
     let totalCost = 0;
@@ -266,9 +349,39 @@ export default function InvestmentsPage() {
     };
   }, [assets, txns, prices]);
 
+  const allocation = useMemo(() => {
+    const total = portfolio.holdings.reduce((sum, h) => sum + (Number(h.value) || 0), 0);
+
+    if (!Number.isFinite(total) || total <= 0) return [];
+
+    return portfolio.holdings
+      .filter((h) => Number(h.value) > 0)
+      .map((h) => ({
+        ...h,
+        weight: (Number(h.value) / total) * 100,
+      }))
+      .sort((a, b) => b.weight - a.weight)
+      .slice(0, 8);
+  }, [portfolio.holdings]);
+
   const recentTxns = useMemo(() => {
-    return [...txns].slice(0, 8);
+    return [...txns].slice(0, 6);
   }, [txns]);
+
+  const favoriteCards = useMemo(() => {
+    return favorites.map((f) => {
+      const sym = String(f.symbol || "").toUpperCase();
+      const livePrice = Number(prices[sym]);
+      const hasLivePrice = Number.isFinite(livePrice) && livePrice > 0;
+
+      return {
+        ...f,
+        symbol: sym,
+        livePrice,
+        hasLivePrice,
+      };
+    });
+  }, [favorites, prices]);
 
   return (
     <main
@@ -385,33 +498,96 @@ export default function InvestmentsPage() {
             />
           </div>
 
+          <div className="card" style={{ padding: 18, marginBottom: 18 }}>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                gap: 12,
+                alignItems: "center",
+                flexWrap: "wrap",
+              }}
+            >
+              <div>
+                <div style={{ fontWeight: 950, fontSize: 20 }}>Favorites</div>
+                <div className="muted" style={{ marginTop: 6, fontSize: 14 }}>
+                  Quick-access symbols you want to keep close.
+                </div>
+              </div>
+            </div>
+
+            <div style={{ height: 16 }} />
+
+            {favoriteCards.length ? (
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+                  gap: 12,
+                }}
+              >
+                {favoriteCards.map((f) => (
+                  <div
+                    key={f.id}
+                    className="card"
+                    style={{
+                      padding: 14,
+                      border: "1px solid rgba(255,255,255,.08)",
+                      background: "rgba(255,255,255,.03)",
+                    }}
+                  >
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+                      <div>
+                        <div style={{ fontWeight: 900, fontSize: 18 }}>{f.symbol}</div>
+                        <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+                          {f.asset_type || "stock"}
+                        </div>
+                      </div>
+
+                      <button
+                        className="btnGhost"
+                        onClick={() => removeFavorite(f.id)}
+                        style={{ minWidth: 70 }}
+                      >
+                        Remove
+                      </button>
+                    </div>
+
+                    <div style={{ marginTop: 14 }}>
+                      <div className="muted" style={{ fontSize: 12 }}>Live Price</div>
+                      <div style={{ marginTop: 4, fontWeight: 900, fontSize: 20 }}>
+                        {f.hasLivePrice ? money(f.livePrice) : "Pending"}
+                      </div>
+                    </div>
+
+                    <div style={{ marginTop: 14 }}>
+                      <Link href={`/market/${encodeURIComponent(f.symbol)}`} className="btn">
+                        Open Market
+                      </Link>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <EmptyState
+                title="No favorites yet"
+                sub="You can add favorites from Discover later or from your holdings list."
+              />
+            )}
+          </div>
+
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "1.45fr .95fr",
+              gridTemplateColumns: "1.2fr .8fr",
               gap: 18,
+              marginBottom: 18,
             }}
           >
             <div className="card" style={{ padding: 18 }}>
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  gap: 12,
-                  alignItems: "center",
-                  flexWrap: "wrap",
-                }}
-              >
-                <div>
-                  <div style={{ fontWeight: 950, fontSize: 20 }}>Top Holdings</div>
-                  <div className="muted" style={{ marginTop: 6, fontSize: 14 }}>
-                    Clean account summary. Open an asset only when you want chart detail.
-                  </div>
-                </div>
-
-                <Link href="/investments/discover" className="btnGhost">
-                  Explore Market
-                </Link>
+              <div style={{ fontWeight: 950, fontSize: 20 }}>Top Holdings</div>
+              <div className="muted" style={{ marginTop: 6, fontSize: 14 }}>
+                Clean account summary. Open an asset only when you want chart detail.
               </div>
 
               <div style={{ height: 16 }} />
@@ -423,77 +599,204 @@ export default function InvestmentsPage() {
                 />
               ) : (
                 <div style={{ display: "grid", gap: 10 }}>
-                  {portfolio.holdings.slice(0, 8).map((h) => (
-                    <div
-                      key={h.id}
-                      className="card"
-                      style={{
-                        padding: 14,
-                        border: "1px solid rgba(255,255,255,.08)",
-                        background: "rgba(255,255,255,.03)",
-                      }}
-                    >
+                  {portfolio.holdings.slice(0, 8).map((h) => {
+                    const isFavorite = favorites.some(
+                      (f) => String(f.symbol || "").toUpperCase() === String(h.symbol || "").toUpperCase()
+                    );
+
+                    return (
                       <div
+                        key={h.id}
+                        className="card"
                         style={{
-                          display: "grid",
-                          gridTemplateColumns: "1.15fr .8fr .9fr .9fr auto",
-                          gap: 12,
-                          alignItems: "center",
+                          padding: 14,
+                          border: "1px solid rgba(255,255,255,.08)",
+                          background: "rgba(255,255,255,.03)",
                         }}
                       >
-                        <div>
-                          <div style={{ fontWeight: 900, fontSize: 16 }}>{h.symbol}</div>
-                          <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
-                            {h.account || "Main"} • {h.asset_type || "stock"} • {h.txCount} trade{h.txCount === 1 ? "" : "s"}
+                        <div
+                          style={{
+                            display: "grid",
+                            gridTemplateColumns: "1.1fr .75fr .9fr .85fr auto auto",
+                            gap: 12,
+                            alignItems: "center",
+                          }}
+                        >
+                          <div>
+                            <div style={{ fontWeight: 900, fontSize: 16 }}>{h.symbol}</div>
+                            <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+                              {h.account || "Main"} • {h.asset_type || "stock"} • {h.txCount} trade{h.txCount === 1 ? "" : "s"}
+                            </div>
                           </div>
-                        </div>
 
-                        <div>
-                          <div className="muted" style={{ fontSize: 12 }}>Shares</div>
-                          <div style={{ fontWeight: 850, marginTop: 4 }}>{fmtNumber(h.shares)}</div>
-                        </div>
-
-                        <div>
-                          <div className="muted" style={{ fontSize: 12 }}>Value</div>
-                          <div style={{ fontWeight: 850, marginTop: 4 }}>
-                            {h.hasLivePrice ? money(h.value) : "Pending"}
+                          <div>
+                            <div className="muted" style={{ fontSize: 12 }}>Shares</div>
+                            <div style={{ fontWeight: 850, marginTop: 4 }}>{fmtNumber(h.shares)}</div>
                           </div>
-                        </div>
 
-                        <div>
-                          <div className="muted" style={{ fontSize: 12 }}>P/L</div>
-                          <div
-                            style={{
-                              fontWeight: 850,
-                              marginTop: 4,
-                              color: h.hasLivePrice ? (h.pnl >= 0 ? "#4ade80" : "#f87171") : "inherit",
-                            }}
+                          <div>
+                            <div className="muted" style={{ fontSize: 12 }}>Value</div>
+                            <div style={{ fontWeight: 850, marginTop: 4 }}>
+                              {h.hasLivePrice ? money(h.value) : "Pending"}
+                            </div>
+                          </div>
+
+                          <div>
+                            <div className="muted" style={{ fontSize: 12 }}>P/L</div>
+                            <div
+                              style={{
+                                fontWeight: 850,
+                                marginTop: 4,
+                                color: h.hasLivePrice ? (h.pnl >= 0 ? "#4ade80" : "#f87171") : "inherit",
+                              }}
+                            >
+                              {h.hasLivePrice ? money(h.pnl) : "Pending"}
+                            </div>
+                          </div>
+
+                          <button
+                            className={isFavorite ? "btnGhost" : "btnGhost"}
+                            onClick={() => addFavoriteFromHolding(h)}
+                            style={{ minWidth: 92 }}
                           >
-                            {h.hasLivePrice ? money(h.pnl) : "Pending"}
-                          </div>
-                        </div>
+                            {isFavorite ? "Favorited" : "Favorite"}
+                          </button>
 
-                        <Link href={`/investments/${h.id}`} className="btn">
-                          View Asset
-                        </Link>
+                          <Link href={`/investments/${h.id}`} className="btn">
+                            View Asset
+                          </Link>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            <div className="card" style={{ padding: 18 }}>
+              <div style={{ fontWeight: 950, fontSize: 20 }}>Allocation View</div>
+              <div className="muted" style={{ marginTop: 6, fontSize: 14 }}>
+                Portfolio weights by live market value.
+              </div>
+
+              <div style={{ height: 16 }} />
+
+              {allocation.length ? (
+                <div style={{ display: "grid", gap: 12 }}>
+                  {allocation.map((h) => (
+                    <div key={h.id}>
+                      <div
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          gap: 10,
+                          marginBottom: 8,
+                        }}
+                      >
+                        <div style={{ fontWeight: 850 }}>{h.symbol}</div>
+                        <div className="muted" style={{ fontSize: 13 }}>
+                          {h.weight.toFixed(1)}%
+                        </div>
+                      </div>
+
+                      <div
+                        style={{
+                          height: 10,
+                          borderRadius: 999,
+                          background: "rgba(255,255,255,.06)",
+                          overflow: "hidden",
+                        }}
+                      >
+                        <div
+                          style={{
+                            width: `${Math.max(4, Math.min(100, h.weight))}%`,
+                            height: "100%",
+                            borderRadius: 999,
+                            background: "linear-gradient(90deg, rgba(96,165,250,.95), rgba(59,130,246,.55))",
+                          }}
+                        />
+                      </div>
+
+                      <div className="muted" style={{ marginTop: 6, fontSize: 12 }}>
+                        {money(h.value)}
                       </div>
                     </div>
                   ))}
                 </div>
+              ) : (
+                <EmptyState
+                  title="No allocation yet"
+                  sub="Allocation appears once live market values are available."
+                />
+              )}
+            </div>
+          </div>
+
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1.1fr .9fr",
+              gap: 18,
+            }}
+          >
+            <div className="card" style={{ padding: 18 }}>
+              <div style={{ fontWeight: 950, fontSize: 20 }}>Recent Activity</div>
+              <div className="muted" style={{ marginTop: 6, fontSize: 14 }}>
+                Latest buys and sells across your portfolio.
+              </div>
+
+              <div style={{ height: 16 }} />
+
+              {recentTxns.length ? (
+                <div style={{ display: "grid", gap: 10 }}>
+                  {recentTxns.map((t) => {
+                    const asset = assets.find((a) => a.id === t.asset_id);
+
+                    return (
+                      <div
+                        key={t.id}
+                        style={{
+                          border: "1px solid rgba(255,255,255,.08)",
+                          background: "rgba(255,255,255,.03)",
+                          borderRadius: 16,
+                          padding: 14,
+                        }}
+                      >
+                        <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+                          <div style={{ fontWeight: 900 }}>
+                            {asset?.symbol || "—"} • {t.txn_type}
+                          </div>
+                          <div className="muted" style={{ fontSize: 12 }}>
+                            {t.txn_date}
+                          </div>
+                        </div>
+
+                        <div className="muted" style={{ marginTop: 8, fontSize: 13 }}>
+                          {fmtNumber(t.qty)} shares at {money(t.price)}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <EmptyState
+                  title="No recent activity"
+                  sub="Your newest investment trades will show here."
+                />
               )}
             </div>
 
             <div className="card" style={{ padding: 18 }}>
               <div style={{ fontWeight: 950, fontSize: 20 }}>Next Upgrade Stack</div>
               <div className="muted" style={{ marginTop: 8, lineHeight: 1.5 }}>
-                Now that the dashboard is separated from trader mode, the strongest next upgrades are:
+                Now that favorites, allocation, and recent activity are live, the strongest next upgrades are:
               </div>
 
               <div style={{ display: "grid", gap: 10, marginTop: 16 }}>
-                <MiniPoint title="Allocation view" sub="Portfolio weights by live market value." />
                 <MiniPoint title="Performance cards" sub="1D / 1W / 1M / YTD account change metrics." />
-                <MiniPoint title="Watchlist" sub="Track symbols before adding them as holdings." />
-                <MiniPoint title="Recent activity" sub="Show latest buy and sell activity on the dashboard." />
+                <MiniPoint title="Watchlist depth" sub="Notes, tags, and grouped favorite lists." />
+                <MiniPoint title="Account snapshots" sub="Daily portfolio history for real account performance." />
+                <MiniPoint title="Market movers" sub="Top gainers, losers, and trending names." />
               </div>
             </div>
           </div>
@@ -538,7 +841,7 @@ export default function InvestmentsPage() {
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: "1.15fr .8fr .9fr .9fr .9fr .9fr 180px",
+                gridTemplateColumns: "1.05fr .75fr .9fr .9fr .9fr .85fr 110px 120px",
                 gap: 12,
                 padding: "16px 18px",
                 borderBottom: "1px solid rgba(255,255,255,.08)",
@@ -552,50 +855,63 @@ export default function InvestmentsPage() {
               <div>Avg Cost</div>
               <div>Live Price</div>
               <div>P/L</div>
+              <div>Fav</div>
               <div>Action</div>
             </div>
 
             {portfolio.holdings.length ? (
-              portfolio.holdings.map((h) => (
-                <div
-                  key={h.id}
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "1.15fr .8fr .9fr .9fr .9fr .9fr 180px",
-                    gap: 12,
-                    padding: "16px 18px",
-                    borderBottom: "1px solid rgba(255,255,255,.08)",
-                    alignItems: "center",
-                  }}
-                >
-                  <div>
-                    <div style={{ fontWeight: 900 }}>{h.symbol}</div>
-                    <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
-                      {h.account || "Main"}
-                    </div>
-                  </div>
+              portfolio.holdings.map((h) => {
+                const isFavorite = favorites.some(
+                  (f) => String(f.symbol || "").toUpperCase() === String(h.symbol || "").toUpperCase()
+                );
 
-                  <div>{fmtNumber(h.shares)}</div>
-                  <div>{money(h.cost)}</div>
-                  <div>{h.shares > 0 ? money(h.avgCost) : "—"}</div>
-                  <div>{h.hasLivePrice ? money(h.livePrice) : "Unavailable"}</div>
-
+                return (
                   <div
+                    key={h.id}
                     style={{
-                      color: h.hasLivePrice ? (h.pnl >= 0 ? "#4ade80" : "#f87171") : "inherit",
-                      fontWeight: 850,
+                      display: "grid",
+                      gridTemplateColumns: "1.05fr .75fr .9fr .9fr .9fr .85fr 110px 120px",
+                      gap: 12,
+                      padding: "16px 18px",
+                      borderBottom: "1px solid rgba(255,255,255,.08)",
+                      alignItems: "center",
                     }}
                   >
-                    {h.hasLivePrice ? money(h.pnl) : "Pending"}
-                  </div>
+                    <div>
+                      <div style={{ fontWeight: 900 }}>{h.symbol}</div>
+                      <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+                        {h.account || "Main"}
+                      </div>
+                    </div>
 
-                  <div>
-                    <Link href={`/investments/${h.id}`} className="btn">
-                      View Asset
-                    </Link>
+                    <div>{fmtNumber(h.shares)}</div>
+                    <div>{money(h.cost)}</div>
+                    <div>{h.shares > 0 ? money(h.avgCost) : "—"}</div>
+                    <div>{h.hasLivePrice ? money(h.livePrice) : "Unavailable"}</div>
+
+                    <div
+                      style={{
+                        color: h.hasLivePrice ? (h.pnl >= 0 ? "#4ade80" : "#f87171") : "inherit",
+                        fontWeight: 850,
+                      }}
+                    >
+                      {h.hasLivePrice ? money(h.pnl) : "Pending"}
+                    </div>
+
+                    <div>
+                      <button className="btnGhost" onClick={() => addFavoriteFromHolding(h)}>
+                        {isFavorite ? "Saved" : "Save"}
+                      </button>
+                    </div>
+
+                    <div>
+                      <Link href={`/investments/${h.id}`} className="btn">
+                        View
+                      </Link>
+                    </div>
                   </div>
-                </div>
-              ))
+                );
+              })
             ) : (
               <div style={{ padding: 18 }}>
                 <EmptyState
