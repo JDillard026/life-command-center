@@ -3,9 +3,6 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
-import InvestmentChart from "@/components/ui/InvestmentChart";
-
-const RANGE_OPTIONS = ["1M", "3M", "6M", "1Y", "ALL"];
 
 function money(n) {
   const num = Number(n);
@@ -32,14 +29,6 @@ export default function InvestmentsPage() {
   const [txnAsset, setTxnAsset] = useState("");
   const [txnQty, setTxnQty] = useState("");
   const [txnPrice, setTxnPrice] = useState("");
-
-  const [selectedAssetId, setSelectedAssetId] = useState("");
-  const [chartRange, setChartRange] = useState("6M");
-  const [chartMode, setChartMode] = useState("candles");
-  const [chartData, setChartData] = useState([]);
-  const [chartVolume, setChartVolume] = useState([]);
-  const [chartLoading, setChartLoading] = useState(false);
-  const [chartError, setChartError] = useState("");
 
   useEffect(() => {
     async function load() {
@@ -69,19 +58,8 @@ export default function InvestmentsPage() {
         return;
       }
 
-      const loadedAssets = assetRows || [];
-      const loadedTxns = txnRows || [];
-
-      setAssets(loadedAssets);
-      setTxns(loadedTxns);
-
-      if (loadedAssets.length) {
-        setSelectedAssetId((prev) =>
-          prev && loadedAssets.some((a) => a.id === prev) ? prev : loadedAssets[0].id
-        );
-      } else {
-        setSelectedAssetId("");
-      }
+      setAssets(assetRows || []);
+      setTxns(txnRows || []);
     }
 
     load();
@@ -118,115 +96,6 @@ export default function InvestmentsPage() {
 
     loadPrices();
   }, [assets]);
-
-  const portfolio = useMemo(() => {
-    let totalValue = 0;
-    let totalCost = 0;
-
-    const holdings = assets.map((a) => {
-      const list = txns.filter((t) => t.asset_id === a.id);
-
-      let shares = 0;
-      let cost = 0;
-
-      for (const t of list) {
-        const qty = Number(t.qty) || 0;
-        const price = Number(t.price) || 0;
-
-        if (String(t.txn_type).toUpperCase() === "BUY") {
-          shares += qty;
-          cost += qty * price;
-        }
-
-        if (String(t.txn_type).toUpperCase() === "SELL") {
-          shares -= qty;
-        }
-      }
-
-      const livePrice = Number(prices[a.symbol]);
-      const hasLivePrice = Number.isFinite(livePrice) && livePrice > 0;
-      const value = hasLivePrice ? shares * livePrice : null;
-      const pnl = hasLivePrice ? value - cost : null;
-      const avgCost = shares > 0 ? cost / shares : 0;
-
-      if (hasLivePrice) totalValue += value;
-      totalCost += cost;
-
-      return {
-        ...a,
-        shares,
-        cost,
-        value,
-        pnl,
-        avgCost,
-        livePrice,
-        hasLivePrice,
-        txCount: list.length,
-      };
-    });
-
-    const sorted = [...holdings].sort((a, b) => {
-      const aVal = Number(a.value) || 0;
-      const bVal = Number(b.value) || 0;
-      return bVal - aVal;
-    });
-
-    return {
-      holdings: sorted,
-      totalValue,
-      totalCost,
-      totalPnl: totalValue - totalCost,
-      hasAnyLivePrices: sorted.some((h) => h.hasLivePrice),
-    };
-  }, [assets, txns, prices]);
-
-  const selectedHolding = useMemo(() => {
-    return (
-      portfolio.holdings.find((h) => h.id === selectedAssetId) ||
-      portfolio.holdings[0] ||
-      null
-    );
-  }, [portfolio.holdings, selectedAssetId]);
-
-  useEffect(() => {
-    async function loadChart() {
-      if (!selectedHolding?.symbol) {
-        setChartData([]);
-        setChartVolume([]);
-        setChartError("");
-        return;
-      }
-
-      setChartLoading(true);
-      setChartError("");
-
-      try {
-        const res = await fetch(
-          `/api/investment-chart?symbol=${encodeURIComponent(
-            selectedHolding.symbol
-          )}&range=${encodeURIComponent(chartRange)}`
-        );
-
-        const data = await res.json();
-
-        if (!res.ok) {
-          throw new Error(data?.error || "Failed to load chart.");
-        }
-
-        setChartData(Array.isArray(data?.candles) ? data.candles : []);
-        setChartVolume(Array.isArray(data?.volume) ? data.volume : []);
-      } catch (err) {
-        console.error(err);
-        setChartData([]);
-        setChartVolume([]);
-        setChartError(err?.message || "Failed to load chart.");
-      } finally {
-        setChartLoading(false);
-      }
-    }
-
-    loadChart();
-  }, [selectedHolding?.symbol, chartRange]);
 
   async function addAsset() {
     setError("");
@@ -275,7 +144,6 @@ export default function InvestmentsPage() {
     }
 
     setAssets((prev) => [data, ...prev]);
-    setSelectedAssetId(data.id);
     setSymbol("");
     setStatus("Asset added.");
   }
@@ -336,11 +204,71 @@ export default function InvestmentsPage() {
     setStatus("Trade added.");
   }
 
-  const lineData = useMemo(() => {
-    return Array.isArray(chartData)
-      ? chartData.map((c) => ({ time: c.time, value: c.close }))
-      : [];
-  }, [chartData]);
+  const portfolio = useMemo(() => {
+    let totalValue = 0;
+    let totalCost = 0;
+
+    const holdings = assets.map((a) => {
+      const list = txns.filter((t) => t.asset_id === a.id);
+
+      let shares = 0;
+      let cost = 0;
+
+      for (const t of list) {
+        const qty = Number(t.qty) || 0;
+        const price = Number(t.price) || 0;
+        const txnType = String(t.txn_type || "").toUpperCase();
+
+        if (txnType === "BUY") {
+          shares += qty;
+          cost += qty * price;
+        }
+
+        if (txnType === "SELL") {
+          shares -= qty;
+        }
+      }
+
+      const livePrice = Number(prices[a.symbol]);
+      const hasLivePrice = Number.isFinite(livePrice) && livePrice > 0;
+      const value = hasLivePrice ? shares * livePrice : null;
+      const pnl = hasLivePrice ? value - cost : null;
+      const avgCost = shares > 0 ? cost / shares : 0;
+
+      if (hasLivePrice) totalValue += value;
+      totalCost += cost;
+
+      return {
+        ...a,
+        shares,
+        cost,
+        value,
+        pnl,
+        avgCost,
+        livePrice,
+        hasLivePrice,
+        txCount: list.length,
+      };
+    });
+
+    const sorted = [...holdings].sort((a, b) => {
+      const aVal = Number(a.value) || 0;
+      const bVal = Number(b.value) || 0;
+      return bVal - aVal;
+    });
+
+    return {
+      holdings: sorted,
+      totalValue,
+      totalCost,
+      totalPnl: totalValue - totalCost,
+      hasAnyLivePrices: sorted.some((h) => h.hasLivePrice),
+    };
+  }, [assets, txns, prices]);
+
+  const recentTxns = useMemo(() => {
+    return [...txns].slice(0, 8);
+  }, [txns]);
 
   return (
     <main
@@ -385,7 +313,7 @@ export default function InvestmentsPage() {
           </h1>
 
           <div className="muted" style={{ marginTop: 10, fontSize: 15, maxWidth: 760 }}>
-            Real holdings. Real live prices. Real trader chart. Click a holding and inspect it like a real platform.
+            Full account view first. Clean dashboard here. Deep trader chart lives on each asset screen.
           </div>
         </div>
 
@@ -415,117 +343,16 @@ export default function InvestmentsPage() {
         </div>
       )}
 
-      <div
-        className="card"
-        style={{
-          padding: 18,
-          marginBottom: 18,
-          borderRadius: 24,
-          border: "1px solid rgba(255,255,255,.08)",
-          background: "linear-gradient(180deg, rgba(59,130,246,.12), rgba(255,255,255,.02))",
-        }}
-      >
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1.45fr .9fr",
-            gap: 18,
-            alignItems: "stretch",
-          }}
-        >
-          <div>
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                gap: 12,
-                alignItems: "center",
-                flexWrap: "wrap",
-                marginBottom: 12,
-              }}
-            >
-              <div>
-                <div style={{ fontWeight: 950, fontSize: 22 }}>
-                  {selectedHolding ? selectedHolding.symbol : "No asset selected"}
-                </div>
-                <div className="muted" style={{ marginTop: 6, fontSize: 13 }}>
-                  {selectedHolding
-                    ? `${selectedHolding.account || "Main"} • ${selectedHolding.asset_type || "stock"} • ${selectedHolding.txCount} trade${selectedHolding.txCount === 1 ? "" : "s"}`
-                    : "Add an asset to unlock the chart panel."}
-                </div>
-              </div>
-
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                <button
-                  className={chartMode === "candles" ? "btn" : "btnGhost"}
-                  onClick={() => setChartMode("candles")}
-                  style={{ minWidth: 90 }}
-                >
-                  Candles
-                </button>
-
-                <button
-                  className={chartMode === "line" ? "btn" : "btnGhost"}
-                  onClick={() => setChartMode("line")}
-                  style={{ minWidth: 90 }}
-                >
-                  Line
-                </button>
-
-                {RANGE_OPTIONS.map((r) => (
-                  <button
-                    key={r}
-                    className={chartRange === r ? "btn" : "btnGhost"}
-                    onClick={() => setChartRange(r)}
-                    style={{ minWidth: 64 }}
-                  >
-                    {r}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div
-              className="card"
-              style={{
-                padding: 14,
-                borderRadius: 20,
-                background: "rgba(255,255,255,.03)",
-                border: "1px solid rgba(255,255,255,.06)",
-                minHeight: 470,
-              }}
-            >
-              {chartLoading ? (
-                <div className="muted" style={{ padding: 12 }}>Loading chart...</div>
-              ) : chartError ? (
-                <div style={{ padding: 12 }}>
-                  <div style={{ fontWeight: 900 }}>Chart error</div>
-                  <div className="muted" style={{ marginTop: 6 }}>{chartError}</div>
-                </div>
-              ) : chartMode === "candles" && chartData.length >= 2 ? (
-                <InvestmentChart
-                  data={chartData}
-                  volumeData={chartVolume}
-                  mode="candles"
-                />
-              ) : chartMode === "line" && lineData.length >= 2 ? (
-                <InvestmentChart
-                  data={lineData}
-                  volumeData={[]}
-                  mode="line"
-                />
-              ) : (
-                <div style={{ padding: 12 }}>
-                  <div style={{ fontWeight: 900 }}>Not enough historical data</div>
-                  <div className="muted" style={{ marginTop: 6 }}>
-                    Pick a valid symbol with chartable market history.
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div style={{ display: "grid", gap: 12 }}>
+      {tab === "overview" && (
+        <>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+              gap: 16,
+              marginBottom: 18,
+            }}
+          >
             <MetricCard
               title="Tracked Value"
               value={portfolio.hasAnyLivePrices ? money(portfolio.totalValue) : "Price unavailable"}
@@ -535,7 +362,7 @@ export default function InvestmentsPage() {
             <MetricCard
               title="Total Cost Basis"
               value={money(portfolio.totalCost)}
-              sub="Built from recorded buy trades."
+              sub="Built from your recorded buy trades."
             />
 
             <MetricCard
@@ -556,166 +383,121 @@ export default function InvestmentsPage() {
                   : "default"
               }
             />
-
-            <div className="card" style={{ padding: 16 }}>
-              <div style={{ fontWeight: 900, fontSize: 16, marginBottom: 12 }}>Selected position</div>
-
-              {selectedHolding ? (
-                <div style={{ display: "grid", gap: 10 }}>
-                  <InfoRow label="Shares Owned" value={fmtNumber(selectedHolding.shares)} />
-                  <InfoRow label="Cost Basis" value={money(selectedHolding.cost)} />
-                  <InfoRow
-                    label="Average Cost"
-                    value={selectedHolding.shares > 0 ? money(selectedHolding.avgCost) : "—"}
-                  />
-                  <InfoRow
-                    label="Live Price"
-                    value={selectedHolding.hasLivePrice ? money(selectedHolding.livePrice) : "Unavailable"}
-                  />
-                  <InfoRow
-                    label="Position Value"
-                    value={selectedHolding.hasLivePrice ? money(selectedHolding.value) : "Pending"}
-                  />
-                  <InfoRow
-                    label="P/L"
-                    value={selectedHolding.hasLivePrice ? money(selectedHolding.pnl) : "Pending"}
-                    tone={
-                      selectedHolding.hasLivePrice
-                        ? selectedHolding.pnl >= 0
-                          ? "good"
-                          : "bad"
-                        : "default"
-                    }
-                  />
-                </div>
-              ) : (
-                <div className="muted">No holding selected.</div>
-              )}
-            </div>
           </div>
-        </div>
-      </div>
 
-      {tab === "overview" && (
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1.45fr .95fr",
-            gap: 18,
-          }}
-        >
-          <div className="card" style={{ padding: 18 }}>
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                gap: 12,
-                alignItems: "center",
-                flexWrap: "wrap",
-              }}
-            >
-              <div>
-                <div style={{ fontWeight: 950, fontSize: 20 }}>Top Holdings</div>
-                <div className="muted" style={{ marginTop: 6, fontSize: 14 }}>
-                  Click any holding to load it into the trader panel above.
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1.45fr .95fr",
+              gap: 18,
+            }}
+          >
+            <div className="card" style={{ padding: 18 }}>
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  gap: 12,
+                  alignItems: "center",
+                  flexWrap: "wrap",
+                }}
+              >
+                <div>
+                  <div style={{ fontWeight: 950, fontSize: 20 }}>Top Holdings</div>
+                  <div className="muted" style={{ marginTop: 6, fontSize: 14 }}>
+                    Clean account summary. Open an asset only when you want chart detail.
+                  </div>
                 </div>
+
+                <Link href="/investments/discover" className="btnGhost">
+                  Explore Market
+                </Link>
               </div>
 
-              <Link href="/investments/discover" className="btnGhost">
-                Explore Market
-              </Link>
-            </div>
+              <div style={{ height: 16 }} />
 
-            <div style={{ height: 16 }} />
-
-            {!portfolio.holdings.length ? (
-              <EmptyState
-                title="No investments yet"
-                sub="Add your first asset, then log a trade to start building your portfolio."
-              />
-            ) : (
-              <div style={{ display: "grid", gap: 10 }}>
-                {portfolio.holdings.slice(0, 8).map((h) => (
-                  <button
-                    key={h.id}
-                    onClick={() => setSelectedAssetId(h.id)}
-                    className="card"
-                    style={{
-                      padding: 14,
-                      textAlign: "left",
-                      cursor: "pointer",
-                      border:
-                        selectedAssetId === h.id
-                          ? "1px solid rgba(59,130,246,.55)"
-                          : "1px solid rgba(255,255,255,.08)",
-                      background:
-                        selectedAssetId === h.id
-                          ? "rgba(59,130,246,.10)"
-                          : "rgba(255,255,255,.03)",
-                    }}
-                  >
+              {!portfolio.holdings.length ? (
+                <EmptyState
+                  title="No investments yet"
+                  sub="Add your first asset, then log a trade to start building your portfolio."
+                />
+              ) : (
+                <div style={{ display: "grid", gap: 10 }}>
+                  {portfolio.holdings.slice(0, 8).map((h) => (
                     <div
+                      key={h.id}
+                      className="card"
                       style={{
-                        display: "grid",
-                        gridTemplateColumns: "1.15fr .8fr .9fr .9fr auto",
-                        gap: 12,
-                        alignItems: "center",
+                        padding: 14,
+                        border: "1px solid rgba(255,255,255,.08)",
+                        background: "rgba(255,255,255,.03)",
                       }}
                     >
-                      <div>
-                        <div style={{ fontWeight: 900, fontSize: 16 }}>{h.symbol}</div>
-                        <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
-                          {h.account || "Main"} • {h.asset_type || "stock"}
+                      <div
+                        style={{
+                          display: "grid",
+                          gridTemplateColumns: "1.15fr .8fr .9fr .9fr auto",
+                          gap: 12,
+                          alignItems: "center",
+                        }}
+                      >
+                        <div>
+                          <div style={{ fontWeight: 900, fontSize: 16 }}>{h.symbol}</div>
+                          <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+                            {h.account || "Main"} • {h.asset_type || "stock"} • {h.txCount} trade{h.txCount === 1 ? "" : "s"}
+                          </div>
                         </div>
-                      </div>
 
-                      <div>
-                        <div className="muted" style={{ fontSize: 12 }}>Shares</div>
-                        <div style={{ fontWeight: 850, marginTop: 4 }}>{fmtNumber(h.shares)}</div>
-                      </div>
-
-                      <div>
-                        <div className="muted" style={{ fontSize: 12 }}>Value</div>
-                        <div style={{ fontWeight: 850, marginTop: 4 }}>
-                          {h.hasLivePrice ? money(h.value) : "Pending"}
+                        <div>
+                          <div className="muted" style={{ fontSize: 12 }}>Shares</div>
+                          <div style={{ fontWeight: 850, marginTop: 4 }}>{fmtNumber(h.shares)}</div>
                         </div>
-                      </div>
 
-                      <div>
-                        <div className="muted" style={{ fontSize: 12 }}>P/L</div>
-                        <div
-                          style={{
-                            fontWeight: 850,
-                            marginTop: 4,
-                            color: h.hasLivePrice ? (h.pnl >= 0 ? "#4ade80" : "#f87171") : "inherit",
-                          }}
-                        >
-                          {h.hasLivePrice ? money(h.pnl) : "Pending"}
+                        <div>
+                          <div className="muted" style={{ fontSize: 12 }}>Value</div>
+                          <div style={{ fontWeight: 850, marginTop: 4 }}>
+                            {h.hasLivePrice ? money(h.value) : "Pending"}
+                          </div>
                         </div>
-                      </div>
 
-                      <div className="btnGhost">View</div>
+                        <div>
+                          <div className="muted" style={{ fontSize: 12 }}>P/L</div>
+                          <div
+                            style={{
+                              fontWeight: 850,
+                              marginTop: 4,
+                              color: h.hasLivePrice ? (h.pnl >= 0 ? "#4ade80" : "#f87171") : "inherit",
+                            }}
+                          >
+                            {h.hasLivePrice ? money(h.pnl) : "Pending"}
+                          </div>
+                        </div>
+
+                        <Link href={`/investments/${h.id}`} className="btn">
+                          View Asset
+                        </Link>
+                      </div>
                     </div>
-                  </button>
-                ))}
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="card" style={{ padding: 18 }}>
+              <div style={{ fontWeight: 950, fontSize: 20 }}>Next Upgrade Stack</div>
+              <div className="muted" style={{ marginTop: 8, lineHeight: 1.5 }}>
+                Now that the dashboard is separated from trader mode, the strongest next upgrades are:
               </div>
-            )}
-          </div>
 
-          <div className="card" style={{ padding: 18 }}>
-            <div style={{ fontWeight: 950, fontSize: 20 }}>Next Upgrade Stack</div>
-            <div className="muted" style={{ marginTop: 8, lineHeight: 1.5 }}>
-              Now that the real chart is in, the strongest next upgrades are:
-            </div>
-
-            <div style={{ display: "grid", gap: 10, marginTop: 16 }}>
-              <MiniPoint title="Allocation view" sub="Portfolio weights by live market value." />
-              <MiniPoint title="Performance cards" sub="1D / 1W / 1M / YTD change metrics." />
-              <MiniPoint title="Watchlist" sub="Track symbols before adding them as holdings." />
-              <MiniPoint title="Asset detail screen" sub="Dedicated page per holding with trades and notes." />
+              <div style={{ display: "grid", gap: 10, marginTop: 16 }}>
+                <MiniPoint title="Allocation view" sub="Portfolio weights by live market value." />
+                <MiniPoint title="Performance cards" sub="1D / 1W / 1M / YTD account change metrics." />
+                <MiniPoint title="Watchlist" sub="Track symbols before adding them as holdings." />
+                <MiniPoint title="Recent activity" sub="Show latest buy and sell activity on the dashboard." />
+              </div>
             </div>
           </div>
-        </div>
+        </>
       )}
 
       {tab === "holdings" && (
@@ -808,9 +590,9 @@ export default function InvestmentsPage() {
                   </div>
 
                   <div>
-                    <button className="btn" onClick={() => setSelectedAssetId(h.id)}>
-                      Load Chart
-                    </button>
+                    <Link href={`/investments/${h.id}`} className="btn">
+                      View Asset
+                    </Link>
                   </div>
                 </div>
               ))
@@ -868,41 +650,94 @@ export default function InvestmentsPage() {
             </div>
           </div>
 
-          <div className="card" style={{ padding: 0, overflow: "hidden" }}>
-            <TableHeader cols={["Type", "Asset", "Qty", "Price", "Date"]} />
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1.2fr .9fr",
+              gap: 18,
+            }}
+          >
+            <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+              <TableHeader cols={["Type", "Asset", "Qty", "Price", "Date"]} />
 
-            {txns.length ? (
-              txns.map((t) => {
-                const asset = assets.find((a) => a.id === t.asset_id);
+              {txns.length ? (
+                txns.map((t) => {
+                  const asset = assets.find((a) => a.id === t.asset_id);
 
-                return (
-                  <div
-                    key={t.id}
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "1fr 1fr 1fr 1fr 1fr",
-                      gap: 12,
-                      padding: "16px 18px",
-                      borderBottom: "1px solid rgba(255,255,255,.08)",
-                      alignItems: "center",
-                    }}
-                  >
-                    <div style={{ fontWeight: 850 }}>{t.txn_type}</div>
-                    <div>{asset?.symbol || "—"}</div>
-                    <div>{fmtNumber(t.qty)}</div>
-                    <div>{money(t.price)}</div>
-                    <div>{t.txn_date}</div>
-                  </div>
-                );
-              })
-            ) : (
-              <div style={{ padding: 18 }}>
-                <EmptyState
-                  title="No trades yet"
-                  sub="Add your first transaction to build cost basis and position size."
-                />
+                  return (
+                    <div
+                      key={t.id}
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "1fr 1fr 1fr 1fr 1fr",
+                        gap: 12,
+                        padding: "16px 18px",
+                        borderBottom: "1px solid rgba(255,255,255,.08)",
+                        alignItems: "center",
+                      }}
+                    >
+                      <div style={{ fontWeight: 850 }}>{t.txn_type}</div>
+                      <div>{asset?.symbol || "—"}</div>
+                      <div>{fmtNumber(t.qty)}</div>
+                      <div>{money(t.price)}</div>
+                      <div>{t.txn_date}</div>
+                    </div>
+                  );
+                })
+              ) : (
+                <div style={{ padding: 18 }}>
+                  <EmptyState
+                    title="No trades yet"
+                    sub="Add your first transaction to build cost basis and position size."
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="card" style={{ padding: 18 }}>
+              <div style={{ fontWeight: 950, fontSize: 20 }}>Recent Activity</div>
+              <div className="muted" style={{ marginTop: 8, fontSize: 14 }}>
+                Latest portfolio moves at a glance.
               </div>
-            )}
+
+              <div style={{ display: "grid", gap: 10, marginTop: 16 }}>
+                {recentTxns.length ? (
+                  recentTxns.map((t) => {
+                    const asset = assets.find((a) => a.id === t.asset_id);
+
+                    return (
+                      <div
+                        key={t.id}
+                        style={{
+                          border: "1px solid rgba(255,255,255,.08)",
+                          background: "rgba(255,255,255,.03)",
+                          borderRadius: 16,
+                          padding: 14,
+                        }}
+                      >
+                        <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+                          <div style={{ fontWeight: 900 }}>
+                            {asset?.symbol || "—"} • {t.txn_type}
+                          </div>
+                          <div className="muted" style={{ fontSize: 12 }}>
+                            {t.txn_date}
+                          </div>
+                        </div>
+
+                        <div className="muted" style={{ marginTop: 8, fontSize: 13 }}>
+                          {fmtNumber(t.qty)} shares at {money(t.price)}
+                        </div>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <EmptyState
+                    title="No recent activity"
+                    sub="Your newest investment trades will show here."
+                  />
+                )}
+              </div>
+            </div>
           </div>
         </>
       )}
@@ -1001,31 +836,6 @@ function MiniPoint({ title, sub }) {
       <div className="muted" style={{ marginTop: 6, fontSize: 13, lineHeight: 1.45 }}>
         {sub}
       </div>
-    </div>
-  );
-}
-
-function InfoRow({ label, value, tone = "default" }) {
-  const color =
-    tone === "good"
-      ? "#4ade80"
-      : tone === "bad"
-      ? "#f87171"
-      : "rgba(255,255,255,.92)";
-
-  return (
-    <div
-      style={{
-        display: "flex",
-        justifyContent: "space-between",
-        gap: 10,
-        alignItems: "center",
-        paddingBottom: 8,
-        borderBottom: "1px solid rgba(255,255,255,.06)",
-      }}
-    >
-      <div className="muted" style={{ fontSize: 13 }}>{label}</div>
-      <div style={{ fontWeight: 900, color }}>{value}</div>
     </div>
   );
 }

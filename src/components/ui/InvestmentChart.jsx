@@ -11,9 +11,7 @@ import {
 function toChartTime(value) {
   if (!value) return null;
 
-  if (typeof value === "number") {
-    return value;
-  }
+  if (typeof value === "number") return value;
 
   if (value instanceof Date) {
     return Math.floor(value.getTime() / 1000);
@@ -21,10 +19,8 @@ function toChartTime(value) {
 
   if (typeof value === "string") {
     const trimmed = value.trim();
-
     if (!trimmed) return null;
 
-    // keep YYYY-MM-DD as-is for lightweight-charts business day support
     if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
       return trimmed;
     }
@@ -116,7 +112,7 @@ function normalizeVolumeData(data = []) {
             ? close >= open
               ? "rgba(34,197,94,0.45)"
               : "rgba(239,68,68,0.45)"
-            : "rgba(148,163,184,0.4)",
+            : "rgba(148,163,184,0.35)",
       };
     })
     .filter(Boolean)
@@ -131,7 +127,7 @@ export default function InvestmentChart({
   data = [],
   volumeData = [],
   mode = "line",
-  height = 420,
+  height = 540,
 }) {
   const chartContainerRef = useRef(null);
 
@@ -142,27 +138,38 @@ export default function InvestmentChart({
     container.innerHTML = "";
 
     const chart = createChart(container, {
-      width: container.clientWidth || 800,
+      width: container.clientWidth || 900,
       height,
       layout: {
-        background: { color: "#0b1020" },
+        background: { color: "#09111f" },
         textColor: "#cbd5e1",
       },
       grid: {
-        vertLines: { color: "rgba(255,255,255,0.06)" },
-        horzLines: { color: "rgba(255,255,255,0.06)" },
+        vertLines: { color: "rgba(255,255,255,0.05)" },
+        horzLines: { color: "rgba(255,255,255,0.05)" },
       },
       rightPriceScale: {
-        borderColor: "rgba(255,255,255,0.12)",
+        borderColor: "rgba(255,255,255,0.10)",
       },
       timeScale: {
-        borderColor: "rgba(255,255,255,0.12)",
+        borderColor: "rgba(255,255,255,0.10)",
         timeVisible: true,
         secondsVisible: false,
       },
       crosshair: {
-        vertLine: { color: "rgba(255,255,255,0.18)" },
-        horzLine: { color: "rgba(255,255,255,0.18)" },
+        vertLine: { color: "rgba(255,255,255,0.16)" },
+        horzLine: { color: "rgba(255,255,255,0.16)" },
+      },
+      handleScroll: {
+        mouseWheel: true,
+        pressedMouseMove: true,
+        horzTouchDrag: true,
+        vertTouchDrag: true,
+      },
+      handleScale: {
+        axisPressedMouseMove: true,
+        mouseWheel: true,
+        pinch: true,
       },
     });
 
@@ -204,7 +211,7 @@ export default function InvestmentChart({
 
           volumeSeries.priceScale().applyOptions({
             scaleMargins: {
-              top: 0.75,
+              top: 0.78,
               bottom: 0,
             },
           });
@@ -230,7 +237,7 @@ export default function InvestmentChart({
     const handleResize = () => {
       if (!container) return;
       chart.applyOptions({
-        width: container.clientWidth || 800,
+        width: container.clientWidth || 900,
       });
       chart.timeScale().fitContent();
     };
@@ -249,7 +256,7 @@ export default function InvestmentChart({
       style={{
         width: "100%",
         height: `${height}px`,
-        borderRadius: "16px",
+        borderRadius: "18px",
         overflow: "hidden",
       }}
     />
