@@ -26,6 +26,13 @@ function pct(n) {
   return `${num >= 0 ? "+" : ""}${num.toFixed(2)}%`;
 }
 
+function fmtDate(value) {
+  if (!value) return "—";
+  const d = new Date(value);
+  if (!Number.isFinite(d.getTime())) return String(value);
+  return d.toLocaleDateString();
+}
+
 function toneByValue(value) {
   const n = Number(value);
   if (!Number.isFinite(n) || n === 0) return "neutral";
@@ -128,6 +135,7 @@ export default function InvestmentAssetPage() {
   useEffect(() => {
     async function loadPrice() {
       const symbol = String(asset?.symbol || "").toUpperCase().trim();
+
       if (!symbol) {
         setLivePrice(null);
         return;
@@ -176,7 +184,7 @@ export default function InvestmentAssetPage() {
       const price = Number(t.price) || 0;
       const txnType = String(t.txn_type || "").toUpperCase();
 
-      let avgCostBefore = shares > 0 ? remainingBasis / shares : 0;
+      const avgCostBefore = shares > 0 ? remainingBasis / shares : 0;
       let basisRemoved = 0;
       let realizedOnTxn = 0;
       let sharesAfter = shares;
@@ -189,9 +197,7 @@ export default function InvestmentAssetPage() {
 
           sharesAfter = shares + qty;
           basisAfter = remainingBasis + qty * price;
-        }
-
-        if (txnType === "SELL") {
+        } else if (txnType === "SELL") {
           const sellQty = Math.min(qty, shares);
 
           totalSoldShares += qty;
@@ -236,13 +242,29 @@ export default function InvestmentAssetPage() {
     });
 
     const hasLivePrice = Number.isFinite(Number(livePrice)) && Number(livePrice) > 0;
-    const currentValue = hasLivePrice ? shares * Number(livePrice) : null;
+    const live = hasLivePrice ? Number(livePrice) : null;
+    const currentValue = hasLivePrice ? shares * live : null;
     const unrealizedPnl = hasLivePrice ? currentValue - remainingBasis : null;
     const unrealizedPct =
       hasLivePrice && remainingBasis > 0
         ? ((currentValue - remainingBasis) / remainingBasis) * 100
         : null;
     const avgRemainingCost = shares > 0 ? remainingBasis / shares : 0;
+
+    const purchasePrice =
+      totalBoughtShares > 0 ? totalBuyCost / totalBoughtShares : null;
+
+    const priceChange =
+      hasLivePrice && Number.isFinite(Number(purchasePrice))
+        ? live - Number(purchasePrice)
+        : null;
+
+    const priceChangePct =
+      hasLivePrice &&
+      Number.isFinite(Number(purchasePrice)) &&
+      Number(purchasePrice) > 0
+        ? ((live - Number(purchasePrice)) / Number(purchasePrice)) * 100
+        : null;
 
     return {
       rows,
@@ -256,16 +278,22 @@ export default function InvestmentAssetPage() {
       realizedPnl,
       avgRemainingCost,
       hasLivePrice,
-      livePrice: hasLivePrice ? Number(livePrice) : null,
+      livePrice: live,
       currentValue,
       unrealizedPnl,
       unrealizedPct,
+      purchasePrice,
+      priceChange,
+      priceChangePct,
     };
   }, [txns, livePrice]);
 
   const assetTone = breakdown.hasLivePrice
     ? toneByValue(breakdown.unrealizedPnl)
     : "neutral";
+
+  const priceTone = toneByValue(breakdown.priceChange);
+  const realizedTone = toneByValue(breakdown.realizedPnl);
 
   if (loading) {
     return (
@@ -414,7 +442,9 @@ export default function InvestmentAssetPage() {
               }}
             >
               {breakdown.hasLivePrice
-                ? `${money(breakdown.unrealizedPnl)} unrealized • ${breakdown.unrealizedPct != null ? pct(breakdown.unrealizedPct) : "—"}`
+                ? `${money(breakdown.unrealizedPnl)} unrealized • ${
+                    breakdown.unrealizedPct != null ? pct(breakdown.unrealizedPct) : "—"
+                  }`
                 : loadingPrice
                   ? "Checking live market price..."
                   : "Live price unavailable."}
@@ -508,8 +538,8 @@ export default function InvestmentAssetPage() {
           title="Realized P/L"
           value={money(breakdown.realizedPnl)}
           sub="Closed gain/loss from sells."
-          tone={toneByValue(breakdown.realizedPnl)}
-          valueTone={toneByValue(breakdown.realizedPnl)}
+          tone={realizedTone}
+          valueTone={realizedTone}
           strong
         />
 
@@ -540,6 +570,52 @@ export default function InvestmentAssetPage() {
       <div
         style={{
           display: "grid",
+          gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+          gap: 16,
+          marginBottom: 18,
+        }}
+      >
+        <MetricCard
+          title="Purchase Price"
+          value={
+            Number.isFinite(Number(breakdown.purchasePrice))
+              ? money(breakdown.purchasePrice)
+              : "—"
+          }
+          sub="Average price paid across recorded buys."
+          tone="neutral"
+          strong
+        />
+
+        <MetricCard
+          title="Current Price"
+          value={breakdown.hasLivePrice ? money(breakdown.livePrice) : "Pending"}
+          sub="Latest market quote for this symbol."
+          tone="neutral"
+          strong
+        />
+
+        <MetricCard
+          title="Price Change"
+          value={
+            Number.isFinite(Number(breakdown.priceChange))
+              ? money(breakdown.priceChange)
+              : "—"
+          }
+          sub={
+            Number.isFinite(Number(breakdown.priceChangePct))
+              ? pct(breakdown.priceChangePct)
+              : "Price comparison unavailable."
+          }
+          tone={priceTone}
+          valueTone={priceTone}
+          strong
+        />
+      </div>
+
+      <div
+        style={{
+          display: "grid",
           gridTemplateColumns: "1fr 1fr",
           gap: 18,
           marginBottom: 18,
@@ -554,34 +630,161 @@ export default function InvestmentAssetPage() {
           <div style={{ display: "grid", gap: 12, marginTop: 16 }}>
             <MiniPoint
               title="Bought"
-              sub={`${fmtNumber(breakdown.totalBoughtShares)} shares for ${money(breakdown.totalBuyCost)}`}
+              sub={`${fmtNumber(breakdown.totalBoughtShares)} shares for ${money(
+                breakdown.totalBuyCost
+              )}`}
             />
             <MiniPoint
               title="Sold"
-              sub={`${fmtNumber(breakdown.totalSoldShares)} shares for ${money(breakdown.totalSellProceeds)}`}
+              sub={`${fmtNumber(breakdown.totalSoldShares)} shares for ${money(
+                breakdown.totalSellProceeds
+              )}`}
             />
             <MiniPoint
               title="Remaining"
-              sub={`${fmtNumber(breakdown.remainingShares)} shares with ${money(breakdown.remainingBasis)} basis`}
+              sub={`${fmtNumber(breakdown.remainingShares)} shares with ${money(
+                breakdown.remainingBasis
+              )} basis`}
+            />
+            <MiniPoint
+              title="Price Comparison"
+              sub={`Paid ${
+                Number.isFinite(Number(breakdown.purchasePrice))
+                  ? money(breakdown.purchasePrice)
+                  : "—"
+              } vs now ${
+                breakdown.hasLivePrice ? money(breakdown.livePrice) : "Pending"
+              }`}
             />
             <MiniPoint
               title="Realized vs Unrealized"
-              sub={`Realized ${money(breakdown.realizedPnl)} • Unrealized ${breakdown.hasLivePrice ? money(breakdown.unrealizedPnl) : "Pending"}`}
+              sub={`Realized ${money(breakdown.realizedPnl)} • Unrealized ${
+                breakdown.hasLivePrice ? money(breakdown.unrealizedPnl) : "Pending"
+              }`}
             />
           </div>
         </div>
 
         <div className="card" style={{ padding: 18 }}>
           <div style={{ fontWeight: 950, fontSize: 22 }}>Read This Correctly</div>
-          <div className="muted" style={{ marginTop: 8, lineHeight: 1.5 }}>
-            Remaining basis is what is still attached to the shares you have left. Realized P/L is what you already locked in on sells. Unrealized P/L is what the remaining position is worth versus its remaining basis.
+
+          <div
+            className="muted"
+            style={{ marginTop: 8, lineHeight: 1.5 }}
+          >
+            Remaining basis is what is still attached to the shares you have left.
+            Realized P/L is what you already locked in on sells.
+            Unrealized P/L is what the remaining position is worth versus its remaining basis.
           </div>
 
-          <div style={{ display: "grid", gap: 10, marginTop: 16 }}>
-            <MiniPoint title="Accounting method" sub="Average-cost sell handling." />
-            <MiniPoint title="Live pricing" sub={loadingPrice ? "Refreshing current quote." : "Uses your live price route when available."} />
-            <MiniPoint title="Why this matters" sub="This exposes bad trade data fast instead of hiding it in portfolio totals." />
+          <div
+            style={{
+              display: "grid",
+              gap: 10,
+              marginTop: 16,
+            }}
+          >
+            <MiniPoint
+              title="Accounting method"
+              sub="Average-cost sell handling."
+            />
+
+            <MiniPoint
+              title="Live pricing"
+              sub={
+                loadingPrice
+                  ? "Refreshing current quote."
+                  : "Uses your live price route when available."
+              }
+            />
+
+            <MiniPoint
+              title="Why this matters"
+              sub="This page exposes incorrect trade entries immediately instead of hiding them in portfolio totals."
+            />
           </div>
+        </div>
+      </div>
+
+      <div className="card" style={{ padding: 18, marginBottom: 18 }}>
+        <div style={{ fontWeight: 950, fontSize: 22 }}>Transaction Timeline</div>
+        <div className="muted" style={{ marginTop: 6, fontSize: 14 }}>
+          Read the position from top to bottom. This is the story of the asset.
+        </div>
+
+        <div style={{ display: "grid", gap: 12, marginTop: 16 }}>
+          {breakdown.rows.length ? (
+            breakdown.rows.map((t) => {
+              const tone =
+                t.txnType === "BUY" ? "good" : t.txnType === "SELL" ? "bad" : "neutral";
+
+              return (
+                <div
+                  key={`timeline-${t.id}`}
+                  style={{
+                    borderRadius: 18,
+                    padding: 16,
+                    ...glowPanelStyle(tone, false),
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      gap: 12,
+                      alignItems: "center",
+                      flexWrap: "wrap",
+                    }}
+                  >
+                    <div style={{ fontWeight: 950, fontSize: 17 }}>
+                      {t.txnType} {fmtNumber(t.qty)} shares @ {money(t.price)}
+                    </div>
+                    <div className="muted" style={{ fontSize: 13 }}>
+                      {fmtDate(t.txn_date)}
+                    </div>
+                  </div>
+
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+                      gap: 10,
+                      marginTop: 12,
+                    }}
+                  >
+                    <TimelineStat label="Shares Before" value={fmtNumber(t.sharesBefore)} />
+                    <TimelineStat label="Shares After" value={fmtNumber(t.sharesAfter)} />
+                    <TimelineStat label="Basis Before" value={money(t.basisBefore)} />
+                    <TimelineStat label="Basis After" value={money(t.basisAfter)} />
+                  </div>
+
+                  {t.txnType === "SELL" ? (
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+                        gap: 10,
+                        marginTop: 12,
+                      }}
+                    >
+                      <TimelineStat label="Basis Removed" value={money(t.basisRemoved)} />
+                      <TimelineStat label="Avg Cost Before" value={money(t.avgCostBefore)} />
+                      <TimelineStat
+                        label="Realized On Trade"
+                        value={money(t.realizedOnTxn)}
+                        tone={toneByValue(t.realizedOnTxn)}
+                      />
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })
+          ) : (
+            <EmptyState
+              title="No transactions yet"
+              sub="This asset needs recorded buys or sells before the breakdown can show real math."
+            />
+          )}
         </div>
       </div>
 
@@ -738,6 +941,36 @@ function PulseMiniCard({ label, value, sub }) {
       </div>
       <div style={{ marginTop: 8, fontWeight: 950, fontSize: 22 }}>{value}</div>
       <div className="muted" style={{ marginTop: 6, fontSize: 12 }}>{sub}</div>
+    </div>
+  );
+}
+
+function TimelineStat({ label, value, tone = "neutral" }) {
+  const color =
+    tone === "good"
+      ? "#4ade80"
+      : tone === "bad"
+        ? "#f87171"
+        : "rgba(255,255,255,.92)";
+
+  return (
+    <div
+      style={{
+        borderRadius: 14,
+        padding: 12,
+        border: "1px solid rgba(255,255,255,.07)",
+        background: "rgba(255,255,255,.025)",
+      }}
+    >
+      <div
+        className="muted"
+        style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.08em" }}
+      >
+        {label}
+      </div>
+      <div style={{ marginTop: 6, fontWeight: 900, color }}>
+        {value}
+      </div>
     </div>
   );
 }
