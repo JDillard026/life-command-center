@@ -39,34 +39,75 @@ function toneByValue(value) {
   return n > 0 ? "good" : "bad";
 }
 
-function glowPanelStyle(tone = "neutral", strong = false) {
+function tintVars(tone = "neutral") {
   if (tone === "good") {
     return {
-      border: "1px solid rgba(34,197,94,.18)",
-      background:
-        "linear-gradient(180deg, rgba(34,197,94,.12) 0%, rgba(255,255,255,.03) 100%)",
-      boxShadow: strong
-        ? "0 0 26px rgba(34,197,94,.12), inset 0 0 0 1px rgba(34,197,94,.06)"
-        : "0 0 18px rgba(34,197,94,.08)",
+      border: "rgba(16,185,129,.24)",
+      glow: "rgba(16,185,129,.16)",
+      top: "rgba(16,185,129,.10)",
+      text: "#86efac",
     };
   }
 
   if (tone === "bad") {
     return {
-      border: "1px solid rgba(239,68,68,.18)",
-      background:
-        "linear-gradient(180deg, rgba(239,68,68,.12) 0%, rgba(255,255,255,.03) 100%)",
-      boxShadow: strong
-        ? "0 0 26px rgba(239,68,68,.12), inset 0 0 0 1px rgba(239,68,68,.06)"
-        : "0 0 18px rgba(239,68,68,.08)",
+      border: "rgba(244,63,94,.24)",
+      glow: "rgba(244,63,94,.16)",
+      top: "rgba(244,63,94,.10)",
+      text: "#fda4af",
     };
   }
 
   return {
-    border: "1px solid rgba(255,255,255,.08)",
-    background:
-      "linear-gradient(180deg, rgba(255,255,255,.04) 0%, rgba(255,255,255,.025) 100%)",
-    boxShadow: strong ? "0 0 18px rgba(96,165,250,.08)" : "none",
+    border: "rgba(59,130,246,.18)",
+    glow: "rgba(59,130,246,.12)",
+    top: "rgba(59,130,246,.07)",
+    text: "rgba(255,255,255,.92)",
+  };
+}
+
+function shellPanel(tone = "neutral", strong = false) {
+  const t = tintVars(tone);
+
+  return {
+    borderRadius: 26,
+    border: `1px solid ${t.border}`,
+    background: `
+      radial-gradient(circle at top left, ${t.top} 0%, rgba(255,255,255,0) 26%),
+      linear-gradient(180deg, rgba(5,10,22,.94) 0%, rgba(3,8,20,.98) 100%)
+    `,
+    boxShadow: strong
+      ? `0 0 0 1px rgba(255,255,255,.02) inset, 0 18px 55px rgba(0,0,0,.42), 0 0 34px ${t.glow}`
+      : `0 0 0 1px rgba(255,255,255,.02) inset, 0 16px 42px rgba(0,0,0,.34), 0 0 20px ${t.glow}`,
+    backdropFilter: "blur(10px)",
+  };
+}
+
+function softPanel(tone = "neutral") {
+  const t = tintVars(tone);
+
+  return {
+    borderRadius: 22,
+    border: `1px solid ${t.border}`,
+    background: `
+      radial-gradient(circle at top left, ${t.top} 0%, rgba(255,255,255,0) 24%),
+      linear-gradient(180deg, rgba(7,12,26,.90) 0%, rgba(4,9,22,.96) 100%)
+    `,
+    boxShadow: `0 14px 32px rgba(0,0,0,.28), 0 0 18px ${t.glow}`,
+  };
+}
+
+function microPanel(tone = "neutral") {
+  const t = tintVars(tone);
+
+  return {
+    borderRadius: 18,
+    border: `1px solid ${t.border}`,
+    background: `
+      radial-gradient(circle at top left, ${t.top} 0%, rgba(255,255,255,0) 28%),
+      linear-gradient(180deg, rgba(10,15,30,.86) 0%, rgba(5,9,20,.94) 100%)
+    `,
+    boxShadow: `0 10px 24px rgba(0,0,0,.24), 0 0 14px ${t.glow}`,
   };
 }
 
@@ -297,8 +338,18 @@ export default function InvestmentAssetPage() {
 
   if (loading) {
     return (
-      <main style={{ padding: "36px 28px 44px", maxWidth: "1320px", margin: "0 auto" }}>
-        <div className="card" style={{ padding: 18 }}>
+      <main
+        style={{
+          background:
+            "radial-gradient(circle at top left, rgba(37,99,235,.10) 0%, rgba(0,0,0,0) 22%), radial-gradient(circle at top right, rgba(168,85,247,.06) 0%, rgba(0,0,0,0) 22%), linear-gradient(180deg, #030712 0%, #050a16 100%)",
+          padding: "34px 28px 46px",
+          maxWidth: "1320px",
+          margin: "0 auto",
+          color: "rgba(255,255,255,.96)",
+          minHeight: "100vh",
+        }}
+      >
+        <div style={{ ...shellPanel("neutral", false), padding: 18 }}>
           Loading asset...
         </div>
       </main>
@@ -307,10 +358,20 @@ export default function InvestmentAssetPage() {
 
   if (error) {
     return (
-      <main style={{ padding: "36px 28px 44px", maxWidth: "1320px", margin: "0 auto" }}>
-        <div className="card" style={{ padding: 18 }}>
+      <main
+        style={{
+          background:
+            "radial-gradient(circle at top left, rgba(37,99,235,.10) 0%, rgba(0,0,0,0) 22%), radial-gradient(circle at top right, rgba(168,85,247,.06) 0%, rgba(0,0,0,0) 22%), linear-gradient(180deg, #030712 0%, #050a16 100%)",
+          padding: "34px 28px 46px",
+          maxWidth: "1320px",
+          margin: "0 auto",
+          color: "rgba(255,255,255,.96)",
+          minHeight: "100vh",
+        }}
+      >
+        <div style={{ ...softPanel("bad"), padding: 18 }}>
           <div style={{ fontWeight: 900 }}>Fix this</div>
-          <div className="muted" style={{ marginTop: 8 }}>{error}</div>
+          <div style={{ marginTop: 8, color: "rgba(255,255,255,.68)" }}>{error}</div>
         </div>
       </main>
     );
@@ -318,8 +379,18 @@ export default function InvestmentAssetPage() {
 
   if (!asset) {
     return (
-      <main style={{ padding: "36px 28px 44px", maxWidth: "1320px", margin: "0 auto" }}>
-        <div className="card" style={{ padding: 18 }}>
+      <main
+        style={{
+          background:
+            "radial-gradient(circle at top left, rgba(37,99,235,.10) 0%, rgba(0,0,0,0) 22%), radial-gradient(circle at top right, rgba(168,85,247,.06) 0%, rgba(0,0,0,0) 22%), linear-gradient(180deg, #030712 0%, #050a16 100%)",
+          padding: "34px 28px 46px",
+          maxWidth: "1320px",
+          margin: "0 auto",
+          color: "rgba(255,255,255,.96)",
+          minHeight: "100vh",
+        }}
+      >
+        <div style={{ ...shellPanel("neutral", false), padding: 18 }}>
           Asset not found.
         </div>
       </main>
@@ -329,29 +400,35 @@ export default function InvestmentAssetPage() {
   return (
     <main
       style={{
-        padding: "36px 28px 44px",
+        background:
+          "radial-gradient(circle at top left, rgba(37,99,235,.10) 0%, rgba(0,0,0,0) 22%), radial-gradient(circle at top right, rgba(168,85,247,.06) 0%, rgba(0,0,0,0) 22%), linear-gradient(180deg, #030712 0%, #050a16 100%)",
+        padding: "34px 28px 46px",
         maxWidth: "1320px",
         margin: "0 auto",
+        color: "rgba(255,255,255,.96)",
+        minHeight: "100vh",
       }}
     >
       <div
         style={{
+          ...shellPanel("neutral", true),
+          padding: 22,
+          marginBottom: 18,
           display: "grid",
           gridTemplateColumns: "1fr auto",
           gap: 16,
           alignItems: "end",
-          marginBottom: 24,
         }}
       >
         <div>
           <div
-            className="muted"
             style={{
               fontSize: 12,
               fontWeight: 900,
               textTransform: "uppercase",
-              letterSpacing: "0.16em",
-              marginBottom: 10,
+              letterSpacing: "0.22em",
+              marginBottom: 8,
+              color: "rgba(134,239,172,.82)",
             }}
           >
             Asset Detail
@@ -363,12 +440,20 @@ export default function InvestmentAssetPage() {
               fontSize: "clamp(2rem, 4vw, 3rem)",
               lineHeight: 1.04,
               fontWeight: 950,
+              letterSpacing: "-0.03em",
             }}
           >
             {asset.symbol || "Unknown"} Breakdown
           </h1>
 
-          <div className="muted" style={{ marginTop: 10, fontSize: 15, maxWidth: 800 }}>
+          <div
+            style={{
+              marginTop: 10,
+              fontSize: 15,
+              maxWidth: 800,
+              color: "rgba(255,255,255,.68)",
+            }}
+          >
             This page shows the actual math behind the position so you can see why the asset is up or down.
           </div>
         </div>
@@ -384,23 +469,10 @@ export default function InvestmentAssetPage() {
       </div>
 
       <div
-        className="card"
         style={{
+          ...shellPanel(assetTone, true),
           padding: 20,
           marginBottom: 18,
-          borderRadius: 26,
-          background:
-            assetTone === "good"
-              ? "linear-gradient(180deg, rgba(34,197,94,.10), rgba(255,255,255,.02))"
-              : assetTone === "bad"
-                ? "linear-gradient(180deg, rgba(239,68,68,.10), rgba(255,255,255,.02))"
-                : "linear-gradient(180deg, rgba(96,165,250,.10), rgba(255,255,255,.02))",
-          border:
-            assetTone === "good"
-              ? "1px solid rgba(34,197,94,.16)"
-              : assetTone === "bad"
-                ? "1px solid rgba(239,68,68,.16)"
-                : "1px solid rgba(255,255,255,.08)",
         }}
       >
         <div
@@ -413,12 +485,12 @@ export default function InvestmentAssetPage() {
         >
           <div>
             <div
-              className="muted"
               style={{
                 fontSize: 12,
                 fontWeight: 900,
                 textTransform: "uppercase",
                 letterSpacing: "0.16em",
+                color: "rgba(255,255,255,.54)",
               }}
             >
               Position Pulse
@@ -435,10 +507,10 @@ export default function InvestmentAssetPage() {
                 fontWeight: 850,
                 color:
                   assetTone === "good"
-                    ? "#4ade80"
+                    ? "#86efac"
                     : assetTone === "bad"
-                      ? "#f87171"
-                      : "rgba(255,255,255,.85)",
+                      ? "#fda4af"
+                      : "rgba(255,255,255,.82)",
               }}
             >
               {breakdown.hasLivePrice
@@ -462,16 +534,19 @@ export default function InvestmentAssetPage() {
               label="Remaining Shares"
               value={fmtNumber(breakdown.remainingShares)}
               sub="Current position size"
+              tone="neutral"
             />
             <PulseMiniCard
               label="Transactions"
               value={String(txns.length)}
               sub="Recorded asset trades"
+              tone="neutral"
             />
             <PulseMiniCard
               label="Live Price"
               value={breakdown.hasLivePrice ? money(breakdown.livePrice) : "Pending"}
               sub="Current market quote"
+              tone={assetTone}
             />
           </div>
         </div>
@@ -621,9 +696,9 @@ export default function InvestmentAssetPage() {
           marginBottom: 18,
         }}
       >
-        <div className="card" style={{ padding: 18 }}>
+        <div style={{ ...shellPanel("neutral", false), padding: 18 }}>
           <div style={{ fontWeight: 950, fontSize: 22 }}>Position Summary</div>
-          <div className="muted" style={{ marginTop: 6, fontSize: 14 }}>
+          <div style={{ marginTop: 6, fontSize: 14, color: "rgba(255,255,255,.66)" }}>
             Straight math. No guessing.
           </div>
 
@@ -633,18 +708,21 @@ export default function InvestmentAssetPage() {
               sub={`${fmtNumber(breakdown.totalBoughtShares)} shares for ${money(
                 breakdown.totalBuyCost
               )}`}
+              tone="good"
             />
             <MiniPoint
               title="Sold"
               sub={`${fmtNumber(breakdown.totalSoldShares)} shares for ${money(
                 breakdown.totalSellProceeds
               )}`}
+              tone="bad"
             />
             <MiniPoint
               title="Remaining"
               sub={`${fmtNumber(breakdown.remainingShares)} shares with ${money(
                 breakdown.remainingBasis
               )} basis`}
+              tone="neutral"
             />
             <MiniPoint
               title="Price Comparison"
@@ -655,22 +733,27 @@ export default function InvestmentAssetPage() {
               } vs now ${
                 breakdown.hasLivePrice ? money(breakdown.livePrice) : "Pending"
               }`}
+              tone="neutral"
             />
             <MiniPoint
               title="Realized vs Unrealized"
               sub={`Realized ${money(breakdown.realizedPnl)} • Unrealized ${
                 breakdown.hasLivePrice ? money(breakdown.unrealizedPnl) : "Pending"
               }`}
+              tone={assetTone}
             />
           </div>
         </div>
 
-        <div className="card" style={{ padding: 18 }}>
+        <div style={{ ...shellPanel("neutral", false), padding: 18 }}>
           <div style={{ fontWeight: 950, fontSize: 22 }}>Read This Correctly</div>
 
           <div
-            className="muted"
-            style={{ marginTop: 8, lineHeight: 1.5 }}
+            style={{
+              marginTop: 8,
+              lineHeight: 1.5,
+              color: "rgba(255,255,255,.68)",
+            }}
           >
             Remaining basis is what is still attached to the shares you have left.
             Realized P/L is what you already locked in on sells.
@@ -687,6 +770,7 @@ export default function InvestmentAssetPage() {
             <MiniPoint
               title="Accounting method"
               sub="Average-cost sell handling."
+              tone="neutral"
             />
 
             <MiniPoint
@@ -696,19 +780,21 @@ export default function InvestmentAssetPage() {
                   ? "Refreshing current quote."
                   : "Uses your live price route when available."
               }
+              tone="neutral"
             />
 
             <MiniPoint
               title="Why this matters"
               sub="This page exposes incorrect trade entries immediately instead of hiding them in portfolio totals."
+              tone="neutral"
             />
           </div>
         </div>
       </div>
 
-      <div className="card" style={{ padding: 18, marginBottom: 18 }}>
+      <div style={{ ...shellPanel("neutral", false), padding: 18, marginBottom: 18 }}>
         <div style={{ fontWeight: 950, fontSize: 22 }}>Transaction Timeline</div>
-        <div className="muted" style={{ marginTop: 6, fontSize: 14 }}>
+        <div style={{ marginTop: 6, fontSize: 14, color: "rgba(255,255,255,.66)" }}>
           Read the position from top to bottom. This is the story of the asset.
         </div>
 
@@ -722,9 +808,8 @@ export default function InvestmentAssetPage() {
                 <div
                   key={`timeline-${t.id}`}
                   style={{
-                    borderRadius: 18,
+                    ...softPanel(tone),
                     padding: 16,
-                    ...glowPanelStyle(tone, false),
                   }}
                 >
                   <div
@@ -739,7 +824,7 @@ export default function InvestmentAssetPage() {
                     <div style={{ fontWeight: 950, fontSize: 17 }}>
                       {t.txnType} {fmtNumber(t.qty)} shares @ {money(t.price)}
                     </div>
-                    <div className="muted" style={{ fontSize: 13 }}>
+                    <div style={{ fontSize: 13, color: "rgba(255,255,255,.56)" }}>
                       {fmtDate(t.txn_date)}
                     </div>
                   </div>
@@ -788,7 +873,13 @@ export default function InvestmentAssetPage() {
         </div>
       </div>
 
-      <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+      <div
+        style={{
+          ...shellPanel("neutral", false),
+          padding: 0,
+          overflow: "hidden",
+        }}
+      >
         <div
           style={{
             display: "grid",
@@ -797,7 +888,8 @@ export default function InvestmentAssetPage() {
             padding: "16px 18px",
             borderBottom: "1px solid rgba(255,255,255,.08)",
             fontWeight: 900,
-            color: "rgba(255,255,255,.75)",
+            color: "rgba(255,255,255,.68)",
+            background: "rgba(255,255,255,.02)",
           }}
         >
           <div>Type</div>
@@ -814,6 +906,7 @@ export default function InvestmentAssetPage() {
           breakdown.rows.map((t) => {
             const tone =
               t.txnType === "BUY" ? "good" : t.txnType === "SELL" ? "bad" : "neutral";
+            const tint = tintVars(tone);
 
             return (
               <div
@@ -823,14 +916,12 @@ export default function InvestmentAssetPage() {
                   gridTemplateColumns: "120px 120px 120px 150px 150px 150px 150px 150px",
                   gap: 12,
                   padding: "16px 18px",
-                  borderBottom: "1px solid rgba(255,255,255,.08)",
+                  borderBottom: "1px solid rgba(255,255,255,.06)",
                   alignItems: "center",
-                  background:
-                    tone === "good"
-                      ? "linear-gradient(90deg, rgba(34,197,94,.05), transparent 28%)"
-                      : tone === "bad"
-                        ? "linear-gradient(90deg, rgba(239,68,68,.05), transparent 28%)"
-                        : "transparent",
+                  background: `
+                    linear-gradient(90deg, ${tint.top}, rgba(255,255,255,0) 28%),
+                    rgba(255,255,255,.01)
+                  `,
                 }}
               >
                 <div
@@ -838,9 +929,9 @@ export default function InvestmentAssetPage() {
                     fontWeight: 850,
                     color:
                       tone === "good"
-                        ? "#4ade80"
+                        ? "#86efac"
                         : tone === "bad"
-                          ? "#f87171"
+                          ? "#fda4af"
                           : "inherit",
                   }}
                 >
@@ -856,9 +947,9 @@ export default function InvestmentAssetPage() {
                     color:
                       t.txnType === "SELL"
                         ? toneByValue(t.realizedOnTxn) === "good"
-                          ? "#4ade80"
+                          ? "#86efac"
                           : toneByValue(t.realizedOnTxn) === "bad"
-                            ? "#f87171"
+                            ? "#fda4af"
                             : "inherit"
                         : "inherit",
                     fontWeight: t.txnType === "SELL" ? 850 : 400,
@@ -894,53 +985,61 @@ function MetricCard({
 }) {
   const toneColor =
     valueTone === "good"
-      ? "#4ade80"
+      ? "#86efac"
       : valueTone === "bad"
-        ? "#f87171"
+        ? "#fda4af"
         : "inherit";
 
   return (
     <div
       style={{
-        borderRadius: 22,
+        ...softPanel(tone),
         padding: 18,
-        ...glowPanelStyle(tone, strong),
+        ...(strong
+          ? { boxShadow: `${softPanel(tone).boxShadow}, 0 0 0 1px rgba(255,255,255,.02) inset` }
+          : {}),
       }}
     >
       <div
-        className="muted"
-        style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: "0.12em" }}
+        style={{
+          fontSize: 12,
+          textTransform: "uppercase",
+          letterSpacing: "0.12em",
+          color: "rgba(255,255,255,.54)",
+        }}
       >
         {title}
       </div>
       <div style={{ marginTop: 10, fontSize: 20, fontWeight: 950, color: toneColor }}>
         {value}
       </div>
-      <div className="muted" style={{ marginTop: 10, fontSize: 13, lineHeight: 1.45 }}>
+      <div style={{ marginTop: 10, fontSize: 13, lineHeight: 1.45, color: "rgba(255,255,255,.64)" }}>
         {sub}
       </div>
     </div>
   );
 }
 
-function PulseMiniCard({ label, value, sub }) {
+function PulseMiniCard({ label, value, sub, tone = "neutral" }) {
   return (
     <div
       style={{
-        borderRadius: 18,
+        ...microPanel(tone),
         padding: 14,
-        border: "1px solid rgba(255,255,255,.08)",
-        background: "rgba(255,255,255,.035)",
       }}
     >
       <div
-        className="muted"
-        style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.12em" }}
+        style={{
+          fontSize: 11,
+          textTransform: "uppercase",
+          letterSpacing: "0.12em",
+          color: "rgba(255,255,255,.54)",
+        }}
       >
         {label}
       </div>
       <div style={{ marginTop: 8, fontWeight: 950, fontSize: 22 }}>{value}</div>
-      <div className="muted" style={{ marginTop: 6, fontSize: 12 }}>{sub}</div>
+      <div style={{ marginTop: 6, fontSize: 12, color: "rgba(255,255,255,.62)" }}>{sub}</div>
     </div>
   );
 }
@@ -948,23 +1047,25 @@ function PulseMiniCard({ label, value, sub }) {
 function TimelineStat({ label, value, tone = "neutral" }) {
   const color =
     tone === "good"
-      ? "#4ade80"
+      ? "#86efac"
       : tone === "bad"
-        ? "#f87171"
+        ? "#fda4af"
         : "rgba(255,255,255,.92)";
 
   return (
     <div
       style={{
-        borderRadius: 14,
+        ...microPanel("neutral"),
         padding: 12,
-        border: "1px solid rgba(255,255,255,.07)",
-        background: "rgba(255,255,255,.025)",
       }}
     >
       <div
-        className="muted"
-        style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.08em" }}
+        style={{
+          fontSize: 11,
+          textTransform: "uppercase",
+          letterSpacing: "0.08em",
+          color: "rgba(255,255,255,.54)",
+        }}
       >
         {label}
       </div>
@@ -979,33 +1080,33 @@ function EmptyState({ title, sub }) {
   return (
     <div
       style={{
-        borderRadius: 16,
-        border: "1px dashed rgba(255,255,255,.16)",
-        padding: "24px 18px",
-        background: "rgba(255,255,255,.02)",
+        borderRadius: 20,
+        border: "1px dashed rgba(255,255,255,.14)",
+        padding: "26px 18px",
+        background:
+          "linear-gradient(180deg, rgba(8,13,26,.84) 0%, rgba(4,8,18,.94) 100%)",
         textAlign: "center",
+        boxShadow: "0 14px 32px rgba(0,0,0,.24)",
       }}
     >
       <div style={{ fontWeight: 900, fontSize: 16 }}>{title}</div>
-      <div className="muted" style={{ marginTop: 8, fontSize: 14, lineHeight: 1.45 }}>
+      <div style={{ marginTop: 8, fontSize: 14, lineHeight: 1.45, color: "rgba(255,255,255,.62)" }}>
         {sub}
       </div>
     </div>
   );
 }
 
-function MiniPoint({ title, sub }) {
+function MiniPoint({ title, sub, tone = "neutral" }) {
   return (
     <div
       style={{
-        border: "1px solid rgba(255,255,255,.08)",
-        background: "rgba(255,255,255,.03)",
-        borderRadius: 16,
+        ...microPanel(tone),
         padding: 14,
       }}
     >
       <div style={{ fontWeight: 850 }}>{title}</div>
-      <div className="muted" style={{ marginTop: 6, fontSize: 13, lineHeight: 1.45 }}>
+      <div style={{ marginTop: 6, fontSize: 13, lineHeight: 1.45, color: "rgba(255,255,255,.64)" }}>
         {sub}
       </div>
     </div>

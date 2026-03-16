@@ -55,34 +55,79 @@ function toNum(value) {
 
 function changeTone(value) {
   const n = Number(value);
-  if (!Number.isFinite(n) || n === 0) return null;
+  if (!Number.isFinite(n) || n === 0) return "neutral";
   return n > 0 ? "up" : "down";
 }
 
-function glowCardStyle(changeValue) {
-  const tone = changeTone(changeValue);
-
+function tintVars(tone = "neutral") {
   if (tone === "up") {
     return {
-      border: "1px solid rgba(34,197,94,.16)",
-      background:
-        "linear-gradient(180deg, rgba(34,197,94,.09) 0%, rgba(255,255,255,.03) 100%)",
-      boxShadow: "0 0 24px rgba(34,197,94,.08), inset 0 0 0 1px rgba(34,197,94,.04)",
+      border: "rgba(16,185,129,.24)",
+      glow: "rgba(16,185,129,.16)",
+      top: "rgba(16,185,129,.10)",
+      text: "#86efac",
     };
   }
 
   if (tone === "down") {
     return {
-      border: "1px solid rgba(239,68,68,.16)",
-      background:
-        "linear-gradient(180deg, rgba(239,68,68,.09) 0%, rgba(255,255,255,.03) 100%)",
-      boxShadow: "0 0 24px rgba(239,68,68,.08), inset 0 0 0 1px rgba(239,68,68,.04)",
+      border: "rgba(244,63,94,.24)",
+      glow: "rgba(244,63,94,.16)",
+      top: "rgba(244,63,94,.10)",
+      text: "#fda4af",
     };
   }
 
   return {
-    border: "1px solid rgba(255,255,255,.08)",
-    background: "rgba(255,255,255,.03)",
+    border: "rgba(59,130,246,.18)",
+    glow: "rgba(59,130,246,.12)",
+    top: "rgba(59,130,246,.07)",
+    text: "rgba(255,255,255,.92)",
+  };
+}
+
+function shellPanel(tone = "neutral", strong = false) {
+  const t = tintVars(tone);
+
+  return {
+    borderRadius: 26,
+    border: `1px solid ${t.border}`,
+    background: `
+      radial-gradient(circle at top left, ${t.top} 0%, rgba(255,255,255,0) 26%),
+      linear-gradient(180deg, rgba(5,10,22,.94) 0%, rgba(3,8,20,.98) 100%)
+    `,
+    boxShadow: strong
+      ? `0 0 0 1px rgba(255,255,255,.02) inset, 0 18px 55px rgba(0,0,0,.42), 0 0 34px ${t.glow}`
+      : `0 0 0 1px rgba(255,255,255,.02) inset, 0 16px 42px rgba(0,0,0,.34), 0 0 20px ${t.glow}`,
+    backdropFilter: "blur(10px)",
+  };
+}
+
+function softPanel(tone = "neutral") {
+  const t = tintVars(tone);
+
+  return {
+    borderRadius: 22,
+    border: `1px solid ${t.border}`,
+    background: `
+      radial-gradient(circle at top left, ${t.top} 0%, rgba(255,255,255,0) 24%),
+      linear-gradient(180deg, rgba(7,12,26,.90) 0%, rgba(4,9,22,.96) 100%)
+    `,
+    boxShadow: `0 14px 32px rgba(0,0,0,.28), 0 0 18px ${t.glow}`,
+  };
+}
+
+function microPanel(tone = "neutral") {
+  const t = tintVars(tone);
+
+  return {
+    borderRadius: 18,
+    border: `1px solid ${t.border}`,
+    background: `
+      radial-gradient(circle at top left, ${t.top} 0%, rgba(255,255,255,0) 28%),
+      linear-gradient(180deg, rgba(10,15,30,.86) 0%, rgba(5,9,20,.94) 100%)
+    `,
+    boxShadow: `0 10px 24px rgba(0,0,0,.24), 0 0 14px ${t.glow}`,
   };
 }
 
@@ -470,47 +515,61 @@ export default function DiscoverInvestmentsPage() {
   return (
     <main
       style={{
-        padding: "36px 28px 44px",
+        background:
+          "radial-gradient(circle at top left, rgba(37,99,235,.10) 0%, rgba(0,0,0,0) 22%), radial-gradient(circle at top right, rgba(168,85,247,.06) 0%, rgba(0,0,0,0) 22%), linear-gradient(180deg, #030712 0%, #050a16 100%)",
+        padding: "34px 28px 46px",
         maxWidth: "1280px",
         margin: "0 auto",
+        color: "rgba(255,255,255,.96)",
+        minHeight: "100vh",
       }}
     >
       <div
         style={{
+          ...shellPanel("neutral", true),
+          padding: 22,
+          marginBottom: 18,
           display: "grid",
           gridTemplateColumns: "1fr auto",
           gap: 16,
           alignItems: "end",
-          marginBottom: 24,
         }}
       >
         <div>
           <div
-            className="muted"
             style={{
               fontSize: 12,
               fontWeight: 900,
               textTransform: "uppercase",
-              letterSpacing: "0.16em",
-              marginBottom: 10,
+              letterSpacing: "0.22em",
+              marginBottom: 8,
+              color: "rgba(134,239,172,.82)",
             }}
           >
-            Investments
+            Life Command Center
           </div>
 
           <h1
             style={{
               margin: 0,
-              fontSize: "clamp(2.2rem, 4vw, 3.4rem)",
+              fontSize: "clamp(2.1rem, 4vw, 3.2rem)",
               lineHeight: 1.02,
               fontWeight: 950,
+              letterSpacing: "-0.03em",
             }}
           >
             Discover Market Assets
           </h1>
 
-          <div className="muted" style={{ marginTop: 10, fontSize: 15, maxWidth: 860 }}>
-            Loaded market universe first. Live search when you type. Add holdings or pin favorites fast.
+          <div
+            style={{
+              marginTop: 10,
+              fontSize: 15,
+              maxWidth: 860,
+              color: "rgba(255,255,255,.68)",
+            }}
+          >
+            Search public symbols fast, scan your core universe, and add holdings or favorites without the ugly old card style.
           </div>
         </div>
 
@@ -522,9 +581,15 @@ export default function DiscoverInvestmentsPage() {
       </div>
 
       {(status || error) && (
-        <div className="card" style={{ padding: 14, marginBottom: 18 }}>
+        <div
+          style={{
+            ...softPanel(error ? "down" : "up"),
+            padding: 14,
+            marginBottom: 18,
+          }}
+        >
           <div style={{ fontWeight: 900 }}>{error ? "Fix this" : "Status"}</div>
-          <div className="muted" style={{ marginTop: 6 }}>{error || status}</div>
+          <div style={{ marginTop: 6, color: "rgba(255,255,255,.70)" }}>{error || status}</div>
         </div>
       )}
 
@@ -537,11 +602,11 @@ export default function DiscoverInvestmentsPage() {
           alignItems: "stretch",
         }}
       >
-        <div className="card" style={{ padding: 20 }}>
+        <div style={{ ...shellPanel("neutral", false), padding: 20 }}>
           <div style={{ fontWeight: 950, fontSize: 22 }}>
             {searchMode ? "Search Market" : "Market Universe"}
           </div>
-          <div className="muted" style={{ marginTop: 6, fontSize: 14 }}>
+          <div style={{ marginTop: 6, fontSize: 14, color: "rgba(255,255,255,.66)" }}>
             {searchMode
               ? "Live search by symbol or company name."
               : "Curated default universe loaded on first open."}
@@ -554,10 +619,15 @@ export default function DiscoverInvestmentsPage() {
             placeholder="Search AAPL, Apple, VOO, Nvidia..."
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            style={{ width: "100%" }}
+            style={{
+              width: "100%",
+              background: "rgba(255,255,255,.04)",
+              border: "1px solid rgba(255,255,255,.10)",
+              borderRadius: 16,
+            }}
           />
 
-          <div className="muted" style={{ marginTop: 10, fontSize: 12 }}>
+          <div style={{ marginTop: 10, fontSize: 12, color: "rgba(255,255,255,.56)" }}>
             {loadingResults
               ? "Searching live market symbols..."
               : searchMode
@@ -566,7 +636,7 @@ export default function DiscoverInvestmentsPage() {
           </div>
         </div>
 
-        <div className="card" style={{ padding: 20 }}>
+        <div style={{ ...shellPanel("neutral", false), padding: 20 }}>
           <div style={{ fontWeight: 950, fontSize: 22 }}>Scanner Snapshot</div>
 
           <div
@@ -577,17 +647,17 @@ export default function DiscoverInvestmentsPage() {
               marginTop: 16,
             }}
           >
-            <MiniStat title="Showing" value={String(stats.showing)} />
-            <MiniStat title="Owned" value={String(stats.ownedMatches)} />
-            <MiniStat title="Favs" value={String(stats.favoriteMatches)} />
-            <MiniStat title="ETFs" value={String(stats.etfs)} />
+            <MiniStat title="Showing" value={String(stats.showing)} tone="neutral" />
+            <MiniStat title="Owned" value={String(stats.ownedMatches)} tone="up" />
+            <MiniStat title="Favs" value={String(stats.favoriteMatches)} tone="up" />
+            <MiniStat title="ETFs" value={String(stats.etfs)} tone="neutral" />
           </div>
         </div>
       </div>
 
-      <div className="card" style={{ padding: 20, marginBottom: 18 }}>
+      <div style={{ ...shellPanel("neutral", false), padding: 20, marginBottom: 18 }}>
         <div style={{ fontWeight: 950, fontSize: 22 }}>Favorites</div>
-        <div className="muted" style={{ marginTop: 6, fontSize: 14 }}>
+        <div style={{ marginTop: 6, fontSize: 14, color: "rgba(255,255,255,.66)" }}>
           Quick-access symbols pinned from Discover.
         </div>
 
@@ -680,7 +750,7 @@ export default function DiscoverInvestmentsPage() {
           />
         </div>
       ) : (
-        <div className="card" style={{ padding: 20 }}>
+        <div style={{ ...shellPanel("neutral", false), padding: 20 }}>
           <div
             style={{
               display: "flex",
@@ -693,12 +763,12 @@ export default function DiscoverInvestmentsPage() {
           >
             <div>
               <div style={{ fontWeight: 950, fontSize: 22 }}>Search Results</div>
-              <div className="muted" style={{ marginTop: 6, fontSize: 14 }}>
+              <div style={{ marginTop: 6, fontSize: 14, color: "rgba(255,255,255,.66)" }}>
                 Live market results for your query.
               </div>
             </div>
 
-            <div className="muted" style={{ fontSize: 13 }}>
+            <div style={{ fontSize: 13, color: "rgba(255,255,255,.58)" }}>
               Matches: {results.length}
             </div>
           </div>
@@ -763,9 +833,9 @@ function UniverseSection({
   onRemoveFavorite,
 }) {
   return (
-    <div className="card" style={{ padding: 20 }}>
+    <div style={{ ...shellPanel("neutral", false), padding: 20 }}>
       <div style={{ fontWeight: 950, fontSize: 22 }}>{title}</div>
-      <div className="muted" style={{ marginTop: 6, fontSize: 14 }}>{sub}</div>
+      <div style={{ marginTop: 6, fontSize: 14, color: "rgba(255,255,255,.66)" }}>{sub}</div>
 
       <div style={{ height: 16 }} />
 
@@ -820,14 +890,7 @@ function SearchRow({
   return (
     <div
       style={{
-        border: "1px solid rgba(255,255,255,.08)",
-        background:
-          tone === "up"
-            ? "linear-gradient(180deg, rgba(34,197,94,.08), rgba(255,255,255,.02))"
-            : tone === "down"
-              ? "linear-gradient(180deg, rgba(239,68,68,.08), rgba(255,255,255,.02))"
-              : "linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02))",
-        borderRadius: 22,
+        ...softPanel(tone),
         padding: 16,
       }}
     >
@@ -858,7 +921,18 @@ function SearchRow({
             {item.name}
           </div>
 
-          <div className="muted" style={{ marginTop: 8, fontSize: 13 }}>
+          <div
+            style={{
+              marginTop: 8,
+              fontSize: 13,
+              color:
+                tone === "up"
+                  ? "#86efac"
+                  : tone === "down"
+                    ? "#fda4af"
+                    : "rgba(255,255,255,.60)",
+            }}
+          >
             {changeTextFromQuote(quote)}
           </div>
         </div>
@@ -870,8 +944,8 @@ function SearchRow({
             gap: 10,
           }}
         >
-          <MiniBox label="Live Price" value={priceTextFromQuote(quote)} />
-          <MiniBox label="Status" value={owned ? "Owned" : favorited ? "Favorite" : "Available"} />
+          <MiniBox label="Live Price" value={priceTextFromQuote(quote)} tone={tone} />
+          <MiniBox label="Status" value={owned ? "Owned" : favorited ? "Favorite" : "Available"} tone="neutral" />
         </div>
 
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "flex-end" }}>
@@ -918,18 +992,19 @@ function AssetCard({
   addDisabled = false,
   favoriteLabel,
 }) {
+  const tone = changeTone(quote?.change);
+
   return (
     <div
       style={{
-        borderRadius: 18,
+        ...microPanel(tone),
         padding: 14,
-        ...glowCardStyle(quote?.change),
       }}
     >
       <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
         <div>
           <div style={{ fontWeight: 950, fontSize: 18 }}>{item.symbol}</div>
-          <div className="muted" style={{ marginTop: 4, fontSize: 12 }}>
+          <div style={{ marginTop: 4, fontSize: 12, color: "rgba(255,255,255,.56)" }}>
             {item.type} • {item.exchange}
           </div>
         </div>
@@ -948,16 +1023,21 @@ function AssetCard({
       </div>
 
       <div style={{ marginTop: 12 }}>
-        <div className="muted" style={{ fontSize: 12 }}>Live Price</div>
+        <div style={{ fontSize: 12, color: "rgba(255,255,255,.54)" }}>Live Price</div>
         <div style={{ marginTop: 4, fontWeight: 900, fontSize: 20 }}>
           {priceTextFromQuote(quote)}
         </div>
         <div
-          className="muted"
           style={{
             marginTop: 6,
             fontSize: 12,
             minHeight: 18,
+            color:
+              tone === "up"
+                ? "#86efac"
+                : tone === "down"
+                  ? "#fda4af"
+                  : "rgba(255,255,255,.56)",
           }}
         >
           {changeTextFromQuote(quote)}
@@ -997,17 +1077,22 @@ function pillStyle(color = "rgba(255,255,255,.82)", background = "rgba(255,255,2
   };
 }
 
-function MiniStat({ title, value }) {
+function MiniStat({ title, value, tone = "neutral" }) {
   return (
     <div
       style={{
-        borderRadius: 16,
-        border: "1px solid rgba(255,255,255,.08)",
-        background: "rgba(255,255,255,.03)",
+        ...microPanel(tone),
         padding: 14,
       }}
     >
-      <div className="muted" style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.12em" }}>
+      <div
+        style={{
+          fontSize: 11,
+          textTransform: "uppercase",
+          letterSpacing: "0.12em",
+          color: "rgba(255,255,255,.54)",
+        }}
+      >
         {title}
       </div>
       <div style={{ marginTop: 8, fontWeight: 950, fontSize: 22 }}>
@@ -1017,17 +1102,22 @@ function MiniStat({ title, value }) {
   );
 }
 
-function MiniBox({ label, value }) {
+function MiniBox({ label, value, tone = "neutral" }) {
   return (
     <div
       style={{
-        borderRadius: 16,
-        border: "1px solid rgba(255,255,255,.08)",
-        background: "rgba(255,255,255,.025)",
+        ...microPanel(tone),
         padding: 12,
       }}
     >
-      <div className="muted" style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.12em" }}>
+      <div
+        style={{
+          fontSize: 11,
+          textTransform: "uppercase",
+          letterSpacing: "0.12em",
+          color: "rgba(255,255,255,.54)",
+        }}
+      >
         {label}
       </div>
       <div style={{ marginTop: 7, fontWeight: 800 }}>
@@ -1041,15 +1131,17 @@ function EmptyState({ title, sub }) {
   return (
     <div
       style={{
-        borderRadius: 18,
-        border: "1px dashed rgba(255,255,255,.16)",
-        padding: "28px 20px",
-        background: "rgba(255,255,255,.02)",
+        borderRadius: 20,
+        border: "1px dashed rgba(255,255,255,.14)",
+        padding: "26px 18px",
+        background:
+          "linear-gradient(180deg, rgba(8,13,26,.84) 0%, rgba(4,8,18,.94) 100%)",
         textAlign: "center",
+        boxShadow: "0 14px 32px rgba(0,0,0,.24)",
       }}
     >
-      <div style={{ fontWeight: 900, fontSize: 18 }}>{title}</div>
-      <div className="muted" style={{ marginTop: 8, fontSize: 14, lineHeight: 1.45 }}>
+      <div style={{ fontWeight: 900, fontSize: 16 }}>{title}</div>
+      <div style={{ marginTop: 8, fontSize: 14, lineHeight: 1.45, color: "rgba(255,255,255,.62)" }}>
         {sub}
       </div>
     </div>
