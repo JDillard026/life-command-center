@@ -63,10 +63,9 @@ const DEFAULT_BUDGETS = {
 };
 
 const ACCENT = "#22c55e";
-const RED = "#ff4d6d";
+const RED = "#ff5d73";
 const GREEN = "#4ade80";
 const BLUE = "#38bdf8";
-const PURPLE = "#8b5cf6";
 
 function uid() {
   return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -120,12 +119,8 @@ function endOfYear(d) {
 }
 function periodBounds(mode) {
   const now = new Date();
-  if (mode === "week") {
-    return { start: startOfWeek(now), end: endOfWeek(now), budgetMode: "weekly", label: "This Week" };
-  }
-  if (mode === "year") {
-    return { start: startOfYear(now), end: endOfYear(now), budgetMode: "yearly", label: "This Year" };
-  }
+  if (mode === "week") return { start: startOfWeek(now), end: endOfWeek(now), budgetMode: "weekly", label: "This Week" };
+  if (mode === "year") return { start: startOfYear(now), end: endOfYear(now), budgetMode: "yearly", label: "This Year" };
   return { start: startOfMonth(now), end: endOfMonth(now), budgetMode: "monthly", label: "This Month" };
 }
 function inRange(iso, start, end) {
@@ -157,12 +152,8 @@ function shortDate(iso) {
 }
 function formatTrendLabel(iso, period) {
   const d = toDate(iso);
-  if (period === "year") {
-    return d.toLocaleDateString(undefined, { month: "short" });
-  }
-  if (period === "month") {
-    return String(d.getDate());
-  }
+  if (period === "year") return d.toLocaleDateString(undefined, { month: "short" });
+  if (period === "month") return String(d.getDate());
   return d.toLocaleDateString(undefined, { weekday: "short" }).slice(0, 3);
 }
 function buildDateKeys(period, start) {
@@ -250,7 +241,7 @@ function trendMeta(current, previous) {
   return {
     value: `${positive ? "+" : ""}${diff.toFixed(0)}%`,
     positive,
-    text: positive ? "vs prior period" : "vs prior period",
+    text: "vs prior period",
   };
 }
 function NativeSelect({ value, onChange, children, className = "", ...rest }) {
@@ -347,7 +338,7 @@ function GlassSection({ children, className = "" }) {
   return (
     <div
       className={
-        "rounded-[30px] border border-white/10 bg-[linear-gradient(180deg,rgba(8,12,24,.96),rgba(7,11,21,.94))] shadow-[0_24px_60px_rgba(0,0,0,.42)] backdrop-blur-xl " +
+        "rounded-[28px] border border-white/10 bg-[linear-gradient(180deg,rgba(8,12,24,.96),rgba(7,11,21,.94))] shadow-[0_24px_60px_rgba(0,0,0,.42)] backdrop-blur-xl " +
         className
       }
     >
@@ -356,50 +347,33 @@ function GlassSection({ children, className = "" }) {
   );
 }
 
-function OptionBHeroCard({ title, value, sub, tone = "green", accentValue, accentLabel }) {
+function CommandMetricCard({ title, value, sub, accentValue, tone = "green" }) {
   const toneMap = {
-    red: {
-      glow: "rgba(255,77,109,.16)",
-      border: "rgba(255,77,109,.18)",
-      accent: RED,
-    },
-    green: {
-      glow: "rgba(74,222,128,.16)",
-      border: "rgba(74,222,128,.18)",
-      accent: GREEN,
-    },
-    blue: {
-      glow: "rgba(56,189,248,.16)",
-      border: "rgba(56,189,248,.18)",
-      accent: BLUE,
-    },
+    red: { border: "rgba(255,93,115,.18)", glow: "rgba(255,93,115,.18)", accent: RED },
+    green: { border: "rgba(74,222,128,.18)", glow: "rgba(74,222,128,.18)", accent: GREEN },
+    blue: { border: "rgba(56,189,248,.18)", glow: "rgba(56,189,248,.18)", accent: BLUE },
   };
 
   const t = toneMap[tone] || toneMap.green;
 
   return (
     <div
-      className="relative overflow-hidden rounded-[28px] border p-5"
+      className="relative overflow-hidden rounded-[24px] border p-5"
       style={{
         borderColor: t.border,
-        background:
-          "linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,.025))",
-        boxShadow: `inset 0 1px 0 rgba(255,255,255,.04), 0 0 28px ${t.glow}`,
+        background: "linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,.02))",
+        boxShadow: `inset 0 1px 0 rgba(255,255,255,.03), 0 0 28px ${t.glow}`,
       }}
     >
-      <div
-        className="pointer-events-none absolute inset-x-10 bottom-0 h-10 blur-2xl"
-        style={{ background: t.glow }}
-      />
-      <div className="mb-3 text-[12px] font-semibold tracking-[0.02em] text-white/55">{title}</div>
-      <div className="text-[24px] font-black leading-none text-white md:text-[34px]">{value}</div>
-      <div className="mt-2 flex items-center gap-2">
+      <div className="mb-2 text-[11px] uppercase tracking-[0.18em] text-white/40">{title}</div>
+      <div className="text-[26px] font-black leading-none text-white md:text-[32px]">{value}</div>
+      <div className="mt-2 flex items-center gap-2 text-sm">
         {accentValue ? (
-          <span className="text-sm font-black" style={{ color: t.accent }}>
+          <span className="font-black" style={{ color: t.accent }}>
             {accentValue}
           </span>
         ) : null}
-        <span className="text-sm text-white/55">{sub || accentLabel}</span>
+        <span className="text-white/52">{sub}</span>
       </div>
     </div>
   );
@@ -426,17 +400,17 @@ function RingGauge({ percent = 0, amount = "$0.00", label = "Category", color = 
   const angle = (p / 100) * 360;
 
   return (
-    <div className="my-4 flex justify-center">
+    <div className="my-3 flex justify-center">
       <div
-        className="relative grid h-[200px] w-[200px] place-items-center rounded-full"
+        className="relative grid h-[184px] w-[184px] place-items-center rounded-full"
         style={{
           background: `conic-gradient(${color} 0deg, ${color} ${angle}deg, rgba(255,255,255,0.08) ${angle}deg, rgba(255,255,255,0.08) 360deg)`,
-          boxShadow: `0 0 32px ${color}22`,
+          boxShadow: `0 0 30px ${color}22`,
         }}
       >
-        <div className="flex h-[152px] w-[152px] flex-col items-center justify-center rounded-full border border-white/10 bg-[radial-gradient(circle_at_50%_35%,rgba(18,26,46,0.98),rgba(6,10,18,0.98))] px-3 text-center shadow-[inset_0_1px_0_rgba(255,255,255,.03)]">
-          <div className="mb-1 text-[11px] uppercase tracking-[0.24em] text-white/35">{label}</div>
-          <div className="text-[30px] font-black leading-none text-white">{p.toFixed(1)}%</div>
+        <div className="flex h-[140px] w-[140px] flex-col items-center justify-center rounded-full border border-white/10 bg-[radial-gradient(circle_at_50%_35%,rgba(18,26,46,0.98),rgba(6,10,18,0.98))] px-3 text-center shadow-[inset_0_1px_0_rgba(255,255,255,.03)]">
+          <div className="mb-1 text-[10px] uppercase tracking-[0.24em] text-white/35">{label}</div>
+          <div className="text-[26px] font-black leading-none text-white">{p.toFixed(1)}%</div>
           <div className="mt-2 text-sm text-white/60">{amount}</div>
         </div>
       </div>
@@ -446,9 +420,9 @@ function RingGauge({ percent = 0, amount = "$0.00", label = "Category", color = 
 
 function TrendChart({ data, color = RED }) {
   const width = 1000;
-  const height = 320;
-  const padX = 30;
-  const padY = 24;
+  const height = 280;
+  const padX = 28;
+  const padY = 20;
   const chartW = width - padX * 2;
   const chartH = height - padY * 2;
 
@@ -470,15 +444,15 @@ function TrendChart({ data, color = RED }) {
   });
 
   return (
-    <div className="overflow-hidden rounded-[28px] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,.025),rgba(255,255,255,.015))] p-4">
-      <div className="relative h-[300px] w-full">
+    <div className="overflow-hidden rounded-[24px] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,.025),rgba(255,255,255,.015))] p-3">
+      <div className="relative h-[260px] w-full">
         <svg viewBox={`0 0 ${width} ${height}`} className="h-full w-full">
           <defs>
-            <linearGradient id="trendFill" x1="0" x2="0" y1="0" y2="1">
+            <linearGradient id="trendFillSmallHeader" x1="0" x2="0" y1="0" y2="1">
               <stop offset="0%" stopColor={color} stopOpacity="0.38" />
               <stop offset="100%" stopColor={color} stopOpacity="0.02" />
             </linearGradient>
-            <filter id="trendGlow">
+            <filter id="trendGlowSmallHeader">
               <feGaussianBlur stdDeviation="6" result="blur" />
               <feMerge>
                 <feMergeNode in="blur" />
@@ -509,21 +483,21 @@ function TrendChart({ data, color = RED }) {
             </text>
           ))}
 
-          <path d={areaPath} fill="url(#trendFill)" />
+          <path d={areaPath} fill="url(#trendFillSmallHeader)" />
           <path
             d={linePath}
             fill="none"
             stroke={color}
             strokeWidth="4"
-            filter="url(#trendGlow)"
+            filter="url(#trendGlowSmallHeader)"
             strokeLinecap="round"
             strokeLinejoin="round"
           />
 
           {points.map((p) => (
             <g key={p.key}>
-              <circle cx={p.x} cy={p.y} r="4.5" fill={color} />
-              <circle cx={p.x} cy={p.y} r="10" fill={color} fillOpacity="0.12" />
+              <circle cx={p.x} cy={p.y} r="4" fill={color} />
+              <circle cx={p.x} cy={p.y} r="9" fill={color} fillOpacity="0.12" />
             </g>
           ))}
         </svg>
@@ -788,9 +762,7 @@ export default function SpendingPage() {
     ? (totals.expense / totalBudget) * 100
     : 0;
 
-  const recentActivity = React.useMemo(() => {
-    return filteredTransactions.slice(0, 8);
-  }, [filteredTransactions]);
+  const recentActivity = React.useMemo(() => filteredTransactions.slice(0, 8), [filteredTransactions]);
 
   const upcomingItems = React.useMemo(() => {
     const now = new Date();
@@ -1046,16 +1018,16 @@ export default function SpendingPage() {
 
   if (loading) {
     return (
-      <div className="mx-auto max-w-[1700px] px-4 py-5">
-        <GlassSection className="p-6 text-white/70">Loading spending...</GlassSection>
+      <div className="mx-auto max-w-[1700px] px-4 py-4">
+        <GlassSection className="p-5 text-white/70">Loading spending...</GlassSection>
       </div>
     );
   }
 
   if (!user) {
     return (
-      <div className="mx-auto max-w-[1700px] px-4 py-5">
-        <GlassSection className="p-6">
+      <div className="mx-auto max-w-[1700px] px-4 py-4">
+        <GlassSection className="p-5">
           <div className="text-lg font-black text-white">Please log in</div>
           <div className="mt-2 text-sm text-white/60">This page uses Supabase, so you need to be signed in.</div>
         </GlassSection>
@@ -1064,27 +1036,29 @@ export default function SpendingPage() {
   }
 
   return (
-    <div className="mx-auto max-w-[1700px] space-y-5 px-4 py-5">
-      <GlassSection className="overflow-hidden p-8">
-        <div className="flex flex-col gap-6 xl:flex-row xl:items-start xl:justify-between">
-          <div>
-            <div className="mb-3 text-[11px] font-black uppercase tracking-[0.30em] text-sky-300/80">
+    <div className="mx-auto max-w-[1700px] space-y-4 px-4 py-4">
+      <GlassSection className="overflow-hidden px-6 py-5">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+          <div className="min-w-0">
+            <div className="mb-1 text-[10px] font-black uppercase tracking-[0.26em] text-sky-300/75">
               Life Command Center
             </div>
-            <h1 className="m-0 text-5xl font-black tracking-tight text-white md:text-7xl">Spending Control</h1>
-            <div className="mt-3 max-w-3xl text-lg text-white/60 md:text-[22px]">
-              Track live spend, watch category pressure, and forecast what is coming next.
+            <h1 className="m-0 text-3xl font-bold tracking-tight text-white">
+              Spending Control
+            </h1>
+            <div className="mt-1 text-sm text-white/50">
+              Track live spend, watch pressure, and forecast what hits next.
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2">
             {["week", "month", "year"].map((p) => {
               const active = period === p;
               return (
                 <button
                   key={p}
                   onClick={() => setPeriod(p)}
-                  className="min-h-11 rounded-full px-5 font-black transition"
+                  className="min-h-10 rounded-full px-4 text-sm font-black transition"
                   style={{
                     border: active ? "1px solid rgba(255,255,255,0.16)" : "1px solid rgba(255,255,255,0.08)",
                     background: active
@@ -1099,9 +1073,9 @@ export default function SpendingPage() {
             })}
 
             <Tabs value={tab} onValueChange={setTab}>
-              <TabsList className="h-14 rounded-full border border-white/10 bg-black/40 p-1">
-                <TabsTrigger value="overview" className="rounded-full px-6">Overview</TabsTrigger>
-                <TabsTrigger value="manage" className="rounded-full px-6">Manage</TabsTrigger>
+              <TabsList className="h-11 rounded-full border border-white/10 bg-black/40 p-1">
+                <TabsTrigger value="overview" className="rounded-full px-5 text-sm">Overview</TabsTrigger>
+                <TabsTrigger value="manage" className="rounded-full px-5 text-sm">Manage</TabsTrigger>
               </TabsList>
             </Tabs>
           </div>
@@ -1115,22 +1089,22 @@ export default function SpendingPage() {
         </GlassSection>
       ) : null}
 
-      <div className="grid gap-5 xl:grid-cols-3">
-        <OptionBHeroCard
+      <div className="grid gap-4 xl:grid-cols-3">
+        <CommandMetricCard
           title="Spent"
           value={money(totals.expense)}
           sub={expenseTrend.text}
           accentValue={expenseTrend.value}
           tone="red"
         />
-        <OptionBHeroCard
+        <CommandMetricCard
           title="Remaining"
           value={money(Math.max(remaining, 0))}
           sub={remaining < 0 ? "budget exceeded" : `from ${money(totalBudget)} budget`}
           accentValue={remaining < 0 ? money(Math.abs(remaining)) : ""}
           tone="green"
         />
-        <OptionBHeroCard
+        <CommandMetricCard
           title="Daily Avg"
           value={money(dailyAverage)}
           sub={range.label}
@@ -1142,18 +1116,18 @@ export default function SpendingPage() {
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList className="hidden" />
 
-        <TabsContent value="overview" className="space-y-5">
-          <div className="grid gap-5 xl:grid-cols-[minmax(0,1.7fr)_minmax(340px,.9fr)]">
-            <GlassSection className="p-6">
-              <div className="mb-4 flex items-center justify-between gap-4">
+        <TabsContent value="overview" className="space-y-4">
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,1.75fr)_minmax(320px,.85fr)]">
+            <GlassSection className="p-5">
+              <div className="mb-3 flex items-center justify-between gap-4">
                 <div>
-                  <div className="text-[28px] font-black text-white">Spending Trend</div>
-                  <div className="mt-1 text-sm text-white/55">
+                  <div className="text-2xl font-black text-white">Spending Trend</div>
+                  <div className="mt-1 text-sm text-white/52">
                     Daily spend pattern for {range.label.toLowerCase()}.
                   </div>
                 </div>
 
-                <div className="rounded-full border border-white/10 bg-white/[0.03] px-4 py-2 text-sm font-semibold text-white/60">
+                <div className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1.5 text-xs font-semibold text-white/60">
                   {range.label}
                 </div>
               </div>
@@ -1161,16 +1135,16 @@ export default function SpendingPage() {
               <TrendChart data={trendData} color={RED} />
             </GlassSection>
 
-            <GlassSection className="p-6">
+            <GlassSection className="p-5">
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <div className="mb-2 text-[11px] uppercase tracking-[0.26em] text-white/40">Priority Category</div>
-                  <div className="text-2xl font-black text-white">
+                  <div className="mb-1 text-[10px] uppercase tracking-[0.24em] text-white/40">Priority Category</div>
+                  <div className="text-xl font-black text-white">
                     {priorityCategory?.category?.name || "No category yet"}
                   </div>
                 </div>
 
-                <div className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs font-black text-white/70">
+                <div className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-[11px] font-black text-white/70">
                   Top pressure
                 </div>
               </div>
@@ -1182,9 +1156,9 @@ export default function SpendingPage() {
                 color={priorityCategory?.category?.color || "#22c55e"}
               />
 
-              <div className="rounded-[22px] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,.05),rgba(255,255,255,.025))] p-5">
+              <div className="rounded-[22px] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,.05),rgba(255,255,255,.025))] p-4">
                 <div className="mb-2 text-sm text-white/55">Quick read</div>
-                <div className="text-base leading-7 text-white/88">
+                <div className="text-sm leading-7 text-white/88">
                   {priorityCategory
                     ? priorityPercent >= 100
                       ? "This category is over budget pressure right now. Pull back here first."
@@ -1197,43 +1171,41 @@ export default function SpendingPage() {
             </GlassSection>
           </div>
 
-          <div className="grid gap-5 xl:grid-cols-[minmax(0,1.1fr)_minmax(340px,.8fr)]">
-            <GlassSection className="p-6">
-              <div className="mb-4 flex items-center justify-between gap-4">
-                <div>
-                  <div className="text-[28px] font-black text-white">Categories</div>
-                  <div className="mt-1 text-sm text-white/55">Budget pressure by category.</div>
-                </div>
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,1.08fr)_minmax(320px,.82fr)]">
+            <GlassSection className="p-5">
+              <div className="mb-4">
+                <div className="text-2xl font-black text-white">Categories</div>
+                <div className="mt-1 text-sm text-white/52">Budget pressure by category.</div>
               </div>
 
-              <div className="space-y-4">
+              <div className="space-y-3">
                 {budgetRows.length === 0 ? (
                   <div className="text-sm text-white/55">No budget rows yet.</div>
                 ) : (
                   budgetRows.slice(0, 7).map((r) => {
                     const pct = r.budget > 0 ? clamp((r.forecast / r.budget) * 100, 0, 100) : 0;
                     return (
-                      <div key={r.id} className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4">
+                      <div key={r.id} className="rounded-[20px] border border-white/10 bg-white/[0.03] p-4">
                         <div className="mb-2 flex items-center justify-between gap-3">
                           <div className="flex min-w-0 items-center gap-3">
                             <div
-                              className="h-10 w-10 rounded-xl border border-white/10"
+                              className="h-9 w-9 rounded-xl border border-white/10"
                               style={{
                                 background: `linear-gradient(180deg, ${r.color}33, rgba(255,255,255,.03))`,
                                 boxShadow: `0 0 18px ${r.color}22`,
                               }}
                             />
                             <div className="min-w-0">
-                              <div className="truncate text-xl font-black text-white">{r.name}</div>
-                              <div className="text-sm text-white/45">{r.group}</div>
+                              <div className="truncate text-lg font-black text-white">{r.name}</div>
+                              <div className="text-xs text-white/45">{r.group}</div>
                             </div>
                           </div>
 
                           <div className="text-right">
-                            <div className="font-black text-white">
+                            <div className="text-sm font-black text-white">
                               {money(r.spent)} / {money(r.budget)}
                             </div>
-                            <div className="text-sm text-white/45">{statusBadge(r.forecastStatus)}</div>
+                            <div className="mt-1">{statusBadge(r.forecastStatus)}</div>
                           </div>
                         </div>
 
@@ -1248,34 +1220,32 @@ export default function SpendingPage() {
               </div>
             </GlassSection>
 
-            <GlassSection className="p-6">
-              <div className="mb-4 flex items-center justify-between gap-4">
-                <div>
-                  <div className="text-[28px] font-black text-white">Upcoming Bills</div>
-                  <div className="mt-1 text-sm text-white/55">Planned items and forecasted outflow.</div>
-                </div>
+            <GlassSection className="p-5">
+              <div className="mb-4">
+                <div className="text-2xl font-black text-white">Upcoming Bills</div>
+                <div className="mt-1 text-sm text-white/52">Planned items and forecasted outflow.</div>
               </div>
 
               <div className="space-y-3">
                 {upcomingItems.length === 0 ? (
-                  <div className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4 text-sm text-white/55">
+                  <div className="rounded-[20px] border border-white/10 bg-white/[0.03] p-4 text-sm text-white/55">
                     No upcoming planned items.
                   </div>
                 ) : (
                   upcomingItems.map((p) => {
                     const cat = categoriesById.get(p.categoryId);
                     return (
-                      <div key={p.id} className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4">
+                      <div key={p.id} className="rounded-[20px] border border-white/10 bg-white/[0.03] p-4">
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
-                            <div className="truncate text-xl font-black text-white">
+                            <div className="truncate text-lg font-black text-white">
                               {p.merchant || cat?.name || "Planned item"}
                             </div>
                             <div className="mt-1 text-sm text-white/50">
                               {shortDate(p.date)} {cat ? `• ${cat.name}` : ""}
                             </div>
                           </div>
-                          <div className="text-right text-xl font-black text-white">{money(p.amount)}</div>
+                          <div className="text-right text-lg font-black text-white">{money(p.amount)}</div>
                         </div>
 
                         {p.note ? <div className="mt-2 text-sm text-white/45">{p.note}</div> : null}
@@ -1296,17 +1266,15 @@ export default function SpendingPage() {
             </GlassSection>
           </div>
 
-          <GlassSection className="p-6">
-            <div className="mb-4 flex items-center justify-between gap-4">
-              <div>
-                <div className="text-[28px] font-black text-white">Recent Activity</div>
-                <div className="mt-1 text-sm text-white/55">Latest spending, income, and transfers.</div>
-              </div>
+          <GlassSection className="p-5">
+            <div className="mb-4">
+              <div className="text-2xl font-black text-white">Recent Activity</div>
+              <div className="mt-1 text-sm text-white/52">Latest spending, income, and transfers.</div>
             </div>
 
             <div className="space-y-3">
               {recentActivity.length === 0 ? (
-                <div className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4 text-sm text-white/55">
+                <div className="rounded-[20px] border border-white/10 bg-white/[0.03] p-4 text-sm text-white/55">
                   No activity in this range.
                 </div>
               ) : (
@@ -1316,11 +1284,11 @@ export default function SpendingPage() {
                   const amountColor = isExpense ? "#ff6b81" : t.type === "income" ? "#4ade80" : "#7dd3fc";
 
                   return (
-                    <div key={t.id} className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4">
+                    <div key={t.id} className="rounded-[20px] border border-white/10 bg-white/[0.03] p-4">
                       <div className="flex flex-wrap items-center justify-between gap-3">
                         <div className="min-w-0">
-                          <div className="flex flex-wrap items-center gap-3">
-                            <span className="truncate text-xl font-black text-white">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="truncate text-lg font-black text-white">
                               {t.merchant || cat?.name || "Transaction"}
                             </span>
                             <Badge variant="outline">{t.type}</Badge>
@@ -1334,7 +1302,7 @@ export default function SpendingPage() {
 
                         <div className="flex items-center gap-3">
                           <div className="text-right">
-                            <div className="text-[30px] font-black leading-none" style={{ color: amountColor }}>
+                            <div className="text-2xl font-black leading-none" style={{ color: amountColor }}>
                               {isExpense ? "-" : t.type === "income" ? "+" : ""}
                               {money(t.amount)}
                             </div>
@@ -1357,175 +1325,177 @@ export default function SpendingPage() {
             </div>
           </GlassSection>
 
-          <GlassSection className="p-6">
-            <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <div className="text-xl font-black text-white">Quick Add</div>
-                <div className="mt-1 text-sm text-white/55">
-                  Use <b>Now</b> for real spending. Use <b>Planned</b> for forecast.
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,1.05fr)_minmax(0,.95fr)]">
+            <GlassSection className="p-5">
+              <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <div className="text-lg font-black text-white">Quick Add</div>
+                  <div className="mt-1 text-sm text-white/55">
+                    Use <b>Now</b> for real spending. Use <b>Planned</b> for forecast.
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  <Button variant={mode === "now" ? "default" : "secondary"} onClick={() => setMode("now")}>Now</Button>
+                  <Button variant={mode === "planned" ? "default" : "secondary"} onClick={() => setMode("planned")}>Planned</Button>
+                  <Button variant="secondary" onClick={clearQuickAdd}>Clear</Button>
+                  <Button onClick={() => (mode === "planned" ? addPlanned() : addNow())}>
+                    {mode === "planned" ? "Add Planned" : "Add Transaction"}
+                  </Button>
                 </div>
               </div>
 
-              <div className="flex flex-wrap gap-2">
-                <Button variant={mode === "now" ? "default" : "secondary"} onClick={() => setMode("now")}>Now</Button>
-                <Button variant={mode === "planned" ? "default" : "secondary"} onClick={() => setMode("planned")}>Planned</Button>
-                <Button variant="secondary" onClick={clearQuickAdd}>Clear</Button>
-                <Button onClick={() => (mode === "planned" ? addPlanned() : addNow())}>
-                  {mode === "planned" ? "Add Planned" : "Add Transaction"}
-                </Button>
-              </div>
-            </div>
+              <div className="grid gap-3 md:grid-cols-12">
+                <div className="md:col-span-2">
+                  <Label className="mb-2 block text-xs text-white/55">Type</Label>
+                  <NativeSelect value={qaType} onChange={(e) => setQaType(e.target.value)} disabled={mode === "planned"}>
+                    <option value="expense">Expense</option>
+                    <option value="income">Income</option>
+                    <option value="transfer">Transfer</option>
+                  </NativeSelect>
+                </div>
 
-            <div className="grid gap-3 md:grid-cols-12">
-              <div className="md:col-span-2">
-                <Label className="mb-2 block text-xs text-white/55">Type</Label>
-                <NativeSelect value={qaType} onChange={(e) => setQaType(e.target.value)} disabled={mode === "planned"}>
-                  <option value="expense">Expense</option>
-                  <option value="income">Income</option>
-                  <option value="transfer">Transfer</option>
-                </NativeSelect>
-              </div>
+                <div className="md:col-span-2">
+                  <Label className="mb-2 block text-xs text-white/55">Amount</Label>
+                  <Input
+                    className="h-11 rounded-2xl border-white/10 bg-white/[0.04] text-white placeholder:text-white/35"
+                    inputMode="decimal"
+                    placeholder="0.00"
+                    value={qaAmount}
+                    onChange={(e) => setQaAmount(e.target.value)}
+                  />
+                </div>
 
-              <div className="md:col-span-2">
-                <Label className="mb-2 block text-xs text-white/55">Amount</Label>
-                <Input
-                  className="h-11 rounded-2xl border-white/10 bg-white/[0.04] text-white placeholder:text-white/35"
-                  inputMode="decimal"
-                  placeholder="0.00"
-                  value={qaAmount}
-                  onChange={(e) => setQaAmount(e.target.value)}
-                />
-              </div>
+                <div className="md:col-span-3">
+                  <Label className="mb-2 block text-xs text-white/55">Category</Label>
+                  <NativeSelect
+                    value={qaCategoryId}
+                    onChange={(e) => setQaCategoryId(e.target.value)}
+                    disabled={mode === "now" ? qaType !== "expense" : false}
+                  >
+                    {categories
+                      .slice()
+                      .sort((a, b) => a.group.localeCompare(b.group) || a.name.localeCompare(b.name))
+                      .map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.group} • {c.name}
+                        </option>
+                      ))}
+                  </NativeSelect>
+                </div>
 
-              <div className="md:col-span-3">
-                <Label className="mb-2 block text-xs text-white/55">Category</Label>
-                <NativeSelect
-                  value={qaCategoryId}
-                  onChange={(e) => setQaCategoryId(e.target.value)}
-                  disabled={mode === "now" ? qaType !== "expense" : false}
-                >
-                  {categories
-                    .slice()
-                    .sort((a, b) => a.group.localeCompare(b.group) || a.name.localeCompare(b.name))
-                    .map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.group} • {c.name}
-                      </option>
-                    ))}
-                </NativeSelect>
-              </div>
+                <div className="md:col-span-2">
+                  <Label className="mb-2 block text-xs text-white/55">{mode === "planned" ? "Planned date" : "Date"}</Label>
+                  <Input
+                    className="h-11 rounded-2xl border-white/10 bg-white/[0.04] text-white"
+                    type="date"
+                    value={qaDate}
+                    onChange={(e) => setQaDate(e.target.value)}
+                  />
+                </div>
 
-              <div className="md:col-span-2">
-                <Label className="mb-2 block text-xs text-white/55">{mode === "planned" ? "Planned date" : "Date"}</Label>
-                <Input
-                  className="h-11 rounded-2xl border-white/10 bg-white/[0.04] text-white"
-                  type="date"
-                  value={qaDate}
-                  onChange={(e) => setQaDate(e.target.value)}
-                />
-              </div>
-
-              <div className="md:col-span-3">
-                <Label className="mb-2 block text-xs text-white/55">Merchant</Label>
-                <Input
-                  className="h-11 rounded-2xl border-white/10 bg-white/[0.04] text-white placeholder:text-white/35"
-                  placeholder="optional"
-                  value={qaMerchant}
-                  onChange={(e) => setQaMerchant(e.target.value)}
-                />
-              </div>
-            </div>
-
-            <div className="mt-3 grid gap-3 md:grid-cols-12">
-              <div className="md:col-span-6">
-                <Label className="mb-2 block text-xs text-white/55">Note</Label>
-                <Input
-                  className="h-11 rounded-2xl border-white/10 bg-white/[0.04] text-white placeholder:text-white/35"
-                  placeholder="optional"
-                  value={qaNote}
-                  onChange={(e) => setQaNote(e.target.value)}
-                />
+                <div className="md:col-span-3">
+                  <Label className="mb-2 block text-xs text-white/55">Merchant</Label>
+                  <Input
+                    className="h-11 rounded-2xl border-white/10 bg-white/[0.04] text-white placeholder:text-white/35"
+                    placeholder="optional"
+                    value={qaMerchant}
+                    onChange={(e) => setQaMerchant(e.target.value)}
+                  />
+                </div>
               </div>
 
-              <div className="md:col-span-3">
-                <Label className="mb-2 block text-xs text-white/55">Payment</Label>
-                <NativeSelect value={qaPayment} onChange={(e) => setQaPayment(e.target.value)} disabled={mode === "planned"}>
-                  <option>Card</option>
-                  <option>Cash</option>
-                  <option>Debit</option>
-                  <option>Credit</option>
-                  <option>Apple Pay</option>
-                  <option>Google Pay</option>
-                </NativeSelect>
+              <div className="mt-3 grid gap-3 md:grid-cols-12">
+                <div className="md:col-span-6">
+                  <Label className="mb-2 block text-xs text-white/55">Note</Label>
+                  <Input
+                    className="h-11 rounded-2xl border-white/10 bg-white/[0.04] text-white placeholder:text-white/35"
+                    placeholder="optional"
+                    value={qaNote}
+                    onChange={(e) => setQaNote(e.target.value)}
+                  />
+                </div>
+
+                <div className="md:col-span-3">
+                  <Label className="mb-2 block text-xs text-white/55">Payment</Label>
+                  <NativeSelect value={qaPayment} onChange={(e) => setQaPayment(e.target.value)} disabled={mode === "planned"}>
+                    <option>Card</option>
+                    <option>Cash</option>
+                    <option>Debit</option>
+                    <option>Credit</option>
+                    <option>Apple Pay</option>
+                    <option>Google Pay</option>
+                  </NativeSelect>
+                </div>
+
+                <div className="md:col-span-3">
+                  <Label className="mb-2 block text-xs text-white/55">Account</Label>
+                  <NativeSelect value={qaAccount} onChange={(e) => setQaAccount(e.target.value)} disabled={mode === "planned"}>
+                    <option>Checking</option>
+                    <option>Savings</option>
+                    <option>Credit Card</option>
+                    <option>Business</option>
+                  </NativeSelect>
+                </div>
+              </div>
+            </GlassSection>
+
+            <GlassSection className="p-5">
+              <div className="mb-4">
+                <div className="text-lg font-black text-white">Filters</div>
+                <div className="mt-1 text-sm text-white/55">Search transactions, narrow categories, and change the view.</div>
               </div>
 
-              <div className="md:col-span-3">
-                <Label className="mb-2 block text-xs text-white/55">Account</Label>
-                <NativeSelect value={qaAccount} onChange={(e) => setQaAccount(e.target.value)} disabled={mode === "planned"}>
-                  <option>Checking</option>
-                  <option>Savings</option>
-                  <option>Credit Card</option>
-                  <option>Business</option>
-                </NativeSelect>
-              </div>
-            </div>
-          </GlassSection>
+              <div className="grid gap-3">
+                <div>
+                  <Label className="mb-2 block text-xs text-white/55">Search</Label>
+                  <Input
+                    className="h-11 rounded-2xl border-white/10 bg-white/[0.04] text-white placeholder:text-white/35"
+                    placeholder="Merchant, note, category, amount..."
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                  />
+                </div>
 
-          <GlassSection className="p-6">
-            <div className="mb-4">
-              <div className="text-xl font-black text-white">Filters</div>
-              <div className="mt-1 text-sm text-white/55">Search transactions, narrow categories, and change the view.</div>
-            </div>
+                <div>
+                  <Label className="mb-2 block text-xs text-white/55">Type</Label>
+                  <NativeSelect value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
+                    <option value="expense">Expenses</option>
+                    <option value="income">Income</option>
+                    <option value="transfer">Transfers</option>
+                    <option value="all">All</option>
+                  </NativeSelect>
+                </div>
 
-            <div className="grid gap-3 md:grid-cols-12">
-              <div className="md:col-span-5">
-                <Label className="mb-2 block text-xs text-white/55">Search</Label>
-                <Input
-                  className="h-11 rounded-2xl border-white/10 bg-white/[0.04] text-white placeholder:text-white/35"
-                  placeholder="Merchant, note, category, amount..."
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                />
+                <div>
+                  <Label className="mb-2 block text-xs text-white/55">Category</Label>
+                  <NativeSelect value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}>
+                    <option value="all">All Categories</option>
+                    {groups
+                      .filter((g) => g !== "All")
+                      .map((group) => {
+                        const arr = categories.filter((c) => c.group === group).sort((a, b) => a.name.localeCompare(b.name));
+                        return (
+                          <optgroup key={group} label={group}>
+                            {arr.map((c) => (
+                              <option key={c.id} value={c.id}>
+                                {c.name}
+                              </option>
+                            ))}
+                          </optgroup>
+                        );
+                      })}
+                  </NativeSelect>
+                </div>
               </div>
-
-              <div className="md:col-span-3">
-                <Label className="mb-2 block text-xs text-white/55">Type</Label>
-                <NativeSelect value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
-                  <option value="expense">Expenses</option>
-                  <option value="income">Income</option>
-                  <option value="transfer">Transfers</option>
-                  <option value="all">All</option>
-                </NativeSelect>
-              </div>
-
-              <div className="md:col-span-4">
-                <Label className="mb-2 block text-xs text-white/55">Category</Label>
-                <NativeSelect value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}>
-                  <option value="all">All Categories</option>
-                  {groups
-                    .filter((g) => g !== "All")
-                    .map((group) => {
-                      const arr = categories.filter((c) => c.group === group).sort((a, b) => a.name.localeCompare(b.name));
-                      return (
-                        <optgroup key={group} label={group}>
-                          {arr.map((c) => (
-                            <option key={c.id} value={c.id}>
-                              {c.name}
-                            </option>
-                          ))}
-                        </optgroup>
-                      );
-                    })}
-                </NativeSelect>
-              </div>
-            </div>
-          </GlassSection>
+            </GlassSection>
+          </div>
         </TabsContent>
 
-        <TabsContent value="manage" className="space-y-5">
-          <GlassSection className="p-6">
+        <TabsContent value="manage" className="space-y-4">
+          <GlassSection className="p-5">
             <div className="mb-4">
-              <div className="text-xl font-black text-white">Manage Budgets</div>
+              <div className="text-lg font-black text-white">Manage Budgets</div>
               <div className="mt-1 text-sm text-white/55">Current period mode: <b>{range.budgetMode}</b></div>
             </div>
 
@@ -1534,7 +1504,7 @@ export default function SpendingPage() {
                 .slice()
                 .sort((a, b) => a.group.localeCompare(b.group) || a.name.localeCompare(b.name))
                 .map((c) => (
-                  <div key={c.id} className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4">
+                  <div key={c.id} className="rounded-[20px] border border-white/10 bg-white/[0.03] p-4">
                     <div className="grid items-center gap-4 md:grid-cols-12">
                       <div className="md:col-span-4">
                         <div className="font-black text-white">{c.name}</div>
@@ -1592,10 +1562,10 @@ export default function SpendingPage() {
             </div>
           </GlassSection>
 
-          <div className="grid gap-5 xl:grid-cols-2">
-            <GlassSection className="p-6">
+          <div className="grid gap-4 xl:grid-cols-2">
+            <GlassSection className="p-5">
               <div className="mb-4">
-                <div className="text-xl font-black text-white">Add Category</div>
+                <div className="text-lg font-black text-white">Add Category</div>
                 <div className="mt-1 text-sm text-white/55">Keep categories clean and grouped correctly.</div>
               </div>
 
@@ -1624,9 +1594,9 @@ export default function SpendingPage() {
               </div>
             </GlassSection>
 
-            <GlassSection className="p-6">
+            <GlassSection className="p-5">
               <div className="mb-4">
-                <div className="text-xl font-black text-white">Current Categories</div>
+                <div className="text-lg font-black text-white">Current Categories</div>
                 <div className="mt-1 text-sm text-white/55">Delete the ones you do not want.</div>
               </div>
 
@@ -1635,7 +1605,7 @@ export default function SpendingPage() {
                   .slice()
                   .sort((a, b) => a.group.localeCompare(b.group) || a.name.localeCompare(b.name))
                   .map((c) => (
-                    <div key={c.id} className="flex items-start justify-between gap-3 rounded-[22px] border border-white/10 bg-white/[0.03] p-4">
+                    <div key={c.id} className="flex items-start justify-between gap-3 rounded-[20px] border border-white/10 bg-white/[0.03] p-4">
                       <div>
                         <div className="font-black text-white">{c.name}</div>
                         <div className="text-xs text-white/52">{c.group} • {c.id}</div>
