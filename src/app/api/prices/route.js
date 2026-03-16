@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 
+export const dynamic = "force-dynamic";
+
 function toNum(value) {
   const n = Number(value);
   return Number.isFinite(n) ? n : null;
