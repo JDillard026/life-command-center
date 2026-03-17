@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
-import InvestmentChart from "@/components/ui/InvestmentChart";
 
 export const dynamic = "force-dynamic";
 
@@ -171,9 +170,6 @@ function mapIncomeDepositRowToClient(row) {
   };
 }
 
-/* =========================
-   page
-========================= */
 export default function DashboardPage() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -214,57 +210,51 @@ export default function DashboardPage() {
         const monthStart = startOfMonthISO(now);
         const monthEnd = endOfMonthISO(now);
 
-        const [
-          accRes,
-          settingsRes,
-          billsRes,
-          spendingRes,
-          plannedRes,
-          incomeRes,
-        ] = await Promise.all([
-          supabase
-            .from("accounts")
-            .select("*")
-            .eq("user_id", currentUser.id)
-            .order("updated_at", { ascending: false }),
+        const [accRes, settingsRes, billsRes, spendingRes, plannedRes, incomeRes] =
+          await Promise.all([
+            supabase
+              .from("accounts")
+              .select("*")
+              .eq("user_id", currentUser.id)
+              .order("updated_at", { ascending: false }),
 
-          supabase
-            .from("account_settings")
-            .select("*")
-            .eq("user_id", currentUser.id)
-            .maybeSingle(),
+            supabase
+              .from("account_settings")
+              .select("*")
+              .eq("user_id", currentUser.id)
+              .maybeSingle(),
 
-          supabase
-            .from("bills")
-            .select("*")
-            .eq("user_id", currentUser.id)
-            .eq("active", true)
-            .order("due_date", { ascending: true }),
+            supabase
+              .from("bills")
+              .select("*")
+              .eq("user_id", currentUser.id)
+              .eq("active", true)
+              .order("due_date", { ascending: true }),
 
-          supabase
-            .from("spending_transactions")
-            .select("*")
-            .eq("user_id", currentUser.id)
-            .gte("tx_date", monthStart)
-            .lte("tx_date", monthEnd)
-            .order("tx_date", { ascending: true }),
+            supabase
+              .from("spending_transactions")
+              .select("*")
+              .eq("user_id", currentUser.id)
+              .gte("tx_date", monthStart)
+              .lte("tx_date", monthEnd)
+              .order("tx_date", { ascending: true }),
 
-          supabase
-            .from("spending_planned_items")
-            .select("*")
-            .eq("user_id", currentUser.id)
-            .gte("planned_date", monthStart)
-            .lte("planned_date", monthEnd)
-            .order("planned_date", { ascending: true }),
+            supabase
+              .from("spending_planned_items")
+              .select("*")
+              .eq("user_id", currentUser.id)
+              .gte("planned_date", monthStart)
+              .lte("planned_date", monthEnd)
+              .order("planned_date", { ascending: true }),
 
-          supabase
-            .from("income_deposits")
-            .select("*")
-            .eq("user_id", currentUser.id)
-            .gte("deposit_date", monthStart)
-            .lte("deposit_date", monthEnd)
-            .order("deposit_date", { ascending: true }),
-        ]);
+            supabase
+              .from("income_deposits")
+              .select("*")
+              .eq("user_id", currentUser.id)
+              .gte("deposit_date", monthStart)
+              .lte("deposit_date", monthEnd)
+              .order("deposit_date", { ascending: true }),
+          ]);
 
         if (accRes.error) throw accRes.error;
         if (settingsRes.error) throw settingsRes.error;
@@ -314,17 +304,19 @@ export default function DashboardPage() {
 
     const primary = accounts.find((a) => a.id === primaryId) || accounts[0] || null;
 
-    const liquidTotal = accounts
-      .filter((a) => ["checking", "savings", "cash"].includes(String(a.type || "").toLowerCase()))
-      .reduce((s, a) => s + safeNum(a.balance, 0), 0);
+    const liquidAccounts = accounts.filter((a) =>
+      ["checking", "savings", "cash"].includes(String(a.type || "").toLowerCase())
+    );
+    const creditAccounts = accounts.filter(
+      (a) => String(a.type || "").toLowerCase() === "credit"
+    );
+    const investmentAccounts = accounts.filter(
+      (a) => String(a.type || "").toLowerCase() === "investment"
+    );
 
-    const debtTotal = accounts
-      .filter((a) => String(a.type || "").toLowerCase() === "credit")
-      .reduce((s, a) => s + safeNum(a.balance, 0), 0);
-
-    const investTotal = accounts
-      .filter((a) => String(a.type || "").toLowerCase() === "investment")
-      .reduce((s, a) => s + safeNum(a.balance, 0), 0);
+    const liquidTotal = liquidAccounts.reduce((s, a) => s + safeNum(a.balance, 0), 0);
+    const debtTotal = creditAccounts.reduce((s, a) => s + safeNum(a.balance, 0), 0);
+    const investTotal = investmentAccounts.reduce((s, a) => s + safeNum(a.balance, 0), 0);
 
     const nonDebtAssets = accounts
       .filter((a) => String(a.type || "").toLowerCase() !== "credit")
@@ -369,12 +361,15 @@ export default function DashboardPage() {
         return ad - bd;
       });
 
-    const dueNextSeven = dueSoon.filter((b) => Number.isFinite(b.dueIn) && b.dueIn <= 7).slice(0, 6);
+    const dueNextSeven = dueSoon
+      .filter((b) => Number.isFinite(b.dueIn) && b.dueIn <= 7)
+      .slice(0, 10);
 
     const dueSoonTotal = dueNextSeven.reduce((s, b) => s + safeNum(b.displayAmount, 0), 0);
 
     const netMonthCashFlow = incomeMonth - spendingActual - billsMonthlyPressure;
-    const projectedMonthCashFlow = incomeMonth - spendingActual - plannedMonth - billsMonthlyPressure;
+    const projectedMonthCashFlow =
+      incomeMonth - spendingActual - plannedMonth - billsMonthlyPressure;
 
     const burnTotal = spendingActual + billsMonthlyPressure;
     const pressurePct = incomeMonth > 0 ? clamp(pct(burnTotal, incomeMonth), 0, 100) : 0;
@@ -384,7 +379,7 @@ export default function DashboardPage() {
     if (!accounts.length) {
       attention.push({
         title: "No accounts loaded",
-        body: "You need at least one account so the dashboard can show where you actually stand.",
+        body: "Add at least one account so this page can show your real position.",
         tone: "bad",
       });
     }
@@ -392,23 +387,23 @@ export default function DashboardPage() {
     if (primary && safeNum(primary.balance, 0) < 0) {
       attention.push({
         title: "Primary account is negative",
-        body: `${primary.name} is sitting at ${money(primary.balance)}.`,
+        body: `${primary.name} is at ${money(primary.balance)}.`,
         tone: "bad",
       });
     }
 
     if (netMonthCashFlow < 0) {
       attention.push({
-        title: "This month is running negative",
-        body: `Income minus spending and bill pressure is ${money(netMonthCashFlow)}.`,
+        title: "Month cash flow is negative",
+        body: `Income minus spending and bills is ${money(netMonthCashFlow)}.`,
         tone: "bad",
       });
     }
 
     if (projectedMonthCashFlow < 0) {
       attention.push({
-        title: "Planned spending makes it worse",
-        body: `After planned purchases, projected month cash flow drops to ${money(projectedMonthCashFlow)}.`,
+        title: "Planned spending makes this worse",
+        body: `Projected cash flow falls to ${money(projectedMonthCashFlow)}.`,
         tone: "warn",
       });
     }
@@ -417,12 +412,12 @@ export default function DashboardPage() {
     if (urgentBill) {
       attention.push({
         title: "Bill due now",
-        body: `${urgentBill.name} is due ${
+        body: `${urgentBill.name} is ${
           urgentBill.dueIn < 0
             ? `${Math.abs(urgentBill.dueIn)} day(s) late`
             : urgentBill.dueIn === 0
-            ? "today"
-            : `in ${urgentBill.dueIn} day(s)`
+            ? "due today"
+            : `due in ${urgentBill.dueIn} day(s)`
         }.`,
         tone: urgentBill.dueIn <= 0 ? "bad" : "warn",
       });
@@ -431,7 +426,7 @@ export default function DashboardPage() {
     if (attention.length === 0) {
       attention.push({
         title: "No immediate red flags",
-        body: "Your numbers are loaded and nothing major is screaming for attention right now.",
+        body: "Nothing major is screaming for attention right now.",
         tone: "good",
       });
     }
@@ -458,33 +453,52 @@ export default function DashboardPage() {
       .sort((a, b) => b.total - a.total)
       .slice(0, 4);
 
-    const dayMap = new Map();
+    const accountMix = [
+      {
+        label: "Checking",
+        value: accounts
+          .filter((a) => String(a.type || "").toLowerCase() === "checking")
+          .reduce((s, a) => s + safeNum(a.balance, 0), 0),
+      },
+      {
+        label: "Savings",
+        value: accounts
+          .filter((a) => String(a.type || "").toLowerCase() === "savings")
+          .reduce((s, a) => s + safeNum(a.balance, 0), 0),
+      },
+      {
+        label: "Cash",
+        value: accounts
+          .filter((a) => String(a.type || "").toLowerCase() === "cash")
+          .reduce((s, a) => s + safeNum(a.balance, 0), 0),
+      },
+      {
+        label: "Credit",
+        value: accounts
+          .filter((a) => String(a.type || "").toLowerCase() === "credit")
+          .reduce((s, a) => s + safeNum(a.balance, 0), 0),
+      },
+      {
+        label: "Investments",
+        value: accounts
+          .filter((a) => String(a.type || "").toLowerCase() === "investment")
+          .reduce((s, a) => s + safeNum(a.balance, 0), 0),
+      },
+    ];
 
-    incomeDeposits.forEach((d) => {
-      const key = d.date || today;
-      dayMap.set(key, (dayMap.get(key) || 0) + safeNum(d.amount, 0));
-    });
+    const pressureIncomeBase = Math.max(safeNum(incomeMonth, 0), 0);
+    const pressureBills = Math.max(safeNum(billsMonthlyPressure, 0), 0);
+    const pressureSpending = Math.max(safeNum(spendingActual, 0), 0);
+    const pressureRemaining = Math.max(pressureIncomeBase - pressureBills - pressureSpending, 0);
+    const pressureOverflow = Math.max(pressureBills + pressureSpending - pressureIncomeBase, 0);
+    const pressureDenominator =
+      pressureIncomeBase > 0
+        ? pressureIncomeBase
+        : Math.max(pressureBills + pressureSpending, 1);
 
-    spendingTx.forEach((t) => {
-      const key = t.date || today;
-      const amt = safeNum(t.amount, 0);
-      if (String(t.type || "").toLowerCase() === "income") {
-        dayMap.set(key, (dayMap.get(key) || 0) + amt);
-      } else {
-        dayMap.set(key, (dayMap.get(key) || 0) - amt);
-      }
-    });
-
-    const cashFlowChartData = Array.from(dayMap.entries())
-      .sort((a, b) => a[0].localeCompare(b[0]))
-      .reduce((arr, [time, delta]) => {
-        const prev = arr.length ? arr[arr.length - 1].value : 0;
-        arr.push({
-          time,
-          value: Number((prev + safeNum(delta, 0)).toFixed(2)),
-        });
-        return arr;
-      }, []);
+    const pressureBillsPct = pct(pressureBills, pressureDenominator);
+    const pressureSpendingPct = pct(pressureSpending, pressureDenominator);
+    const pressureRemainingPct = pct(pressureRemaining, pressureDenominator);
 
     return {
       today,
@@ -508,18 +522,41 @@ export default function DashboardPage() {
       attention,
       biggestBill,
       topIncomeSources,
-      cashFlowChartData,
+      accountMix,
+      accountCount: accounts.length,
+      billCount: activeBills.length,
+      pressureIncomeBase,
+      pressureBills,
+      pressureSpending,
+      pressureRemaining,
+      pressureOverflow,
+      pressureBillsPct,
+      pressureSpendingPct,
+      pressureRemainingPct,
     };
   }, [accounts, primaryId, bills, spendingTx, plannedSpending, incomeDeposits]);
 
   const heroTone =
-    !computed.primary
-      ? "neutral"
-      : safeNum(computed.primary.balance, 0) < 0
+    computed.netWorth < 0
       ? "bad"
       : computed.netMonthCashFlow < 0
       ? "warn"
       : "good";
+
+  const shellCard = {
+    border: "1px solid rgba(96,165,250,.12)",
+    background:
+      "radial-gradient(circle at top left, rgba(59,130,246,.08), transparent 42%), linear-gradient(180deg, rgba(10,16,32,.86), rgba(6,11,24,.94))",
+    boxShadow: "inset 0 1px 0 rgba(255,255,255,.03), 0 14px 30px rgba(2,8,23,.18)",
+  };
+
+  const actionBtn = {
+    textAlign: "center",
+    background: "linear-gradient(180deg, rgba(125,182,255,.95), rgba(107,165,245,.92))",
+    border: "1px solid rgba(186,217,255,.32)",
+    boxShadow: "0 10px 24px rgba(59,130,246,.22), inset 0 1px 0 rgba(255,255,255,.2)",
+    color: "#f8fbff",
+  };
 
   if (loading) {
     return (
@@ -537,7 +574,7 @@ export default function DashboardPage() {
         <div className="card" style={{ padding: 18 }}>
           <div style={{ fontWeight: 900, fontSize: 18 }}>Please log in</div>
           <div className="muted" style={{ marginTop: 8 }}>
-            This dashboard is now Supabase-backed, so it needs an authenticated user.
+            This dashboard is Supabase-backed, so it needs an authenticated user.
           </div>
         </div>
       </main>
@@ -546,7 +583,7 @@ export default function DashboardPage() {
 
   return (
     <main className="container">
-      <header style={{ marginBottom: 18 }}>
+      <header style={{ marginBottom: 16 }}>
         <div
           className="muted"
           style={{
@@ -554,6 +591,7 @@ export default function DashboardPage() {
             letterSpacing: ".08em",
             textTransform: "uppercase",
             marginBottom: 6,
+            color: "rgba(147,197,253,.92)",
           }}
         >
           Dashboard
@@ -572,15 +610,15 @@ export default function DashboardPage() {
             <h1
               style={{
                 margin: 0,
-                fontSize: "clamp(30px, 4.5vw, 46px)",
+                fontSize: "clamp(28px, 4.5vw, 42px)",
                 lineHeight: 1.02,
                 letterSpacing: "-0.03em",
               }}
             >
               Financial Standing
             </h1>
-            <div className="muted" style={{ marginTop: 10, maxWidth: 860 }}>
-              This is your live status page. Cash. Bills. Income. Spending. Pressure. No filler.
+            <div className="muted" style={{ marginTop: 8, maxWidth: 820 }}>
+              Total life numbers first. Monthly pressure second. Fast actions only.
             </div>
           </div>
 
@@ -588,11 +626,15 @@ export default function DashboardPage() {
             className="pill"
             style={{
               padding: "12px 14px",
-              borderRadius: 16,
+              borderRadius: 18,
               display: "flex",
               flexDirection: "column",
               gap: 4,
-              minWidth: 250,
+              minWidth: 220,
+              border: "1px solid rgba(59,130,246,.18)",
+              background:
+                "radial-gradient(circle at top, rgba(59,130,246,.1), transparent 55%), linear-gradient(180deg, rgba(8,14,28,.94), rgba(6,11,24,.98))",
+              boxShadow: "inset 0 1px 0 rgba(255,255,255,.03)",
             }}
           >
             <span className="muted" style={{ fontSize: 12 }}>
@@ -626,26 +668,27 @@ export default function DashboardPage() {
       <section
         className="card"
         style={{
+          ...shellCard,
           padding: 18,
-          marginBottom: 16,
-          borderRadius: 24,
+          marginBottom: 14,
+          borderRadius: 26,
           overflow: "hidden",
           position: "relative",
           background:
             heroTone === "bad"
-              ? "linear-gradient(180deg, rgba(239,68,68,.12), rgba(255,255,255,.02))"
+              ? "radial-gradient(circle at top left, rgba(239,68,68,.10), transparent 28%), radial-gradient(circle at top right, rgba(59,130,246,.08), transparent 32%), linear-gradient(180deg, rgba(10,16,32,.88), rgba(6,11,24,.98))"
               : heroTone === "warn"
-              ? "linear-gradient(180deg, rgba(245,158,11,.12), rgba(255,255,255,.02))"
-              : "linear-gradient(180deg, rgba(59,130,246,.14), rgba(255,255,255,.02))",
-          border: "1px solid rgba(255,255,255,.08)",
+              ? "radial-gradient(circle at top left, rgba(245,158,11,.08), transparent 26%), radial-gradient(circle at top right, rgba(59,130,246,.10), transparent 34%), linear-gradient(180deg, rgba(10,16,32,.88), rgba(6,11,24,.98))"
+              : "radial-gradient(circle at top left, rgba(59,130,246,.13), transparent 30%), radial-gradient(circle at top right, rgba(37,99,235,.09), transparent 34%), linear-gradient(180deg, rgba(10,16,32,.88), rgba(6,11,24,.98))",
+          border: "1px solid rgba(96,165,250,.14)",
         }}
       >
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "1.2fr .8fr",
+            gridTemplateColumns: "minmax(0,1.18fr) minmax(320px,.82fr)",
             gap: 16,
-            alignItems: "end",
+            alignItems: "stretch",
           }}
         >
           <div>
@@ -653,32 +696,187 @@ export default function DashboardPage() {
               className="muted"
               style={{ fontSize: 12, letterSpacing: ".08em", textTransform: "uppercase" }}
             >
-              Current standing
-            </div>
-
-            <div style={{ marginTop: 8, fontSize: 16, fontWeight: 800 }}>
-              {computed.primary ? `${computed.primary.name} • ${typeLabel(computed.primary.type)}` : "No primary account"}
+              Whole life position
             </div>
 
             <div
               style={{
-                fontWeight: 950,
-                fontSize: "clamp(34px, 5vw, 54px)",
-                marginTop: 8,
-                lineHeight: 1,
+                display: "grid",
+                gridTemplateColumns: "minmax(0,1fr) minmax(220px,.7fr)",
+                gap: 18,
+                alignItems: "end",
+                marginTop: 10,
               }}
             >
-              {computed.primary ? money(computed.primary.balance) : "—"}
+              <div>
+                <div className="muted" style={{ fontSize: 12 }}>Liquid cash</div>
+                <div
+                  style={{
+                    fontWeight: 950,
+                    fontSize: "clamp(34px, 5vw, 56px)",
+                    lineHeight: 1,
+                    marginTop: 6,
+                  }}
+                >
+                  {money(computed.liquidTotal)}
+                </div>
+              </div>
+
+              <div>
+                <div className="muted" style={{ fontSize: 12 }}>Net worth</div>
+                <div
+                  style={{
+                    fontWeight: 900,
+                    fontSize: "clamp(24px, 3vw, 34px)",
+                    lineHeight: 1.05,
+                    marginTop: 8,
+                    color: computed.netWorth < 0 ? "rgb(252 165 165)" : "inherit",
+                  }}
+                >
+                  {money(computed.netWorth)}
+                </div>
+              </div>
             </div>
 
-            <div className="muted" style={{ marginTop: 10, fontSize: 14 }}>
-              Liquid total <b>{money(computed.liquidTotal)}</b>
-              {" • "}
-              Net worth <b>{money(computed.netWorth)}</b>
-              {" • "}
-              Credit debt <b>{money(computed.debtTotal)}</b>
+            <div className="muted" style={{ marginTop: 12, fontSize: 14 }}>
+              {computed.primary
+                ? `Primary account ${computed.primary.name} • ${typeLabel(computed.primary.type)} • ${money(computed.primary.balance)}`
+                : "No primary account selected"}
+            </div>
+
+            <div className="muted" style={{ marginTop: 8, fontSize: 14 }}>
+              Debt <b>{money(computed.debtTotal)}</b>
               {" • "}
               Investments <b>{money(computed.investTotal)}</b>
+              {" • "}
+              Accounts <b>{computed.accountCount}</b>
+              {" • "}
+              Active bills <b>{computed.billCount}</b>
+            </div>
+
+            <div
+              className="card"
+              style={{
+                marginTop: 16,
+                padding: 14,
+                borderRadius: 18,
+                border: "1px solid rgba(96,165,250,.12)",
+                background:
+                  "radial-gradient(circle at top left, rgba(59,130,246,.08), transparent 35%), linear-gradient(180deg, rgba(8,14,28,.84), rgba(7,12,25,.96))",
+                boxShadow: "inset 0 1px 0 rgba(255,255,255,.03)",
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  gap: 10,
+                  alignItems: "baseline",
+                  flexWrap: "wrap",
+                  marginBottom: 10,
+                }}
+              >
+                <div style={{ fontWeight: 900, fontSize: 14 }}>Financial pressure bar</div>
+                <div className="muted" style={{ fontSize: 12 }}>
+                  Income vs bills vs spending vs remaining
+                </div>
+              </div>
+
+              <div
+                style={{
+                  height: 16,
+                  width: "100%",
+                  borderRadius: 999,
+                  overflow: "hidden",
+                  background: "rgba(255,255,255,.05)",
+                  border: "1px solid rgba(255,255,255,.06)",
+                  display: "flex",
+                }}
+              >
+                {computed.pressureIncomeBase > 0 ? (
+                  <>
+                    <div
+                      title={`Bills ${money(computed.pressureBills)}`}
+                      style={{
+                        width: `${clamp(computed.pressureBillsPct, 0, 100)}%`,
+                        background: "linear-gradient(180deg, rgba(251,191,36,.92), rgba(245,158,11,.84))",
+                      }}
+                    />
+                    <div
+                      title={`Spending ${money(computed.pressureSpending)}`}
+                      style={{
+                        width: `${clamp(computed.pressureSpendingPct, 0, 100)}%`,
+                        background: "linear-gradient(180deg, rgba(96,165,250,.96), rgba(59,130,246,.84))",
+                      }}
+                    />
+                    <div
+                      title={`Remaining ${money(computed.pressureRemaining)}`}
+                      style={{
+                        width: `${clamp(computed.pressureRemainingPct, 0, 100)}%`,
+                        background: "linear-gradient(180deg, rgba(74,222,128,.92), rgba(34,197,94,.82))",
+                      }}
+                    />
+                  </>
+                ) : (
+                  <div
+                    title={
+                      computed.pressureOverflow > 0
+                        ? `No income logged / pressure ${money(computed.pressureOverflow)}`
+                        : "No income logged"
+                    }
+                    style={{
+                      width: "100%",
+                      background:
+                        "linear-gradient(180deg, rgba(71,85,105,.76), rgba(51,65,85,.76))",
+                    }}
+                  />
+                )}
+              </div>
+
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+                  gap: 10,
+                  marginTop: 10,
+                }}
+              >
+                <div>
+                  <div className="muted" style={{ fontSize: 11 }}>Income</div>
+                  <div style={{ fontWeight: 900, marginTop: 4 }}>
+                    {money(computed.incomeMonth)}
+                  </div>
+                </div>
+                <div>
+                  <div className="muted" style={{ fontSize: 11 }}>Bills</div>
+                  <div style={{ fontWeight: 900, marginTop: 4, color: "rgb(253 186 116)" }}>
+                    {money(computed.billsMonthlyPressure)}
+                  </div>
+                </div>
+                <div>
+                  <div className="muted" style={{ fontSize: 11 }}>Spending</div>
+                  <div style={{ fontWeight: 900, marginTop: 4, color: "rgb(147 197 253)" }}>
+                    {money(computed.spendingActual)}
+                  </div>
+                </div>
+                <div>
+                  <div className="muted" style={{ fontSize: 11 }}>
+                    {computed.netMonthCashFlow >= 0 ? "Remaining" : "Short"}
+                  </div>
+                  <div
+                    style={{
+                      fontWeight: 900,
+                      marginTop: 4,
+                      color:
+                        computed.netMonthCashFlow >= 0
+                          ? "rgb(134 239 172)"
+                          : "rgb(252 165 165)",
+                    }}
+                  >
+                    {money(Math.abs(computed.netMonthCashFlow))}
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -686,150 +884,187 @@ export default function DashboardPage() {
             className="card"
             style={{
               padding: 14,
-              borderRadius: 20,
-              background: "rgba(255,255,255,.04)",
-              border: "1px solid rgba(255,255,255,.08)",
+              borderRadius: 22,
+              border: "1px solid rgba(96,165,250,.14)",
+              background:
+                "radial-gradient(circle at top left, rgba(59,130,246,.08), transparent 34%), linear-gradient(180deg, rgba(9,15,29,.9), rgba(7,12,25,.98))",
+              display: "grid",
+              gap: 12,
+              alignContent: "start",
+              boxShadow: "inset 0 1px 0 rgba(255,255,255,.03)",
             }}
           >
-            <div style={{ display: "grid", gap: 10 }}>
-              <div>
-                <div className="muted" style={{ fontSize: 12 }}>Bills + spending pressure</div>
-                <div style={{ fontWeight: 900, fontSize: 20, marginTop: 4 }}>
-                  {computed.incomeMonth > 0
-                    ? `${Math.round(computed.pressurePct)}% of income`
-                    : "No income logged"}
+            <div>
+              <div className="muted" style={{ fontSize: 12 }}>
+                This month pressure
+              </div>
+              <div style={{ fontWeight: 900, fontSize: 20, marginTop: 4 }}>
+                {computed.incomeMonth > 0
+                  ? `${Math.round(computed.pressurePct)}% of income`
+                  : "No income logged"}
+              </div>
+            </div>
+
+            <div
+              style={{
+                height: 10,
+                borderRadius: 999,
+                border: "1px solid rgba(255,255,255,.08)",
+                overflow: "hidden",
+                background: "rgba(255,255,255,.05)",
+              }}
+            >
+              <div
+                style={{
+                  height: "100%",
+                  width: `${clamp(computed.pressurePct, 0, 100)}%`,
+                  background:
+                    computed.pressurePct >= 100
+                      ? "linear-gradient(180deg, rgba(239,68,68,.88), rgba(220,38,38,.82))"
+                      : computed.pressurePct >= 80
+                      ? "linear-gradient(180deg, rgba(251,191,36,.88), rgba(245,158,11,.82))"
+                      : "linear-gradient(180deg, rgba(96,165,250,.92), rgba(59,130,246,.84))",
+                }}
+              />
+            </div>
+
+            <div className="muted" style={{ fontSize: 12 }}>
+              Income {money(computed.incomeMonth)} • Spending {money(computed.spendingActual)} • Bills {money(computed.billsMonthlyPressure)}
+            </div>
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1fr 1fr",
+                gap: 10,
+              }}
+            >
+              <div
+                style={{
+                  padding: 10,
+                  borderRadius: 16,
+                  background: "rgba(255,255,255,.03)",
+                  border: "1px solid rgba(96,165,250,.08)",
+                }}
+              >
+                <div className="muted" style={{ fontSize: 11 }}>
+                  Month cash flow
+                </div>
+                <div
+                  style={{
+                    fontWeight: 900,
+                    fontSize: 18,
+                    marginTop: 4,
+                    color: computed.netMonthCashFlow < 0 ? "rgb(252 165 165)" : "rgb(134 239 172)",
+                  }}
+                >
+                  {money(computed.netMonthCashFlow)}
                 </div>
               </div>
 
               <div
                 style={{
-                  height: 10,
-                  borderRadius: 999,
-                  border: "1px solid rgba(255,255,255,.08)",
-                  overflow: "hidden",
-                  background: "rgba(255,255,255,.05)",
+                  padding: 10,
+                  borderRadius: 16,
+                  background: "rgba(255,255,255,.03)",
+                  border: "1px solid rgba(96,165,250,.08)",
                 }}
               >
-                <div
-                  style={{
-                    height: "100%",
-                    width: `${clamp(computed.pressurePct, 0, 100)}%`,
-                    background:
-                      computed.pressurePct >= 100
-                        ? "rgba(239,68,68,.75)"
-                        : computed.pressurePct >= 80
-                        ? "rgba(245,158,11,.75)"
-                        : "rgba(59,130,246,.75)",
-                  }}
-                />
+                <div className="muted" style={{ fontSize: 11 }}>
+                  Due next 7 days
+                </div>
+                <div style={{ fontWeight: 900, fontSize: 18, marginTop: 4 }}>
+                  {money(computed.dueSoonTotal)}
+                </div>
               </div>
+            </div>
 
-              <div className="muted" style={{ fontSize: 12 }}>
-                Actual spending {money(computed.spendingActual)} • Bill pressure {money(computed.billsMonthlyPressure)}
-              </div>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+                gap: 8,
+              }}
+            >
+              <Link className="btn" href="/accounts" style={actionBtn}>
+                Accounts
+              </Link>
+              <Link className="btn" href="/bills" style={actionBtn}>
+                Bills
+              </Link>
+              <Link className="btn" href="/debt" style={actionBtn}>
+                Debt
+              </Link>
+              <Link className="btn" href="/spending" style={actionBtn}>
+                Spending
+              </Link>
             </div>
           </div>
         </div>
-      </section>
-
-      <section
-        className="card"
-        style={{ padding: 16, borderRadius: 24, marginBottom: 16 }}
-      >
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            gap: 12,
-            alignItems: "baseline",
-            flexWrap: "wrap",
-            marginBottom: 12,
-          }}
-        >
-          <div>
-            <div style={{ fontWeight: 900, fontSize: 18 }}>Cash flow trend</div>
-            <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
-              Real chart from this month’s income and spending activity.
-            </div>
-          </div>
-
-          <div className="muted" style={{ fontSize: 12 }}>
-            Current net month cash flow <b>{money(computed.netMonthCashFlow)}</b>
-          </div>
-        </div>
-
-        {computed.cashFlowChartData.length >= 2 ? (
-          <InvestmentChart data={computed.cashFlowChartData} />
-        ) : (
-          <div
-            className="card"
-            style={{
-              padding: 16,
-              borderRadius: 18,
-              background: "rgba(255,255,255,.03)",
-              border: "1px solid rgba(255,255,255,.06)",
-            }}
-          >
-            <div style={{ fontWeight: 900 }}>Not enough chart data yet</div>
-            <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
-              Add at least a couple income or spending entries this month and the chart will populate.
-            </div>
-          </div>
-        )}
       </section>
 
       <section
         style={{
           display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))",
+          gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
           gap: 12,
-          marginBottom: 16,
+          marginBottom: 14,
         }}
       >
-        <div className="card" style={{ padding: 14, borderRadius: 20 }}>
-          <div className="muted" style={{ fontSize: 12 }}>Income this month</div>
-          <div style={{ fontWeight: 950, fontSize: 28, marginTop: 6 }}>
-            {money(computed.incomeMonth)}
+        <div className="card" style={{ ...shellCard, padding: 14, borderRadius: 22 }}>
+          <div className="muted" style={{ fontSize: 12 }}>Liquid cash</div>
+          <div style={{ fontWeight: 950, fontSize: 26, marginTop: 6 }}>
+            {money(computed.liquidTotal)}
           </div>
           <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
-            From Income page deposits
+            Checking, savings, and cash
           </div>
         </div>
 
-        <div className="card" style={{ padding: 14, borderRadius: 20 }}>
-          <div className="muted" style={{ fontSize: 12 }}>Bills this month</div>
-          <div style={{ fontWeight: 950, fontSize: 28, marginTop: 6 }}>
-            {money(computed.billsMonthlyPressure)}
-          </div>
-          <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
-            Frequency-adjusted monthly pressure
-          </div>
-        </div>
-
-        <div className="card" style={{ padding: 14, borderRadius: 20 }}>
-          <div className="muted" style={{ fontSize: 12 }}>Spending this month</div>
-          <div style={{ fontWeight: 950, fontSize: 28, marginTop: 6 }}>
-            {money(computed.spendingActual)}
-          </div>
-          <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
-            Actual expense transactions only
-          </div>
-        </div>
-
-        <div className="card" style={{ padding: 14, borderRadius: 20 }}>
-          <div className="muted" style={{ fontSize: 12 }}>Month cash flow</div>
+        <div className="card" style={{ ...shellCard, padding: 14, borderRadius: 22 }}>
+          <div className="muted" style={{ fontSize: 12 }}>Net worth</div>
           <div
             style={{
               fontWeight: 950,
-              fontSize: 28,
+              fontSize: 26,
               marginTop: 6,
-              color: computed.netMonthCashFlow < 0 ? "rgb(252 165 165)" : "inherit",
+              color: computed.netWorth < 0 ? "rgb(252 165 165)" : "inherit",
             }}
           >
-            {money(computed.netMonthCashFlow)}
+            {money(computed.netWorth)}
           </div>
           <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
-            Income − spending − bills
+            Assets minus credit debt
+          </div>
+        </div>
+
+        <div
+          className="card"
+          style={{
+            ...shellCard,
+            padding: 14,
+            borderRadius: 22,
+            border: "1px solid rgba(239,68,68,.12)",
+            background:
+              "radial-gradient(circle at top left, rgba(239,68,68,.06), transparent 34%), linear-gradient(180deg, rgba(10,16,32,.86), rgba(6,11,24,.94))",
+          }}
+        >
+          <div className="muted" style={{ fontSize: 12 }}>Credit debt</div>
+          <div style={{ fontWeight: 950, fontSize: 26, marginTop: 6 }}>
+            {money(computed.debtTotal)}
+          </div>
+          <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
+            Total credit balances
+          </div>
+        </div>
+
+        <div className="card" style={{ ...shellCard, padding: 14, borderRadius: 22 }}>
+          <div className="muted" style={{ fontSize: 12 }}>Investments</div>
+          <div style={{ fontWeight: 950, fontSize: 26, marginTop: 6 }}>
+            {money(computed.investTotal)}
+          </div>
+          <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
+            Investment account total
           </div>
         </div>
       </section>
@@ -837,55 +1072,277 @@ export default function DashboardPage() {
       <section
         style={{
           display: "grid",
-          gridTemplateColumns: "1.05fr .95fr",
+          gridTemplateColumns: "minmax(0,1.08fr) minmax(0,.92fr)",
+          gap: 16,
+          alignItems: "start",
+          marginBottom: 16,
+        }}
+      >
+        <div className="card" style={{ ...shellCard, padding: 16, borderRadius: 24 }}>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              gap: 12,
+              alignItems: "baseline",
+              flexWrap: "wrap",
+            }}
+          >
+            <div>
+              <div style={{ fontWeight: 900, fontSize: 18 }}>Needs attention</div>
+              <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
+                Fast read only. Biggest problems first.
+              </div>
+            </div>
+
+            <Link className="btn" href="/spending" style={actionBtn}>
+              Open Spending
+            </Link>
+          </div>
+
+          <div style={{ height: 12 }} />
+
+          <div className="grid" style={{ gap: 10 }}>
+            {computed.attention.map((item, idx) => (
+              <div
+                key={`${item.title}-${idx}`}
+                className="card"
+                style={{
+                  padding: 12,
+                  borderRadius: 18,
+                  border:
+                    item.tone === "bad"
+                      ? "1px solid rgba(239,68,68,.24)"
+                      : item.tone === "warn"
+                      ? "1px solid rgba(245,158,11,.24)"
+                      : "1px solid rgba(34,197,94,.18)",
+                  background:
+                    item.tone === "bad"
+                      ? "linear-gradient(180deg, rgba(127,29,29,.16), rgba(36,12,18,.12))"
+                      : item.tone === "warn"
+                      ? "linear-gradient(180deg, rgba(120,53,15,.14), rgba(36,24,12,.1))"
+                      : "linear-gradient(180deg, rgba(20,83,45,.12), rgba(10,22,18,.1))",
+                }}
+              >
+                <div style={{ fontWeight: 900 }}>{item.title}</div>
+                <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
+                  {item.body}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="card" style={{ ...shellCard, padding: 16, borderRadius: 24 }}>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              gap: 12,
+              alignItems: "baseline",
+              flexWrap: "wrap",
+            }}
+          >
+            <div style={{ fontWeight: 900, fontSize: 18 }}>Bills due soon</div>
+            <div className="muted" style={{ fontSize: 12 }}>
+              Next 7 days total <b>{money(computed.dueSoonTotal)}</b>
+            </div>
+          </div>
+
+          <div style={{ height: 12 }} />
+
+          {computed.dueNextSeven.length === 0 ? (
+            <div className="card" style={{ padding: 12, borderRadius: 18 }}>
+              <div style={{ fontWeight: 900 }}>Nothing immediate</div>
+              <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
+                No active bills are due in the next 7 days.
+              </div>
+            </div>
+          ) : (
+            <>
+              <div
+                className="grid"
+                style={{
+                  gap: 10,
+                  maxHeight: 330,
+                  overflowY: "auto",
+                  paddingRight: 4,
+                }}
+              >
+                {computed.dueNextSeven.map((b) => (
+                  <div
+                    key={b.id}
+                    className="card"
+                    style={{
+                      padding: 12,
+                      borderRadius: 18,
+                      border:
+                        b.dueIn <= 0
+                          ? "1px solid rgba(239,68,68,.24)"
+                          : b.dueIn <= 3
+                          ? "1px solid rgba(245,158,11,.24)"
+                          : "1px solid rgba(96,165,250,.1)",
+                      background:
+                        b.dueIn <= 0
+                          ? "linear-gradient(180deg, rgba(127,29,29,.14), rgba(36,12,18,.1))"
+                          : b.dueIn <= 3
+                          ? "linear-gradient(180deg, rgba(120,53,15,.14), rgba(36,24,12,.1))"
+                          : "linear-gradient(180deg, rgba(10,16,32,.66), rgba(6,11,24,.82))",
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        gap: 12,
+                        alignItems: "flex-start",
+                      }}
+                    >
+                      <div>
+                        <div style={{ fontWeight: 900 }}>{b.name}</div>
+                        <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
+                          {fmtShort(b.dueDate)} • {b.type === "controllable" ? "Debt" : "Bill"}
+                          {b.autopay ? " • Autopay" : ""}
+                        </div>
+                      </div>
+
+                      <div style={{ textAlign: "right" }}>
+                        <div style={{ fontWeight: 900 }}>{money(b.displayAmount)}</div>
+                        <div
+                          className="muted"
+                          style={{
+                            fontSize: 12,
+                            marginTop: 6,
+                            color:
+                              b.dueIn <= 0
+                                ? "rgb(252 165 165)"
+                                : b.dueIn <= 3
+                                ? "rgb(253 186 116)"
+                                : "rgba(255,255,255,.72)",
+                          }}
+                        >
+                          {b.dueIn < 0
+                            ? `${Math.abs(b.dueIn)} day(s) late`
+                            : b.dueIn === 0
+                            ? "Due today"
+                            : `Due in ${b.dueIn} day(s)`}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div style={{ marginTop: 12 }}>
+                <Link className="btn" href="/bills" style={{ ...actionBtn, width: "100%" }}>
+                  View all bills
+                </Link>
+              </div>
+            </>
+          )}
+        </div>
+      </section>
+
+      <section
+        style={{
+          display: "grid",
+          gridTemplateColumns: "minmax(0,.96fr) minmax(0,1.04fr)",
           gap: 16,
           alignItems: "start",
         }}
       >
         <div style={{ display: "grid", gap: 16 }}>
-          <div className="card" style={{ padding: 16, borderRadius: 24 }}>
-            <div style={{ fontWeight: 900, fontSize: 18 }}>Needs attention</div>
+          <div className="card" style={{ ...shellCard, padding: 16, borderRadius: 24 }}>
+            <div style={{ fontWeight: 900, fontSize: 18 }}>Life totals breakdown</div>
             <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
-              The dashboard should tell you what matters, not make you hunt for it.
+              Real totals by account type.
             </div>
 
             <div style={{ height: 12 }} />
 
-            <div className="grid" style={{ gap: 12 }}>
-              {computed.attention.map((item, idx) => (
+            <div className="grid" style={{ gap: 10 }}>
+              {computed.accountMix.map((row) => (
                 <div
-                  key={`${item.title}-${idx}`}
+                  key={row.label}
                   className="card"
                   style={{
                     padding: 12,
                     borderRadius: 18,
-                    border:
-                      item.tone === "bad"
-                        ? "1px solid rgba(239,68,68,.28)"
-                        : item.tone === "warn"
-                        ? "1px solid rgba(245,158,11,.28)"
-                        : "1px solid rgba(34,197,94,.22)",
                     background:
-                      item.tone === "bad"
-                        ? "rgba(239,68,68,.10)"
-                        : item.tone === "warn"
-                        ? "rgba(245,158,11,.10)"
-                        : "rgba(34,197,94,.08)",
+                      row.label === "Credit"
+                        ? "linear-gradient(180deg, rgba(127,29,29,.08), rgba(10,16,32,.88))"
+                        : "linear-gradient(180deg, rgba(10,16,32,.84), rgba(6,11,24,.95))",
+                    border:
+                      row.label === "Credit"
+                        ? "1px solid rgba(239,68,68,.12)"
+                        : "1px solid rgba(96,165,250,.08)",
                   }}
                 >
-                  <div style={{ fontWeight: 900 }}>{item.title}</div>
-                  <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
-                    {item.body}
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      gap: 12,
+                      alignItems: "center",
+                    }}
+                  >
+                    <div style={{ fontWeight: 800 }}>{row.label}</div>
+                    <div
+                      style={{
+                        fontWeight: 900,
+                        color: row.label === "Credit" && row.value > 0 ? "rgb(252 165 165)" : "inherit",
+                      }}
+                    >
+                      {money(row.value)}
+                    </div>
                   </div>
                 </div>
               ))}
             </div>
           </div>
 
-          <div className="card" style={{ padding: 16, borderRadius: 24 }}>
+          <div className="card" style={{ ...shellCard, padding: 16, borderRadius: 24 }}>
+            <div style={{ fontWeight: 900, fontSize: 18 }}>Quick links</div>
+            <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
+              Jump straight to the page that owns the detail.
+            </div>
+
+            <div style={{ height: 12 }} />
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                gap: 10,
+              }}
+            >
+              <Link className="btn" href="/accounts" style={actionBtn}>
+                Open Accounts
+              </Link>
+              <Link className="btn" href="/bills" style={actionBtn}>
+                Open Bills
+              </Link>
+              <Link className="btn" href="/debt" style={actionBtn}>
+                Open Debt
+              </Link>
+              <Link className="btn" href="/income" style={actionBtn}>
+                Open Income
+              </Link>
+              <Link className="btn" href="/spending" style={actionBtn}>
+                Open Spending
+              </Link>
+              <Link className="btn" href="/investments" style={actionBtn}>
+                Open Investments
+              </Link>
+            </div>
+          </div>
+        </div>
+
+        <div style={{ display: "grid", gap: 16 }}>
+          <div className="card" style={{ ...shellCard, padding: 16, borderRadius: 24 }}>
             <div style={{ fontWeight: 900, fontSize: 18 }}>Month breakdown</div>
             <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
-              This pulls the major numbers together from Income, Spending, and Bills.
+              Monthly pressure lives here, but it stays secondary.
             </div>
 
             <div style={{ height: 14 }} />
@@ -893,28 +1350,22 @@ export default function DashboardPage() {
             <div className="grid" style={{ gap: 12 }}>
               {[
                 {
-                  label: "Income",
-                  value: computed.incomeMonth,
-                  pct: computed.incomeMonth > 0 ? 100 : 0,
-                  fill: "rgba(34,197,94,.70)",
-                },
-                {
                   label: "Bills pressure",
                   value: computed.billsMonthlyPressure,
                   pct: computed.incomeMonth > 0 ? pct(computed.billsMonthlyPressure, computed.incomeMonth) : 0,
-                  fill: "rgba(245,158,11,.72)",
+                  fill: "linear-gradient(180deg, rgba(251,191,36,.88), rgba(245,158,11,.82))",
                 },
                 {
                   label: "Actual spending",
                   value: computed.spendingActual,
                   pct: computed.incomeMonth > 0 ? pct(computed.spendingActual, computed.incomeMonth) : 0,
-                  fill: "rgba(59,130,246,.75)",
+                  fill: "linear-gradient(180deg, rgba(96,165,250,.92), rgba(59,130,246,.84))",
                 },
                 {
                   label: "Planned spending",
                   value: computed.plannedMonth,
                   pct: computed.incomeMonth > 0 ? pct(computed.plannedMonth, computed.incomeMonth) : 0,
-                  fill: "rgba(168,85,247,.70)",
+                  fill: "linear-gradient(180deg, rgba(192,132,252,.88), rgba(168,85,247,.78))",
                 },
               ].map((row) => (
                 <div key={row.label} style={{ display: "grid", gap: 8 }}>
@@ -960,8 +1411,14 @@ export default function DashboardPage() {
               style={{
                 padding: 12,
                 borderRadius: 18,
-                background: "rgba(255,255,255,.03)",
-                border: "1px solid rgba(255,255,255,.06)",
+                background:
+                  computed.projectedMonthCashFlow < 0
+                    ? "linear-gradient(180deg, rgba(127,29,29,.1), rgba(10,16,32,.9))"
+                    : "linear-gradient(180deg, rgba(20,83,45,.1), rgba(10,16,32,.9))",
+                border:
+                  computed.projectedMonthCashFlow < 0
+                    ? "1px solid rgba(239,68,68,.14)"
+                    : "1px solid rgba(34,197,94,.14)",
               }}
             >
               <div className="muted" style={{ fontSize: 12 }}>Projected after planned spending</div>
@@ -970,113 +1427,18 @@ export default function DashboardPage() {
                   fontWeight: 950,
                   fontSize: 24,
                   marginTop: 6,
-                  color: computed.projectedMonthCashFlow < 0 ? "rgb(252 165 165)" : "inherit",
+                  color: computed.projectedMonthCashFlow < 0 ? "rgb(252 165 165)" : "rgb(134 239 172)",
                 }}
               >
                 {money(computed.projectedMonthCashFlow)}
               </div>
             </div>
           </div>
-        </div>
 
-        <div style={{ display: "grid", gap: 16 }}>
-          <div className="card" style={{ padding: 16, borderRadius: 24 }}>
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                gap: 12,
-                alignItems: "baseline",
-                flexWrap: "wrap",
-              }}
-            >
-              <div style={{ fontWeight: 900, fontSize: 18 }}>Bills due soon</div>
-              <div className="muted" style={{ fontSize: 12 }}>
-                Next 7 days total <b>{money(computed.dueSoonTotal)}</b>
-              </div>
-            </div>
-
-            <div style={{ height: 12 }} />
-
-            {computed.dueNextSeven.length === 0 ? (
-              <div className="card" style={{ padding: 12, borderRadius: 18 }}>
-                <div style={{ fontWeight: 900 }}>Nothing immediate</div>
-                <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
-                  No active bills are due in the next 7 days.
-                </div>
-              </div>
-            ) : (
-              <div className="grid" style={{ gap: 10 }}>
-                {computed.dueNextSeven.map((b) => (
-                  <div
-                    key={b.id}
-                    className="card"
-                    style={{
-                      padding: 12,
-                      borderRadius: 18,
-                      border:
-                        b.dueIn <= 0
-                          ? "1px solid rgba(239,68,68,.28)"
-                          : b.dueIn <= 3
-                          ? "1px solid rgba(245,158,11,.28)"
-                          : "1px solid rgba(255,255,255,.06)",
-                      background:
-                        b.dueIn <= 0
-                          ? "rgba(239,68,68,.10)"
-                          : b.dueIn <= 3
-                          ? "rgba(245,158,11,.10)"
-                          : "rgba(255,255,255,.025)",
-                    }}
-                  >
-                    <div
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        gap: 12,
-                        alignItems: "flex-start",
-                      }}
-                    >
-                      <div>
-                        <div style={{ fontWeight: 900 }}>{b.name}</div>
-                        <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
-                          {fmtShort(b.dueDate)} • {b.type === "controllable" ? "Debt" : "Bill"}
-                          {b.autopay ? " • Autopay" : ""}
-                        </div>
-                      </div>
-
-                      <div style={{ textAlign: "right" }}>
-                        <div style={{ fontWeight: 900 }}>{money(b.displayAmount)}</div>
-                        <div
-                          className="muted"
-                          style={{
-                            fontSize: 12,
-                            marginTop: 6,
-                            color:
-                              b.dueIn <= 0
-                                ? "rgb(252 165 165)"
-                                : b.dueIn <= 3
-                                ? "rgb(253 186 116)"
-                                : "rgba(255,255,255,.72)",
-                          }}
-                        >
-                          {b.dueIn < 0
-                            ? `${Math.abs(b.dueIn)} day(s) late`
-                            : b.dueIn === 0
-                            ? "Due today"
-                            : `Due in ${b.dueIn} day(s)`}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div className="card" style={{ padding: 16, borderRadius: 24 }}>
+          <div className="card" style={{ ...shellCard, padding: 16, borderRadius: 24 }}>
             <div style={{ fontWeight: 900, fontSize: 18 }}>What is driving the month</div>
             <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
-              Biggest pressure points from your real data.
+              Kept lower on purpose. Useful, but not dashboard-first.
             </div>
 
             <div style={{ height: 12 }} />
@@ -1087,8 +1449,8 @@ export default function DashboardPage() {
                 style={{
                   padding: 12,
                   borderRadius: 18,
-                  background: "rgba(255,255,255,.03)",
-                  border: "1px solid rgba(255,255,255,.06)",
+                  background: "linear-gradient(180deg, rgba(10,16,32,.84), rgba(6,11,24,.95))",
+                  border: "1px solid rgba(96,165,250,.08)",
                 }}
               >
                 <div className="muted" style={{ fontSize: 12 }}>Largest bill pressure</div>
@@ -1111,13 +1473,15 @@ export default function DashboardPage() {
                 style={{
                   padding: 12,
                   borderRadius: 18,
-                  background: "rgba(255,255,255,.03)",
-                  border: "1px solid rgba(255,255,255,.06)",
+                  background: "linear-gradient(180deg, rgba(10,16,32,.84), rgba(6,11,24,.95))",
+                  border: "1px solid rgba(96,165,250,.08)",
                 }}
               >
                 <div className="muted" style={{ fontSize: 12 }}>Income sources</div>
                 {computed.topIncomeSources.length === 0 ? (
-                  <div style={{ fontWeight: 900, fontSize: 18, marginTop: 6 }}>No income logged</div>
+                  <div style={{ fontWeight: 900, fontSize: 18, marginTop: 6 }}>
+                    No income logged
+                  </div>
                 ) : (
                   <div className="grid" style={{ gap: 8, marginTop: 8 }}>
                     {computed.topIncomeSources.map((s) => (
@@ -1145,8 +1509,8 @@ export default function DashboardPage() {
                 style={{
                   padding: 12,
                   borderRadius: 18,
-                  background: "rgba(255,255,255,.03)",
-                  border: "1px solid rgba(255,255,255,.06)",
+                  background: "linear-gradient(180deg, rgba(10,16,32,.84), rgba(6,11,24,.95))",
+                  border: "1px solid rgba(96,165,250,.08)",
                 }}
               >
                 <div className="muted" style={{ fontSize: 12 }}>Spending page income entries</div>
@@ -1154,7 +1518,7 @@ export default function DashboardPage() {
                   {money(computed.spendingIncomeLoggedOnSpendingPage)}
                 </div>
                 <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
-                  This is separate from Income page deposits.
+                  Separate from Income page deposits.
                 </div>
               </div>
             </div>
@@ -1167,7 +1531,9 @@ export default function DashboardPage() {
                 Add accounts first so this page can show your actual standing.
               </div>
               <div style={{ height: 12 }} />
-              <Link className="btn" href="/accounts">Go to Accounts</Link>
+              <Link className="btn" href="/accounts" style={actionBtn}>
+                Go to Accounts
+              </Link>
             </div>
           ) : null}
         </div>
