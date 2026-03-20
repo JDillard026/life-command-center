@@ -5,7 +5,9 @@ import { supabase } from "@/lib/supabaseClient";
 
 export const dynamic = "force-dynamic";
 
-/** ---------- utils ---------- **/
+/* =========================
+   utils
+========================= */
 function uid() {
   return globalThis.crypto?.randomUUID?.() ?? String(Date.now());
 }
@@ -31,9 +33,9 @@ function fmtDate(iso) {
 function daysUntil(iso) {
   if (!iso) return null;
   const now = new Date();
-  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
   const target = new Date(`${iso}T00:00:00`).getTime();
-  return Math.round((target - start) / 86400000);
+  return Math.round((target - today) / 86400000);
 }
 
 function parseMoneyInput(v) {
@@ -55,9 +57,18 @@ function clamp(n, a, b) {
   return Math.max(a, Math.min(b, n));
 }
 
+function pct(goal) {
+  const t = Number(goal?.target) || 0;
+  const c = Number(goal?.current) || 0;
+  if (t <= 0) return 0;
+  return clamp((c / t) * 100, 0, 100);
+}
+
 function computeNeeded(left, dueIso) {
   const d = daysUntil(dueIso);
-  if (d === null) return { daysLeft: null, perDay: null, perWeek: null, perMonth: null };
+  if (d === null) {
+    return { daysLeft: null, perDay: null, perWeek: null, perMonth: null };
+  }
   const daysLeft = Math.max(0, d);
   if (daysLeft === 0) {
     return {
@@ -81,22 +92,25 @@ function priorityRank(p) {
   return 2;
 }
 
-function progressTone(pct) {
-  if (pct >= 100) return "done";
-  if (pct >= 70) return "strong";
-  if (pct >= 25) return "mid";
-  return "early";
+function dueLabel(goal) {
+  if (!goal?.dueDate) return "No due date";
+  const d = daysUntil(goal.dueDate);
+  if (d === null) return "No due date";
+  if (d < 0) return `Overdue • ${fmtDate(goal.dueDate)}`;
+  if (d === 0) return "Due today";
+  return `Due in ${d} day${d === 1 ? "" : "s"}`;
 }
 
-function progressGradient(pct) {
-  const tone = progressTone(pct);
-  if (tone === "done") return "linear-gradient(90deg, rgba(16,185,129,.9), rgba(52,211,153,.7))";
-  if (tone === "strong") return "linear-gradient(90deg, rgba(34,197,94,.82), rgba(16,185,129,.62))";
-  if (tone === "mid") return "linear-gradient(90deg, rgba(59,130,246,.78), rgba(56,189,248,.55))";
-  return "linear-gradient(90deg, rgba(244,114,182,.85), rgba(239,68,68,.58))";
+function progressGradient(value) {
+  if (value >= 100) return "linear-gradient(90deg, rgba(16,185,129,.95), rgba(52,211,153,.72))";
+  if (value >= 70) return "linear-gradient(90deg, rgba(34,197,94,.88), rgba(16,185,129,.62))";
+  if (value >= 30) return "linear-gradient(90deg, rgba(59,130,246,.86), rgba(56,189,248,.56))";
+  return "linear-gradient(90deg, rgba(244,114,182,.90), rgba(239,68,68,.62))";
 }
 
-/** ---------- presets ---------- **/
+/* =========================
+   presets
+========================= */
 const GOAL_PRESETS = [
   "Emergency Fund",
   "Vacation",
@@ -110,6 +124,9 @@ const GOAL_PRESETS = [
 
 const QUICK_AMOUNTS = [25, 100, 250, 500];
 
+/* =========================
+   ui bits
+========================= */
 function Pill({ children, tone = "default", title }) {
   const tones = {
     default: {
@@ -119,27 +136,27 @@ function Pill({ children, tone = "default", title }) {
     },
     accent: {
       bg: "rgba(59,130,246,.14)",
-      bd: "rgba(59,130,246,.26)",
+      bd: "rgba(59,130,246,.28)",
       tx: "var(--text)",
     },
     emerald: {
       bg: "rgba(16,185,129,.14)",
-      bd: "rgba(16,185,129,.26)",
+      bd: "rgba(16,185,129,.28)",
       tx: "var(--text)",
     },
     steel: {
-      bg: "rgba(148,163,184,.13)",
+      bg: "rgba(148,163,184,.14)",
       bd: "rgba(148,163,184,.24)",
       tx: "var(--text)",
     },
     danger: {
       bg: "rgba(239,68,68,.14)",
-      bd: "rgba(239,68,68,.26)",
+      bd: "rgba(239,68,68,.28)",
       tx: "var(--text)",
     },
     amber: {
       bg: "rgba(245,158,11,.14)",
-      bd: "rgba(245,158,11,.24)",
+      bd: "rgba(245,158,11,.26)",
       tx: "var(--text)",
     },
   };
@@ -198,6 +215,83 @@ function Select({ value, onChange, children, style, title }) {
   );
 }
 
+function TopShell({ children }) {
+  return (
+    <header
+      className="card"
+      style={{
+        padding: "18px 22px",
+        marginBottom: 14,
+        background:
+          "linear-gradient(180deg, rgba(4,9,21,.94), rgba(4,9,21,.86)), radial-gradient(circle at top center, rgba(59,130,246,.12), transparent 40%)",
+      }}
+    >
+      {children}
+    </header>
+  );
+}
+
+function StatCard({ label, value, subtext, accent = "rgba(59,130,246,.14)", children }) {
+  return (
+    <div
+      className="card"
+      style={{
+        padding: 18,
+        minHeight: 126,
+        background:
+          `linear-gradient(180deg, rgba(255,255,255,.045), rgba(255,255,255,.025)), radial-gradient(circle at top left, ${accent}, transparent 44%)`,
+      }}
+    >
+      <div
+        className="muted"
+        style={{
+          fontSize: 11,
+          letterSpacing: 3,
+          textTransform: "uppercase",
+          marginBottom: 10,
+        }}
+      >
+        {label}
+      </div>
+      <div style={{ fontSize: 24, fontWeight: 900, letterSpacing: -0.45 }}>{value}</div>
+      {subtext ? (
+        <div className="muted" style={{ marginTop: 10, fontSize: 13, lineHeight: 1.35 }}>
+          {subtext}
+        </div>
+      ) : null}
+      {children ? <div style={{ marginTop: 12 }}>{children}</div> : null}
+    </div>
+  );
+}
+
+function MiniMetric({ label, value }) {
+  return (
+    <div
+      className="card"
+      style={{
+        padding: 12,
+        background: "linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,.03))",
+      }}
+    >
+      <div
+        className="muted"
+        style={{
+          fontSize: 11,
+          textTransform: "uppercase",
+          letterSpacing: 2,
+          marginBottom: 6,
+        }}
+      >
+        {label}
+      </div>
+      <div style={{ fontWeight: 900, fontSize: 16 }}>{value}</div>
+    </div>
+  );
+}
+
+/* =========================
+   db mapping
+========================= */
 function mapGoalRow(row) {
   return {
     id: row.id,
@@ -232,46 +326,19 @@ function mapGoalToRow(goal, userId) {
   };
 }
 
-function StatCard({ label, value, subtext, accent = "rgba(59,130,246,.18)", children }) {
-  return (
-    <div
-      className="card"
-      style={{
-        padding: 16,
-        minHeight: 112,
-        background:
-          `linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,.03)), radial-gradient(circle at top left, ${accent}, transparent 42%)`,
-      }}
-    >
-      <div
-        className="muted"
-        style={{
-          fontSize: 11,
-          letterSpacing: 2.2,
-          textTransform: "uppercase",
-          marginBottom: 8,
-        }}
-      >
-        {label}
-      </div>
-      <div style={{ fontSize: 22, fontWeight: 900, letterSpacing: -0.4 }}>{value}</div>
-      {subtext ? (
-        <div className="muted" style={{ marginTop: 8, fontSize: 13, lineHeight: 1.35 }}>
-          {subtext}
-        </div>
-      ) : null}
-      {children ? <div style={{ marginTop: 10 }}>{children}</div> : null}
-    </div>
-  );
-}
-
+/* =========================
+   page
+========================= */
 export default function SavingsPage() {
   const [goals, setGoals] = useState([]);
   const [loading, setLoading] = useState(true);
   const [userId, setUserId] = useState(null);
   const [savingIds, setSavingIds] = useState({});
 
-  // add form
+  // mode
+  const [mode, setMode] = useState("overview");
+
+  // add
   const [preset, setPreset] = useState(GOAL_PRESETS[0]);
   const [customName, setCustomName] = useState("");
   const [target, setTarget] = useState("");
@@ -280,7 +347,7 @@ export default function SavingsPage() {
   const [priority, setPriority] = useState("Medium");
   const [error, setError] = useState("");
 
-  // list controls
+  // controls
   const [query, setQuery] = useState("");
   const [sortBy, setSortBy] = useState("priority_then_due");
   const [showArchived, setShowArchived] = useState(false);
@@ -296,8 +363,11 @@ export default function SavingsPage() {
     archived: false,
   });
 
-  // contribute
+  // panels
   const [openId, setOpenId] = useState(null);
+  const [manageId, setManageId] = useState(null);
+
+  // contribute inputs
   const [customAdd, setCustomAdd] = useState({});
   const [customNote, setCustomNote] = useState({});
 
@@ -311,7 +381,7 @@ export default function SavingsPage() {
   const saveTimersRef = useRef({});
 
   useEffect(() => {
-    const onResize = () => setIsNarrow(window.innerWidth < 1100);
+    const onResize = () => setIsNarrow(window.innerWidth < 1180);
     onResize();
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
@@ -395,7 +465,6 @@ export default function SavingsPage() {
     if (saveTimersRef.current[goal.id]) {
       clearTimeout(saveTimersRef.current[goal.id]);
     }
-
     saveTimersRef.current[goal.id] = setTimeout(() => {
       persistGoal(goal);
     }, 250);
@@ -425,7 +494,7 @@ export default function SavingsPage() {
     const c = parseMoneyInput(current === "" ? "0" : current);
 
     if (!n) return setError("Goal name is required.");
-    if (!Number.isFinite(t) || t <= 0) return setError("Target must be a number greater than 0.");
+    if (!Number.isFinite(t) || t <= 0) return setError("Target must be greater than 0.");
     if (!Number.isFinite(c) || c < 0) return setError("Starting saved must be 0 or more.");
     if (!userId) return setError("You must be signed in.");
 
@@ -458,16 +527,16 @@ export default function SavingsPage() {
     }
   }
 
-  function startEdit(g) {
-    setEditingId(g.id);
+  function startEdit(goal) {
+    setEditingId(goal.id);
     setError("");
     setEditDraft({
-      name: g.name || "",
-      target: String(g.target ?? ""),
-      current: String(g.current ?? ""),
-      dueDate: g.dueDate || "",
-      priority: g.priority || "Medium",
-      archived: !!g.archived,
+      name: goal.name || "",
+      target: String(goal.target ?? ""),
+      current: String(goal.current ?? ""),
+      dueDate: goal.dueDate || "",
+      priority: goal.priority || "Medium",
+      archived: !!goal.archived,
     });
   }
 
@@ -491,7 +560,7 @@ export default function SavingsPage() {
     const c = parseMoneyInput(editDraft.current === "" ? "0" : editDraft.current);
 
     if (!n) return setError("Goal name is required.");
-    if (!Number.isFinite(t) || t <= 0) return setError("Target must be a number greater than 0.");
+    if (!Number.isFinite(t) || t <= 0) return setError("Target must be greater than 0.");
     if (!Number.isFinite(c) || c < 0) return setError("Current saved must be 0 or more.");
 
     setGoals((prev) => {
@@ -519,6 +588,7 @@ export default function SavingsPage() {
   async function removeGoal(id) {
     setGoals((prev) => prev.filter((g) => g.id !== id));
     if (openId === id) setOpenId(null);
+    if (manageId === id) setManageId(null);
     if (editingId === id) cancelEdit();
 
     const { error } = await supabase.from("savings_goals").delete().eq("id", id);
@@ -540,7 +610,7 @@ export default function SavingsPage() {
   function applyContribution(goalId, amount, note) {
     const amt = Number(amount);
     if (!Number.isFinite(amt) || amt <= 0) {
-      setError("Contribution amount must be a number greater than 0.");
+      setError("Contribution amount must be greater than 0.");
       return;
     }
 
@@ -582,11 +652,7 @@ export default function SavingsPage() {
         if (list.length === 0) return g;
         const [last, ...rest] = list;
         const nextCurrent = Math.max(0, (Number(g.current) || 0) - (Number(last.amount) || 0));
-        return {
-          ...g,
-          current: nextCurrent,
-          contributions: rest,
-        };
+        return { ...g, current: nextCurrent, contributions: rest };
       });
 
       const changed = next.find((g) => g.id === goalId);
@@ -597,8 +663,8 @@ export default function SavingsPage() {
 
   const totals = useMemo(() => {
     const active = goals.filter((g) => !g.archived);
-    const totalTarget = active.reduce((s, g) => s + (Number(g.target) || 0), 0);
-    const totalCurrent = active.reduce((s, g) => s + (Number(g.current) || 0), 0);
+    const totalTarget = active.reduce((sum, g) => sum + (Number(g.target) || 0), 0);
+    const totalCurrent = active.reduce((sum, g) => sum + (Number(g.current) || 0), 0);
     const left = Math.max(0, totalTarget - totalCurrent);
     const overallPct = totalTarget > 0 ? Math.round((totalCurrent / totalTarget) * 100) : 0;
 
@@ -611,8 +677,30 @@ export default function SavingsPage() {
     const fundedCount = active.reduce((count, g) => {
       const t = Number(g.target) || 0;
       const c = Number(g.current) || 0;
-      return c >= t && t > 0 ? count + 1 : count;
+      return t > 0 && c >= t ? count + 1 : count;
     }, 0);
+
+    const topOpenGoal = active
+      .slice()
+      .sort((a, b) => {
+        const aLeft = Math.max(0, (Number(a.target) || 0) - (Number(a.current) || 0));
+        const bLeft = Math.max(0, (Number(b.target) || 0) - (Number(b.current) || 0));
+        return bLeft - aLeft;
+      })[0] || null;
+
+    const closestDueGoal = active
+      .filter((g) => g.dueDate)
+      .slice()
+      .sort((a, b) => {
+        const ad = daysUntil(a.dueDate);
+        const bd = daysUntil(b.dueDate);
+        return (ad ?? Number.POSITIVE_INFINITY) - (bd ?? Number.POSITIVE_INFINITY);
+      })[0] || null;
+
+    const recentContributionCount = active.reduce(
+      (sum, g) => sum + (Array.isArray(g.contributions) ? g.contributions.length : 0),
+      0
+    );
 
     return {
       totalTarget,
@@ -620,8 +708,11 @@ export default function SavingsPage() {
       left,
       overallPct: clamp(overallPct, 0, 100),
       dueSoonCount,
-      activeCount: active.length,
       fundedCount,
+      activeCount: active.length,
+      topOpenGoal,
+      closestDueGoal,
+      recentContributionCount,
     };
   }, [goals]);
 
@@ -632,13 +723,6 @@ export default function SavingsPage() {
     if (!showArchived) list = list.filter((g) => !g.archived);
     if (q) list = list.filter((g) => String(g.name || "").toLowerCase().includes(q));
 
-    const getPct = (g) => {
-      const t = Number(g.target) || 0;
-      const c = Number(g.current) || 0;
-      if (t <= 0) return 0;
-      return clamp((c / t) * 100, 0, 100);
-    };
-
     const dueKey = (g) => {
       if (!g.dueDate) return Number.POSITIVE_INFINITY;
       const d = daysUntil(g.dueDate);
@@ -648,7 +732,7 @@ export default function SavingsPage() {
     list.sort((a, b) => {
       if (sortBy === "name") return String(a.name || "").localeCompare(String(b.name || ""));
       if (sortBy === "due") return dueKey(a) - dueKey(b);
-      if (sortBy === "progress") return getPct(b) - getPct(a);
+      if (sortBy === "progress") return pct(b) - pct(a);
       if (sortBy === "left") {
         const la = Math.max(0, (Number(a.target) || 0) - (Number(a.current) || 0));
         const lb = Math.max(0, (Number(b.target) || 0) - (Number(b.current) || 0));
@@ -668,21 +752,21 @@ export default function SavingsPage() {
     return "emerald";
   }
 
-  const pageGrid = isNarrow
-    ? { display: "grid", gridTemplateColumns: "1fr", gap: 14, alignItems: "start" }
-    : { display: "grid", gridTemplateColumns: "360px minmax(0, 1fr)", gap: 14, alignItems: "start" };
+  const statsCols = isNarrow ? "1fr" : "repeat(4, minmax(0, 1fr))";
+  const overviewCols = isNarrow ? "1fr" : "minmax(0, 1.55fr) 380px";
 
-  const statsGrid = {
-    display: "grid",
-    gridTemplateColumns: "repeat(12, minmax(0, 1fr))",
-    gap: 14,
-  };
+  const activeGoals = goals.filter((g) => !g.archived);
+  const topGoal = totals.topOpenGoal;
+  const progressGoals = activeGoals
+    .slice()
+    .sort((a, b) => pct(b) - pct(a))
+    .slice(0, 5);
 
   if (loading) {
     return (
       <main className="container">
         <div className="card" style={{ padding: 24 }}>
-          <div style={{ fontWeight: 900, fontSize: 20 }}>Loading savings goals…</div>
+          <div style={{ fontWeight: 900, fontSize: 20 }}>Loading savings goals...</div>
           <div className="muted" style={{ marginTop: 8 }}>
             Pulling your savings data from Supabase.
           </div>
@@ -693,15 +777,7 @@ export default function SavingsPage() {
 
   return (
     <main className="container">
-      <header
-        className="card"
-        style={{
-          padding: "18px 22px",
-          marginBottom: 14,
-          background:
-            "linear-gradient(180deg, rgba(4,9,21,.94), rgba(4,9,21,.86)), radial-gradient(circle at top center, rgba(59,130,246,.12), transparent 40%)",
-        }}
-      >
+      <TopShell>
         <div
           className="row"
           style={{
@@ -731,14 +807,43 @@ export default function SavingsPage() {
             </h1>
 
             <div className="muted" style={{ marginTop: 8, fontSize: 15 }}>
-              Build targets, track progress, and fund future moves without dropping back to local storage.
+              Build targets, track progress, and fund future moves.
             </div>
           </div>
 
           <div className="row" style={{ gap: 10, flexWrap: "wrap" }}>
+            <div
+              className="card"
+              style={{
+                padding: 4,
+                display: "inline-flex",
+                gap: 4,
+                borderRadius: 999,
+                background: "rgba(8,12,22,.78)",
+              }}
+            >
+              <button
+                type="button"
+                className={mode === "overview" ? "btn" : "btnGhost"}
+                onClick={() => setMode("overview")}
+                style={{ minWidth: 108 }}
+              >
+                Overview
+              </button>
+              <button
+                type="button"
+                className={mode === "manage" ? "btn" : "btnGhost"}
+                onClick={() => setMode("manage")}
+                style={{ minWidth: 108 }}
+              >
+                Manage
+              </button>
+            </div>
+
             <button className="btnGhost" type="button" onClick={() => setIoOpen((v) => !v)}>
               {ioOpen ? "Close Import / Export" : "Import / Export"}
             </button>
+
             <button
               className="btnGhost"
               type="button"
@@ -752,700 +857,951 @@ export default function SavingsPage() {
             </button>
           </div>
         </div>
-      </header>
+      </TopShell>
 
-      <section style={{ ...statsGrid, marginBottom: 14 }}>
-        <div style={{ gridColumn: isNarrow ? "span 12" : "span 3" }}>
-          <StatCard
-            label="Total Saved"
-            value={money(totals.totalCurrent)}
-            subtext={`${totals.activeCount} active goal${totals.activeCount === 1 ? "" : "s"}`}
-            accent="rgba(244,114,182,.16)"
-          />
-        </div>
+      <section
+        style={{
+          display: "grid",
+          gridTemplateColumns: statsCols,
+          gap: 14,
+          marginBottom: 14,
+        }}
+      >
+        <StatCard
+          label="Total Saved"
+          value={money(totals.totalCurrent)}
+          subtext={`${totals.activeCount} active goal${totals.activeCount === 1 ? "" : "s"}`}
+          accent="rgba(244,114,182,.14)"
+        />
 
-        <div style={{ gridColumn: isNarrow ? "span 12" : "span 3" }}>
-          <StatCard
-            label="Total Target"
-            value={money(totals.totalTarget)}
-            subtext={`${totals.fundedCount} fully funded`}
-            accent="rgba(59,130,246,.16)"
-          />
-        </div>
+        <StatCard
+          label="Total Target"
+          value={money(totals.totalTarget)}
+          subtext={`${totals.fundedCount} fully funded`}
+          accent="rgba(59,130,246,.14)"
+        />
 
-        <div style={{ gridColumn: isNarrow ? "span 12" : "span 3" }}>
-          <StatCard
-            label="Remaining"
-            value={money(totals.left)}
-            subtext={`${totals.dueSoonCount} due within 14 days`}
-            accent="rgba(16,185,129,.15)"
-          />
-        </div>
+        <StatCard
+          label="Remaining"
+          value={money(totals.left)}
+          subtext={`${totals.dueSoonCount} due within 14 days`}
+          accent="rgba(16,185,129,.14)"
+        />
 
-        <div style={{ gridColumn: isNarrow ? "span 12" : "span 3" }}>
-          <StatCard
-            label="Funding Health"
-            value={`${totals.overallPct}%`}
-            subtext="Across active goals"
-            accent="rgba(14,165,233,.14)"
-          >
-            <div
-              style={{
-                height: 12,
-                borderRadius: 999,
-                overflow: "hidden",
-                border: "1px solid var(--stroke)",
-                background: "rgba(255,255,255,.05)",
-              }}
-            >
-              <div
-                style={{
-                  width: `${totals.overallPct}%`,
-                  height: "100%",
-                  background: progressGradient(totals.overallPct),
-                  boxShadow: "0 0 18px rgba(56,189,248,.18)",
-                }}
-              />
-            </div>
-          </StatCard>
-        </div>
-      </section>
-
-      <section style={pageGrid}>
-        <aside
-          className="card"
-          style={{
-            padding: 16,
-            minWidth: 0,
-            background:
-              "linear-gradient(180deg, rgba(255,255,255,.045), rgba(255,255,255,.022)), radial-gradient(circle at top left, rgba(59,130,246,.14), transparent 35%)",
-          }}
+        <StatCard
+          label="Funding Health"
+          value={`${totals.overallPct}%`}
+          subtext={
+            totals.topOpenGoal
+              ? `Largest open goal: ${totals.topOpenGoal.name}`
+              : "Across active goals"
+          }
+          accent="rgba(14,165,233,.14)"
         >
           <div
-            className="row"
-            style={{ justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}
-          >
-            <div>
-              <div style={{ fontWeight: 900, fontSize: 18 }}>Create Goal</div>
-              <div className="muted" style={{ fontSize: 13, marginTop: 4 }}>
-                Saved directly to Supabase.
-              </div>
-            </div>
-            <Pill tone="accent">CLOUD</Pill>
-          </div>
-
-          <form onSubmit={addGoal} className="grid" style={{ gap: 12 }}>
-            <div className="grid" style={{ gap: 8 }}>
-              <div className="muted" style={{ fontSize: 12 }}>Goal</div>
-              <Select
-                value={preset}
-                onChange={(e) => setPreset(e.target.value)}
-                title="Choose a goal"
-                style={{ width: "100%" }}
-              >
-                {GOAL_PRESETS.map((p) => (
-                  <option key={p} value={p} style={{ color: "#0b1220", background: "#e9f0ff" }}>
-                    {p}
-                  </option>
-                ))}
-              </Select>
-
-              {preset === "Other" ? (
-                <input
-                  className="input"
-                  placeholder="Custom goal name"
-                  value={customName}
-                  onChange={(e) => setCustomName(e.target.value)}
-                  style={{ width: "100%" }}
-                />
-              ) : null}
-            </div>
-
-            <div className="grid" style={{ gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-              <div>
-                <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>
-                  Target
-                </div>
-                <input
-                  className="input"
-                  inputMode="decimal"
-                  placeholder="$10,000"
-                  value={target}
-                  onChange={(e) => setTarget(e.target.value)}
-                  style={{ width: "100%" }}
-                />
-              </div>
-
-              <div>
-                <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>
-                  Starting saved
-                </div>
-                <input
-                  className="input"
-                  inputMode="decimal"
-                  placeholder="$0"
-                  value={current}
-                  onChange={(e) => setCurrent(e.target.value)}
-                  style={{ width: "100%" }}
-                />
-              </div>
-            </div>
-
-            <div className="grid" style={{ gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-              <div>
-                <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>
-                  Due date
-                </div>
-                <input
-                  className="input"
-                  type="date"
-                  value={dueDate}
-                  onChange={(e) => setDueDate(e.target.value)}
-                  style={{ width: "100%" }}
-                />
-              </div>
-
-              <div>
-                <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>
-                  Priority
-                </div>
-                <Select
-                  value={priority}
-                  onChange={(e) => setPriority(e.target.value)}
-                  title="Priority"
-                  style={{ width: "100%" }}
-                >
-                  {["High", "Medium", "Low"].map((p) => (
-                    <option key={p} value={p} style={{ color: "#0b1220", background: "#e9f0ff" }}>
-                      {p}
-                    </option>
-                  ))}
-                </Select>
-              </div>
-            </div>
-
-            {error ? (
-              <div
-                className="card"
-                style={{
-                  padding: 10,
-                  border: "1px solid rgba(239,68,68,.32)",
-                  background: "rgba(239,68,68,.06)",
-                }}
-              >
-                <div style={{ fontWeight: 900, marginBottom: 4 }}>Fix this</div>
-                <div className="muted" style={{ fontSize: 13 }}>{error}</div>
-              </div>
-            ) : null}
-
-            <div className="row" style={{ gap: 10, flexWrap: "wrap" }}>
-              <button className="btn" type="submit">
-                Add goal
-              </button>
-              <button className="btnGhost" type="button" onClick={clearAddForm}>
-                Clear
-              </button>
-            </div>
-
-            <div
-              className="card"
-              style={{
-                padding: 12,
-                background: "rgba(255,255,255,.025)",
-              }}
-            >
-              <div className="muted" style={{ fontSize: 12, lineHeight: 1.45 }}>
-                Goals with due dates should get first funding attention. Use the pace math inside each goal card to see
-                what you need per day, week, and month.
-              </div>
-            </div>
-          </form>
-        </aside>
-
-        <section
-          className="card"
-          style={{
-            padding: 16,
-            minWidth: 0,
-            overflow: "hidden",
-            background:
-              "linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02)), radial-gradient(circle at top right, rgba(99,102,241,.10), transparent 38%)",
-          }}
-        >
-          <div
-            className="row"
             style={{
-              justifyContent: "space-between",
-              alignItems: "center",
-              gap: 12,
-              flexWrap: "wrap",
-              marginBottom: 12,
+              height: 12,
+              borderRadius: 999,
+              overflow: "hidden",
+              border: "1px solid var(--stroke)",
+              background: "rgba(255,255,255,.05)",
             }}
           >
-            <div>
-              <div style={{ fontWeight: 900, fontSize: 18 }}>Goals</div>
-              <div className="muted" style={{ marginTop: 4, fontSize: 13 }}>
-                Priority-first funding view with progress and urgency.
-              </div>
-            </div>
-
-            <div className="row" style={{ gap: 10, flexWrap: "wrap" }}>
-              <input
-                className="input"
-                placeholder="Search goals..."
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                style={{ width: 220 }}
-              />
-
-              <Select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value)}
-                style={{ width: 210 }}
-                title="Sort goals"
-              >
-                <option value="priority_then_due" style={{ color: "#0b1220", background: "#e9f0ff" }}>
-                  Priority → Due
-                </option>
-                <option value="due" style={{ color: "#0b1220", background: "#e9f0ff" }}>
-                  Due date
-                </option>
-                <option value="progress" style={{ color: "#0b1220", background: "#e9f0ff" }}>
-                  Progress
-                </option>
-                <option value="left" style={{ color: "#0b1220", background: "#e9f0ff" }}>
-                  Amount left
-                </option>
-                <option value="name" style={{ color: "#0b1220", background: "#e9f0ff" }}>
-                  Name
-                </option>
-              </Select>
-
-              <button className="btnGhost" type="button" onClick={() => setShowArchived((v) => !v)}>
-                {showArchived ? "Hide archived" : "Show archived"}
-              </button>
-            </div>
-          </div>
-
-          {filteredGoals.length === 0 ? (
             <div
+              style={{
+                width: `${totals.overallPct}%`,
+                height: "100%",
+                background: progressGradient(totals.overallPct),
+                boxShadow: "0 0 18px rgba(56,189,248,.18)",
+              }}
+            />
+          </div>
+        </StatCard>
+      </section>
+
+      {mode === "overview" ? (
+        <section
+          style={{
+            display: "grid",
+            gridTemplateColumns: overviewCols,
+            gap: 14,
+            alignItems: "start",
+          }}
+        >
+          <div className="grid" style={{ gap: 14 }}>
+            <section
               className="card"
               style={{
                 padding: 18,
-                minHeight: 180,
-                display: "grid",
-                alignContent: "center",
-                background: "rgba(255,255,255,.025)",
+                background:
+                  "linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02)), radial-gradient(circle at top left, rgba(59,130,246,.09), transparent 38%)",
               }}
             >
-              <div style={{ fontWeight: 900, fontSize: 18, marginBottom: 8 }}>No goals showing</div>
-              <div className="muted" style={{ lineHeight: 1.45 }}>
-                Add an <b>Emergency Fund</b> first, then build out things like <b>Vacation</b>,{" "}
-                <b>Truck / Car Fund</b>, or <b>House Projects</b>.
+              <div
+                className="row"
+                style={{
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  gap: 10,
+                  flexWrap: "wrap",
+                  marginBottom: 12,
+                }}
+              >
+                <div>
+                  <div style={{ fontWeight: 900, fontSize: 18 }}>Funding Progress</div>
+                  <div className="muted" style={{ marginTop: 4, fontSize: 13 }}>
+                    Top goals by percent funded.
+                  </div>
+                </div>
+                <Pill tone="accent">Overview</Pill>
               </div>
-            </div>
-          ) : (
-            <div className="grid" style={{ gap: 12 }}>
-              {filteredGoals.map((g) => {
-                const t = Number(g.target) || 0;
-                const c = Number(g.current) || 0;
-                const left = Math.max(0, t - c);
-                const pct = t > 0 ? clamp(Math.round((c / t) * 100), 0, 999) : 0;
-                const pctBar = t > 0 ? clamp((c / t) * 100, 0, 100) : 0;
-                const d = daysUntil(g.dueDate);
 
-                const dueLabel = !g.dueDate
-                  ? "No due date"
-                  : d < 0
-                    ? `Overdue • ${fmtDate(g.dueDate)}`
-                    : d === 0
-                      ? "Due today"
-                      : `Due in ${d} day${d === 1 ? "" : "s"}`;
-
-                const need =
-                  g.dueDate && left > 0
-                    ? computeNeeded(left, g.dueDate)
-                    : { daysLeft: null, perDay: null, perWeek: null, perMonth: null };
-
-                const isEditing = editingId === g.id;
-                const panelOpen = openId === g.id;
-                const archived = !!g.archived;
-
-                let dueTone = "steel";
-                if (g.dueDate) {
-                  if (d < 0) dueTone = "danger";
-                  else if (d <= 14) dueTone = "amber";
-                  else dueTone = "accent";
-                }
-
-                return (
-                  <div
-                    key={g.id}
-                    className="card"
-                    style={{
-                      padding: 14,
-                      opacity: archived ? 0.76 : 1,
-                      minWidth: 0,
-                      background:
-                        "linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,.028))",
-                    }}
-                  >
-                    {isEditing ? (
-                      <div className="grid" style={{ gap: 12 }}>
-                        <div
-                          className="grid"
-                          style={{
-                            gridTemplateColumns: isNarrow ? "1fr" : "minmax(220px,1.3fr) repeat(4, minmax(120px, .7fr))",
-                            gap: 10,
-                          }}
-                        >
-                          <input
-                            className="input"
-                            value={editDraft.name}
-                            onChange={(e) => setEditDraft((d2) => ({ ...d2, name: e.target.value }))}
-                            placeholder="Goal name"
-                          />
-
-                          <input
-                            className="input"
-                            inputMode="decimal"
-                            value={editDraft.target}
-                            onChange={(e) => setEditDraft((d2) => ({ ...d2, target: e.target.value }))}
-                            placeholder="Target"
-                          />
-
-                          <input
-                            className="input"
-                            inputMode="decimal"
-                            value={editDraft.current}
-                            onChange={(e) => setEditDraft((d2) => ({ ...d2, current: e.target.value }))}
-                            placeholder="Saved"
-                          />
-
-                          <input
-                            className="input"
-                            type="date"
-                            value={editDraft.dueDate}
-                            onChange={(e) => setEditDraft((d2) => ({ ...d2, dueDate: e.target.value }))}
-                          />
-
-                          <Select
-                            value={editDraft.priority}
-                            onChange={(e) => setEditDraft((d2) => ({ ...d2, priority: e.target.value }))}
-                            title="Priority"
-                          >
-                            {["High", "Medium", "Low"].map((p) => (
-                              <option key={p} value={p} style={{ color: "#0b1220", background: "#e9f0ff" }}>
-                                {p}
-                              </option>
-                            ))}
-                          </Select>
-                        </div>
-
-                        <label className="row" style={{ gap: 8, alignItems: "center" }}>
-                          <input
-                            type="checkbox"
-                            checked={!!editDraft.archived}
-                            onChange={(e) =>
-                              setEditDraft((d2) => ({ ...d2, archived: e.target.checked }))
-                            }
-                          />
-                          <span className="muted" style={{ fontSize: 13 }}>Archive this goal</span>
-                        </label>
-
-                        <div className="row" style={{ gap: 10, flexWrap: "wrap" }}>
-                          <button className="btn" type="button" onClick={() => saveEdit(g.id)}>
-                            Save
-                          </button>
-                          <button className="btnGhost" type="button" onClick={cancelEdit}>
-                            Cancel
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <>
+              {progressGoals.length === 0 ? (
+                <div className="muted" style={{ fontSize: 14 }}>No active goals yet.</div>
+              ) : (
+                <div className="grid" style={{ gap: 12 }}>
+                  {progressGoals.map((g) => {
+                    const value = pct(g);
+                    return (
+                      <div key={g.id} className="card" style={{ padding: 14, background: "rgba(255,255,255,.025)" }}>
                         <div
                           className="row"
-                          style={{
-                            justifyContent: "space-between",
-                            alignItems: "flex-start",
-                            gap: 14,
-                            flexWrap: "wrap",
-                          }}
+                          style={{ justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap" }}
                         >
-                          <div style={{ minWidth: 0, flex: 1 }}>
-                            <div
-                              className="row"
-                              style={{
-                                gap: 10,
-                                alignItems: "center",
-                                flexWrap: "wrap",
-                                marginBottom: 8,
-                              }}
-                            >
-                              <div style={{ fontWeight: 900, fontSize: 28, lineHeight: 1 }}>
-                                {g.name}
-                              </div>
-
-                              <Pill tone={priorityPillTone(g.priority)}>
-                                {(g.priority || "Medium").toUpperCase()}
-                              </Pill>
-
-                              <Pill tone={dueTone} title={g.dueDate ? fmtDate(g.dueDate) : "No due date"}>
-                                {dueLabel}
-                              </Pill>
-
-                              {archived ? <Pill tone="steel">ARCHIVED</Pill> : null}
-                              {savingIds[g.id] ? <Pill tone="accent">SAVING</Pill> : null}
-                            </div>
-
-                            <div
-                              className="grid"
-                              style={{
-                                gridTemplateColumns: isNarrow ? "1fr 1fr" : "repeat(4, minmax(0, 1fr))",
-                                gap: 10,
-                                marginBottom: 12,
-                              }}
-                            >
-                              <div className="card" style={{ padding: 10, background: "rgba(255,255,255,.025)" }}>
-                                <div className="muted" style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 1.5 }}>
-                                  Saved
-                                </div>
-                                <div style={{ fontWeight: 900, fontSize: 18, marginTop: 4 }}>{money(c)}</div>
-                              </div>
-
-                              <div className="card" style={{ padding: 10, background: "rgba(255,255,255,.025)" }}>
-                                <div className="muted" style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 1.5 }}>
-                                  Target
-                                </div>
-                                <div style={{ fontWeight: 900, fontSize: 18, marginTop: 4 }}>{money(t)}</div>
-                              </div>
-
-                              <div className="card" style={{ padding: 10, background: "rgba(255,255,255,.025)" }}>
-                                <div className="muted" style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 1.5 }}>
-                                  Left
-                                </div>
-                                <div style={{ fontWeight: 900, fontSize: 18, marginTop: 4 }}>{money(left)}</div>
-                              </div>
-
-                              <div className="card" style={{ padding: 10, background: "rgba(255,255,255,.025)" }}>
-                                <div className="muted" style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 1.5 }}>
-                                  Funded
-                                </div>
-                                <div style={{ fontWeight: 900, fontSize: 18, marginTop: 4 }}>
-                                  {t > 0 ? `${pct}%` : "—"}
-                                </div>
-                              </div>
+                          <div>
+                            <div style={{ fontWeight: 900, fontSize: 18 }}>{g.name}</div>
+                            <div className="muted" style={{ marginTop: 4, fontSize: 13 }}>
+                              {money(g.current)} of {money(g.target)}
                             </div>
                           </div>
-
-                          <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
-                            <button
-                              className="btn"
-                              type="button"
-                              onClick={() => setOpenId(panelOpen ? null : g.id)}
-                            >
-                              {panelOpen ? "Close" : "Contribute"}
-                            </button>
-                            <button className="btnGhost" type="button" onClick={() => startEdit(g)}>
-                              Edit
-                            </button>
-                            <button
-                              className="btnGhost"
-                              type="button"
-                              onClick={() => setArchived(g.id, !archived)}
-                            >
-                              {archived ? "Unarchive" : "Archive"}
-                            </button>
-                            <button className="btnGhost" type="button" onClick={() => removeGoal(g.id)}>
-                              Delete
-                            </button>
-                          </div>
+                          <Pill tone={value >= 100 ? "emerald" : value >= 30 ? "accent" : "steel"}>
+                            {Math.round(value)}%
+                          </Pill>
                         </div>
 
-                        <div style={{ marginTop: 4 }}>
+                        <div style={{ marginTop: 10 }}>
                           <div
                             style={{
-                              height: 14,
+                              height: 12,
                               borderRadius: 999,
-                              border: "1px solid var(--stroke)",
                               overflow: "hidden",
+                              border: "1px solid var(--stroke)",
                               background: "rgba(255,255,255,.05)",
                             }}
                           >
                             <div
                               style={{
-                                width: `${pctBar}%`,
+                                width: `${value}%`,
                                 height: "100%",
-                                background: progressGradient(pctBar),
-                                boxShadow: "0 0 18px rgba(96,165,250,.16)",
+                                background: progressGradient(value),
                               }}
                             />
                           </div>
-
-                          <div
-                            className="row"
-                            style={{
-                              justifyContent: "space-between",
-                              gap: 12,
-                              flexWrap: "wrap",
-                              marginTop: 8,
-                            }}
-                          >
-                            <div className="muted" style={{ fontSize: 13 }}>
-                              {g.dueDate && left > 0 && need.daysLeft !== null && need.daysLeft >= 0 ? (
-                                <>
-                                  Need <b>{money(need.perMonth)}</b>/month • <b>{money(need.perWeek)}</b>/week •{" "}
-                                  <b>{money(need.perDay)}</b>/day
-                                </>
-                              ) : (
-                                <>No pace target needed yet.</>
-                              )}
-                            </div>
-
-                            <Pill tone={pct >= 100 ? "emerald" : pct >= 25 ? "accent" : "steel"}>
-                              {money(c)} / {money(t)}
-                            </Pill>
-                          </div>
                         </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
 
-                        {panelOpen ? (
-                          <div
-                            className="card"
-                            style={{
-                              marginTop: 14,
-                              padding: 14,
-                              background:
-                                "linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.025))",
-                            }}
-                          >
+            <section
+              className="card"
+              style={{
+                padding: 18,
+                background:
+                  "linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02)), radial-gradient(circle at top center, rgba(244,114,182,.07), transparent 36%)",
+              }}
+            >
+              <div
+                className="row"
+                style={{
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  gap: 10,
+                  flexWrap: "wrap",
+                  marginBottom: 12,
+                }}
+              >
+                <div>
+                  <div style={{ fontWeight: 900, fontSize: 18 }}>Goals</div>
+                  <div className="muted" style={{ marginTop: 4, fontSize: 13 }}>
+                    Priority-first funding view.
+                  </div>
+                </div>
+
+                <div className="row" style={{ gap: 10, flexWrap: "wrap" }}>
+                  <input
+                    className="input"
+                    placeholder="Search goals..."
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    style={{ width: 220 }}
+                  />
+
+                  <Select
+                    value={sortBy}
+                    onChange={(e) => setSortBy(e.target.value)}
+                    style={{ width: 210 }}
+                    title="Sort goals"
+                  >
+                    <option value="priority_then_due" style={{ color: "#0b1220", background: "#e9f0ff" }}>
+                      Priority → Due
+                    </option>
+                    <option value="due" style={{ color: "#0b1220", background: "#e9f0ff" }}>
+                      Due date
+                    </option>
+                    <option value="progress" style={{ color: "#0b1220", background: "#e9f0ff" }}>
+                      Progress
+                    </option>
+                    <option value="left" style={{ color: "#0b1220", background: "#e9f0ff" }}>
+                      Amount left
+                    </option>
+                    <option value="name" style={{ color: "#0b1220", background: "#e9f0ff" }}>
+                      Name
+                    </option>
+                  </Select>
+
+                  <button className="btnGhost" type="button" onClick={() => setShowArchived((v) => !v)}>
+                    {showArchived ? "Hide archived" : "Show archived"}
+                  </button>
+                </div>
+              </div>
+
+              {filteredGoals.length === 0 ? (
+                <div
+                  className="card"
+                  style={{
+                    padding: 18,
+                    minHeight: 180,
+                    display: "grid",
+                    alignContent: "center",
+                    background: "rgba(255,255,255,.025)",
+                  }}
+                >
+                  <div style={{ fontWeight: 900, fontSize: 18, marginBottom: 8 }}>No goals showing</div>
+                  <div className="muted" style={{ lineHeight: 1.45 }}>
+                    Add an <b>Emergency Fund</b> first, then build out things like <b>Vacation</b>, <b>Truck / Car Fund</b>, or <b>House Projects</b>.
+                  </div>
+                </div>
+              ) : (
+                <div className="grid" style={{ gap: 14 }}>
+                  {filteredGoals.map((g) => {
+                    const t = Number(g.target) || 0;
+                    const c = Number(g.current) || 0;
+                    const left = Math.max(0, t - c);
+                    const value = pct(g);
+                    const pace =
+                      g.dueDate && left > 0
+                        ? computeNeeded(left, g.dueDate)
+                        : { daysLeft: null, perDay: null, perWeek: null, perMonth: null };
+
+                    const archived = !!g.archived;
+                    const isEditing = editingId === g.id;
+                    const panelOpen = openId === g.id;
+                    const manageOpen = manageId === g.id;
+
+                    return (
+                      <div
+                        key={g.id}
+                        className="card"
+                        style={{
+                          padding: 16,
+                          opacity: archived ? 0.76 : 1,
+                          minWidth: 0,
+                          background:
+                            "linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,.028))",
+                        }}
+                      >
+                        {isEditing ? (
+                          <div className="grid" style={{ gap: 12 }}>
                             <div
-                              className="row"
+                              className="grid"
                               style={{
-                                justifyContent: "space-between",
-                                alignItems: "center",
+                                gridTemplateColumns: isNarrow
+                                  ? "1fr"
+                                  : "minmax(220px,1.3fr) repeat(4, minmax(120px,.7fr))",
                                 gap: 10,
-                                flexWrap: "wrap",
                               }}
                             >
-                              <div>
-                                <div style={{ fontWeight: 900, fontSize: 17 }}>Contribute to {g.name}</div>
-                                <div className="muted" style={{ fontSize: 13, marginTop: 4 }}>
-                                  Quick adds or custom contribution with note.
-                                </div>
-                              </div>
-
-                              <button className="btnGhost" type="button" onClick={() => undoLast(g.id)}>
-                                Undo last
-                              </button>
-                            </div>
-
-                            <div style={{ height: 12 }} />
-
-                            <div className="row" style={{ gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-                              {QUICK_AMOUNTS.map((amt) => (
-                                <button
-                                  key={amt}
-                                  className="btnGhost"
-                                  type="button"
-                                  onClick={() => applyContribution(g.id, amt, "Quick add")}
-                                  style={{
-                                    border: "1px solid rgba(16,185,129,.28)",
-                                    background: "rgba(16,185,129,.10)",
-                                  }}
-                                >
-                                  +{money(amt)}
-                                </button>
-                              ))}
+                              <input
+                                className="input"
+                                value={editDraft.name}
+                                onChange={(e) => setEditDraft((d2) => ({ ...d2, name: e.target.value }))}
+                                placeholder="Goal name"
+                              />
 
                               <input
                                 className="input"
                                 inputMode="decimal"
-                                placeholder="Custom amount"
-                                value={customAdd[g.id] ?? ""}
-                                onChange={(e) =>
-                                  setCustomAdd((m) => ({ ...m, [g.id]: e.target.value }))
-                                }
-                                style={{ width: 160 }}
+                                value={editDraft.target}
+                                onChange={(e) => setEditDraft((d2) => ({ ...d2, target: e.target.value }))}
+                                placeholder="Target"
                               />
 
                               <input
                                 className="input"
-                                placeholder="Note (optional)"
-                                value={customNote[g.id] ?? ""}
-                                onChange={(e) =>
-                                  setCustomNote((m) => ({ ...m, [g.id]: e.target.value }))
-                                }
-                                style={{ flex: 1, minWidth: 220 }}
+                                inputMode="decimal"
+                                value={editDraft.current}
+                                onChange={(e) => setEditDraft((d2) => ({ ...d2, current: e.target.value }))}
+                                placeholder="Saved"
                               />
 
-                              <button
-                                className="btn"
-                                type="button"
-                                onClick={() =>
-                                  applyContribution(
-                                    g.id,
-                                    parseMoneyInput(customAdd[g.id] ?? ""),
-                                    customNote[g.id] ?? ""
-                                  )
-                                }
+                              <input
+                                className="input"
+                                type="date"
+                                value={editDraft.dueDate}
+                                onChange={(e) => setEditDraft((d2) => ({ ...d2, dueDate: e.target.value }))}
+                              />
+
+                              <Select
+                                value={editDraft.priority}
+                                onChange={(e) => setEditDraft((d2) => ({ ...d2, priority: e.target.value }))}
+                                title="Priority"
                               >
-                                Add
-                              </button>
+                                {["High", "Medium", "Low"].map((p) => (
+                                  <option key={p} value={p} style={{ color: "#0b1220", background: "#e9f0ff" }}>
+                                    {p}
+                                  </option>
+                                ))}
+                              </Select>
                             </div>
 
-                            <div style={{ height: 12 }} />
+                            <label className="row" style={{ gap: 8, alignItems: "center" }}>
+                              <input
+                                type="checkbox"
+                                checked={!!editDraft.archived}
+                                onChange={(e) => setEditDraft((d2) => ({ ...d2, archived: e.target.checked }))}
+                              />
+                              <span className="muted" style={{ fontSize: 13 }}>Archive this goal</span>
+                            </label>
 
-                            <div className="muted" style={{ fontSize: 12, marginBottom: 8 }}>
-                              Recent contributions
+                            <div className="row" style={{ gap: 10, flexWrap: "wrap" }}>
+                              <button className="btn" type="button" onClick={() => saveEdit(g.id)}>Save</button>
+                              <button className="btnGhost" type="button" onClick={cancelEdit}>Cancel</button>
                             </div>
-
-                            {Array.isArray(g.contributions) && g.contributions.length > 0 ? (
-                              <div className="grid" style={{ gap: 8 }}>
-                                {g.contributions.slice(0, 5).map((x) => (
+                          </div>
+                        ) : (
+                          <>
+                            <div
+                              className="row"
+                              style={{
+                                justifyContent: "space-between",
+                                alignItems: "flex-start",
+                                gap: 14,
+                                flexWrap: "wrap",
+                              }}
+                            >
+                              <div style={{ minWidth: 0, flex: 1 }}>
+                                <div
+                                  className="row"
+                                  style={{
+                                    gap: 10,
+                                    alignItems: "center",
+                                    flexWrap: "wrap",
+                                    marginBottom: 12,
+                                  }}
+                                >
                                   <div
-                                    key={x.id}
-                                    className="card"
                                     style={{
-                                      padding: 10,
-                                      background: "rgba(255,255,255,.025)",
+                                      fontWeight: 900,
+                                      fontSize: isNarrow ? 26 : 30,
+                                      lineHeight: 1,
+                                      letterSpacing: -0.5,
                                     }}
                                   >
-                                    <div
-                                      className="row"
-                                      style={{
-                                        justifyContent: "space-between",
-                                        alignItems: "center",
-                                        gap: 10,
-                                      }}
-                                    >
-                                      <div>
-                                        <div style={{ fontWeight: 900, fontSize: 16 }}>
-                                          {money(x.amount)}
-                                        </div>
-                                        <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>
-                                          {fmtDate(x.date)} {x.note ? `• ${x.note}` : ""}
-                                        </div>
-                                      </div>
-                                      <Pill tone="steel">LOGGED</Pill>
+                                    {g.name}
+                                  </div>
+
+                                  <Pill tone={priorityPillTone(g.priority)}>
+                                    {(g.priority || "Medium").toUpperCase()}
+                                  </Pill>
+
+                                  <Pill tone={dueTone(g)} title={g.dueDate ? fmtDate(g.dueDate) : "No due date"}>
+                                    {dueLabel(g)}
+                                  </Pill>
+
+                                  {archived ? <Pill tone="steel">ARCHIVED</Pill> : null}
+                                  {savingIds[g.id] ? <Pill tone="accent">SAVING</Pill> : null}
+                                </div>
+
+                                <div
+                                  style={{
+                                    display: "grid",
+                                    gridTemplateColumns: isNarrow ? "1fr 1fr" : "repeat(4, minmax(0, 1fr))",
+                                    gap: 10,
+                                    marginBottom: 12,
+                                  }}
+                                >
+                                  <MiniMetric label="Saved" value={money(c)} />
+                                  <MiniMetric label="Target" value={money(t)} />
+                                  <MiniMetric label="Left" value={money(left)} />
+                                  <MiniMetric label="Funded" value={t > 0 ? `${Math.round(value)}%` : "—"} />
+                                </div>
+                              </div>
+
+                              <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+                                <button
+                                  className="btn"
+                                  type="button"
+                                  onClick={() => setOpenId(panelOpen ? null : g.id)}
+                                >
+                                  {panelOpen ? "Close" : "Contribute"}
+                                </button>
+
+                                <button
+                                  className="btnGhost"
+                                  type="button"
+                                  onClick={() => setManageId(manageOpen ? null : g.id)}
+                                >
+                                  {manageOpen ? "Close" : "Manage"}
+                                </button>
+                              </div>
+                            </div>
+
+                            <div style={{ marginTop: 4 }}>
+                              <div
+                                style={{
+                                  height: 14,
+                                  borderRadius: 999,
+                                  border: "1px solid var(--stroke)",
+                                  overflow: "hidden",
+                                  background: "rgba(255,255,255,.05)",
+                                }}
+                              >
+                                <div
+                                  style={{
+                                    width: `${value}%`,
+                                    height: "100%",
+                                    background: progressGradient(value),
+                                    boxShadow: "0 0 18px rgba(96,165,250,.16)",
+                                  }}
+                                />
+                              </div>
+
+                              <div
+                                className="row"
+                                style={{
+                                  justifyContent: "space-between",
+                                  gap: 12,
+                                  flexWrap: "wrap",
+                                  marginTop: 8,
+                                }}
+                              >
+                                <div className="muted" style={{ fontSize: 13 }}>
+                                  {g.dueDate && left > 0 && pace.daysLeft !== null && pace.daysLeft >= 0 ? (
+                                    <>
+                                      Need <b>{money(pace.perMonth)}</b>/month • <b>{money(pace.perWeek)}</b>/week • <b>{money(pace.perDay)}</b>/day
+                                    </>
+                                  ) : (
+                                    <>No pace target needed yet.</>
+                                  )}
+                                </div>
+
+                                <Pill tone={value >= 100 ? "emerald" : value >= 25 ? "accent" : "steel"}>
+                                  {money(c)} / {money(t)}
+                                </Pill>
+                              </div>
+                            </div>
+
+                            {manageOpen ? (
+                              <div
+                                className="card"
+                                style={{
+                                  marginTop: 14,
+                                  padding: 14,
+                                  background: "linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.025))",
+                                }}
+                              >
+                                <div
+                                  className="row"
+                                  style={{
+                                    justifyContent: "space-between",
+                                    alignItems: "center",
+                                    gap: 10,
+                                    flexWrap: "wrap",
+                                  }}
+                                >
+                                  <div>
+                                    <div style={{ fontWeight: 900, fontSize: 17 }}>Manage {g.name}</div>
+                                    <div className="muted" style={{ fontSize: 13, marginTop: 4 }}>
+                                      Edit or archive from here instead of cluttering the card face.
                                     </div>
                                   </div>
-                                ))}
+
+                                  <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+                                    <button className="btnGhost" type="button" onClick={() => startEdit(g)}>
+                                      Edit
+                                    </button>
+                                    <button
+                                      className="btnGhost"
+                                      type="button"
+                                      onClick={() => setArchived(g.id, !archived)}
+                                    >
+                                      {archived ? "Unarchive" : "Archive"}
+                                    </button>
+                                    <button className="btnGhost" type="button" onClick={() => removeGoal(g.id)}>
+                                      Delete
+                                    </button>
+                                  </div>
+                                </div>
                               </div>
-                            ) : (
-                              <div className="muted" style={{ fontSize: 13 }}>No contributions yet.</div>
-                            )}
-                          </div>
-                        ) : null}
-                      </>
-                    )}
+                            ) : null}
+
+                            {panelOpen ? (
+                              <div
+                                className="card"
+                                style={{
+                                  marginTop: 14,
+                                  padding: 14,
+                                  background: "linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.025))",
+                                }}
+                              >
+                                <div
+                                  className="row"
+                                  style={{
+                                    justifyContent: "space-between",
+                                    alignItems: "center",
+                                    gap: 10,
+                                    flexWrap: "wrap",
+                                  }}
+                                >
+                                  <div>
+                                    <div style={{ fontWeight: 900, fontSize: 17 }}>Contribute to {g.name}</div>
+                                    <div className="muted" style={{ fontSize: 13, marginTop: 4 }}>
+                                      Quick adds or custom contribution with note.
+                                    </div>
+                                  </div>
+
+                                  <button className="btnGhost" type="button" onClick={() => undoLast(g.id)}>
+                                    Undo last
+                                  </button>
+                                </div>
+
+                                <div style={{ height: 12 }} />
+
+                                <div className="row" style={{ gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                                  {QUICK_AMOUNTS.map((amt) => (
+                                    <button
+                                      key={amt}
+                                      className="btnGhost"
+                                      type="button"
+                                      onClick={() => applyContribution(g.id, amt, "Quick add")}
+                                      style={{
+                                        border: "1px solid rgba(16,185,129,.28)",
+                                        background: "rgba(16,185,129,.10)",
+                                      }}
+                                    >
+                                      +{money(amt)}
+                                    </button>
+                                  ))}
+
+                                  <input
+                                    className="input"
+                                    inputMode="decimal"
+                                    placeholder="Custom amount"
+                                    value={customAdd[g.id] ?? ""}
+                                    onChange={(e) => setCustomAdd((m) => ({ ...m, [g.id]: e.target.value }))}
+                                    style={{ width: 160 }}
+                                  />
+
+                                  <input
+                                    className="input"
+                                    placeholder="Note (optional)"
+                                    value={customNote[g.id] ?? ""}
+                                    onChange={(e) => setCustomNote((m) => ({ ...m, [g.id]: e.target.value }))}
+                                    style={{ flex: 1, minWidth: 220 }}
+                                  />
+
+                                  <button
+                                    className="btn"
+                                    type="button"
+                                    onClick={() =>
+                                      applyContribution(
+                                        g.id,
+                                        parseMoneyInput(customAdd[g.id] ?? ""),
+                                        customNote[g.id] ?? ""
+                                      )
+                                    }
+                                  >
+                                    Add
+                                  </button>
+                                </div>
+
+                                <div style={{ height: 12 }} />
+
+                                <div className="muted" style={{ fontSize: 12, marginBottom: 8 }}>
+                                  Recent contributions
+                                </div>
+
+                                {Array.isArray(g.contributions) && g.contributions.length > 0 ? (
+                                  <div className="grid" style={{ gap: 8 }}>
+                                    {g.contributions.slice(0, 5).map((x) => (
+                                      <div
+                                        key={x.id}
+                                        className="card"
+                                        style={{
+                                          padding: 10,
+                                          background: "rgba(255,255,255,.025)",
+                                        }}
+                                      >
+                                        <div
+                                          className="row"
+                                          style={{
+                                            justifyContent: "space-between",
+                                            alignItems: "center",
+                                            gap: 10,
+                                          }}
+                                        >
+                                          <div>
+                                            <div style={{ fontWeight: 900, fontSize: 16 }}>{money(x.amount)}</div>
+                                            <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>
+                                              {fmtDate(x.date)} {x.note ? `• ${x.note}` : ""}
+                                            </div>
+                                          </div>
+                                          <Pill tone="steel">LOGGED</Pill>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <div className="muted" style={{ fontSize: 13 }}>No contributions yet.</div>
+                                )}
+                              </div>
+                            ) : null}
+                          </>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
+          </div>
+
+          <aside className="grid" style={{ gap: 14 }}>
+            <section
+              className="card"
+              style={{
+                padding: 18,
+                background:
+                  "linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02)), radial-gradient(circle at top center, rgba(16,185,129,.09), transparent 38%)",
+              }}
+            >
+              <div className="row" style={{ justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+                <div>
+                  <div
+                    className="muted"
+                    style={{ fontSize: 11, letterSpacing: 3, textTransform: "uppercase", marginBottom: 8 }}
+                  >
+                    Focus Goal
                   </div>
-                );
-              })}
-            </div>
-          )}
+                  <div style={{ fontWeight: 900, fontSize: 18 }}>
+                    {topGoal ? topGoal.name : "No active goals"}
+                  </div>
+                </div>
+                <Pill tone={topGoal ? priorityPillTone(topGoal.priority) : "steel"}>
+                  {topGoal ? (topGoal.priority || "Medium").toUpperCase() : "IDLE"}
+                </Pill>
+              </div>
+
+              {topGoal ? (
+                <>
+                  <div style={{ marginTop: 14 }}>
+                    <div
+                      style={{
+                        height: 14,
+                        borderRadius: 999,
+                        overflow: "hidden",
+                        border: "1px solid var(--stroke)",
+                        background: "rgba(255,255,255,.05)",
+                      }}
+                    >
+                      <div
+                        style={{
+                          width: `${pct(topGoal)}%`,
+                          height: "100%",
+                          background: progressGradient(pct(topGoal)),
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid" style={{ gap: 10, marginTop: 14 }}>
+                    <MiniMetric label="Saved" value={money(topGoal.current)} />
+                    <MiniMetric label="Target" value={money(topGoal.target)} />
+                    <MiniMetric label="Left" value={money(Math.max(0, (Number(topGoal.target) || 0) - (Number(topGoal.current) || 0)))} />
+                    <MiniMetric label="Due" value={dueLabel(topGoal)} />
+                  </div>
+                </>
+              ) : (
+                <div className="muted" style={{ marginTop: 12, fontSize: 14 }}>
+                  Add a goal to start tracking focus.
+                </div>
+              )}
+            </section>
+
+            <section
+              className="card"
+              style={{
+                padding: 18,
+                background:
+                  "linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02)), radial-gradient(circle at top right, rgba(245,158,11,.08), transparent 34%)",
+              }}
+            >
+              <div
+                className="muted"
+                style={{ fontSize: 11, letterSpacing: 3, textTransform: "uppercase", marginBottom: 8 }}
+              >
+                Quick Read
+              </div>
+
+              <div style={{ fontWeight: 900, fontSize: 18, marginBottom: 10 }}>
+                {totals.closestDueGoal ? totals.closestDueGoal.name : "No urgent due dates"}
+              </div>
+
+              <div className="muted" style={{ fontSize: 14, lineHeight: 1.45 }}>
+                {totals.closestDueGoal
+                  ? `Closest dated goal is ${totals.closestDueGoal.name}. ${dueLabel(totals.closestDueGoal)}.`
+                  : "No goal currently has a due date. Pace pressure is low right now."}
+              </div>
+
+              <div style={{ marginTop: 14 }}>
+                <Pill tone={totals.closestDueGoal ? dueTone(totals.closestDueGoal) : "steel"}>
+                  {totals.closestDueGoal ? dueLabel(totals.closestDueGoal) : "No due date pressure"}
+                </Pill>
+              </div>
+            </section>
+
+            <section
+              className="card"
+              style={{
+                padding: 18,
+                background:
+                  "linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02)), radial-gradient(circle at bottom left, rgba(59,130,246,.08), transparent 34%)",
+              }}
+            >
+              <div
+                className="muted"
+                style={{ fontSize: 11, letterSpacing: 3, textTransform: "uppercase", marginBottom: 8 }}
+              >
+                Activity
+              </div>
+
+              <div style={{ fontWeight: 900, fontSize: 18, marginBottom: 8 }}>
+                {totals.recentContributionCount} logged contribution{totals.recentContributionCount === 1 ? "" : "s"}
+              </div>
+
+              <div className="muted" style={{ fontSize: 14, lineHeight: 1.45 }}>
+                This page is running cloud-first with Supabase persistence across devices.
+              </div>
+            </section>
+          </aside>
         </section>
-      </section>
+      ) : (
+        <section
+          style={{
+            display: "grid",
+            gridTemplateColumns: isNarrow ? "1fr" : "360px minmax(0, 1fr)",
+            gap: 14,
+            alignItems: "start",
+          }}
+        >
+          <aside
+            className="card"
+            style={{
+              padding: 18,
+              minWidth: 0,
+              background:
+                "linear-gradient(180deg, rgba(255,255,255,.045), rgba(255,255,255,.022)), radial-gradient(circle at top left, rgba(59,130,246,.14), transparent 35%)",
+            }}
+          >
+            <div
+              className="row"
+              style={{ justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}
+            >
+              <div>
+                <div style={{ fontWeight: 900, fontSize: 18 }}>Create Goal</div>
+                <div className="muted" style={{ fontSize: 13, marginTop: 4 }}>
+                  Saved directly to Supabase.
+                </div>
+              </div>
+              <Pill tone="accent">CLOUD</Pill>
+            </div>
+
+            <form onSubmit={addGoal} className="grid" style={{ gap: 12 }}>
+              <div className="grid" style={{ gap: 8 }}>
+                <div className="muted" style={{ fontSize: 12 }}>Goal</div>
+                <Select
+                  value={preset}
+                  onChange={(e) => setPreset(e.target.value)}
+                  title="Choose a goal"
+                  style={{ width: "100%" }}
+                >
+                  {GOAL_PRESETS.map((p) => (
+                    <option key={p} value={p} style={{ color: "#0b1220", background: "#e9f0ff" }}>
+                      {p}
+                    </option>
+                  ))}
+                </Select>
+
+                {preset === "Other" ? (
+                  <input
+                    className="input"
+                    placeholder="Custom goal name"
+                    value={customName}
+                    onChange={(e) => setCustomName(e.target.value)}
+                    style={{ width: "100%" }}
+                  />
+                ) : null}
+              </div>
+
+              <div className="grid" style={{ gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                <div>
+                  <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>Target</div>
+                  <input
+                    className="input"
+                    inputMode="decimal"
+                    placeholder="$10,000"
+                    value={target}
+                    onChange={(e) => setTarget(e.target.value)}
+                    style={{ width: "100%" }}
+                  />
+                </div>
+
+                <div>
+                  <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>Starting saved</div>
+                  <input
+                    className="input"
+                    inputMode="decimal"
+                    placeholder="$0"
+                    value={current}
+                    onChange={(e) => setCurrent(e.target.value)}
+                    style={{ width: "100%" }}
+                  />
+                </div>
+              </div>
+
+              <div className="grid" style={{ gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                <div>
+                  <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>Due date</div>
+                  <input
+                    className="input"
+                    type="date"
+                    value={dueDate}
+                    onChange={(e) => setDueDate(e.target.value)}
+                    style={{ width: "100%" }}
+                  />
+                </div>
+
+                <div>
+                  <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>Priority</div>
+                  <Select
+                    value={priority}
+                    onChange={(e) => setPriority(e.target.value)}
+                    title="Priority"
+                    style={{ width: "100%" }}
+                  >
+                    {["High", "Medium", "Low"].map((p) => (
+                      <option key={p} value={p} style={{ color: "#0b1220", background: "#e9f0ff" }}>
+                        {p}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+              </div>
+
+              {error ? (
+                <div
+                  className="card"
+                  style={{
+                    padding: 10,
+                    border: "1px solid rgba(239,68,68,.32)",
+                    background: "rgba(239,68,68,.06)",
+                  }}
+                >
+                  <div style={{ fontWeight: 900, marginBottom: 4 }}>Fix this</div>
+                  <div className="muted" style={{ fontSize: 13 }}>{error}</div>
+                </div>
+              ) : null}
+
+              <div className="row" style={{ gap: 10, flexWrap: "wrap" }}>
+                <button className="btn" type="submit">Add goal</button>
+                <button className="btnGhost" type="button" onClick={clearAddForm}>Clear</button>
+              </div>
+            </form>
+          </aside>
+
+          <section
+            className="card"
+            style={{
+              padding: 18,
+              minWidth: 0,
+              background:
+                "linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02)), radial-gradient(circle at top right, rgba(99,102,241,.10), transparent 38%)",
+            }}
+          >
+            <div
+              className="row"
+              style={{
+                justifyContent: "space-between",
+                alignItems: "center",
+                gap: 12,
+                flexWrap: "wrap",
+                marginBottom: 14,
+              }}
+            >
+              <div>
+                <div style={{ fontWeight: 900, fontSize: 18 }}>Manage Goals</div>
+                <div className="muted" style={{ marginTop: 4, fontSize: 13 }}>
+                  Search, sort, archive, edit, and fund.
+                </div>
+              </div>
+
+              <div className="row" style={{ gap: 10, flexWrap: "wrap" }}>
+                <input
+                  className="input"
+                  placeholder="Search goals..."
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  style={{ width: 220 }}
+                />
+
+                <Select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value)}
+                  style={{ width: 210 }}
+                  title="Sort goals"
+                >
+                  <option value="priority_then_due" style={{ color: "#0b1220", background: "#e9f0ff" }}>
+                    Priority → Due
+                  </option>
+                  <option value="due" style={{ color: "#0b1220", background: "#e9f0ff" }}>
+                    Due date
+                  </option>
+                  <option value="progress" style={{ color: "#0b1220", background: "#e9f0ff" }}>
+                    Progress
+                  </option>
+                  <option value="left" style={{ color: "#0b1220", background: "#e9f0ff" }}>
+                    Amount left
+                  </option>
+                  <option value="name" style={{ color: "#0b1220", background: "#e9f0ff" }}>
+                    Name
+                  </option>
+                </Select>
+
+                <button className="btnGhost" type="button" onClick={() => setShowArchived((v) => !v)}>
+                  {showArchived ? "Hide archived" : "Show archived"}
+                </button>
+              </div>
+            </div>
+
+            <div className="muted" style={{ fontSize: 14 }}>
+              Use the Overview tab when you want the premium dashboard feel. Use Manage when you want raw control.
+            </div>
+          </section>
+        </section>
+      )}
 
       {ioOpen ? (
         <div className="card" style={{ marginTop: 14, padding: 16 }}>
