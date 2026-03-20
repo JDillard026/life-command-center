@@ -23,6 +23,7 @@ function todayISO() {
 function fmtDate(iso) {
   if (!iso) return "";
   const d = new Date(`${iso}T00:00:00`);
+  if (!Number.isFinite(d.getTime())) return "";
   return d.toLocaleDateString(undefined, {
     month: "short",
     day: "numeric",
@@ -35,6 +36,7 @@ function daysUntil(iso) {
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
   const target = new Date(`${iso}T00:00:00`).getTime();
+  if (!Number.isFinite(target)) return null;
   return Math.round((target - today) / 86400000);
 }
 
@@ -69,7 +71,9 @@ function computeNeeded(left, dueIso) {
   if (d === null) {
     return { daysLeft: null, perDay: null, perWeek: null, perMonth: null };
   }
+
   const daysLeft = Math.max(0, d);
+
   if (daysLeft === 0) {
     return {
       daysLeft,
@@ -78,6 +82,7 @@ function computeNeeded(left, dueIso) {
       perMonth: left,
     };
   }
+
   return {
     daysLeft,
     perDay: left / daysLeft,
@@ -101,11 +106,28 @@ function dueLabel(goal) {
   return `Due in ${d} day${d === 1 ? "" : "s"}`;
 }
 
+function dueTone(goal) {
+  if (!goal?.dueDate) return "steel";
+  const d = daysUntil(goal.dueDate);
+  if (d === null) return "steel";
+  if (d < 0) return "danger";
+  if (d === 0) return "danger";
+  if (d <= 7) return "amber";
+  if (d <= 30) return "accent";
+  return "emerald";
+}
+
 function progressGradient(value) {
-  if (value >= 100) return "linear-gradient(90deg, rgba(16,185,129,.95), rgba(52,211,153,.72))";
-  if (value >= 70) return "linear-gradient(90deg, rgba(34,197,94,.88), rgba(16,185,129,.62))";
-  if (value >= 30) return "linear-gradient(90deg, rgba(59,130,246,.86), rgba(56,189,248,.56))";
-  return "linear-gradient(90deg, rgba(244,114,182,.90), rgba(239,68,68,.62))";
+  if (value >= 100) {
+    return "linear-gradient(90deg, rgba(16,185,129,.98), rgba(52,211,153,.78))";
+  }
+  if (value >= 70) {
+    return "linear-gradient(90deg, rgba(34,197,94,.92), rgba(16,185,129,.68))";
+  }
+  if (value >= 30) {
+    return "linear-gradient(90deg, rgba(59,130,246,.92), rgba(56,189,248,.66))";
+  }
+  return "linear-gradient(90deg, rgba(244,114,182,.95), rgba(239,68,68,.68))";
 }
 
 /* =========================
@@ -220,10 +242,10 @@ function TopShell({ children }) {
     <header
       className="card"
       style={{
-        padding: "18px 22px",
-        marginBottom: 14,
+        padding: "22px 24px",
+        marginBottom: 16,
         background:
-          "linear-gradient(180deg, rgba(4,9,21,.94), rgba(4,9,21,.86)), radial-gradient(circle at top center, rgba(59,130,246,.12), transparent 40%)",
+          "linear-gradient(180deg, rgba(4,9,21,.96), rgba(4,9,21,.88)), radial-gradient(circle at 18% 0%, rgba(59,130,246,.16), transparent 42%), radial-gradient(circle at 82% 0%, rgba(167,139,250,.12), transparent 38%)",
       }}
     >
       {children}
@@ -231,15 +253,23 @@ function TopShell({ children }) {
   );
 }
 
-function StatCard({ label, value, subtext, accent = "rgba(59,130,246,.14)", children }) {
+function StatCard({
+  label,
+  value,
+  subtext,
+  accent = "rgba(59,130,246,.16)",
+  border = "rgba(59,130,246,.22)",
+}) {
   return (
     <div
       className="card"
       style={{
-        padding: 18,
-        minHeight: 126,
+        padding: 20,
+        minHeight: 138,
         background:
-          `linear-gradient(180deg, rgba(255,255,255,.045), rgba(255,255,255,.025)), radial-gradient(circle at top left, ${accent}, transparent 44%)`,
+          `linear-gradient(180deg, rgba(255,255,255,.045), rgba(255,255,255,.022)), radial-gradient(circle at top left, ${accent}, transparent 50%)`,
+        borderColor: border,
+        boxShadow: "0 16px 34px rgba(0,0,0,.22)",
       }}
     >
       <div
@@ -248,18 +278,19 @@ function StatCard({ label, value, subtext, accent = "rgba(59,130,246,.14)", chil
           fontSize: 11,
           letterSpacing: 3,
           textTransform: "uppercase",
-          marginBottom: 10,
+          marginBottom: 12,
         }}
       >
         {label}
       </div>
-      <div style={{ fontSize: 24, fontWeight: 900, letterSpacing: -0.45 }}>{value}</div>
+
+      <div style={{ fontSize: 24, fontWeight: 950, letterSpacing: -0.5 }}>{value}</div>
+
       {subtext ? (
         <div className="muted" style={{ marginTop: 10, fontSize: 13, lineHeight: 1.35 }}>
           {subtext}
         </div>
       ) : null}
-      {children ? <div style={{ marginTop: 12 }}>{children}</div> : null}
     </div>
   );
 }
@@ -270,7 +301,8 @@ function MiniMetric({ label, value }) {
       className="card"
       style={{
         padding: 12,
-        background: "linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,.03))",
+        background:
+          "linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,.025))",
       }}
     >
       <div
@@ -335,10 +367,8 @@ export default function SavingsPage() {
   const [userId, setUserId] = useState(null);
   const [savingIds, setSavingIds] = useState({});
 
-  // mode
   const [mode, setMode] = useState("overview");
 
-  // add
   const [preset, setPreset] = useState(GOAL_PRESETS[0]);
   const [customName, setCustomName] = useState("");
   const [target, setTarget] = useState("");
@@ -347,12 +377,10 @@ export default function SavingsPage() {
   const [priority, setPriority] = useState("Medium");
   const [error, setError] = useState("");
 
-  // controls
   const [query, setQuery] = useState("");
   const [sortBy, setSortBy] = useState("priority_then_due");
   const [showArchived, setShowArchived] = useState(false);
 
-  // edit
   const [editingId, setEditingId] = useState(null);
   const [editDraft, setEditDraft] = useState({
     name: "",
@@ -363,19 +391,15 @@ export default function SavingsPage() {
     archived: false,
   });
 
-  // panels
   const [openId, setOpenId] = useState(null);
   const [manageId, setManageId] = useState(null);
 
-  // contribute inputs
   const [customAdd, setCustomAdd] = useState({});
   const [customNote, setCustomNote] = useState({});
 
-  // io
   const [ioOpen, setIoOpen] = useState(false);
   const [ioText, setIoText] = useState("");
 
-  // responsive
   const [isNarrow, setIsNarrow] = useState(false);
 
   const saveTimersRef = useRef({});
@@ -397,6 +421,7 @@ export default function SavingsPage() {
       console.error("getUser error:", error);
       return null;
     }
+
     return user ?? null;
   }
 
@@ -404,6 +429,7 @@ export default function SavingsPage() {
     setLoading(true);
 
     const user = await getCurrentUser();
+
     if (!user) {
       setUserId(null);
       setGoals([]);
@@ -465,6 +491,7 @@ export default function SavingsPage() {
     if (saveTimersRef.current[goal.id]) {
       clearTimeout(saveTimersRef.current[goal.id]);
     }
+
     saveTimersRef.current[goal.id] = setTimeout(() => {
       persistGoal(goal);
     }, 250);
@@ -577,8 +604,10 @@ export default function SavingsPage() {
             }
           : g
       );
+
       const changed = next.find((g) => g.id === id);
       if (changed) scheduleSave(changed);
+
       return next;
     });
 
@@ -587,11 +616,13 @@ export default function SavingsPage() {
 
   async function removeGoal(id) {
     setGoals((prev) => prev.filter((g) => g.id !== id));
+
     if (openId === id) setOpenId(null);
     if (manageId === id) setManageId(null);
     if (editingId === id) cancelEdit();
 
     const { error } = await supabase.from("savings_goals").delete().eq("id", id);
+
     if (error) {
       console.error("delete goal error:", error);
       await loadGoals();
@@ -609,6 +640,7 @@ export default function SavingsPage() {
 
   function applyContribution(goalId, amount, note) {
     const amt = Number(amount);
+
     if (!Number.isFinite(amt) || amt <= 0) {
       setError("Contribution amount must be greater than 0.");
       return;
@@ -619,6 +651,7 @@ export default function SavingsPage() {
     setGoals((prev) => {
       const next = prev.map((g) => {
         if (g.id !== goalId) return g;
+
         const nextCurrent = (Number(g.current) || 0) + amt;
         const entry = {
           id: uid(),
@@ -626,6 +659,7 @@ export default function SavingsPage() {
           amount: amt,
           note: String(note || "").trim(),
         };
+
         return {
           ...g,
           current: nextCurrent,
@@ -635,6 +669,7 @@ export default function SavingsPage() {
 
       const changed = next.find((g) => g.id === goalId);
       if (changed) scheduleSave(changed);
+
       return next;
     });
 
@@ -648,21 +683,30 @@ export default function SavingsPage() {
     setGoals((prev) => {
       const next = prev.map((g) => {
         if (g.id !== goalId) return g;
+
         const list = Array.isArray(g.contributions) ? g.contributions : [];
         if (list.length === 0) return g;
+
         const [last, ...rest] = list;
         const nextCurrent = Math.max(0, (Number(g.current) || 0) - (Number(last.amount) || 0));
-        return { ...g, current: nextCurrent, contributions: rest };
+
+        return {
+          ...g,
+          current: nextCurrent,
+          contributions: rest,
+        };
       });
 
       const changed = next.find((g) => g.id === goalId);
       if (changed) scheduleSave(changed);
+
       return next;
     });
   }
 
   const totals = useMemo(() => {
     const active = goals.filter((g) => !g.archived);
+
     const totalTarget = active.reduce((sum, g) => sum + (Number(g.target) || 0), 0);
     const totalCurrent = active.reduce((sum, g) => sum + (Number(g.current) || 0), 0);
     const left = Math.max(0, totalTarget - totalCurrent);
@@ -680,22 +724,24 @@ export default function SavingsPage() {
       return t > 0 && c >= t ? count + 1 : count;
     }, 0);
 
-    const topOpenGoal = active
-      .slice()
-      .sort((a, b) => {
-        const aLeft = Math.max(0, (Number(a.target) || 0) - (Number(a.current) || 0));
-        const bLeft = Math.max(0, (Number(b.target) || 0) - (Number(b.current) || 0));
-        return bLeft - aLeft;
-      })[0] || null;
+    const topOpenGoal =
+      active
+        .slice()
+        .sort((a, b) => {
+          const aLeft = Math.max(0, (Number(a.target) || 0) - (Number(a.current) || 0));
+          const bLeft = Math.max(0, (Number(b.target) || 0) - (Number(b.current) || 0));
+          return bLeft - aLeft;
+        })[0] || null;
 
-    const closestDueGoal = active
-      .filter((g) => g.dueDate)
-      .slice()
-      .sort((a, b) => {
-        const ad = daysUntil(a.dueDate);
-        const bd = daysUntil(b.dueDate);
-        return (ad ?? Number.POSITIVE_INFINITY) - (bd ?? Number.POSITIVE_INFINITY);
-      })[0] || null;
+    const closestDueGoal =
+      active
+        .filter((g) => g.dueDate)
+        .slice()
+        .sort((a, b) => {
+          const ad = daysUntil(a.dueDate);
+          const bd = daysUntil(b.dueDate);
+          return (ad ?? Number.POSITIVE_INFINITY) - (bd ?? Number.POSITIVE_INFINITY);
+        })[0] || null;
 
     const recentContributionCount = active.reduce(
       (sum, g) => sum + (Array.isArray(g.contributions) ? g.contributions.length : 0),
@@ -721,7 +767,9 @@ export default function SavingsPage() {
     let list = goals.slice();
 
     if (!showArchived) list = list.filter((g) => !g.archived);
-    if (q) list = list.filter((g) => String(g.name || "").toLowerCase().includes(q));
+    if (q) {
+      list = list.filter((g) => String(g.name || "").toLowerCase().includes(q));
+    }
 
     const dueKey = (g) => {
       if (!g.dueDate) return Number.POSITIVE_INFINITY;
@@ -733,11 +781,13 @@ export default function SavingsPage() {
       if (sortBy === "name") return String(a.name || "").localeCompare(String(b.name || ""));
       if (sortBy === "due") return dueKey(a) - dueKey(b);
       if (sortBy === "progress") return pct(b) - pct(a);
+
       if (sortBy === "left") {
         const la = Math.max(0, (Number(a.target) || 0) - (Number(a.current) || 0));
         const lb = Math.max(0, (Number(b.target) || 0) - (Number(b.current) || 0));
         return lb - la;
       }
+
       const pr = priorityRank(a.priority) - priorityRank(b.priority);
       if (pr !== 0) return pr;
       return dueKey(a) - dueKey(b);
@@ -752,15 +802,16 @@ export default function SavingsPage() {
     return "emerald";
   }
 
-  const statsCols = isNarrow ? "1fr" : "repeat(4, minmax(0, 1fr))";
-  const overviewCols = isNarrow ? "1fr" : "minmax(0, 1.55fr) 380px";
+  const statsCols = isNarrow ? "1fr" : "repeat(3, minmax(0, 1fr))";
+  const overviewCols = isNarrow ? "1fr" : "minmax(0, 1.7fr) 500px";
 
   const activeGoals = goals.filter((g) => !g.archived);
   const topGoal = totals.topOpenGoal;
+
   const progressGoals = activeGoals
     .slice()
     .sort((a, b) => pct(b) - pct(a))
-    .slice(0, 5);
+    .slice(0, 6);
 
   if (loading) {
     return (
@@ -782,8 +833,8 @@ export default function SavingsPage() {
           className="row"
           style={{
             justifyContent: "space-between",
-            alignItems: "flex-end",
-            gap: 16,
+            alignItems: "center",
+            gap: 18,
             flexWrap: "wrap",
           }}
         >
@@ -794,47 +845,50 @@ export default function SavingsPage() {
                 fontSize: 11,
                 letterSpacing: 3,
                 textTransform: "uppercase",
-                marginBottom: 6,
+                marginBottom: 8,
                 color: "rgba(125,211,252,.92)",
-                fontWeight: 800,
+                fontWeight: 900,
               }}
             >
               Life Command Center
             </div>
 
-            <h1 style={{ margin: 0, letterSpacing: -0.7, fontSize: 32, lineHeight: 1.05 }}>
+            <h1 style={{ margin: 0, fontSize: 32, lineHeight: 1.04, letterSpacing: -0.8 }}>
               Savings Control
             </h1>
 
             <div className="muted" style={{ marginTop: 8, fontSize: 15 }}>
-              Build targets, track progress, and fund future moves.
+              Track goal pressure, build reserves, and forecast what needs funded next.
             </div>
           </div>
 
-          <div className="row" style={{ gap: 10, flexWrap: "wrap" }}>
+          <div className="row" style={{ gap: 12, flexWrap: "wrap", alignItems: "center" }}>
             <div
               className="card"
               style={{
-                padding: 4,
+                padding: 5,
                 display: "inline-flex",
-                gap: 4,
+                gap: 5,
                 borderRadius: 999,
-                background: "rgba(8,12,22,.78)",
+                background: "rgba(255,255,255,.05)",
+                border: "1px solid rgba(255,255,255,.10)",
+                boxShadow: "inset 0 1px 0 rgba(255,255,255,.04)",
               }}
             >
               <button
                 type="button"
                 className={mode === "overview" ? "btn" : "btnGhost"}
                 onClick={() => setMode("overview")}
-                style={{ minWidth: 108 }}
+                style={{ minWidth: 110, borderRadius: 999 }}
               >
                 Overview
               </button>
+
               <button
                 type="button"
                 className={mode === "manage" ? "btn" : "btnGhost"}
                 onClick={() => setMode("manage")}
-                style={{ minWidth: 108 }}
+                style={{ minWidth: 110, borderRadius: 999 }}
               >
                 Manage
               </button>
@@ -842,18 +896,6 @@ export default function SavingsPage() {
 
             <button className="btnGhost" type="button" onClick={() => setIoOpen((v) => !v)}>
               {ioOpen ? "Close Import / Export" : "Import / Export"}
-            </button>
-
-            <button
-              className="btnGhost"
-              type="button"
-              onClick={() => {
-                setQuery("");
-                setSortBy("priority_then_due");
-                setShowArchived(false);
-              }}
-            >
-              Reset view
             </button>
           </div>
         </div>
@@ -864,28 +906,23 @@ export default function SavingsPage() {
           display: "grid",
           gridTemplateColumns: statsCols,
           gap: 14,
-          marginBottom: 14,
+          marginBottom: 16,
         }}
       >
         <StatCard
-          label="Total Saved"
+          label="Saved"
           value={money(totals.totalCurrent)}
           subtext={`${totals.activeCount} active goal${totals.activeCount === 1 ? "" : "s"}`}
-          accent="rgba(244,114,182,.14)"
-        />
-
-        <StatCard
-          label="Total Target"
-          value={money(totals.totalTarget)}
-          subtext={`${totals.fundedCount} fully funded`}
-          accent="rgba(59,130,246,.14)"
+          accent="rgba(244,114,182,.15)"
+          border="rgba(244,114,182,.18)"
         />
 
         <StatCard
           label="Remaining"
           value={money(totals.left)}
-          subtext={`${totals.dueSoonCount} due within 14 days`}
-          accent="rgba(16,185,129,.14)"
+          subtext={`from ${money(totals.totalTarget)} total target`}
+          accent="rgba(16,185,129,.15)"
+          border="rgba(16,185,129,.18)"
         />
 
         <StatCard
@@ -893,30 +930,12 @@ export default function SavingsPage() {
           value={`${totals.overallPct}%`}
           subtext={
             totals.topOpenGoal
-              ? `Largest open goal: ${totals.topOpenGoal.name}`
-              : "Across active goals"
+              ? `${totals.topOpenGoal.name} is your largest open goal`
+              : "No active goals yet"
           }
-          accent="rgba(14,165,233,.14)"
-        >
-          <div
-            style={{
-              height: 12,
-              borderRadius: 999,
-              overflow: "hidden",
-              border: "1px solid var(--stroke)",
-              background: "rgba(255,255,255,.05)",
-            }}
-          >
-            <div
-              style={{
-                width: `${totals.overallPct}%`,
-                height: "100%",
-                background: progressGradient(totals.overallPct),
-                boxShadow: "0 0 18px rgba(56,189,248,.18)",
-              }}
-            />
-          </div>
-        </StatCard>
+          accent="rgba(96,165,250,.16)"
+          border="rgba(96,165,250,.18)"
+        />
       </section>
 
       {mode === "overview" ? (
@@ -924,17 +943,17 @@ export default function SavingsPage() {
           style={{
             display: "grid",
             gridTemplateColumns: overviewCols,
-            gap: 14,
+            gap: 16,
             alignItems: "start",
           }}
         >
-          <div className="grid" style={{ gap: 14 }}>
+          <div className="grid" style={{ gap: 16 }}>
             <section
               className="card"
               style={{
                 padding: 18,
                 background:
-                  "linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02)), radial-gradient(circle at top left, rgba(59,130,246,.09), transparent 38%)",
+                  "linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02)), radial-gradient(circle at top left, rgba(59,130,246,.11), transparent 42%)",
               }}
             >
               <div
@@ -942,18 +961,19 @@ export default function SavingsPage() {
                 style={{
                   justifyContent: "space-between",
                   alignItems: "center",
-                  gap: 10,
+                  gap: 12,
                   flexWrap: "wrap",
-                  marginBottom: 12,
+                  marginBottom: 14,
                 }}
               >
                 <div>
-                  <div style={{ fontWeight: 900, fontSize: 18 }}>Funding Progress</div>
+                  <div style={{ fontWeight: 950, fontSize: 18 }}>Funding Trend</div>
                   <div className="muted" style={{ marginTop: 4, fontSize: 13 }}>
-                    Top goals by percent funded.
+                    Best-funded goals right now.
                   </div>
                 </div>
-                <Pill tone="accent">Overview</Pill>
+
+                <Pill tone="accent">Top funded</Pill>
               </div>
 
               {progressGoals.length === 0 ? (
@@ -963,10 +983,24 @@ export default function SavingsPage() {
                   {progressGoals.map((g) => {
                     const value = pct(g);
                     return (
-                      <div key={g.id} className="card" style={{ padding: 14, background: "rgba(255,255,255,.025)" }}>
+                      <div
+                        key={g.id}
+                        className="card"
+                        style={{
+                          padding: 14,
+                          background:
+                            "linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,.018))",
+                        }}
+                      >
                         <div
                           className="row"
-                          style={{ justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap" }}
+                          style={{
+                            justifyContent: "space-between",
+                            alignItems: "center",
+                            gap: 12,
+                            flexWrap: "wrap",
+                            marginBottom: 10,
+                          }}
                         >
                           <div>
                             <div style={{ fontWeight: 900, fontSize: 18 }}>{g.name}</div>
@@ -974,29 +1008,29 @@ export default function SavingsPage() {
                               {money(g.current)} of {money(g.target)}
                             </div>
                           </div>
+
                           <Pill tone={value >= 100 ? "emerald" : value >= 30 ? "accent" : "steel"}>
                             {Math.round(value)}%
                           </Pill>
                         </div>
 
-                        <div style={{ marginTop: 10 }}>
+                        <div
+                          style={{
+                            height: 13,
+                            borderRadius: 999,
+                            overflow: "hidden",
+                            border: "1px solid var(--stroke)",
+                            background: "rgba(255,255,255,.05)",
+                          }}
+                        >
                           <div
                             style={{
-                              height: 12,
-                              borderRadius: 999,
-                              overflow: "hidden",
-                              border: "1px solid var(--stroke)",
-                              background: "rgba(255,255,255,.05)",
+                              width: `${value}%`,
+                              height: "100%",
+                              background: progressGradient(value),
+                              boxShadow: "0 0 20px rgba(96,165,250,.18)",
                             }}
-                          >
-                            <div
-                              style={{
-                                width: `${value}%`,
-                                height: "100%",
-                                background: progressGradient(value),
-                              }}
-                            />
-                          </div>
+                          />
                         </div>
                       </div>
                     );
@@ -1010,7 +1044,7 @@ export default function SavingsPage() {
               style={{
                 padding: 18,
                 background:
-                  "linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02)), radial-gradient(circle at top center, rgba(244,114,182,.07), transparent 36%)",
+                  "linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02)), radial-gradient(circle at top center, rgba(244,114,182,.08), transparent 40%)",
               }}
             >
               <div
@@ -1020,13 +1054,13 @@ export default function SavingsPage() {
                   alignItems: "center",
                   gap: 10,
                   flexWrap: "wrap",
-                  marginBottom: 12,
+                  marginBottom: 14,
                 }}
               >
                 <div>
-                  <div style={{ fontWeight: 900, fontSize: 18 }}>Goals</div>
+                  <div style={{ fontWeight: 950, fontSize: 18 }}>Goals</div>
                   <div className="muted" style={{ marginTop: 4, fontSize: 13 }}>
-                    Priority-first funding view.
+                    Priority-first savings pressure view.
                   </div>
                 </div>
 
@@ -1042,24 +1076,14 @@ export default function SavingsPage() {
                   <Select
                     value={sortBy}
                     onChange={(e) => setSortBy(e.target.value)}
-                    style={{ width: 210 }}
+                    style={{ width: 200 }}
                     title="Sort goals"
                   >
-                    <option value="priority_then_due" style={{ color: "#0b1220", background: "#e9f0ff" }}>
-                      Priority → Due
-                    </option>
-                    <option value="due" style={{ color: "#0b1220", background: "#e9f0ff" }}>
-                      Due date
-                    </option>
-                    <option value="progress" style={{ color: "#0b1220", background: "#e9f0ff" }}>
-                      Progress
-                    </option>
-                    <option value="left" style={{ color: "#0b1220", background: "#e9f0ff" }}>
-                      Amount left
-                    </option>
-                    <option value="name" style={{ color: "#0b1220", background: "#e9f0ff" }}>
-                      Name
-                    </option>
+                    <option value="priority_then_due">Priority → Due</option>
+                    <option value="due">Due date</option>
+                    <option value="progress">Progress</option>
+                    <option value="left">Amount left</option>
+                    <option value="name">Name</option>
                   </Select>
 
                   <button className="btnGhost" type="button" onClick={() => setShowArchived((v) => !v)}>
@@ -1076,12 +1100,13 @@ export default function SavingsPage() {
                     minHeight: 180,
                     display: "grid",
                     alignContent: "center",
-                    background: "rgba(255,255,255,.025)",
+                    background: "rgba(255,255,255,.02)",
                   }}
                 >
-                  <div style={{ fontWeight: 900, fontSize: 18, marginBottom: 8 }}>No goals showing</div>
+                  <div style={{ fontWeight: 950, fontSize: 18, marginBottom: 8 }}>No goals showing</div>
                   <div className="muted" style={{ lineHeight: 1.45 }}>
-                    Add an <b>Emergency Fund</b> first, then build out things like <b>Vacation</b>, <b>Truck / Car Fund</b>, or <b>House Projects</b>.
+                    Add an <b>Emergency Fund</b> first, then start stacking goals like <b>Vacation</b>,{" "}
+                    <b>Truck / Car Fund</b>, or <b>House Projects</b>.
                   </div>
                 </div>
               ) : (
@@ -1110,7 +1135,7 @@ export default function SavingsPage() {
                           opacity: archived ? 0.76 : 1,
                           minWidth: 0,
                           background:
-                            "linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,.028))",
+                            "linear-gradient(180deg, rgba(255,255,255,.048), rgba(255,255,255,.022))",
                         }}
                       >
                         {isEditing ? (
@@ -1160,7 +1185,7 @@ export default function SavingsPage() {
                                 title="Priority"
                               >
                                 {["High", "Medium", "Low"].map((p) => (
-                                  <option key={p} value={p} style={{ color: "#0b1220", background: "#e9f0ff" }}>
+                                  <option key={p} value={p}>
                                     {p}
                                   </option>
                                 ))}
@@ -1173,12 +1198,18 @@ export default function SavingsPage() {
                                 checked={!!editDraft.archived}
                                 onChange={(e) => setEditDraft((d2) => ({ ...d2, archived: e.target.checked }))}
                               />
-                              <span className="muted" style={{ fontSize: 13 }}>Archive this goal</span>
+                              <span className="muted" style={{ fontSize: 13 }}>
+                                Archive this goal
+                              </span>
                             </label>
 
                             <div className="row" style={{ gap: 10, flexWrap: "wrap" }}>
-                              <button className="btn" type="button" onClick={() => saveEdit(g.id)}>Save</button>
-                              <button className="btnGhost" type="button" onClick={cancelEdit}>Cancel</button>
+                              <button className="btn" type="button" onClick={() => saveEdit(g.id)}>
+                                Save
+                              </button>
+                              <button className="btnGhost" type="button" onClick={cancelEdit}>
+                                Cancel
+                              </button>
                             </div>
                           </div>
                         ) : (
@@ -1204,8 +1235,8 @@ export default function SavingsPage() {
                                 >
                                   <div
                                     style={{
-                                      fontWeight: 900,
-                                      fontSize: isNarrow ? 26 : 30,
+                                      fontWeight: 950,
+                                      fontSize: isNarrow ? 25 : 29,
                                       lineHeight: 1,
                                       letterSpacing: -0.5,
                                     }}
@@ -1259,7 +1290,7 @@ export default function SavingsPage() {
                               </div>
                             </div>
 
-                            <div style={{ marginTop: 4 }}>
+                            <div style={{ marginTop: 2 }}>
                               <div
                                 style={{
                                   height: 14,
@@ -1274,7 +1305,7 @@ export default function SavingsPage() {
                                     width: `${value}%`,
                                     height: "100%",
                                     background: progressGradient(value),
-                                    boxShadow: "0 0 18px rgba(96,165,250,.16)",
+                                    boxShadow: "0 0 20px rgba(96,165,250,.16)",
                                   }}
                                 />
                               </div>
@@ -1291,7 +1322,8 @@ export default function SavingsPage() {
                                 <div className="muted" style={{ fontSize: 13 }}>
                                   {g.dueDate && left > 0 && pace.daysLeft !== null && pace.daysLeft >= 0 ? (
                                     <>
-                                      Need <b>{money(pace.perMonth)}</b>/month • <b>{money(pace.perWeek)}</b>/week • <b>{money(pace.perDay)}</b>/day
+                                      Need <b>{money(pace.perMonth)}</b>/month • <b>{money(pace.perWeek)}</b>/week •{" "}
+                                      <b>{money(pace.perDay)}</b>/day
                                     </>
                                   ) : (
                                     <>No pace target needed yet.</>
@@ -1310,7 +1342,8 @@ export default function SavingsPage() {
                                 style={{
                                   marginTop: 14,
                                   padding: 14,
-                                  background: "linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.025))",
+                                  background:
+                                    "linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.022))",
                                 }}
                               >
                                 <div
@@ -1325,7 +1358,7 @@ export default function SavingsPage() {
                                   <div>
                                     <div style={{ fontWeight: 900, fontSize: 17 }}>Manage {g.name}</div>
                                     <div className="muted" style={{ fontSize: 13, marginTop: 4 }}>
-                                      Edit or archive from here instead of cluttering the card face.
+                                      Edit, archive, or remove this goal.
                                     </div>
                                   </div>
 
@@ -1333,6 +1366,7 @@ export default function SavingsPage() {
                                     <button className="btnGhost" type="button" onClick={() => startEdit(g)}>
                                       Edit
                                     </button>
+
                                     <button
                                       className="btnGhost"
                                       type="button"
@@ -1340,6 +1374,7 @@ export default function SavingsPage() {
                                     >
                                       {archived ? "Unarchive" : "Archive"}
                                     </button>
+
                                     <button className="btnGhost" type="button" onClick={() => removeGoal(g.id)}>
                                       Delete
                                     </button>
@@ -1354,7 +1389,8 @@ export default function SavingsPage() {
                                 style={{
                                   marginTop: 14,
                                   padding: 14,
-                                  background: "linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.025))",
+                                  background:
+                                    "linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.022))",
                                 }}
                               >
                                 <div
@@ -1442,7 +1478,7 @@ export default function SavingsPage() {
                                         className="card"
                                         style={{
                                           padding: 10,
-                                          background: "rgba(255,255,255,.025)",
+                                          background: "rgba(255,255,255,.024)",
                                         }}
                                       >
                                         <div
@@ -1479,27 +1515,36 @@ export default function SavingsPage() {
             </section>
           </div>
 
-          <aside className="grid" style={{ gap: 14 }}>
+          <aside className="grid" style={{ gap: 16 }}>
             <section
               className="card"
               style={{
                 padding: 18,
                 background:
-                  "linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02)), radial-gradient(circle at top center, rgba(16,185,129,.09), transparent 38%)",
+                  "linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02)), radial-gradient(circle at top center, rgba(16,185,129,.10), transparent 38%)",
               }}
             >
-              <div className="row" style={{ justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+              <div
+                className="row"
+                style={{ justifyContent: "space-between", alignItems: "center", gap: 10 }}
+              >
                 <div>
                   <div
                     className="muted"
-                    style={{ fontSize: 11, letterSpacing: 3, textTransform: "uppercase", marginBottom: 8 }}
+                    style={{
+                      fontSize: 11,
+                      letterSpacing: 3,
+                      textTransform: "uppercase",
+                      marginBottom: 8,
+                    }}
                   >
                     Focus Goal
                   </div>
-                  <div style={{ fontWeight: 900, fontSize: 18 }}>
+                  <div style={{ fontWeight: 950, fontSize: 18 }}>
                     {topGoal ? topGoal.name : "No active goals"}
                   </div>
                 </div>
+
                 <Pill tone={topGoal ? priorityPillTone(topGoal.priority) : "steel"}>
                   {topGoal ? (topGoal.priority || "Medium").toUpperCase() : "IDLE"}
                 </Pill>
@@ -1510,7 +1555,7 @@ export default function SavingsPage() {
                   <div style={{ marginTop: 14 }}>
                     <div
                       style={{
-                        height: 14,
+                        height: 16,
                         borderRadius: 999,
                         overflow: "hidden",
                         border: "1px solid var(--stroke)",
@@ -1522,6 +1567,7 @@ export default function SavingsPage() {
                           width: `${pct(topGoal)}%`,
                           height: "100%",
                           background: progressGradient(pct(topGoal)),
+                          boxShadow: "0 0 20px rgba(16,185,129,.12)",
                         }}
                       />
                     </div>
@@ -1530,7 +1576,15 @@ export default function SavingsPage() {
                   <div className="grid" style={{ gap: 10, marginTop: 14 }}>
                     <MiniMetric label="Saved" value={money(topGoal.current)} />
                     <MiniMetric label="Target" value={money(topGoal.target)} />
-                    <MiniMetric label="Left" value={money(Math.max(0, (Number(topGoal.target) || 0) - (Number(topGoal.current) || 0)))} />
+                    <MiniMetric
+                      label="Left"
+                      value={money(
+                        Math.max(
+                          0,
+                          (Number(topGoal.target) || 0) - (Number(topGoal.current) || 0)
+                        )
+                      )}
+                    />
                     <MiniMetric label="Due" value={dueLabel(topGoal)} />
                   </div>
                 </>
@@ -1550,26 +1604,56 @@ export default function SavingsPage() {
               }}
             >
               <div
-                className="muted"
-                style={{ fontSize: 11, letterSpacing: 3, textTransform: "uppercase", marginBottom: 8 }}
+                className="row"
+                style={{
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  gap: 10,
+                  marginBottom: 10,
+                }}
               >
-                Quick Read
-              </div>
+                <div>
+                  <div
+                    className="muted"
+                    style={{ fontSize: 11, letterSpacing: 3, textTransform: "uppercase" }}
+                  >
+                    Priority Pressure
+                  </div>
+                  <div style={{ fontWeight: 950, fontSize: 18, marginTop: 8 }}>
+                    {totals.closestDueGoal ? totals.closestDueGoal.name : "No urgent due dates"}
+                  </div>
+                </div>
 
-              <div style={{ fontWeight: 900, fontSize: 18, marginBottom: 10 }}>
-                {totals.closestDueGoal ? totals.closestDueGoal.name : "No urgent due dates"}
+                <Pill tone={totals.closestDueGoal ? dueTone(totals.closestDueGoal) : "steel"}>
+                  {totals.closestDueGoal ? dueLabel(totals.closestDueGoal) : "Relaxed"}
+                </Pill>
               </div>
 
               <div className="muted" style={{ fontSize: 14, lineHeight: 1.45 }}>
                 {totals.closestDueGoal
-                  ? `Closest dated goal is ${totals.closestDueGoal.name}. ${dueLabel(totals.closestDueGoal)}.`
+                  ? `Closest dated goal is ${totals.closestDueGoal.name}. ${dueLabel(
+                      totals.closestDueGoal
+                    )}.`
                   : "No goal currently has a due date. Pace pressure is low right now."}
               </div>
 
-              <div style={{ marginTop: 14 }}>
-                <Pill tone={totals.closestDueGoal ? dueTone(totals.closestDueGoal) : "steel"}>
-                  {totals.closestDueGoal ? dueLabel(totals.closestDueGoal) : "No due date pressure"}
-                </Pill>
+              <div
+                className="card"
+                style={{
+                  marginTop: 14,
+                  padding: 14,
+                  background:
+                    "linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,.02))",
+                }}
+              >
+                <div className="muted" style={{ marginBottom: 8, fontSize: 13 }}>
+                  Quick read
+                </div>
+                <div style={{ fontSize: 14, lineHeight: 1.5 }}>
+                  {totals.dueSoonCount > 0
+                    ? `${totals.dueSoonCount} goal${totals.dueSoonCount === 1 ? "" : "s"} due inside 14 days.`
+                    : "No immediate due-date pressure in the next 14 days."}
+                </div>
               </div>
             </section>
 
@@ -1578,7 +1662,7 @@ export default function SavingsPage() {
               style={{
                 padding: 18,
                 background:
-                  "linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02)), radial-gradient(circle at bottom left, rgba(59,130,246,.08), transparent 34%)",
+                  "linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02)), radial-gradient(circle at bottom left, rgba(96,165,250,.08), transparent 34%)",
               }}
             >
               <div
@@ -1588,12 +1672,27 @@ export default function SavingsPage() {
                 Activity
               </div>
 
-              <div style={{ fontWeight: 900, fontSize: 18, marginBottom: 8 }}>
-                {totals.recentContributionCount} logged contribution{totals.recentContributionCount === 1 ? "" : "s"}
+              <div style={{ fontWeight: 950, fontSize: 18, marginBottom: 8 }}>
+                {totals.recentContributionCount} logged contribution
+                {totals.recentContributionCount === 1 ? "" : "s"}
               </div>
 
               <div className="muted" style={{ fontSize: 14, lineHeight: 1.45 }}>
-                This page is running cloud-first with Supabase persistence across devices.
+                This page is saving cloud-first through Supabase across devices.
+              </div>
+
+              <div style={{ marginTop: 14 }}>
+                <button
+                  className="btnGhost"
+                  type="button"
+                  onClick={() => {
+                    setQuery("");
+                    setSortBy("priority_then_due");
+                    setShowArchived(false);
+                  }}
+                >
+                  Reset view
+                </button>
               </div>
             </section>
           </aside>
@@ -1602,8 +1701,8 @@ export default function SavingsPage() {
         <section
           style={{
             display: "grid",
-            gridTemplateColumns: isNarrow ? "1fr" : "360px minmax(0, 1fr)",
-            gap: 14,
+            gridTemplateColumns: isNarrow ? "1fr" : "380px minmax(0, 1fr)",
+            gap: 16,
             alignItems: "start",
           }}
         >
@@ -1621,7 +1720,7 @@ export default function SavingsPage() {
               style={{ justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}
             >
               <div>
-                <div style={{ fontWeight: 900, fontSize: 18 }}>Create Goal</div>
+                <div style={{ fontWeight: 950, fontSize: 18 }}>Create Goal</div>
                 <div className="muted" style={{ fontSize: 13, marginTop: 4 }}>
                   Saved directly to Supabase.
                 </div>
@@ -1639,7 +1738,7 @@ export default function SavingsPage() {
                   style={{ width: "100%" }}
                 >
                   {GOAL_PRESETS.map((p) => (
-                    <option key={p} value={p} style={{ color: "#0b1220", background: "#e9f0ff" }}>
+                    <option key={p} value={p}>
                       {p}
                     </option>
                   ))}
@@ -1703,7 +1802,7 @@ export default function SavingsPage() {
                     style={{ width: "100%" }}
                   >
                     {["High", "Medium", "Low"].map((p) => (
-                      <option key={p} value={p} style={{ color: "#0b1220", background: "#e9f0ff" }}>
+                      <option key={p} value={p}>
                         {p}
                       </option>
                     ))}
@@ -1727,7 +1826,9 @@ export default function SavingsPage() {
 
               <div className="row" style={{ gap: 10, flexWrap: "wrap" }}>
                 <button className="btn" type="submit">Add goal</button>
-                <button className="btnGhost" type="button" onClick={clearAddForm}>Clear</button>
+                <button className="btnGhost" type="button" onClick={clearAddForm}>
+                  Clear
+                </button>
               </div>
             </form>
           </aside>
@@ -1752,7 +1853,7 @@ export default function SavingsPage() {
               }}
             >
               <div>
-                <div style={{ fontWeight: 900, fontSize: 18 }}>Manage Goals</div>
+                <div style={{ fontWeight: 950, fontSize: 18 }}>Manage Goals</div>
                 <div className="muted" style={{ marginTop: 4, fontSize: 13 }}>
                   Search, sort, archive, edit, and fund.
                 </div>
@@ -1773,21 +1874,11 @@ export default function SavingsPage() {
                   style={{ width: 210 }}
                   title="Sort goals"
                 >
-                  <option value="priority_then_due" style={{ color: "#0b1220", background: "#e9f0ff" }}>
-                    Priority → Due
-                  </option>
-                  <option value="due" style={{ color: "#0b1220", background: "#e9f0ff" }}>
-                    Due date
-                  </option>
-                  <option value="progress" style={{ color: "#0b1220", background: "#e9f0ff" }}>
-                    Progress
-                  </option>
-                  <option value="left" style={{ color: "#0b1220", background: "#e9f0ff" }}>
-                    Amount left
-                  </option>
-                  <option value="name" style={{ color: "#0b1220", background: "#e9f0ff" }}>
-                    Name
-                  </option>
+                  <option value="priority_then_due">Priority → Due</option>
+                  <option value="due">Due date</option>
+                  <option value="progress">Progress</option>
+                  <option value="left">Amount left</option>
+                  <option value="name">Name</option>
                 </Select>
 
                 <button className="btnGhost" type="button" onClick={() => setShowArchived((v) => !v)}>
@@ -1797,14 +1888,14 @@ export default function SavingsPage() {
             </div>
 
             <div className="muted" style={{ fontSize: 14 }}>
-              Use the Overview tab when you want the premium dashboard feel. Use Manage when you want raw control.
+              Use the Overview tab for the dashboard view. Use Manage when you want raw control.
             </div>
           </section>
         </section>
       )}
 
       {ioOpen ? (
-        <div className="card" style={{ marginTop: 14, padding: 16 }}>
+        <div className="card" style={{ marginTop: 16, padding: 16 }}>
           <div
             className="row"
             style={{
@@ -1816,7 +1907,7 @@ export default function SavingsPage() {
             }}
           >
             <div>
-              <div style={{ fontWeight: 900, fontSize: 18 }}>Import / Export</div>
+              <div style={{ fontWeight: 950, fontSize: 18 }}>Import / Export</div>
               <div className="muted" style={{ fontSize: 13, marginTop: 4 }}>
                 Export copies JSON. Import replaces this signed-in user’s current savings goals in Supabase.
               </div>
@@ -1918,9 +2009,9 @@ export default function SavingsPage() {
               minHeight: 220,
               resize: "vertical",
               padding: 12,
-              lineHeight: 1.4,
+              lineHeight: 1.45,
               color: "var(--text)",
-              backgroundColor: "rgba(15,26,47,.75)",
+              backgroundColor: "rgba(15,26,47,.78)",
             }}
           />
         </div>
