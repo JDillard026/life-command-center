@@ -1,23 +1,67 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import * as React from "react";
 import { supabase } from "@/lib/supabaseClient";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Badge } from "@/components/ui/badge";
+import { Label } from "@/components/ui/label";
 
 export const dynamic = "force-dynamic";
+
+/* =========================
+   constants
+========================= */
+const GOAL_PRESETS = [
+  "Emergency Fund",
+  "Vacation",
+  "Truck / Car Fund",
+  "House Projects",
+  "Christmas / Gifts",
+  "Taxes",
+  "Investing (Cash to Brokerage)",
+  "Other",
+];
+
+const QUICK_AMOUNTS = [25, 100, 250, 500];
+
+const RED = "#ff5d73";
+const GREEN = "#4ade80";
+const BLUE = "#38bdf8";
+const AMBER = "#f59e0b";
+const PINK = "#fb7185";
 
 /* =========================
    utils
 ========================= */
 function uid() {
-  return globalThis.crypto?.randomUUID?.() ?? String(Date.now());
+  return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function pad2(n) {
+  return String(n).padStart(2, "0");
 }
 
 function todayISO() {
   const d = new Date();
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd}`;
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+}
+
+function money(n) {
+  const x = Number(n);
+  if (!Number.isFinite(x)) return "$0.00";
+  return x.toLocaleString(undefined, { style: "currency", currency: "USD" });
+}
+
+function parseMoneyInput(v) {
+  const cleaned = String(v ?? "").replace(/[^0-9.-]/g, "");
+  const num = Number(cleaned);
+  return Number.isFinite(num) ? num : NaN;
+}
+
+function clamp(n, min, max) {
+  return Math.max(min, Math.min(max, n));
 }
 
 function fmtDate(iso) {
@@ -40,30 +84,43 @@ function daysUntil(iso) {
   return Math.round((target - today) / 86400000);
 }
 
-function parseMoneyInput(v) {
-  const cleaned = String(v ?? "").replace(/[^0-9.-]/g, "");
-  const num = Number(cleaned);
-  return Number.isFinite(num) ? num : NaN;
-}
-
-function money(n) {
-  const num = Number(n);
-  if (!Number.isFinite(num)) return "—";
-  return num.toLocaleString(undefined, {
-    style: "currency",
-    currency: "USD",
-  });
-}
-
-function clamp(n, a, b) {
-  return Math.max(a, Math.min(b, n));
-}
-
 function pct(goal) {
   const t = Number(goal?.target) || 0;
   const c = Number(goal?.current) || 0;
   if (t <= 0) return 0;
   return clamp((c / t) * 100, 0, 100);
+}
+
+function priorityRank(p) {
+  if (p === "High") return 0;
+  if (p === "Medium") return 1;
+  return 2;
+}
+
+function dueLabel(goal) {
+  if (!goal?.dueDate) return "No due date";
+  const d = daysUntil(goal.dueDate);
+  if (d === null) return "No due date";
+  if (d < 0) return `Overdue • ${fmtDate(goal.dueDate)}`;
+  if (d === 0) return "Due today";
+  return `Due in ${d} day${d === 1 ? "" : "s"}`;
+}
+
+function dueTone(goal) {
+  if (!goal?.dueDate) return "steel";
+  const d = daysUntil(goal.dueDate);
+  if (d === null) return "steel";
+  if (d < 0) return "danger";
+  if (d === 0) return "danger";
+  if (d <= 7) return "amber";
+  if (d <= 30) return "blue";
+  return "green";
+}
+
+function priorityTone(priority) {
+  if (priority === "High") return "danger";
+  if (priority === "Low") return "steel";
+  return "green";
 }
 
 function computeNeeded(left, dueIso) {
@@ -91,232 +148,232 @@ function computeNeeded(left, dueIso) {
   };
 }
 
-function priorityRank(p) {
-  if (p === "High") return 0;
-  if (p === "Medium") return 1;
-  return 2;
-}
+function projectedFinishDate(goal) {
+  const contributions = Array.isArray(goal?.contributions) ? goal.contributions : [];
+  const current = Number(goal?.current) || 0;
+  const target = Number(goal?.target) || 0;
+  const left = Math.max(0, target - current);
 
-function dueLabel(goal) {
-  if (!goal?.dueDate) return "No due date";
-  const d = daysUntil(goal.dueDate);
-  if (d === null) return "No due date";
-  if (d < 0) return `Overdue • ${fmtDate(goal.dueDate)}`;
-  if (d === 0) return "Due today";
-  return `Due in ${d} day${d === 1 ? "" : "s"}`;
-}
+  if (left <= 0) return { status: "done", text: "Already funded" };
+  if (contributions.length === 0) return { status: "none", text: "No contribution history yet" };
 
-function dueTone(goal) {
-  if (!goal?.dueDate) return "steel";
-  const d = daysUntil(goal.dueDate);
-  if (d === null) return "steel";
-  if (d < 0) return "danger";
-  if (d === 0) return "danger";
-  if (d <= 7) return "amber";
-  if (d <= 30) return "accent";
-  return "emerald";
-}
+  const recent = contributions
+    .slice()
+    .sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")))
+    .slice(-8);
 
-function progressGradient(value) {
-  if (value >= 100) {
-    return "linear-gradient(90deg, rgba(16,185,129,.98), rgba(52,211,153,.78))";
+  const totalRecent = recent.reduce((sum, x) => sum + (Number(x.amount) || 0), 0);
+
+  const dates = recent
+    .map((x) => (x?.date ? new Date(`${x.date}T00:00:00`).getTime() : NaN))
+    .filter((n) => Number.isFinite(n));
+
+  if (dates.length < 2 || totalRecent <= 0) {
+    return { status: "weak", text: "Need more contribution history" };
   }
-  if (value >= 70) {
-    return "linear-gradient(90deg, rgba(34,197,94,.92), rgba(16,185,129,.68))";
+
+  const first = Math.min(...dates);
+  const last = Math.max(...dates);
+  const spanDays = Math.max(1, Math.round((last - first) / 86400000) + 1);
+
+  const perDay = totalRecent / spanDays;
+  if (!Number.isFinite(perDay) || perDay <= 0) {
+    return { status: "weak", text: "Need more contribution history" };
   }
-  if (value >= 30) {
-    return "linear-gradient(90deg, rgba(59,130,246,.92), rgba(56,189,248,.66))";
-  }
-  return "linear-gradient(90deg, rgba(244,114,182,.95), rgba(239,68,68,.68))";
-}
 
-/* =========================
-   presets
-========================= */
-const GOAL_PRESETS = [
-  "Emergency Fund",
-  "Vacation",
-  "Truck / Car Fund",
-  "House Projects",
-  "Christmas / Gifts",
-  "Taxes",
-  "Investing (Cash to Brokerage)",
-  "Other",
-];
+  const daysToFinish = Math.ceil(left / perDay);
+  const finish = new Date();
+  finish.setDate(finish.getDate() + daysToFinish);
 
-const QUICK_AMOUNTS = [25, 100, 250, 500];
-
-/* =========================
-   ui bits
-========================= */
-function Pill({ children, tone = "default", title }) {
-  const tones = {
-    default: {
-      bg: "rgba(255,255,255,.06)",
-      bd: "rgba(255,255,255,.10)",
-      tx: "var(--text)",
-    },
-    accent: {
-      bg: "rgba(59,130,246,.14)",
-      bd: "rgba(59,130,246,.28)",
-      tx: "var(--text)",
-    },
-    emerald: {
-      bg: "rgba(16,185,129,.14)",
-      bd: "rgba(16,185,129,.28)",
-      tx: "var(--text)",
-    },
-    steel: {
-      bg: "rgba(148,163,184,.14)",
-      bd: "rgba(148,163,184,.24)",
-      tx: "var(--text)",
-    },
-    danger: {
-      bg: "rgba(239,68,68,.14)",
-      bd: "rgba(239,68,68,.28)",
-      tx: "var(--text)",
-    },
-    amber: {
-      bg: "rgba(245,158,11,.14)",
-      bd: "rgba(245,158,11,.26)",
-      tx: "var(--text)",
-    },
+  return {
+    status: "forecast",
+    text: `At recent pace, finish around ${finish.toLocaleDateString()}`,
+    perDay,
+    daysToFinish,
   };
+}
 
-  const t = tones[tone] || tones.default;
+function paceTone(goal) {
+  const proj = projectedFinishDate(goal);
+  if (proj.status === "done") return "green";
+  if (proj.status === "forecast") {
+    if (proj.daysToFinish <= 30) return "green";
+    if (proj.daysToFinish <= 90) return "blue";
+    return "amber";
+  }
+  return "steel";
+}
 
+function progressColor(value) {
+  if (value >= 100) return GREEN;
+  if (value >= 70) return "#22c55e";
+  if (value >= 30) return BLUE;
+  return PINK;
+}
+
+/* =========================
+   shared visual pieces
+========================= */
+function GlassSection({ children, className = "" }) {
   return (
-    <span
-      title={title}
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: "7px 12px",
-        borderRadius: 999,
-        border: `1px solid ${t.bd}`,
-        background: t.bg,
-        color: t.tx,
-        fontWeight: 900,
-        fontSize: 12,
-        lineHeight: "12px",
-        letterSpacing: 0.35,
-        whiteSpace: "nowrap",
-      }}
+    <div
+      className={
+        "rounded-[28px] border border-white/10 bg-[linear-gradient(180deg,rgba(8,12,24,.96),rgba(7,11,21,.94))] shadow-[0_24px_60px_rgba(0,0,0,.42)] backdrop-blur-xl " +
+        className
+      }
     >
       {children}
-    </span>
+    </div>
   );
 }
 
-function Select({ value, onChange, children, style, title }) {
+function NativeSelect({ value, onChange, children, className = "", ...rest }) {
   return (
     <select
-      className="input"
       value={value}
       onChange={onChange}
-      title={title}
-      style={{
-        color: "var(--text)",
-        backgroundColor: "rgba(15,26,47,.84)",
-        border: "1px solid var(--stroke)",
-        paddingRight: 34,
-        appearance: "none",
-        WebkitAppearance: "none",
-        MozAppearance: "none",
-        backgroundImage:
-          "linear-gradient(45deg, transparent 50%, rgba(233,240,255,.75) 50%), linear-gradient(135deg, rgba(233,240,255,.75) 50%, transparent 50%)",
-        backgroundPosition: "calc(100% - 18px) 50%, calc(100% - 12px) 50%",
-        backgroundSize: "6px 6px, 6px 6px",
-        backgroundRepeat: "no-repeat",
-        ...style,
-      }}
+      className={
+        "w-full h-11 rounded-2xl border border-white/10 bg-white/[0.04] px-3 text-sm text-white outline-none focus-visible:ring-2 focus-visible:ring-sky-400/40 " +
+        className
+      }
+      {...rest}
     >
       {children}
     </select>
   );
 }
 
-function TopShell({ children }) {
+function CommandMetricCard({ title, value, sub, accentValue, tone = "green" }) {
+  const toneMap = {
+    red: { border: "rgba(255,93,115,.18)", glow: "rgba(255,93,115,.18)", accent: RED },
+    green: { border: "rgba(74,222,128,.18)", glow: "rgba(74,222,128,.18)", accent: GREEN },
+    blue: { border: "rgba(56,189,248,.18)", glow: "rgba(56,189,248,.18)", accent: BLUE },
+    amber: { border: "rgba(245,158,11,.18)", glow: "rgba(245,158,11,.18)", accent: AMBER },
+  };
+
+  const t = toneMap[tone] || toneMap.green;
+
   return (
-    <header
-      className="card"
+    <div
+      className="relative overflow-hidden rounded-[24px] border p-5"
       style={{
-        padding: "22px 24px",
-        marginBottom: 16,
-        background:
-          "linear-gradient(180deg, rgba(4,9,21,.96), rgba(4,9,21,.88)), radial-gradient(circle at 18% 0%, rgba(59,130,246,.16), transparent 42%), radial-gradient(circle at 82% 0%, rgba(167,139,250,.12), transparent 38%)",
+        borderColor: t.border,
+        background: "linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,.02))",
+        boxShadow: `inset 0 1px 0 rgba(255,255,255,.03), 0 0 28px ${t.glow}`,
       }}
     >
-      {children}
-    </header>
+      <div className="mb-2 text-[11px] uppercase tracking-[0.18em] text-white/40">{title}</div>
+      <div className="text-[26px] font-black leading-none text-white md:text-[32px]">{value}</div>
+      <div className="mt-2 flex items-center gap-2 text-sm">
+        {accentValue ? (
+          <span className="font-black" style={{ color: t.accent }}>
+            {accentValue}
+          </span>
+        ) : null}
+        <span className="text-white/52">{sub}</span>
+      </div>
+    </div>
   );
 }
 
-function StatCard({
-  label,
-  value,
-  subtext,
-  accent = "rgba(59,130,246,.16)",
-  border = "rgba(59,130,246,.22)",
-}) {
+function ProgressBar({ value = 0, color = GREEN, height = "h-3", animated = true }) {
+  const pctValue = clamp(Number(value) || 0, 0, 100);
+
   return (
     <div
-      className="card"
-      style={{
-        padding: 20,
-        minHeight: 138,
-        background:
-          `linear-gradient(180deg, rgba(255,255,255,.045), rgba(255,255,255,.022)), radial-gradient(circle at top left, ${accent}, transparent 50%)`,
-        borderColor: border,
-        boxShadow: "0 16px 34px rgba(0,0,0,.22)",
-      }}
+      className={`${height} relative overflow-hidden rounded-full bg-white/10 shadow-[inset_0_1px_3px_rgba(0,0,0,.25)]`}
     >
       <div
-        className="muted"
+        className="absolute inset-0 opacity-40"
         style={{
-          fontSize: 11,
-          letterSpacing: 3,
-          textTransform: "uppercase",
-          marginBottom: 12,
+          background:
+            "linear-gradient(90deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.00) 100%)",
+        }}
+      />
+      <div
+        className={`h-full rounded-full ${animated ? "transition-all duration-700 ease-out" : ""}`}
+        style={{
+          width: `${pctValue}%`,
+          background: `linear-gradient(90deg, ${color} 0%, rgba(255,255,255,.92) 180%)`,
+          boxShadow: `0 0 18px ${color}55, 0 0 30px ${color}33`,
         }}
       >
-        {label}
+        <div
+          className="h-full w-full rounded-full opacity-40"
+          style={{
+            background:
+              "linear-gradient(90deg, rgba(255,255,255,.22) 0%, rgba(255,255,255,0) 45%)",
+          }}
+        />
       </div>
-
-      <div style={{ fontSize: 24, fontWeight: 950, letterSpacing: -0.5 }}>{value}</div>
-
-      {subtext ? (
-        <div className="muted" style={{ marginTop: 10, fontSize: 13, lineHeight: 1.35 }}>
-          {subtext}
-        </div>
-      ) : null}
     </div>
   );
 }
 
 function MiniMetric({ label, value }) {
   return (
-    <div
-      className="card"
-      style={{
-        padding: 12,
-        background:
-          "linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,.025))",
-      }}
-    >
-      <div
-        className="muted"
-        style={{
-          fontSize: 11,
-          textTransform: "uppercase",
-          letterSpacing: 2,
-          marginBottom: 6,
-        }}
-      >
-        {label}
+    <div className="rounded-[20px] border border-white/10 bg-white/[0.03] p-4">
+      <div className="text-[10px] uppercase tracking-[0.22em] text-white/38">{label}</div>
+      <div className="mt-2 text-lg font-black text-white">{value}</div>
+    </div>
+  );
+}
+
+function ToneBadge({ children, tone = "steel" }) {
+  const tones = {
+    green: "border-emerald-400/20 bg-emerald-400/10 text-emerald-200",
+    blue: "border-sky-400/20 bg-sky-400/10 text-sky-200",
+    amber: "border-amber-400/20 bg-amber-400/10 text-amber-200",
+    danger: "border-rose-400/20 bg-rose-400/10 text-rose-200",
+    steel: "border-white/10 bg-white/5 text-white/70",
+  };
+
+  return (
+    <div className={`rounded-full border px-3 py-1.5 text-[11px] font-black uppercase tracking-[0.08em] ${tones[tone] || tones.steel}`}>
+      {children}
+    </div>
+  );
+}
+
+function SavingsProgressCard({ goal }) {
+  const value = pct(goal);
+  const color = progressColor(value);
+  const projection = projectedFinishDate(goal);
+
+  return (
+    <div className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4 transition-all duration-200 hover:scale-[1.01] hover:bg-white/[0.045] hover:shadow-[0_0_30px_rgba(255,255,255,0.05)]">
+      <div className="mb-3 flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="truncate text-[28px] font-black leading-none tracking-tight text-white md:text-[32px]">
+            {goal.name}
+          </div>
+          <div className="mt-2 text-sm text-white/52">
+            {money(goal.current)} of {money(goal.target)}
+          </div>
+        </div>
+
+        <ToneBadge tone={value >= 100 ? "green" : value >= 30 ? "blue" : "steel"}>
+          {Math.round(value)}%
+        </ToneBadge>
       </div>
-      <div style={{ fontWeight: 900, fontSize: 16 }}>{value}</div>
+
+      <ProgressBar value={value} color={color} />
+
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-sm">
+        <div className="text-white/45">{dueLabel(goal)}</div>
+        <div className="font-black text-white/75">{goal.priority || "Medium"}</div>
+      </div>
+
+      <div className="mt-3 flex items-center justify-between gap-3 rounded-[16px] border border-white/10 bg-white/[0.025] px-3 py-2">
+        <div className="text-xs text-white/58">{projection.text}</div>
+        <ToneBadge tone={paceTone(goal)}>
+          {projection.status === "done"
+            ? "Done"
+            : projection.status === "forecast"
+            ? "Momentum"
+            : "Building"}
+        </ToneBadge>
+      </div>
     </div>
   );
 }
@@ -362,27 +419,27 @@ function mapGoalToRow(goal, userId) {
    page
 ========================= */
 export default function SavingsPage() {
-  const [goals, setGoals] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [userId, setUserId] = useState(null);
-  const [savingIds, setSavingIds] = useState({});
+  const [loading, setLoading] = React.useState(true);
+  const [userId, setUserId] = React.useState(null);
+  const [goals, setGoals] = React.useState([]);
+  const [savingIds, setSavingIds] = React.useState({});
+  const [pageError, setPageError] = React.useState("");
 
-  const [mode, setMode] = useState("overview");
+  const [tab, setTab] = React.useState("overview");
 
-  const [preset, setPreset] = useState(GOAL_PRESETS[0]);
-  const [customName, setCustomName] = useState("");
-  const [target, setTarget] = useState("");
-  const [current, setCurrent] = useState("");
-  const [dueDate, setDueDate] = useState("");
-  const [priority, setPriority] = useState("Medium");
-  const [error, setError] = useState("");
+  const [preset, setPreset] = React.useState(GOAL_PRESETS[0]);
+  const [customName, setCustomName] = React.useState("");
+  const [target, setTarget] = React.useState("");
+  const [current, setCurrent] = React.useState("");
+  const [dueDate, setDueDate] = React.useState("");
+  const [priority, setPriority] = React.useState("Medium");
 
-  const [query, setQuery] = useState("");
-  const [sortBy, setSortBy] = useState("priority_then_due");
-  const [showArchived, setShowArchived] = useState(false);
+  const [query, setQuery] = React.useState("");
+  const [sortBy, setSortBy] = React.useState("priority_then_due");
+  const [showArchived, setShowArchived] = React.useState(false);
 
-  const [editingId, setEditingId] = useState(null);
-  const [editDraft, setEditDraft] = useState({
+  const [editingId, setEditingId] = React.useState(null);
+  const [editDraft, setEditDraft] = React.useState({
     name: "",
     target: "",
     current: "",
@@ -391,25 +448,15 @@ export default function SavingsPage() {
     archived: false,
   });
 
-  const [openId, setOpenId] = useState(null);
-  const [manageId, setManageId] = useState(null);
+  const [openId, setOpenId] = React.useState(null);
+  const [manageId, setManageId] = React.useState(null);
 
-  const [customAdd, setCustomAdd] = useState({});
-  const [customNote, setCustomNote] = useState({});
+  const [customAdd, setCustomAdd] = React.useState({});
+  const [customNote, setCustomNote] = React.useState({});
 
-  const [ioOpen, setIoOpen] = useState(false);
-  const [ioText, setIoText] = useState("");
+  const [ioText, setIoText] = React.useState("");
 
-  const [isNarrow, setIsNarrow] = useState(false);
-
-  const saveTimersRef = useRef({});
-
-  useEffect(() => {
-    const onResize = () => setIsNarrow(window.innerWidth < 1180);
-    onResize();
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
-  }, []);
+  const saveTimersRef = React.useRef({});
 
   async function getCurrentUser() {
     const {
@@ -427,6 +474,7 @@ export default function SavingsPage() {
 
   async function loadGoals() {
     setLoading(true);
+    setPageError("");
 
     const user = await getCurrentUser();
 
@@ -447,6 +495,7 @@ export default function SavingsPage() {
 
     if (error) {
       console.error("load savings error:", error);
+      setPageError(error.message || "Failed to load savings goals.");
       setGoals([]);
       setLoading(false);
       return;
@@ -456,7 +505,7 @@ export default function SavingsPage() {
     setLoading(false);
   }
 
-  useEffect(() => {
+  React.useEffect(() => {
     loadGoals();
 
     const {
@@ -482,6 +531,7 @@ export default function SavingsPage() {
 
     if (error) {
       console.error("save goal error:", error);
+      setPageError(error.message || "Failed to save goal.");
     }
 
     setSavingIds((prev) => ({ ...prev, [goal.id]: false }));
@@ -509,21 +559,20 @@ export default function SavingsPage() {
     setCurrent("");
     setDueDate("");
     setPriority("Medium");
-    setError("");
+    setPageError("");
   }
 
-  async function addGoal(e) {
-    e.preventDefault();
-    setError("");
+  async function addGoal() {
+    setPageError("");
 
     const n = resolvedName();
     const t = parseMoneyInput(target);
     const c = parseMoneyInput(current === "" ? "0" : current);
 
-    if (!n) return setError("Goal name is required.");
-    if (!Number.isFinite(t) || t <= 0) return setError("Target must be greater than 0.");
-    if (!Number.isFinite(c) || c < 0) return setError("Starting saved must be 0 or more.");
-    if (!userId) return setError("You must be signed in.");
+    if (!n) return alert("Goal name is required.");
+    if (!Number.isFinite(t) || t <= 0) return alert("Target must be greater than 0.");
+    if (!Number.isFinite(c) || c < 0) return alert("Starting saved must be 0 or more.");
+    if (!userId) return alert("You must be signed in.");
 
     const id = uid();
     const nextGoal = {
@@ -550,13 +599,14 @@ export default function SavingsPage() {
 
     if (insertError) {
       console.error("add goal error:", insertError);
+      setPageError(insertError.message || "Failed to add goal.");
       await loadGoals();
     }
   }
 
   function startEdit(goal) {
     setEditingId(goal.id);
-    setError("");
+    setPageError("");
     setEditDraft({
       name: goal.name || "",
       target: String(goal.target ?? ""),
@@ -580,15 +630,15 @@ export default function SavingsPage() {
   }
 
   function saveEdit(id) {
-    setError("");
+    setPageError("");
 
     const n = editDraft.name.trim();
     const t = parseMoneyInput(editDraft.target);
     const c = parseMoneyInput(editDraft.current === "" ? "0" : editDraft.current);
 
-    if (!n) return setError("Goal name is required.");
-    if (!Number.isFinite(t) || t <= 0) return setError("Target must be greater than 0.");
-    if (!Number.isFinite(c) || c < 0) return setError("Current saved must be 0 or more.");
+    if (!n) return alert("Goal name is required.");
+    if (!Number.isFinite(t) || t <= 0) return alert("Target must be greater than 0.");
+    if (!Number.isFinite(c) || c < 0) return alert("Current saved must be 0 or more.");
 
     setGoals((prev) => {
       const next = prev.map((g) =>
@@ -625,6 +675,7 @@ export default function SavingsPage() {
 
     if (error) {
       console.error("delete goal error:", error);
+      setPageError(error.message || "Failed to delete goal.");
       await loadGoals();
     }
   }
@@ -642,11 +693,10 @@ export default function SavingsPage() {
     const amt = Number(amount);
 
     if (!Number.isFinite(amt) || amt <= 0) {
-      setError("Contribution amount must be greater than 0.");
-      return;
+      return alert("Contribution amount must be greater than 0.");
     }
 
-    setError("");
+    setPageError("");
 
     setGoals((prev) => {
       const next = prev.map((g) => {
@@ -678,7 +728,7 @@ export default function SavingsPage() {
   }
 
   function undoLast(goalId) {
-    setError("");
+    setPageError("");
 
     setGoals((prev) => {
       const next = prev.map((g) => {
@@ -704,7 +754,9 @@ export default function SavingsPage() {
     });
   }
 
-  const totals = useMemo(() => {
+  const activeGoals = React.useMemo(() => goals.filter((g) => !g.archived), [goals]);
+
+  const totals = React.useMemo(() => {
     const active = goals.filter((g) => !g.archived);
 
     const totalTarget = active.reduce((sum, g) => sum + (Number(g.target) || 0), 0);
@@ -762,7 +814,7 @@ export default function SavingsPage() {
     };
   }, [goals]);
 
-  const filteredGoals = useMemo(() => {
+  const filteredGoals = React.useMemo(() => {
     const q = query.trim().toLowerCase();
     let list = goals.slice();
 
@@ -796,322 +848,216 @@ export default function SavingsPage() {
     return list;
   }, [goals, query, sortBy, showArchived]);
 
-  function priorityPillTone(p) {
-    if (p === "High") return "danger";
-    if (p === "Low") return "steel";
-    return "emerald";
-  }
+  const progressGoals = React.useMemo(() => {
+    return activeGoals.slice().sort((a, b) => pct(b) - pct(a)).slice(0, 6);
+  }, [activeGoals]);
 
-  const statsCols = isNarrow ? "1fr" : "repeat(3, minmax(0, 1fr))";
-  const overviewCols = isNarrow ? "1fr" : "minmax(0, 1.7fr) 500px";
-
-  const activeGoals = goals.filter((g) => !g.archived);
-  const topGoal = totals.topOpenGoal;
-
-  const progressGoals = activeGoals
-    .slice()
-    .sort((a, b) => pct(b) - pct(a))
-    .slice(0, 6);
+  const focusGoal = totals.topOpenGoal;
 
   if (loading) {
     return (
-      <main className="container">
-        <div className="card" style={{ padding: 24 }}>
-          <div style={{ fontWeight: 900, fontSize: 20 }}>Loading savings goals...</div>
-          <div className="muted" style={{ marginTop: 8 }}>
-            Pulling your savings data from Supabase.
-          </div>
-        </div>
-      </main>
+      <div className="mx-auto max-w-[1700px] px-4 py-4">
+        <GlassSection className="p-5 text-white/70">Loading savings...</GlassSection>
+      </div>
     );
   }
 
   return (
-    <main className="container">
-      <TopShell>
-        <div
-          className="row"
-          style={{
-            justifyContent: "space-between",
-            alignItems: "center",
-            gap: 18,
-            flexWrap: "wrap",
-          }}
-        >
-          <div>
-            <div
-              className="muted"
-              style={{
-                fontSize: 11,
-                letterSpacing: 3,
-                textTransform: "uppercase",
-                marginBottom: 8,
-                color: "rgba(125,211,252,.92)",
-                fontWeight: 900,
-              }}
-            >
+    <div className="mx-auto max-w-[1700px] space-y-4 px-4 py-4">
+      <GlassSection className="overflow-hidden px-6 py-5">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+          <div className="min-w-0">
+            <div className="mb-1 text-[10px] font-black uppercase tracking-[0.26em] text-sky-300/75">
               Life Command Center
             </div>
-
-            <h1 style={{ margin: 0, fontSize: 32, lineHeight: 1.04, letterSpacing: -0.8 }}>
+            <h1 className="m-0 text-3xl font-bold tracking-tight text-white">
               Savings Control
             </h1>
-
-            <div className="muted" style={{ marginTop: 8, fontSize: 15 }}>
+            <div className="mt-1 text-sm text-white/50">
               Track goal pressure, build reserves, and forecast what needs funded next.
             </div>
           </div>
 
-          <div className="row" style={{ gap: 12, flexWrap: "wrap", alignItems: "center" }}>
-            <div
-              className="card"
-              style={{
-                padding: 5,
-                display: "inline-flex",
-                gap: 5,
-                borderRadius: 999,
-                background: "rgba(255,255,255,.05)",
-                border: "1px solid rgba(255,255,255,.10)",
-                boxShadow: "inset 0 1px 0 rgba(255,255,255,.04)",
-              }}
-            >
-              <button
-                type="button"
-                className={mode === "overview" ? "btn" : "btnGhost"}
-                onClick={() => setMode("overview")}
-                style={{ minWidth: 110, borderRadius: 999 }}
-              >
-                Overview
-              </button>
-
-              <button
-                type="button"
-                className={mode === "manage" ? "btn" : "btnGhost"}
-                onClick={() => setMode("manage")}
-                style={{ minWidth: 110, borderRadius: 999 }}
-              >
-                Manage
-              </button>
-            </div>
-
-            <button className="btnGhost" type="button" onClick={() => setIoOpen((v) => !v)}>
-              {ioOpen ? "Close Import / Export" : "Import / Export"}
-            </button>
-          </div>
+          <Tabs value={tab} onValueChange={setTab}>
+            <TabsList className="h-11 rounded-full border border-white/10 bg-black/40 p-1">
+              <TabsTrigger value="overview" className="rounded-full px-5 text-sm">Overview</TabsTrigger>
+              <TabsTrigger value="manage" className="rounded-full px-5 text-sm">Manage</TabsTrigger>
+            </TabsList>
+          </Tabs>
         </div>
-      </TopShell>
+      </GlassSection>
 
-      <section
-        style={{
-          display: "grid",
-          gridTemplateColumns: statsCols,
-          gap: 14,
-          marginBottom: 16,
-        }}
-      >
-        <StatCard
-          label="Saved"
+      {pageError ? (
+        <GlassSection className="border-red-400/20 p-4">
+          <div className="font-black text-white">Savings issue</div>
+          <div className="mt-1 text-sm text-white/60">{pageError}</div>
+        </GlassSection>
+      ) : null}
+
+      <div className="grid gap-4 xl:grid-cols-3">
+        <CommandMetricCard
+          title="Saved"
           value={money(totals.totalCurrent)}
-          subtext={`${totals.activeCount} active goal${totals.activeCount === 1 ? "" : "s"}`}
-          accent="rgba(244,114,182,.15)"
-          border="rgba(244,114,182,.18)"
+          sub={`${totals.activeCount} active goal${totals.activeCount === 1 ? "" : "s"}`}
+          accentValue={`${totals.fundedCount} funded`}
+          tone="green"
         />
-
-        <StatCard
-          label="Remaining"
+        <CommandMetricCard
+          title="Remaining"
           value={money(totals.left)}
-          subtext={`from ${money(totals.totalTarget)} total target`}
-          accent="rgba(16,185,129,.15)"
-          border="rgba(16,185,129,.18)"
+          sub={`from ${money(totals.totalTarget)} total target`}
+          accentValue={totals.left > 0 ? "still open" : "fully covered"}
+          tone="blue"
         />
-
-        <StatCard
-          label="Funding Health"
+        <CommandMetricCard
+          title="Funding Health"
           value={`${totals.overallPct}%`}
-          subtext={
-            totals.topOpenGoal
-              ? `${totals.topOpenGoal.name} is your largest open goal`
-              : "No active goals yet"
+          sub={
+            totals.closestDueGoal
+              ? `${dueLabel(totals.closestDueGoal)}`
+              : "No current due-date pressure"
           }
-          accent="rgba(96,165,250,.16)"
-          border="rgba(96,165,250,.18)"
+          accentValue={
+            totals.closestDueGoal ? totals.closestDueGoal.name : "stable"
+          }
+          tone={totals.dueSoonCount > 0 ? "amber" : "green"}
         />
-      </section>
+      </div>
 
-      {mode === "overview" ? (
-        <section
-          style={{
-            display: "grid",
-            gridTemplateColumns: overviewCols,
-            gap: 16,
-            alignItems: "start",
-          }}
-        >
-          <div className="grid" style={{ gap: 16 }}>
-            <section
-              className="card"
-              style={{
-                padding: 18,
-                background:
-                  "linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02)), radial-gradient(circle at top left, rgba(59,130,246,.11), transparent 42%)",
-              }}
-            >
-              <div
-                className="row"
-                style={{
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  gap: 12,
-                  flexWrap: "wrap",
-                  marginBottom: 14,
-                }}
-              >
+      <Tabs value={tab} onValueChange={setTab}>
+        <TabsList className="hidden" />
+
+        <TabsContent value="overview" className="space-y-4">
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,1.75fr)_minmax(320px,.85fr)]">
+            <GlassSection className="p-5">
+              <div className="mb-4 flex items-center justify-between gap-4">
                 <div>
-                  <div style={{ fontWeight: 950, fontSize: 18 }}>Funding Trend</div>
-                  <div className="muted" style={{ marginTop: 4, fontSize: 13 }}>
+                  <div className="text-2xl font-black text-white">Savings Progress</div>
+                  <div className="mt-1 text-sm text-white/52">
                     Best-funded goals right now.
                   </div>
                 </div>
 
-                <Pill tone="accent">Top funded</Pill>
+                <div className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1.5 text-xs font-semibold text-white/60">
+                  Top funded
+                </div>
               </div>
 
-              {progressGoals.length === 0 ? (
-                <div className="muted" style={{ fontSize: 14 }}>No active goals yet.</div>
-              ) : (
-                <div className="grid" style={{ gap: 12 }}>
-                  {progressGoals.map((g) => {
-                    const value = pct(g);
-                    return (
-                      <div
-                        key={g.id}
-                        className="card"
-                        style={{
-                          padding: 14,
-                          background:
-                            "linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,.018))",
-                        }}
-                      >
-                        <div
-                          className="row"
-                          style={{
-                            justifyContent: "space-between",
-                            alignItems: "center",
-                            gap: 12,
-                            flexWrap: "wrap",
-                            marginBottom: 10,
-                          }}
-                        >
-                          <div>
-                            <div style={{ fontWeight: 900, fontSize: 18 }}>{g.name}</div>
-                            <div className="muted" style={{ marginTop: 4, fontSize: 13 }}>
-                              {money(g.current)} of {money(g.target)}
-                            </div>
-                          </div>
+              <div className="space-y-3">
+                {progressGoals.length === 0 ? (
+                  <div className="rounded-[20px] border border-white/10 bg-white/[0.03] p-4 text-sm text-white/55">
+                    No active goals yet.
+                  </div>
+                ) : (
+                  progressGoals.map((g) => <SavingsProgressCard key={g.id} goal={g} />)
+                )}
+              </div>
+            </GlassSection>
 
-                          <Pill tone={value >= 100 ? "emerald" : value >= 30 ? "accent" : "steel"}>
-                            {Math.round(value)}%
-                          </Pill>
-                        </div>
-
-                        <div
-                          style={{
-                            height: 13,
-                            borderRadius: 999,
-                            overflow: "hidden",
-                            border: "1px solid var(--stroke)",
-                            background: "rgba(255,255,255,.05)",
-                          }}
-                        >
-                          <div
-                            style={{
-                              width: `${value}%`,
-                              height: "100%",
-                              background: progressGradient(value),
-                              boxShadow: "0 0 20px rgba(96,165,250,.18)",
-                            }}
-                          />
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </section>
-
-            <section
-              className="card"
-              style={{
-                padding: 18,
-                background:
-                  "linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02)), radial-gradient(circle at top center, rgba(244,114,182,.08), transparent 40%)",
-              }}
-            >
-              <div
-                className="row"
-                style={{
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  gap: 10,
-                  flexWrap: "wrap",
-                  marginBottom: 14,
-                }}
-              >
+            <GlassSection className="p-5">
+              <div className="flex items-start justify-between gap-4">
                 <div>
-                  <div style={{ fontWeight: 950, fontSize: 18 }}>Goals</div>
-                  <div className="muted" style={{ marginTop: 4, fontSize: 13 }}>
-                    Priority-first savings pressure view.
+                  <div className="mb-1 text-[10px] uppercase tracking-[0.24em] text-white/40">Focus Goal</div>
+                  <div className="text-xl font-black text-white">
+                    {focusGoal?.name || "No active goals"}
                   </div>
                 </div>
 
-                <div className="row" style={{ gap: 10, flexWrap: "wrap" }}>
-                  <input
-                    className="input"
+                <ToneBadge tone={focusGoal ? priorityTone(focusGoal.priority) : "steel"}>
+                  {focusGoal ? (focusGoal.priority || "Medium") : "Idle"}
+                </ToneBadge>
+              </div>
+
+              <div className="mt-5">
+                <ProgressBar
+                  value={focusGoal ? pct(focusGoal) : 0}
+                  color={focusGoal ? progressColor(pct(focusGoal)) : BLUE}
+                  height="h-4"
+                />
+              </div>
+
+              <div className="mt-4 grid gap-3">
+                <MiniMetric label="Saved" value={money(focusGoal?.current || 0)} />
+                <MiniMetric label="Target" value={money(focusGoal?.target || 0)} />
+                <MiniMetric
+                  label="Left"
+                  value={money(
+                    Math.max(
+                      0,
+                      (Number(focusGoal?.target) || 0) - (Number(focusGoal?.current) || 0)
+                    )
+                  )}
+                />
+                <MiniMetric label="Due" value={focusGoal ? dueLabel(focusGoal) : "No due date"} />
+              </div>
+
+              <div className="mt-4 rounded-[22px] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,.05),rgba(255,255,255,.025))] p-4">
+                <div className="mb-2 text-sm text-white/55">Quick read</div>
+                <div className="text-sm leading-7 text-white/88">
+                  {focusGoal ? (
+                    (() => {
+                      const left = Math.max(
+                        0,
+                        (Number(focusGoal.target) || 0) - (Number(focusGoal.current) || 0)
+                      );
+                      const projection = projectedFinishDate(focusGoal);
+
+                      if (left <= 0) return "This goal is already fully funded.";
+                      if (projection.status === "forecast") return projection.text;
+                      if (focusGoal.dueDate) {
+                        return `You still need ${money(left)} before ${fmtDate(focusGoal.dueDate)}.`;
+                      }
+                      return "This goal has no due date yet, so pace pressure is low until you assign one.";
+                    })()
+                  ) : (
+                    "Add a savings goal to generate live focus insights."
+                  )}
+                </div>
+              </div>
+            </GlassSection>
+          </div>
+
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,1.08fr)_minmax(320px,.82fr)]">
+            <GlassSection className="p-5">
+              <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <div className="text-2xl font-black text-white">Goals</div>
+                  <div className="mt-1 text-sm text-white/52">Priority-first savings pressure view.</div>
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  <Input
+                    className="h-11 w-[220px] rounded-2xl border-white/10 bg-white/[0.04] text-white placeholder:text-white/35"
                     placeholder="Search goals..."
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
-                    style={{ width: 220 }}
                   />
 
-                  <Select
+                  <NativeSelect
+                    className="w-[210px]"
                     value={sortBy}
                     onChange={(e) => setSortBy(e.target.value)}
-                    style={{ width: 200 }}
-                    title="Sort goals"
                   >
                     <option value="priority_then_due">Priority → Due</option>
                     <option value="due">Due date</option>
                     <option value="progress">Progress</option>
                     <option value="left">Amount left</option>
                     <option value="name">Name</option>
-                  </Select>
+                  </NativeSelect>
 
-                  <button className="btnGhost" type="button" onClick={() => setShowArchived((v) => !v)}>
+                  <Button variant="secondary" onClick={() => setShowArchived((v) => !v)}>
                     {showArchived ? "Hide archived" : "Show archived"}
-                  </button>
+                  </Button>
                 </div>
               </div>
 
-              {filteredGoals.length === 0 ? (
-                <div
-                  className="card"
-                  style={{
-                    padding: 18,
-                    minHeight: 180,
-                    display: "grid",
-                    alignContent: "center",
-                    background: "rgba(255,255,255,.02)",
-                  }}
-                >
-                  <div style={{ fontWeight: 950, fontSize: 18, marginBottom: 8 }}>No goals showing</div>
-                  <div className="muted" style={{ lineHeight: 1.45 }}>
-                    Add an <b>Emergency Fund</b> first, then start stacking goals like <b>Vacation</b>,{" "}
-                    <b>Truck / Car Fund</b>, or <b>House Projects</b>.
+              <div className="space-y-3">
+                {filteredGoals.length === 0 ? (
+                  <div className="rounded-[20px] border border-white/10 bg-white/[0.03] p-4 text-sm text-white/55">
+                    No goals showing.
                   </div>
-                </div>
-              ) : (
-                <div className="grid" style={{ gap: 14 }}>
-                  {filteredGoals.map((g) => {
+                ) : (
+                  filteredGoals.map((g) => {
                     const t = Number(g.target) || 0;
                     const c = Number(g.current) || 0;
                     const left = Math.max(0, t - c);
@@ -1129,329 +1075,194 @@ export default function SavingsPage() {
                     return (
                       <div
                         key={g.id}
-                        className="card"
-                        style={{
-                          padding: 16,
-                          opacity: archived ? 0.76 : 1,
-                          minWidth: 0,
-                          background:
-                            "linear-gradient(180deg, rgba(255,255,255,.048), rgba(255,255,255,.022))",
-                        }}
+                        className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4 transition-all duration-200 hover:scale-[1.005] hover:bg-white/[0.045] hover:shadow-[0_0_34px_rgba(255,255,255,0.045)]"
                       >
                         {isEditing ? (
-                          <div className="grid" style={{ gap: 12 }}>
-                            <div
-                              className="grid"
-                              style={{
-                                gridTemplateColumns: isNarrow
-                                  ? "1fr"
-                                  : "minmax(220px,1.3fr) repeat(4, minmax(120px,.7fr))",
-                                gap: 10,
-                              }}
-                            >
-                              <input
-                                className="input"
+                          <div className="space-y-3">
+                            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+                              <Input
+                                className="h-11 rounded-2xl border-white/10 bg-white/[0.04] text-white"
                                 value={editDraft.name}
-                                onChange={(e) => setEditDraft((d2) => ({ ...d2, name: e.target.value }))}
+                                onChange={(e) => setEditDraft((d) => ({ ...d, name: e.target.value }))}
                                 placeholder="Goal name"
                               />
 
-                              <input
-                                className="input"
-                                inputMode="decimal"
+                              <Input
+                                className="h-11 rounded-2xl border-white/10 bg-white/[0.04] text-white"
                                 value={editDraft.target}
-                                onChange={(e) => setEditDraft((d2) => ({ ...d2, target: e.target.value }))}
+                                onChange={(e) => setEditDraft((d) => ({ ...d, target: e.target.value }))}
+                                inputMode="decimal"
                                 placeholder="Target"
                               />
 
-                              <input
-                                className="input"
-                                inputMode="decimal"
+                              <Input
+                                className="h-11 rounded-2xl border-white/10 bg-white/[0.04] text-white"
                                 value={editDraft.current}
-                                onChange={(e) => setEditDraft((d2) => ({ ...d2, current: e.target.value }))}
+                                onChange={(e) => setEditDraft((d) => ({ ...d, current: e.target.value }))}
+                                inputMode="decimal"
                                 placeholder="Saved"
                               />
 
-                              <input
-                                className="input"
+                              <Input
+                                className="h-11 rounded-2xl border-white/10 bg-white/[0.04] text-white"
                                 type="date"
                                 value={editDraft.dueDate}
-                                onChange={(e) => setEditDraft((d2) => ({ ...d2, dueDate: e.target.value }))}
+                                onChange={(e) => setEditDraft((d) => ({ ...d, dueDate: e.target.value }))}
                               />
 
-                              <Select
+                              <NativeSelect
                                 value={editDraft.priority}
-                                onChange={(e) => setEditDraft((d2) => ({ ...d2, priority: e.target.value }))}
-                                title="Priority"
+                                onChange={(e) => setEditDraft((d) => ({ ...d, priority: e.target.value }))}
                               >
                                 {["High", "Medium", "Low"].map((p) => (
-                                  <option key={p} value={p}>
-                                    {p}
-                                  </option>
+                                  <option key={p} value={p}>{p}</option>
                                 ))}
-                              </Select>
+                              </NativeSelect>
                             </div>
 
-                            <label className="row" style={{ gap: 8, alignItems: "center" }}>
+                            <label className="flex items-center gap-2 text-sm text-white/65">
                               <input
                                 type="checkbox"
                                 checked={!!editDraft.archived}
-                                onChange={(e) => setEditDraft((d2) => ({ ...d2, archived: e.target.checked }))}
+                                onChange={(e) => setEditDraft((d) => ({ ...d, archived: e.target.checked }))}
                               />
-                              <span className="muted" style={{ fontSize: 13 }}>
-                                Archive this goal
-                              </span>
+                              Archive this goal
                             </label>
 
-                            <div className="row" style={{ gap: 10, flexWrap: "wrap" }}>
-                              <button className="btn" type="button" onClick={() => saveEdit(g.id)}>
-                                Save
-                              </button>
-                              <button className="btnGhost" type="button" onClick={cancelEdit}>
-                                Cancel
-                              </button>
+                            <div className="flex flex-wrap gap-2">
+                              <Button onClick={() => saveEdit(g.id)}>Save</Button>
+                              <Button variant="secondary" onClick={cancelEdit}>Cancel</Button>
                             </div>
                           </div>
                         ) : (
                           <>
-                            <div
-                              className="row"
-                              style={{
-                                justifyContent: "space-between",
-                                alignItems: "flex-start",
-                                gap: 14,
-                                flexWrap: "wrap",
-                              }}
-                            >
-                              <div style={{ minWidth: 0, flex: 1 }}>
-                                <div
-                                  className="row"
-                                  style={{
-                                    gap: 10,
-                                    alignItems: "center",
-                                    flexWrap: "wrap",
-                                    marginBottom: 12,
-                                  }}
-                                >
-                                  <div
-                                    style={{
-                                      fontWeight: 950,
-                                      fontSize: isNarrow ? 25 : 29,
-                                      lineHeight: 1,
-                                      letterSpacing: -0.5,
-                                    }}
-                                  >
+                            <div className="flex flex-wrap items-start justify-between gap-4">
+                              <div className="min-w-0 flex-1">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <div className="truncate text-2xl font-black tracking-tight text-white">
                                     {g.name}
                                   </div>
 
-                                  <Pill tone={priorityPillTone(g.priority)}>
-                                    {(g.priority || "Medium").toUpperCase()}
-                                  </Pill>
+                                  <ToneBadge tone={priorityTone(g.priority)}>
+                                    {g.priority || "Medium"}
+                                  </ToneBadge>
 
-                                  <Pill tone={dueTone(g)} title={g.dueDate ? fmtDate(g.dueDate) : "No due date"}>
+                                  <ToneBadge tone={dueTone(g)}>
                                     {dueLabel(g)}
-                                  </Pill>
+                                  </ToneBadge>
 
-                                  {archived ? <Pill tone="steel">ARCHIVED</Pill> : null}
-                                  {savingIds[g.id] ? <Pill tone="accent">SAVING</Pill> : null}
+                                  {archived ? <ToneBadge tone="steel">Archived</ToneBadge> : null}
+                                  {savingIds[g.id] ? <ToneBadge tone="blue">Saving</ToneBadge> : null}
                                 </div>
 
-                                <div
-                                  style={{
-                                    display: "grid",
-                                    gridTemplateColumns: isNarrow ? "1fr 1fr" : "repeat(4, minmax(0, 1fr))",
-                                    gap: 10,
-                                    marginBottom: 12,
-                                  }}
-                                >
+                                <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
                                   <MiniMetric label="Saved" value={money(c)} />
                                   <MiniMetric label="Target" value={money(t)} />
                                   <MiniMetric label="Left" value={money(left)} />
-                                  <MiniMetric label="Funded" value={t > 0 ? `${Math.round(value)}%` : "—"} />
+                                  <MiniMetric label="Funded" value={`${Math.round(value)}%`} />
                                 </div>
                               </div>
 
-                              <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
-                                <button
-                                  className="btn"
-                                  type="button"
-                                  onClick={() => setOpenId(panelOpen ? null : g.id)}
-                                >
+                              <div className="flex flex-wrap gap-2">
+                                <Button onClick={() => setOpenId(panelOpen ? null : g.id)}>
                                   {panelOpen ? "Close" : "Contribute"}
-                                </button>
+                                </Button>
 
-                                <button
-                                  className="btnGhost"
-                                  type="button"
-                                  onClick={() => setManageId(manageOpen ? null : g.id)}
-                                >
+                                <Button variant="secondary" onClick={() => setManageId(manageOpen ? null : g.id)}>
                                   {manageOpen ? "Close" : "Manage"}
-                                </button>
+                                </Button>
                               </div>
                             </div>
 
-                            <div style={{ marginTop: 2 }}>
-                              <div
-                                style={{
-                                  height: 14,
-                                  borderRadius: 999,
-                                  border: "1px solid var(--stroke)",
-                                  overflow: "hidden",
-                                  background: "rgba(255,255,255,.05)",
-                                }}
-                              >
-                                <div
-                                  style={{
-                                    width: `${value}%`,
-                                    height: "100%",
-                                    background: progressGradient(value),
-                                    boxShadow: "0 0 20px rgba(96,165,250,.16)",
-                                  }}
-                                />
-                              </div>
+                            <div className="mt-4">
+                              <ProgressBar value={value} color={progressColor(value)} />
 
-                              <div
-                                className="row"
-                                style={{
-                                  justifyContent: "space-between",
-                                  gap: 12,
-                                  flexWrap: "wrap",
-                                  marginTop: 8,
-                                }}
-                              >
-                                <div className="muted" style={{ fontSize: 13 }}>
+                              <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-sm">
+                                <div className="text-white/55">
                                   {g.dueDate && left > 0 && pace.daysLeft !== null && pace.daysLeft >= 0 ? (
                                     <>
-                                      Need <b>{money(pace.perMonth)}</b>/month • <b>{money(pace.perWeek)}</b>/week •{" "}
-                                      <b>{money(pace.perDay)}</b>/day
+                                      Need <b>{money(pace.perMonth)}</b>/month • <b>{money(pace.perWeek)}</b>/week • <b>{money(pace.perDay)}</b>/day
                                     </>
                                   ) : (
                                     <>No pace target needed yet.</>
                                   )}
                                 </div>
 
-                                <Pill tone={value >= 100 ? "emerald" : value >= 25 ? "accent" : "steel"}>
+                                <div className="font-black text-white/75">
                                   {money(c)} / {money(t)}
-                                </Pill>
+                                </div>
                               </div>
                             </div>
 
                             {manageOpen ? (
-                              <div
-                                className="card"
-                                style={{
-                                  marginTop: 14,
-                                  padding: 14,
-                                  background:
-                                    "linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.022))",
-                                }}
-                              >
-                                <div
-                                  className="row"
-                                  style={{
-                                    justifyContent: "space-between",
-                                    alignItems: "center",
-                                    gap: 10,
-                                    flexWrap: "wrap",
-                                  }}
-                                >
+                              <div className="mt-4 rounded-[20px] border border-white/10 bg-white/[0.03] p-4">
+                                <div className="flex flex-wrap items-start justify-between gap-3">
                                   <div>
-                                    <div style={{ fontWeight: 900, fontSize: 17 }}>Manage {g.name}</div>
-                                    <div className="muted" style={{ fontSize: 13, marginTop: 4 }}>
-                                      Edit, archive, or remove this goal.
+                                    <div className="text-lg font-black text-white">Manage {g.name}</div>
+                                    <div className="mt-1 text-sm text-white/55">
+                                      Edit, archive, or delete this goal.
                                     </div>
                                   </div>
 
-                                  <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
-                                    <button className="btnGhost" type="button" onClick={() => startEdit(g)}>
+                                  <div className="flex flex-wrap gap-2">
+                                    <Button variant="secondary" onClick={() => startEdit(g)}>
                                       Edit
-                                    </button>
-
-                                    <button
-                                      className="btnGhost"
-                                      type="button"
-                                      onClick={() => setArchived(g.id, !archived)}
-                                    >
+                                    </Button>
+                                    <Button variant="secondary" onClick={() => setArchived(g.id, !archived)}>
                                       {archived ? "Unarchive" : "Archive"}
-                                    </button>
-
-                                    <button className="btnGhost" type="button" onClick={() => removeGoal(g.id)}>
+                                    </Button>
+                                    <Button variant="destructive" onClick={() => removeGoal(g.id)}>
                                       Delete
-                                    </button>
+                                    </Button>
                                   </div>
                                 </div>
                               </div>
                             ) : null}
 
                             {panelOpen ? (
-                              <div
-                                className="card"
-                                style={{
-                                  marginTop: 14,
-                                  padding: 14,
-                                  background:
-                                    "linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.022))",
-                                }}
-                              >
-                                <div
-                                  className="row"
-                                  style={{
-                                    justifyContent: "space-between",
-                                    alignItems: "center",
-                                    gap: 10,
-                                    flexWrap: "wrap",
-                                  }}
-                                >
+                              <div className="mt-4 rounded-[20px] border border-white/10 bg-white/[0.03] p-4">
+                                <div className="flex flex-wrap items-start justify-between gap-3">
                                   <div>
-                                    <div style={{ fontWeight: 900, fontSize: 17 }}>Contribute to {g.name}</div>
-                                    <div className="muted" style={{ fontSize: 13, marginTop: 4 }}>
-                                      Quick adds or custom contribution with note.
+                                    <div className="text-lg font-black text-white">Contribute to {g.name}</div>
+                                    <div className="mt-1 text-sm text-white/55">
+                                      Quick adds or a custom contribution with note.
                                     </div>
                                   </div>
 
-                                  <button className="btnGhost" type="button" onClick={() => undoLast(g.id)}>
+                                  <Button variant="secondary" onClick={() => undoLast(g.id)}>
                                     Undo last
-                                  </button>
+                                  </Button>
                                 </div>
 
-                                <div style={{ height: 12 }} />
-
-                                <div className="row" style={{ gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                                <div className="mt-4 flex flex-wrap gap-2">
                                   {QUICK_AMOUNTS.map((amt) => (
-                                    <button
+                                    <Button
                                       key={amt}
-                                      className="btnGhost"
-                                      type="button"
+                                      variant="secondary"
                                       onClick={() => applyContribution(g.id, amt, "Quick add")}
-                                      style={{
-                                        border: "1px solid rgba(16,185,129,.28)",
-                                        background: "rgba(16,185,129,.10)",
-                                      }}
                                     >
                                       +{money(amt)}
-                                    </button>
+                                    </Button>
                                   ))}
+                                </div>
 
-                                  <input
-                                    className="input"
+                                <div className="mt-4 grid gap-3 md:grid-cols-[160px_minmax(0,1fr)_120px]">
+                                  <Input
+                                    className="h-11 rounded-2xl border-white/10 bg-white/[0.04] text-white"
                                     inputMode="decimal"
                                     placeholder="Custom amount"
                                     value={customAdd[g.id] ?? ""}
                                     onChange={(e) => setCustomAdd((m) => ({ ...m, [g.id]: e.target.value }))}
-                                    style={{ width: 160 }}
                                   />
 
-                                  <input
-                                    className="input"
+                                  <Input
+                                    className="h-11 rounded-2xl border-white/10 bg-white/[0.04] text-white"
                                     placeholder="Note (optional)"
                                     value={customNote[g.id] ?? ""}
                                     onChange={(e) => setCustomNote((m) => ({ ...m, [g.id]: e.target.value }))}
-                                    style={{ flex: 1, minWidth: 220 }}
                                   />
 
-                                  <button
-                                    className="btn"
-                                    type="button"
+                                  <Button
                                     onClick={() =>
                                       applyContribution(
                                         g.id,
@@ -1461,561 +1272,311 @@ export default function SavingsPage() {
                                     }
                                   >
                                     Add
-                                  </button>
+                                  </Button>
                                 </div>
 
-                                <div style={{ height: 12 }} />
+                                <div className="mt-4">
+                                  <div className="mb-2 text-sm text-white/55">Recent contributions</div>
 
-                                <div className="muted" style={{ fontSize: 12, marginBottom: 8 }}>
-                                  Recent contributions
-                                </div>
-
-                                {Array.isArray(g.contributions) && g.contributions.length > 0 ? (
-                                  <div className="grid" style={{ gap: 8 }}>
-                                    {g.contributions.slice(0, 5).map((x) => (
-                                      <div
-                                        key={x.id}
-                                        className="card"
-                                        style={{
-                                          padding: 10,
-                                          background: "rgba(255,255,255,.024)",
-                                        }}
-                                      >
-                                        <div
-                                          className="row"
-                                          style={{
-                                            justifyContent: "space-between",
-                                            alignItems: "center",
-                                            gap: 10,
-                                          }}
-                                        >
-                                          <div>
-                                            <div style={{ fontWeight: 900, fontSize: 16 }}>{money(x.amount)}</div>
-                                            <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>
-                                              {fmtDate(x.date)} {x.note ? `• ${x.note}` : ""}
+                                  {Array.isArray(g.contributions) && g.contributions.length > 0 ? (
+                                    <div className="space-y-2">
+                                      {g.contributions.slice(0, 5).map((x) => (
+                                        <div key={x.id} className="rounded-[18px] border border-white/10 bg-white/[0.03] p-3">
+                                          <div className="flex items-center justify-between gap-3">
+                                            <div>
+                                              <div className="text-base font-black text-white">{money(x.amount)}</div>
+                                              <div className="mt-1 text-xs text-white/45">
+                                                {fmtDate(x.date)} {x.note ? `• ${x.note}` : ""}
+                                              </div>
                                             </div>
+                                            <Badge variant="outline">Logged</Badge>
                                           </div>
-                                          <Pill tone="steel">LOGGED</Pill>
                                         </div>
-                                      </div>
-                                    ))}
-                                  </div>
-                                ) : (
-                                  <div className="muted" style={{ fontSize: 13 }}>No contributions yet.</div>
-                                )}
+                                      ))}
+                                    </div>
+                                  ) : (
+                                    <div className="text-sm text-white/55">No contributions yet.</div>
+                                  )}
+                                </div>
                               </div>
                             ) : null}
                           </>
                         )}
                       </div>
                     );
-                  })}
-                </div>
-              )}
-            </section>
-          </div>
+                  })
+                )}
+              </div>
+            </GlassSection>
 
-          <aside className="grid" style={{ gap: 16 }}>
-            <section
-              className="card"
-              style={{
-                padding: 18,
-                background:
-                  "linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02)), radial-gradient(circle at top center, rgba(16,185,129,.10), transparent 38%)",
-              }}
-            >
-              <div
-                className="row"
-                style={{ justifyContent: "space-between", alignItems: "center", gap: 10 }}
-              >
-                <div>
-                  <div
-                    className="muted"
-                    style={{
-                      fontSize: 11,
-                      letterSpacing: 3,
-                      textTransform: "uppercase",
-                      marginBottom: 8,
-                    }}
-                  >
-                    Focus Goal
-                  </div>
-                  <div style={{ fontWeight: 950, fontSize: 18 }}>
-                    {topGoal ? topGoal.name : "No active goals"}
-                  </div>
-                </div>
-
-                <Pill tone={topGoal ? priorityPillTone(topGoal.priority) : "steel"}>
-                  {topGoal ? (topGoal.priority || "Medium").toUpperCase() : "IDLE"}
-                </Pill>
+            <GlassSection className="p-5">
+              <div className="mb-4">
+                <div className="text-2xl font-black text-white">Priority Pressure</div>
+                <div className="mt-1 text-sm text-white/52">Deadlines and pace risk.</div>
               </div>
 
-              {topGoal ? (
-                <>
-                  <div style={{ marginTop: 14 }}>
-                    <div
-                      style={{
-                        height: 16,
-                        borderRadius: 999,
-                        overflow: "hidden",
-                        border: "1px solid var(--stroke)",
-                        background: "rgba(255,255,255,.05)",
-                      }}
-                    >
-                      <div
-                        style={{
-                          width: `${pct(topGoal)}%`,
-                          height: "100%",
-                          background: progressGradient(pct(topGoal)),
-                          boxShadow: "0 0 20px rgba(16,185,129,.12)",
-                        }}
-                      />
+              <div className="space-y-3">
+                <div className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="mb-1 text-[10px] uppercase tracking-[0.24em] text-white/40">Closest Due Goal</div>
+                      <div className="text-lg font-black text-white">
+                        {totals.closestDueGoal ? totals.closestDueGoal.name : "No urgent due dates"}
+                      </div>
                     </div>
+
+                    <ToneBadge tone={totals.closestDueGoal ? dueTone(totals.closestDueGoal) : "steel"}>
+                      {totals.closestDueGoal ? dueLabel(totals.closestDueGoal) : "Relaxed"}
+                    </ToneBadge>
                   </div>
 
-                  <div className="grid" style={{ gap: 10, marginTop: 14 }}>
-                    <MiniMetric label="Saved" value={money(topGoal.current)} />
-                    <MiniMetric label="Target" value={money(topGoal.target)} />
-                    <MiniMetric
-                      label="Left"
-                      value={money(
-                        Math.max(
-                          0,
-                          (Number(topGoal.target) || 0) - (Number(topGoal.current) || 0)
-                        )
-                      )}
-                    />
-                    <MiniMetric label="Due" value={dueLabel(topGoal)} />
+                  <div className="mt-3 text-sm leading-7 text-white/80">
+                    {totals.closestDueGoal
+                      ? `Closest dated goal is ${totals.closestDueGoal.name}. ${dueLabel(totals.closestDueGoal)}.`
+                      : "No goal currently has a due date. Pace pressure is low right now."}
                   </div>
-                </>
-              ) : (
-                <div className="muted" style={{ marginTop: 12, fontSize: 14 }}>
-                  Add a goal to start tracking focus.
                 </div>
-              )}
-            </section>
 
-            <section
-              className="card"
-              style={{
-                padding: 18,
-                background:
-                  "linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02)), radial-gradient(circle at top right, rgba(245,158,11,.08), transparent 34%)",
-              }}
-            >
-              <div
-                className="row"
-                style={{
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  gap: 10,
-                  marginBottom: 10,
-                }}
-              >
+                <div className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4">
+                  <div className="mb-2 text-sm text-white/55">Quick read</div>
+                  <div className="text-sm leading-7 text-white/88">
+                    {totals.dueSoonCount > 0
+                      ? `${totals.dueSoonCount} goal${totals.dueSoonCount === 1 ? "" : "s"} due inside 14 days.`
+                      : "No immediate due-date pressure in the next 14 days."}
+                  </div>
+                </div>
+
+                <div className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4">
+                  <div className="mb-1 text-[10px] uppercase tracking-[0.24em] text-white/40">Activity</div>
+                  <div className="text-lg font-black text-white">
+                    {totals.recentContributionCount} logged contribution{totals.recentContributionCount === 1 ? "" : "s"}
+                  </div>
+                  <div className="mt-2 text-sm text-white/55">
+                    This page is saving cloud-first through Supabase across devices.
+                  </div>
+                </div>
+              </div>
+            </GlassSection>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="manage" className="space-y-4">
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,1.05fr)_minmax(0,.95fr)]">
+            <GlassSection className="p-5">
+              <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <div
-                    className="muted"
-                    style={{ fontSize: 11, letterSpacing: 3, textTransform: "uppercase" }}
-                  >
-                    Priority Pressure
-                  </div>
-                  <div style={{ fontWeight: 950, fontSize: 18, marginTop: 8 }}>
-                    {totals.closestDueGoal ? totals.closestDueGoal.name : "No urgent due dates"}
-                  </div>
+                  <div className="text-lg font-black text-white">Create Goal</div>
+                  <div className="mt-1 text-sm text-white/55">Saved directly to Supabase.</div>
                 </div>
 
-                <Pill tone={totals.closestDueGoal ? dueTone(totals.closestDueGoal) : "steel"}>
-                  {totals.closestDueGoal ? dueLabel(totals.closestDueGoal) : "Relaxed"}
-                </Pill>
+                <ToneBadge tone="blue">Cloud</ToneBadge>
               </div>
 
-              <div className="muted" style={{ fontSize: 14, lineHeight: 1.45 }}>
-                {totals.closestDueGoal
-                  ? `Closest dated goal is ${totals.closestDueGoal.name}. ${dueLabel(
-                      totals.closestDueGoal
-                    )}.`
-                  : "No goal currently has a due date. Pace pressure is low right now."}
-              </div>
-
-              <div
-                className="card"
-                style={{
-                  marginTop: 14,
-                  padding: 14,
-                  background:
-                    "linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,.02))",
-                }}
-              >
-                <div className="muted" style={{ marginBottom: 8, fontSize: 13 }}>
-                  Quick read
+              <div className="grid gap-3 md:grid-cols-12">
+                <div className="md:col-span-4">
+                  <Label className="mb-2 block text-xs text-white/55">Goal</Label>
+                  <NativeSelect value={preset} onChange={(e) => setPreset(e.target.value)}>
+                    {GOAL_PRESETS.map((p) => (
+                      <option key={p} value={p}>{p}</option>
+                    ))}
+                  </NativeSelect>
                 </div>
-                <div style={{ fontSize: 14, lineHeight: 1.5 }}>
-                  {totals.dueSoonCount > 0
-                    ? `${totals.dueSoonCount} goal${totals.dueSoonCount === 1 ? "" : "s"} due inside 14 days.`
-                    : "No immediate due-date pressure in the next 14 days."}
-                </div>
-              </div>
-            </section>
 
-            <section
-              className="card"
-              style={{
-                padding: 18,
-                background:
-                  "linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02)), radial-gradient(circle at bottom left, rgba(96,165,250,.08), transparent 34%)",
-              }}
-            >
-              <div
-                className="muted"
-                style={{ fontSize: 11, letterSpacing: 3, textTransform: "uppercase", marginBottom: 8 }}
-              >
-                Activity
-              </div>
-
-              <div style={{ fontWeight: 950, fontSize: 18, marginBottom: 8 }}>
-                {totals.recentContributionCount} logged contribution
-                {totals.recentContributionCount === 1 ? "" : "s"}
-              </div>
-
-              <div className="muted" style={{ fontSize: 14, lineHeight: 1.45 }}>
-                This page is saving cloud-first through Supabase across devices.
-              </div>
-
-              <div style={{ marginTop: 14 }}>
-                <button
-                  className="btnGhost"
-                  type="button"
-                  onClick={() => {
-                    setQuery("");
-                    setSortBy("priority_then_due");
-                    setShowArchived(false);
-                  }}
-                >
-                  Reset view
-                </button>
-              </div>
-            </section>
-          </aside>
-        </section>
-      ) : (
-        <section
-          style={{
-            display: "grid",
-            gridTemplateColumns: isNarrow ? "1fr" : "380px minmax(0, 1fr)",
-            gap: 16,
-            alignItems: "start",
-          }}
-        >
-          <aside
-            className="card"
-            style={{
-              padding: 18,
-              minWidth: 0,
-              background:
-                "linear-gradient(180deg, rgba(255,255,255,.045), rgba(255,255,255,.022)), radial-gradient(circle at top left, rgba(59,130,246,.14), transparent 35%)",
-            }}
-          >
-            <div
-              className="row"
-              style={{ justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}
-            >
-              <div>
-                <div style={{ fontWeight: 950, fontSize: 18 }}>Create Goal</div>
-                <div className="muted" style={{ fontSize: 13, marginTop: 4 }}>
-                  Saved directly to Supabase.
-                </div>
-              </div>
-              <Pill tone="accent">CLOUD</Pill>
-            </div>
-
-            <form onSubmit={addGoal} className="grid" style={{ gap: 12 }}>
-              <div className="grid" style={{ gap: 8 }}>
-                <div className="muted" style={{ fontSize: 12 }}>Goal</div>
-                <Select
-                  value={preset}
-                  onChange={(e) => setPreset(e.target.value)}
-                  title="Choose a goal"
-                  style={{ width: "100%" }}
-                >
-                  {GOAL_PRESETS.map((p) => (
-                    <option key={p} value={p}>
-                      {p}
-                    </option>
-                  ))}
-                </Select>
-
-                {preset === "Other" ? (
-                  <input
-                    className="input"
-                    placeholder="Custom goal name"
-                    value={customName}
-                    onChange={(e) => setCustomName(e.target.value)}
-                    style={{ width: "100%" }}
-                  />
-                ) : null}
-              </div>
-
-              <div className="grid" style={{ gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                <div>
-                  <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>Target</div>
-                  <input
-                    className="input"
+                <div className="md:col-span-4">
+                  <Label className="mb-2 block text-xs text-white/55">Target</Label>
+                  <Input
+                    className="h-11 rounded-2xl border-white/10 bg-white/[0.04] text-white placeholder:text-white/35"
                     inputMode="decimal"
                     placeholder="$10,000"
                     value={target}
                     onChange={(e) => setTarget(e.target.value)}
-                    style={{ width: "100%" }}
                   />
                 </div>
 
-                <div>
-                  <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>Starting saved</div>
-                  <input
-                    className="input"
+                <div className="md:col-span-4">
+                  <Label className="mb-2 block text-xs text-white/55">Starting saved</Label>
+                  <Input
+                    className="h-11 rounded-2xl border-white/10 bg-white/[0.04] text-white placeholder:text-white/35"
                     inputMode="decimal"
                     placeholder="$0"
                     value={current}
                     onChange={(e) => setCurrent(e.target.value)}
-                    style={{ width: "100%" }}
                   />
                 </div>
               </div>
 
-              <div className="grid" style={{ gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                <div>
-                  <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>Due date</div>
-                  <input
-                    className="input"
-                    type="date"
-                    value={dueDate}
-                    onChange={(e) => setDueDate(e.target.value)}
-                    style={{ width: "100%" }}
+              {preset === "Other" ? (
+                <div className="mt-3">
+                  <Label className="mb-2 block text-xs text-white/55">Custom goal name</Label>
+                  <Input
+                    className="h-11 rounded-2xl border-white/10 bg-white/[0.04] text-white placeholder:text-white/35"
+                    placeholder="Custom goal name"
+                    value={customName}
+                    onChange={(e) => setCustomName(e.target.value)}
                   />
-                </div>
-
-                <div>
-                  <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>Priority</div>
-                  <Select
-                    value={priority}
-                    onChange={(e) => setPriority(e.target.value)}
-                    title="Priority"
-                    style={{ width: "100%" }}
-                  >
-                    {["High", "Medium", "Low"].map((p) => (
-                      <option key={p} value={p}>
-                        {p}
-                      </option>
-                    ))}
-                  </Select>
-                </div>
-              </div>
-
-              {error ? (
-                <div
-                  className="card"
-                  style={{
-                    padding: 10,
-                    border: "1px solid rgba(239,68,68,.32)",
-                    background: "rgba(239,68,68,.06)",
-                  }}
-                >
-                  <div style={{ fontWeight: 900, marginBottom: 4 }}>Fix this</div>
-                  <div className="muted" style={{ fontSize: 13 }}>{error}</div>
                 </div>
               ) : null}
 
-              <div className="row" style={{ gap: 10, flexWrap: "wrap" }}>
-                <button className="btn" type="submit">Add goal</button>
-                <button className="btnGhost" type="button" onClick={clearAddForm}>
-                  Clear
-                </button>
-              </div>
-            </form>
-          </aside>
+              <div className="mt-3 grid gap-3 md:grid-cols-12">
+                <div className="md:col-span-6">
+                  <Label className="mb-2 block text-xs text-white/55">Due date</Label>
+                  <Input
+                    className="h-11 rounded-2xl border-white/10 bg-white/[0.04] text-white"
+                    type="date"
+                    value={dueDate}
+                    onChange={(e) => setDueDate(e.target.value)}
+                  />
+                </div>
 
-          <section
-            className="card"
-            style={{
-              padding: 18,
-              minWidth: 0,
-              background:
-                "linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02)), radial-gradient(circle at top right, rgba(99,102,241,.10), transparent 38%)",
-            }}
-          >
-            <div
-              className="row"
-              style={{
-                justifyContent: "space-between",
-                alignItems: "center",
-                gap: 12,
-                flexWrap: "wrap",
-                marginBottom: 14,
-              }}
-            >
-              <div>
-                <div style={{ fontWeight: 950, fontSize: 18 }}>Manage Goals</div>
-                <div className="muted" style={{ marginTop: 4, fontSize: 13 }}>
-                  Search, sort, archive, edit, and fund.
+                <div className="md:col-span-6">
+                  <Label className="mb-2 block text-xs text-white/55">Priority</Label>
+                  <NativeSelect value={priority} onChange={(e) => setPriority(e.target.value)}>
+                    {["High", "Medium", "Low"].map((p) => (
+                      <option key={p} value={p}>{p}</option>
+                    ))}
+                  </NativeSelect>
                 </div>
               </div>
 
-              <div className="row" style={{ gap: 10, flexWrap: "wrap" }}>
-                <input
-                  className="input"
-                  placeholder="Search goals..."
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  style={{ width: 220 }}
-                />
+              <div className="mt-4 flex flex-wrap gap-2">
+                <Button onClick={addGoal}>Add Goal</Button>
+                <Button variant="secondary" onClick={clearAddForm}>Clear</Button>
+              </div>
+            </GlassSection>
 
-                <Select
-                  value={sortBy}
-                  onChange={(e) => setSortBy(e.target.value)}
-                  style={{ width: 210 }}
-                  title="Sort goals"
+            <GlassSection className="p-5">
+              <div className="mb-4">
+                <div className="text-lg font-black text-white">Import / Export</div>
+                <div className="mt-1 text-sm text-white/55">
+                  Export copies JSON. Import replaces this signed-in user’s current savings goals in Supabase.
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  onClick={async () => {
+                    const payload = JSON.stringify(goals, null, 2);
+                    setIoText(payload);
+                    try {
+                      await navigator.clipboard.writeText(payload);
+                    } catch {}
+                  }}
                 >
-                  <option value="priority_then_due">Priority → Due</option>
-                  <option value="due">Due date</option>
-                  <option value="progress">Progress</option>
-                  <option value="left">Amount left</option>
-                  <option value="name">Name</option>
-                </Select>
+                  Export (copy)
+                </Button>
 
-                <button className="btnGhost" type="button" onClick={() => setShowArchived((v) => !v)}>
-                  {showArchived ? "Hide archived" : "Show archived"}
-                </button>
-              </div>
-            </div>
+                <Button variant="secondary" onClick={() => setIoText("")}>
+                  Clear text
+                </Button>
 
-            <div className="muted" style={{ fontSize: 14 }}>
-              Use the Overview tab for the dashboard view. Use Manage when you want raw control.
-            </div>
-          </section>
-        </section>
-      )}
+                <Button
+                  variant="secondary"
+                  onClick={async () => {
+                    setPageError("");
 
-      {ioOpen ? (
-        <div className="card" style={{ marginTop: 16, padding: 16 }}>
-          <div
-            className="row"
-            style={{
-              justifyContent: "space-between",
-              alignItems: "center",
-              gap: 10,
-              flexWrap: "wrap",
-              marginBottom: 8,
-            }}
-          >
-            <div>
-              <div style={{ fontWeight: 950, fontSize: 18 }}>Import / Export</div>
-              <div className="muted" style={{ fontSize: 13, marginTop: 4 }}>
-                Export copies JSON. Import replaces this signed-in user’s current savings goals in Supabase.
-              </div>
-            </div>
-            <Pill tone="accent">SUPABASE</Pill>
-          </div>
-
-          <div className="row" style={{ gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-            <button
-              className="btn"
-              type="button"
-              onClick={async () => {
-                const payload = JSON.stringify(goals, null, 2);
-                setIoText(payload);
-                try {
-                  await navigator.clipboard.writeText(payload);
-                } catch {}
-              }}
-            >
-              Export (copy)
-            </button>
-
-            <button className="btnGhost" type="button" onClick={() => setIoText("")}>
-              Clear text
-            </button>
-
-            <button
-              className="btnGhost"
-              type="button"
-              onClick={async () => {
-                setError("");
-
-                let parsed = null;
-                try {
-                  parsed = JSON.parse(ioText || "[]");
-                } catch {
-                  setError("Import failed: invalid JSON.");
-                  return;
-                }
-
-                if (!Array.isArray(parsed)) {
-                  setError("Import failed: JSON must be an array of goals.");
-                  return;
-                }
-
-                const fixed = parsed.map((g) => ({
-                  id: g.id ?? uid(),
-                  name: String(g.name ?? "").trim(),
-                  target: Number(g.target) || 0,
-                  current: Number(g.current) || 0,
-                  dueDate: g.dueDate || "",
-                  priority: g.priority || "Medium",
-                  archived: !!g.archived,
-                  createdAt: g.createdAt ?? Date.now(),
-                  contributions: Array.isArray(g.contributions) ? g.contributions : [],
-                }));
-
-                setGoals(fixed);
-
-                if (userId) {
-                  const { error: deleteError } = await supabase
-                    .from("savings_goals")
-                    .delete()
-                    .eq("user_id", userId);
-
-                  if (deleteError) {
-                    console.error("replace delete error:", deleteError);
-                    await loadGoals();
-                    return;
-                  }
-
-                  if (fixed.length > 0) {
-                    const rows = fixed.map((g) => mapGoalToRow(g, userId));
-                    const { error: insertError } = await supabase
-                      .from("savings_goals")
-                      .upsert(rows, { onConflict: "id" });
-
-                    if (insertError) {
-                      console.error("replace import error:", insertError);
-                      await loadGoals();
+                    let parsed = null;
+                    try {
+                      parsed = JSON.parse(ioText || "[]");
+                    } catch {
+                      setPageError("Import failed: invalid JSON.");
+                      return;
                     }
-                  }
-                }
-              }}
-            >
-              Import (replace)
-            </button>
+
+                    if (!Array.isArray(parsed)) {
+                      setPageError("Import failed: JSON must be an array of goals.");
+                      return;
+                    }
+
+                    const fixed = parsed.map((g) => ({
+                      id: g.id ?? uid(),
+                      name: String(g.name ?? "").trim(),
+                      target: Number(g.target) || 0,
+                      current: Number(g.current) || 0,
+                      dueDate: g.dueDate || "",
+                      priority: g.priority || "Medium",
+                      archived: !!g.archived,
+                      createdAt: g.createdAt ?? Date.now(),
+                      contributions: Array.isArray(g.contributions) ? g.contributions : [],
+                    }));
+
+                    setGoals(fixed);
+
+                    if (userId) {
+                      const { error: deleteError } = await supabase
+                        .from("savings_goals")
+                        .delete()
+                        .eq("user_id", userId);
+
+                      if (deleteError) {
+                        console.error("replace delete error:", deleteError);
+                        setPageError(deleteError.message || "Import delete failed.");
+                        await loadGoals();
+                        return;
+                      }
+
+                      if (fixed.length > 0) {
+                        const rows = fixed.map((g) => mapGoalToRow(g, userId));
+                        const { error: insertError } = await supabase
+                          .from("savings_goals")
+                          .upsert(rows, { onConflict: "id" });
+
+                        if (insertError) {
+                          console.error("replace import error:", insertError);
+                          setPageError(insertError.message || "Import failed.");
+                          await loadGoals();
+                        }
+                      }
+                    }
+                  }}
+                >
+                  Import (replace)
+                </Button>
+              </div>
+
+              <div className="mt-4">
+                <textarea
+                  className="min-h-[260px] w-full rounded-[22px] border border-white/10 bg-white/[0.04] p-4 text-sm text-white outline-none placeholder:text-white/35 focus-visible:ring-2 focus-visible:ring-sky-400/40"
+                  value={ioText}
+                  onChange={(e) => setIoText(e.target.value)}
+                  placeholder="Paste exported JSON here to import..."
+                />
+              </div>
+            </GlassSection>
           </div>
 
-          <div style={{ height: 12 }} />
+          <GlassSection className="p-5">
+            <div className="mb-4">
+              <div className="text-lg font-black text-white">Manage Goals</div>
+              <div className="mt-1 text-sm text-white/55">Search, sort, archive, edit, and fund.</div>
+            </div>
 
-          <textarea
-            className="input"
-            value={ioText}
-            onChange={(e) => setIoText(e.target.value)}
-            placeholder="Paste exported JSON here to import..."
-            style={{
-              width: "100%",
-              minHeight: 220,
-              resize: "vertical",
-              padding: 12,
-              lineHeight: 1.45,
-              color: "var(--text)",
-              backgroundColor: "rgba(15,26,47,.78)",
-            }}
-          />
-        </div>
-      ) : null}
-    </main>
+            <div className="flex flex-wrap gap-2">
+              <Input
+                className="h-11 w-[220px] rounded-2xl border-white/10 bg-white/[0.04] text-white placeholder:text-white/35"
+                placeholder="Search goals..."
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+              />
+
+              <NativeSelect
+                className="w-[210px]"
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value)}
+              >
+                <option value="priority_then_due">Priority → Due</option>
+                <option value="due">Due date</option>
+                <option value="progress">Progress</option>
+                <option value="left">Amount left</option>
+                <option value="name">Name</option>
+              </NativeSelect>
+
+              <Button variant="secondary" onClick={() => setShowArchived((v) => !v)}>
+                {showArchived ? "Hide archived" : "Show archived"}
+              </Button>
+            </div>
+          </GlassSection>
+        </TabsContent>
+      </Tabs>
+    </div>
   );
 }
