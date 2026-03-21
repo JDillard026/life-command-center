@@ -25,11 +25,11 @@ function BrandLogo({ size = 64, priority = false }) {
         borderRadius: Math.round(size * 0.3),
         overflow: "hidden",
         flexShrink: 0,
-        border: "1px solid rgba(132, 157, 214, 0.24)",
+        border: "1px solid rgba(120, 148, 210, 0.22)",
         background:
-          "linear-gradient(180deg, rgba(11,18,32,0.98), rgba(7,12,24,1))",
+          "linear-gradient(180deg, rgba(10,16,28,0.98), rgba(6,10,18,1))",
         boxShadow:
-          "0 14px 34px rgba(0,0,0,0.40), inset 0 1px 0 rgba(255,255,255,0.06)",
+          "0 16px 36px rgba(0,0,0,0.42), inset 0 1px 0 rgba(255,255,255,0.06)",
       }}
     >
       <Image
@@ -47,19 +47,25 @@ function BrandLogo({ size = 64, priority = false }) {
 function StatCard({ title, value, tone = "blue" }) {
   const toneMap = {
     blue: {
-      border: "rgba(121, 149, 214, 0.18)",
-      bg: "linear-gradient(180deg, rgba(18,25,40,0.82), rgba(10,14,24,0.92))",
-      glow: "radial-gradient(circle at 0% 100%, rgba(90,140,255,0.18), transparent 45%)",
+      border: "rgba(79, 126, 255, 0.34)",
+      background:
+        "linear-gradient(180deg, rgba(12,18,34,0.92), rgba(7,11,21,0.98))",
+      glow: "radial-gradient(circle at 0% 100%, rgba(53,109,255,0.34), transparent 56%)",
+      shadow: "0 20px 44px rgba(10,18,44,0.34)",
     },
     amber: {
-      border: "rgba(213, 162, 92, 0.18)",
-      bg: "linear-gradient(180deg, rgba(22,19,18,0.82), rgba(12,11,14,0.92))",
-      glow: "radial-gradient(circle at 0% 100%, rgba(224,153,67,0.16), transparent 45%)",
+      border: "rgba(255, 166, 67, 0.30)",
+      background:
+        "linear-gradient(180deg, rgba(24,18,12,0.92), rgba(12,9,7,0.98))",
+      glow: "radial-gradient(circle at 0% 100%, rgba(255,150,52,0.30), transparent 56%)",
+      shadow: "0 20px 44px rgba(54,26,4,0.28)",
     },
     green: {
-      border: "rgba(112, 185, 160, 0.18)",
-      bg: "linear-gradient(180deg, rgba(14,24,24,0.82), rgba(10,14,18,0.92))",
-      glow: "radial-gradient(circle at 100% 100%, rgba(60,185,150,0.16), transparent 45%)",
+      border: "rgba(48, 208, 136, 0.30)",
+      background:
+        "linear-gradient(180deg, rgba(9,22,19,0.92), rgba(6,13,12,0.98))",
+      glow: "radial-gradient(circle at 100% 100%, rgba(34,197,94,0.30), transparent 56%)",
+      shadow: "0 20px 44px rgba(4,36,24,0.28)",
     },
   };
 
@@ -69,14 +75,13 @@ function StatCard({ title, value, tone = "blue" }) {
     <div
       style={{
         position: "relative",
-        borderRadius: 20,
-        border: `1px solid ${t.border}`,
-        background: t.bg,
-        minHeight: 106,
-        padding: "18px 18px 16px",
         overflow: "hidden",
-        boxShadow:
-          "0 16px 36px rgba(0,0,0,0.20), inset 0 1px 0 rgba(255,255,255,0.03)",
+        borderRadius: 22,
+        border: `1px solid ${t.border}`,
+        background: t.background,
+        minHeight: 110,
+        padding: "18px 18px 16px",
+        boxShadow: `${t.shadow}, inset 0 1px 0 rgba(255,255,255,0.04)`,
       }}
     >
       <div
@@ -92,9 +97,9 @@ function StatCard({ title, value, tone = "blue" }) {
           style={{
             fontSize: 12,
             fontWeight: 800,
-            letterSpacing: 0.7,
+            letterSpacing: 0.85,
             textTransform: "uppercase",
-            color: "rgba(218,228,250,0.72)",
+            color: "rgba(227,234,247,0.78)",
           }}
         >
           {title}
@@ -107,7 +112,7 @@ function StatCard({ title, value, tone = "blue" }) {
             lineHeight: 1.05,
             fontWeight: 900,
             letterSpacing: "-0.03em",
-            color: "#F4F7FD",
+            color: "#F7FAFF",
           }}
         >
           {value}
@@ -260,6 +265,7 @@ export default function LoginPage() {
           email: cleanEmail,
           password: pass,
         });
+
         if (error) throw error;
 
         setStatus(
@@ -273,8 +279,8 @@ export default function LoginPage() {
           email: cleanEmail,
           password: pass,
         });
-        if (error) throw error;
 
+        if (error) throw error;
         router.replace("/");
       }
     } catch (err) {
@@ -651,6 +657,7 @@ export default function LoginPage() {
               <div style={{ position: "relative", zIndex: 1 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
                   <BrandLogo size={74} />
+
                   <div>
                     <div
                       style={{
@@ -749,12 +756,12 @@ export default function LoginPage() {
                   <label style={{ display: "grid", gap: 8 }}>
                     <span style={labelStyle}>Email</span>
                     <input
+                      className="lcc-auth-input"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       type="email"
                       autoComplete="email"
                       placeholder="you@example.com"
-                      style={inputStyle}
                     />
                   </label>
 
@@ -763,6 +770,7 @@ export default function LoginPage() {
 
                     <div style={{ position: "relative" }}>
                       <input
+                        className="lcc-auth-input"
                         value={pass}
                         onChange={(e) => setPass(e.target.value)}
                         type={showPass ? "text" : "password"}
@@ -774,7 +782,7 @@ export default function LoginPage() {
                             ? "Enter your password"
                             : "Create a password"
                         }
-                        style={{ ...inputStyle, paddingRight: 74 }}
+                        style={{ paddingRight: 82 }}
                       />
 
                       <button
@@ -944,6 +952,64 @@ export default function LoginPage() {
             align-items: stretch;
           }
 
+          .lcc-auth-input {
+            width: 100%;
+            height: 54px;
+            border-radius: 18px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: linear-gradient(
+              180deg,
+              rgba(28, 36, 52, 0.94),
+              rgba(14, 20, 32, 0.98)
+            ) !important;
+            color: #f4f7fd !important;
+            padding: 0 18px;
+            outline: none;
+            font-size: 15px;
+            caret-color: #f4f7fd;
+            box-shadow:
+              inset 0 1px 0 rgba(255, 255, 255, 0.05),
+              0 10px 24px rgba(0, 0, 0, 0.18);
+            appearance: none;
+            -webkit-appearance: none;
+          }
+
+          .lcc-auth-input::placeholder {
+            color: rgba(214, 224, 242, 0.42) !important;
+          }
+
+          .lcc-auth-input:focus {
+            border-color: rgba(79, 126, 255, 0.38) !important;
+            background: linear-gradient(
+              180deg,
+              rgba(30, 40, 59, 0.96),
+              rgba(16, 22, 35, 1)
+            ) !important;
+            box-shadow:
+              0 0 0 1px rgba(79, 126, 255, 0.18),
+              0 0 24px rgba(47, 107, 255, 0.12),
+              inset 0 1px 0 rgba(255, 255, 255, 0.05);
+          }
+
+          .lcc-auth-input:-webkit-autofill,
+          .lcc-auth-input:-webkit-autofill:hover,
+          .lcc-auth-input:-webkit-autofill:focus,
+          .lcc-auth-input:-webkit-autofill:active {
+            -webkit-text-fill-color: #f4f7fd !important;
+            caret-color: #f4f7fd !important;
+            border: 1px solid rgba(255, 255, 255, 0.1) !important;
+            -webkit-box-shadow:
+              0 0 0 1000px rgba(14, 20, 32, 1) inset,
+              inset 0 1px 0 rgba(255, 255, 255, 0.05),
+              0 10px 24px rgba(0, 0, 0, 0.18) !important;
+            box-shadow:
+              0 0 0 1000px rgba(14, 20, 32, 1) inset,
+              inset 0 1px 0 rgba(255, 255, 255, 0.05),
+              0 10px 24px rgba(0, 0, 0, 0.18) !important;
+            border-radius: 18px !important;
+            transition: background-color 99999s ease-in-out 0s;
+          }
+
           @media (max-width: 1100px) {
             .login-grid {
               grid-template-columns: 1fr;
@@ -977,20 +1043,6 @@ const labelStyle = {
   color: "rgba(225,233,245,0.84)",
 };
 
-const inputStyle = {
-  width: "100%",
-  height: 54,
-  borderRadius: 18,
-  border: "1px solid rgba(255,255,255,0.10)",
-  background:
-    "linear-gradient(180deg, rgba(255,255,255,0.97), rgba(246,248,252,0.96))",
-  color: "#101722",
-  padding: "0 18px",
-  outline: "none",
-  fontSize: 15,
-  boxShadow: "inset 0 1px 0 rgba(255,255,255,0.55)",
-};
-
 const showPassButtonStyle = {
   position: "absolute",
   top: "50%",
@@ -1000,10 +1052,11 @@ const showPassButtonStyle = {
   padding: "0 12px",
   borderRadius: 12,
   border: "1px solid rgba(255,255,255,0.10)",
-  background: "rgba(16,20,29,0.92)",
-  color: "rgba(226,234,245,0.82)",
+  background: "rgba(30,38,56,0.96)",
+  color: "rgba(236,242,250,0.88)",
   fontWeight: 800,
   cursor: "pointer",
+  boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
 };
 
 const textButtonStyle = {
