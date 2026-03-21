@@ -15,19 +15,21 @@ function niceErr(err) {
   return err?.message || "Something went wrong.";
 }
 
-function BrandLogo({ size = 88, priority = false, glow = true }) {
+function BrandLogo({ size = 64, priority = false }) {
   return (
     <div
       style={{
         width: size,
         height: size,
         position: "relative",
-        borderRadius: Math.round(size * 0.28),
+        borderRadius: Math.round(size * 0.3),
         overflow: "hidden",
-        boxShadow: glow
-          ? "0 0 0 1px rgba(96,165,250,0.12), 0 18px 60px rgba(37,99,235,0.22)"
-          : "none",
         flexShrink: 0,
+        border: "1px solid rgba(132, 157, 214, 0.24)",
+        background:
+          "linear-gradient(180deg, rgba(11,18,32,0.98), rgba(7,12,24,1))",
+        boxShadow:
+          "0 14px 34px rgba(0,0,0,0.40), inset 0 1px 0 rgba(255,255,255,0.06)",
       }}
     >
       <Image
@@ -36,30 +38,28 @@ function BrandLogo({ size = 88, priority = false, glow = true }) {
         fill
         priority={priority}
         sizes={`${size}px`}
-        style={{
-          objectFit: "cover",
-        }}
+        style={{ objectFit: "cover" }}
       />
     </div>
   );
 }
 
-function MiniStat({ title, value, tone = "blue" }) {
+function StatCard({ title, value, tone = "blue" }) {
   const toneMap = {
     blue: {
-      border: "rgba(96,165,250,0.20)",
-      bg: "rgba(37,99,235,0.08)",
-      glow: "rgba(37,99,235,0.14)",
-    },
-    green: {
-      border: "rgba(34,197,94,0.20)",
-      bg: "rgba(34,197,94,0.07)",
-      glow: "rgba(34,197,94,0.12)",
+      border: "rgba(121, 149, 214, 0.18)",
+      bg: "linear-gradient(180deg, rgba(18,25,40,0.82), rgba(10,14,24,0.92))",
+      glow: "radial-gradient(circle at 0% 100%, rgba(90,140,255,0.18), transparent 45%)",
     },
     amber: {
-      border: "rgba(245,158,11,0.20)",
-      bg: "rgba(245,158,11,0.07)",
-      glow: "rgba(245,158,11,0.12)",
+      border: "rgba(213, 162, 92, 0.18)",
+      bg: "linear-gradient(180deg, rgba(22,19,18,0.82), rgba(12,11,14,0.92))",
+      glow: "radial-gradient(circle at 0% 100%, rgba(224,153,67,0.16), transparent 45%)",
+    },
+    green: {
+      border: "rgba(112, 185, 160, 0.18)",
+      bg: "linear-gradient(180deg, rgba(14,24,24,0.82), rgba(10,14,18,0.92))",
+      glow: "radial-gradient(circle at 100% 100%, rgba(60,185,150,0.16), transparent 45%)",
     },
   };
 
@@ -68,38 +68,73 @@ function MiniStat({ title, value, tone = "blue" }) {
   return (
     <div
       style={{
-        border: `1px solid ${t.border}`,
-        background: `linear-gradient(180deg, ${t.bg}, rgba(255,255,255,0.02))`,
-        boxShadow: `0 14px 36px ${t.glow}`,
+        position: "relative",
         borderRadius: 20,
-        padding: 14,
-        minWidth: 0,
+        border: `1px solid ${t.border}`,
+        background: t.bg,
+        minHeight: 106,
+        padding: "18px 18px 16px",
+        overflow: "hidden",
+        boxShadow:
+          "0 16px 36px rgba(0,0,0,0.20), inset 0 1px 0 rgba(255,255,255,0.03)",
       }}
     >
       <div
         style={{
-          fontSize: 12,
-          color: "rgba(224,232,255,0.68)",
-          fontWeight: 800,
-          letterSpacing: 0.35,
-          textTransform: "uppercase",
+          position: "absolute",
+          inset: 0,
+          background: t.glow,
+          pointerEvents: "none",
         }}
-      >
-        {title}
-      </div>
+      />
+      <div style={{ position: "relative", zIndex: 1 }}>
+        <div
+          style={{
+            fontSize: 12,
+            fontWeight: 800,
+            letterSpacing: 0.7,
+            textTransform: "uppercase",
+            color: "rgba(218,228,250,0.72)",
+          }}
+        >
+          {title}
+        </div>
 
-      <div
-        style={{
-          marginTop: 8,
-          fontSize: 22,
-          fontWeight: 950,
-          letterSpacing: "-0.03em",
-          color: "#F7FBFF",
-        }}
-      >
-        {value}
+        <div
+          style={{
+            marginTop: 10,
+            fontSize: 20,
+            lineHeight: 1.05,
+            fontWeight: 900,
+            letterSpacing: "-0.03em",
+            color: "#F4F7FD",
+          }}
+        >
+          {value}
+        </div>
       </div>
     </div>
+  );
+}
+
+function ModulePill({ children }) {
+  return (
+    <span
+      style={{
+        padding: "10px 14px",
+        borderRadius: 999,
+        border: "1px solid rgba(255,255,255,0.08)",
+        background:
+          "linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.025))",
+        color: "rgba(240,244,252,0.90)",
+        fontSize: 13,
+        fontWeight: 700,
+        lineHeight: 1,
+        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.03)",
+      }}
+    >
+      {children}
+    </span>
   );
 }
 
@@ -113,7 +148,7 @@ function SplashIntro({ leaving }) {
         display: "grid",
         placeItems: "center",
         background:
-          "radial-gradient(circle at 50% 35%, rgba(37,99,235,0.24), transparent 18%), radial-gradient(circle at 50% 60%, rgba(59,130,246,0.10), transparent 28%), linear-gradient(180deg, #040A13 0%, #06101D 55%, #091423 100%)",
+          "radial-gradient(circle at 50% 40%, rgba(56,88,140,0.18), transparent 18%), linear-gradient(180deg, #05070D 0%, #060A12 45%, #070C16 100%)",
         transform: leaving ? "translateY(-100%)" : "translateY(0)",
         opacity: leaving ? 0 : 1,
         transition:
@@ -124,23 +159,23 @@ function SplashIntro({ leaving }) {
       <div
         style={{
           textAlign: "center",
-          transform: leaving ? "scale(0.96)" : "scale(1)",
+          transform: leaving ? "scale(0.97)" : "scale(1)",
           transition: "transform 420ms ease",
           padding: 24,
         }}
       >
         <div style={{ display: "grid", placeItems: "center" }}>
-          <BrandLogo size={132} priority glow />
+          <BrandLogo size={148} priority />
         </div>
 
         <div
           style={{
-            marginTop: 22,
-            fontSize: 13,
+            marginTop: 20,
+            fontSize: 12,
             fontWeight: 900,
-            letterSpacing: 2,
+            letterSpacing: 1.8,
             textTransform: "uppercase",
-            color: "rgba(186,211,255,0.86)",
+            color: "rgba(196,210,240,0.82)",
           }}
         >
           Life Command Center
@@ -149,11 +184,11 @@ function SplashIntro({ leaving }) {
         <div
           style={{
             marginTop: 14,
-            fontSize: "clamp(32px, 5vw, 60px)",
-            lineHeight: 1.05,
-            fontWeight: 950,
+            fontSize: "clamp(30px, 5vw, 58px)",
+            lineHeight: 1.02,
+            fontWeight: 900,
             letterSpacing: "-0.05em",
-            color: "#F8FBFF",
+            color: "#F5F7FB",
           }}
         >
           Your financial system,
@@ -277,13 +312,13 @@ export default function LoginPage() {
   async function onForgotPassword() {
     setStatus("");
 
-    if (!supabase) {
-      setStatus("Missing Supabase environment variables.", "error");
+    if (!safeEmail(email)) {
+      setStatus("Enter your email first.", "error");
       return;
     }
 
-    if (!safeEmail(email)) {
-      setStatus("Enter your email first.", "error");
+    if (!supabase) {
+      setStatus("Missing Supabase environment variables.", "error");
       return;
     }
 
@@ -298,7 +333,6 @@ export default function LoginPage() {
       );
 
       if (error) throw error;
-
       setStatus("Password reset email sent. Check your inbox.", "success");
     } catch (err) {
       setStatus(niceErr(err), "error");
@@ -310,20 +344,20 @@ export default function LoginPage() {
   const messageStyles =
     msgType === "error"
       ? {
-          border: "1px solid rgba(239,68,68,0.28)",
-          background: "rgba(127,29,29,0.18)",
-          color: "#FFD4D4",
+          border: "1px solid rgba(239,68,68,0.22)",
+          background: "rgba(110,26,26,0.18)",
+          color: "#FFD7D7",
         }
       : msgType === "success"
       ? {
-          border: "1px solid rgba(34,197,94,0.24)",
-          background: "rgba(20,83,45,0.18)",
-          color: "#DDFEE7",
+          border: "1px solid rgba(52,211,153,0.20)",
+          background: "rgba(18,72,57,0.18)",
+          color: "#DDFEEB",
         }
       : {
           border: "1px solid rgba(255,255,255,0.10)",
           background: "rgba(255,255,255,0.04)",
-          color: "#E5EEFF",
+          color: "#E6EDF9",
         };
 
   return (
@@ -333,22 +367,34 @@ export default function LoginPage() {
       <main
         style={{
           minHeight: "100vh",
-          color: "#ECF4FF",
-          background:
-            "radial-gradient(circle at top left, rgba(29,78,216,0.18), transparent 26%), radial-gradient(circle at top right, rgba(16,185,129,0.10), transparent 22%), linear-gradient(180deg, #07111F 0%, #091423 42%, #0A1420 100%)",
-          overflow: "hidden",
           position: "relative",
+          overflow: "hidden",
+          color: "#EEF3FB",
+          background:
+            "radial-gradient(circle at top left, rgba(56,84,134,0.16), transparent 18%), radial-gradient(circle at top right, rgba(180,124,66,0.08), transparent 20%), linear-gradient(180deg, #05070C 0%, #070A11 38%, #080C14 100%)",
         }}
       >
         <div
           style={{
             position: "absolute",
             inset: 0,
-            backgroundImage:
-              "linear-gradient(rgba(255,255,255,0.028) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.028) 1px, transparent 1px)",
-            backgroundSize: "44px 44px",
-            maskImage: "linear-gradient(180deg, rgba(0,0,0,0.65), transparent 82%)",
             pointerEvents: "none",
+            backgroundImage:
+              "linear-gradient(rgba(255,255,255,0.026) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.026) 1px, transparent 1px)",
+            backgroundSize: "48px 48px",
+            maskImage:
+              "linear-gradient(180deg, rgba(0,0,0,0.86), rgba(0,0,0,0.18))",
+          }}
+        />
+
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            pointerEvents: "none",
+            opacity: 0.28,
+            backgroundImage:
+              "radial-gradient(circle at 14% 18%, rgba(255,255,255,0.95) 0 1px, transparent 1.6px), radial-gradient(circle at 30% 42%, rgba(255,255,255,0.75) 0 1px, transparent 1.7px), radial-gradient(circle at 68% 25%, rgba(255,255,255,0.82) 0 1px, transparent 1.7px), radial-gradient(circle at 84% 35%, rgba(255,255,255,0.78) 0 1px, transparent 1.7px), radial-gradient(circle at 58% 70%, rgba(255,255,255,0.74) 0 1px, transparent 1.7px), radial-gradient(circle at 23% 78%, rgba(255,255,255,0.78) 0 1px, transparent 1.7px), radial-gradient(circle at 92% 78%, rgba(255,255,255,0.68) 0 1px, transparent 1.7px)",
           }}
         />
 
@@ -356,90 +402,69 @@ export default function LoginPage() {
           style={{
             position: "relative",
             zIndex: 1,
-            maxWidth: 1320,
+            maxWidth: 1380,
             margin: "0 auto",
-            padding: "18px 16px 28px",
+            padding: "22px 18px 28px",
           }}
         >
           <header
             style={{
               display: "flex",
               alignItems: "center",
-              justifyContent: "space-between",
               gap: 16,
-              padding: "8px 0 18px",
+              padding: "4px 2px 18px",
             }}
           >
-            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              <BrandLogo size={56} glow />
-              <div>
-                <div
-                  style={{
-                    fontSize: 18,
-                    fontWeight: 950,
-                    letterSpacing: "-0.03em",
-                  }}
-                >
-                  Life Command Center
-                </div>
-                <div
-                  style={{
-                    marginTop: 2,
-                    fontSize: 12,
-                    color: "rgba(214,228,255,0.66)",
-                    fontWeight: 800,
-                    letterSpacing: 0.35,
-                    textTransform: "uppercase",
-                  }}
-                >
-                  Personal financial operating system
-                </div>
+            <BrandLogo size={64} />
+
+            <div>
+              <div
+                style={{
+                  fontSize: 17,
+                  fontWeight: 900,
+                  letterSpacing: "-0.03em",
+                  color: "#F3F6FC",
+                }}
+              >
+                Life Command Center
+              </div>
+
+              <div
+                style={{
+                  marginTop: 4,
+                  fontSize: 11,
+                  fontWeight: 800,
+                  letterSpacing: 1.1,
+                  textTransform: "uppercase",
+                  color: "rgba(209,219,239,0.70)",
+                }}
+              >
+                Personal financial operating system
               </div>
             </div>
           </header>
 
-          <section
-            style={{
-              display: "grid",
-              gridTemplateColumns: "1.04fr 0.96fr",
-              gap: 24,
-              alignItems: "stretch",
-            }}
-          >
+          <section className="login-grid">
             <div
               style={{
                 position: "relative",
-                borderRadius: 30,
-                border: "1px solid rgba(255,255,255,0.10)",
+                borderRadius: 32,
+                border: "1px solid rgba(255,255,255,0.08)",
                 background:
-                  "linear-gradient(180deg, rgba(12,18,30,0.74), rgba(8,13,24,0.84))",
-                boxShadow: "0 24px 80px rgba(0,0,0,0.40)",
-                padding: 24,
+                  "linear-gradient(180deg, rgba(11,15,24,0.78), rgba(7,10,18,0.90))",
+                padding: 34,
                 overflow: "hidden",
+                boxShadow:
+                  "0 30px 80px rgba(0,0,0,0.38), inset 0 1px 0 rgba(255,255,255,0.03)",
               }}
             >
               <div
                 style={{
                   position: "absolute",
-                  top: -140,
-                  right: -120,
-                  width: 320,
-                  height: 320,
-                  borderRadius: "50%",
-                  background: "rgba(37,99,235,0.16)",
-                  filter: "blur(80px)",
-                }}
-              />
-              <div
-                style={{
-                  position: "absolute",
-                  bottom: -120,
-                  left: -100,
-                  width: 260,
-                  height: 260,
-                  borderRadius: "50%",
-                  background: "rgba(16,185,129,0.12)",
-                  filter: "blur(90px)",
+                  inset: 0,
+                  background:
+                    "radial-gradient(circle at 82% 32%, rgba(86,122,205,0.18), transparent 22%), radial-gradient(circle at 87% 76%, rgba(190,132,67,0.10), transparent 16%), radial-gradient(circle at 12% 88%, rgba(79,136,122,0.10), transparent 18%)",
+                  pointerEvents: "none",
                 }}
               />
 
@@ -448,16 +473,15 @@ export default function LoginPage() {
                   style={{
                     display: "inline-flex",
                     alignItems: "center",
-                    gap: 8,
                     borderRadius: 999,
-                    padding: "8px 12px",
-                    border: "1px solid rgba(255,255,255,0.12)",
-                    background: "rgba(255,255,255,0.04)",
+                    padding: "10px 14px",
+                    border: "1px solid rgba(255,255,255,0.08)",
+                    background: "rgba(255,255,255,0.03)",
                     fontSize: 12,
-                    fontWeight: 900,
-                    letterSpacing: 0.5,
+                    fontWeight: 800,
+                    letterSpacing: 0.9,
                     textTransform: "uppercase",
-                    color: "rgba(198,217,255,0.88)",
+                    color: "rgba(218,228,245,0.85)",
                   }}
                 >
                   Built for control
@@ -465,12 +489,13 @@ export default function LoginPage() {
 
                 <h1
                   style={{
-                    margin: "18px 0 0 0",
-                    fontSize: "clamp(34px, 5vw, 62px)",
-                    lineHeight: 0.98,
-                    fontWeight: 950,
-                    letterSpacing: "-0.05em",
-                    maxWidth: 700,
+                    margin: "26px 0 0 0",
+                    maxWidth: 760,
+                    fontSize: "clamp(48px, 5.8vw, 82px)",
+                    lineHeight: 0.96,
+                    letterSpacing: "-0.06em",
+                    fontWeight: 900,
+                    color: "#F5F7FB",
                   }}
                 >
                   Run your entire
@@ -484,11 +509,11 @@ export default function LoginPage() {
 
                 <p
                   style={{
-                    marginTop: 18,
-                    maxWidth: 620,
-                    color: "rgba(226,236,255,0.72)",
-                    fontSize: 16,
+                    marginTop: 24,
+                    maxWidth: 700,
+                    fontSize: 17,
                     lineHeight: 1.7,
+                    color: "rgba(223,232,244,0.78)",
                   }}
                 >
                   Track income, bills, spending, debt, savings, investments, and
@@ -496,41 +521,46 @@ export default function LoginPage() {
                 </p>
 
                 <div
+                  className="stats-grid"
                   style={{
-                    marginTop: 24,
+                    marginTop: 28,
                     display: "grid",
                     gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
                     gap: 14,
                   }}
                 >
-                  <MiniStat title="Spending" value="$1,284" tone="amber" />
-                  <MiniStat title="Bills due" value="4 upcoming" tone="blue" />
-                  <MiniStat title="Net flow" value="+$842" tone="green" />
+                  <StatCard title="Spending" value="$1,284" tone="blue" />
+                  <StatCard title="Bills Due" value="4 upcoming" tone="amber" />
+                  <StatCard title="Net Flow" value="+$842" tone="green" />
                 </div>
 
                 <div
+                  className="bottom-grid"
                   style={{
-                    marginTop: 18,
+                    marginTop: 16,
                     display: "grid",
-                    gridTemplateColumns: "1.1fr 0.9fr",
+                    gridTemplateColumns: "1fr 0.92fr",
                     gap: 14,
                   }}
                 >
                   <div
                     style={{
                       borderRadius: 22,
-                      border: "1px solid rgba(255,255,255,0.10)",
-                      background: "rgba(255,255,255,0.035)",
-                      padding: 18,
+                      border: "1px solid rgba(255,255,255,0.07)",
+                      background:
+                        "linear-gradient(180deg, rgba(14,18,28,0.78), rgba(10,13,21,0.88))",
+                      padding: 22,
+                      boxShadow:
+                        "0 16px 30px rgba(0,0,0,0.16), inset 0 1px 0 rgba(255,255,255,0.03)",
                     }}
                   >
                     <div
                       style={{
                         fontSize: 12,
-                        color: "rgba(206,222,255,0.70)",
                         fontWeight: 800,
+                        letterSpacing: 0.8,
                         textTransform: "uppercase",
-                        letterSpacing: 0.35,
+                        color: "rgba(214,224,242,0.72)",
                       }}
                     >
                       Why it feels different
@@ -538,10 +568,11 @@ export default function LoginPage() {
 
                     <div
                       style={{
-                        marginTop: 10,
-                        fontSize: 15,
-                        lineHeight: 1.7,
-                        color: "rgba(232,240,255,0.80)",
+                        marginTop: 14,
+                        fontSize: 16,
+                        lineHeight: 1.8,
+                        color: "rgba(233,239,248,0.82)",
+                        maxWidth: 470,
                       }}
                     >
                       Less scattered apps. Less guessing. More visibility into
@@ -553,19 +584,21 @@ export default function LoginPage() {
                   <div
                     style={{
                       borderRadius: 22,
-                      border: "1px solid rgba(255,255,255,0.10)",
+                      border: "1px solid rgba(255,255,255,0.07)",
                       background:
-                        "linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.025))",
-                      padding: 18,
+                        "linear-gradient(180deg, rgba(14,18,28,0.78), rgba(10,13,21,0.88))",
+                      padding: 22,
+                      boxShadow:
+                        "0 16px 30px rgba(0,0,0,0.16), inset 0 1px 0 rgba(255,255,255,0.03)",
                     }}
                   >
                     <div
                       style={{
                         fontSize: 12,
-                        color: "rgba(206,222,255,0.70)",
                         fontWeight: 800,
+                        letterSpacing: 0.8,
                         textTransform: "uppercase",
-                        letterSpacing: 0.35,
+                        color: "rgba(214,224,242,0.72)",
                       }}
                     >
                       Core modules
@@ -573,36 +606,19 @@ export default function LoginPage() {
 
                     <div
                       style={{
-                        marginTop: 10,
+                        marginTop: 14,
                         display: "flex",
                         flexWrap: "wrap",
-                        gap: 8,
+                        gap: 10,
                       }}
                     >
-                      {[
-                        "Income",
-                        "Bills",
-                        "Spending",
-                        "Debt",
-                        "Savings",
-                        "Investments",
-                        "Calendar",
-                      ].map((item) => (
-                        <span
-                          key={item}
-                          style={{
-                            padding: "7px 10px",
-                            borderRadius: 999,
-                            border: "1px solid rgba(255,255,255,0.10)",
-                            background: "rgba(255,255,255,0.04)",
-                            fontSize: 12,
-                            fontWeight: 800,
-                            color: "rgba(236,244,255,0.82)",
-                          }}
-                        >
-                          {item}
-                        </span>
-                      ))}
+                      <ModulePill>Income</ModulePill>
+                      <ModulePill>Bills</ModulePill>
+                      <ModulePill>Spending</ModulePill>
+                      <ModulePill>Debt</ModulePill>
+                      <ModulePill>Savings</ModulePill>
+                      <ModulePill>Investments</ModulePill>
+                      <ModulePill>Calendar</ModulePill>
                     </div>
                   </div>
                 </div>
@@ -612,39 +628,37 @@ export default function LoginPage() {
             <div
               style={{
                 position: "relative",
-                borderRadius: 30,
-                border: "1px solid rgba(255,255,255,0.12)",
+                borderRadius: 32,
+                border: "1px solid rgba(255,255,255,0.08)",
                 background:
-                  "linear-gradient(180deg, rgba(9,15,26,0.94), rgba(10,16,28,0.96))",
-                boxShadow: "0 26px 80px rgba(0,0,0,0.48)",
-                padding: 24,
+                  "linear-gradient(180deg, rgba(12,15,24,0.80), rgba(8,11,18,0.92))",
+                padding: 28,
                 overflow: "hidden",
+                boxShadow:
+                  "0 30px 80px rgba(0,0,0,0.40), inset 0 1px 0 rgba(255,255,255,0.03)",
               }}
             >
               <div
                 style={{
                   position: "absolute",
-                  top: -70,
-                  right: -60,
-                  width: 180,
-                  height: 180,
-                  borderRadius: "50%",
-                  background: "rgba(96,165,250,0.15)",
-                  filter: "blur(60px)",
+                  inset: 0,
+                  background:
+                    "radial-gradient(circle at 100% 0%, rgba(189,137,77,0.08), transparent 26%), radial-gradient(circle at 0% 20%, rgba(86,122,205,0.12), transparent 22%)",
+                  pointerEvents: "none",
                 }}
               />
 
               <div style={{ position: "relative", zIndex: 1 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                  <BrandLogo size={64} glow />
+                <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                  <BrandLogo size={74} />
                   <div>
                     <div
                       style={{
-                        fontSize: 14,
-                        textTransform: "uppercase",
-                        letterSpacing: 0.45,
-                        color: "rgba(151,188,255,0.86)",
+                        fontSize: 13,
                         fontWeight: 900,
+                        letterSpacing: 1,
+                        textTransform: "uppercase",
+                        color: "rgba(215,225,243,0.82)",
                       }}
                     >
                       Account access
@@ -652,10 +666,12 @@ export default function LoginPage() {
 
                     <div
                       style={{
-                        marginTop: 4,
-                        fontSize: 28,
-                        fontWeight: 950,
+                        marginTop: 6,
+                        fontSize: 30,
+                        lineHeight: 1.05,
+                        fontWeight: 900,
                         letterSpacing: "-0.04em",
+                        color: "#F5F7FB",
                       }}
                     >
                       {mode === "login" ? "Welcome back" : "Create your account"}
@@ -665,10 +681,10 @@ export default function LoginPage() {
 
                 <p
                   style={{
-                    marginTop: 14,
-                    color: "rgba(226,236,255,0.70)",
+                    marginTop: 18,
                     fontSize: 14,
-                    lineHeight: 1.65,
+                    lineHeight: 1.75,
+                    color: "rgba(225,233,244,0.72)",
                   }}
                 >
                   Sign in to continue or create a private account for your own
@@ -677,14 +693,14 @@ export default function LoginPage() {
 
                 <div
                   style={{
-                    marginTop: 18,
+                    marginTop: 20,
                     display: "grid",
                     gridTemplateColumns: "1fr 1fr",
                     gap: 8,
                     padding: 6,
                     borderRadius: 18,
-                    border: "1px solid rgba(255,255,255,0.10)",
-                    background: "rgba(255,255,255,0.03)",
+                    border: "1px solid rgba(255,255,255,0.08)",
+                    background: "rgba(255,255,255,0.025)",
                   }}
                 >
                   {[
@@ -703,17 +719,21 @@ export default function LoginPage() {
                         }}
                         disabled={loading}
                         style={{
-                          height: 46,
+                          height: 48,
                           borderRadius: 14,
                           border: active
-                            ? "1px solid rgba(96,165,250,0.36)"
+                            ? "1px solid rgba(138,163,215,0.22)"
                             : "1px solid transparent",
                           background: active
-                            ? "linear-gradient(135deg, rgba(37,99,235,0.24), rgba(16,185,129,0.14))"
+                            ? "linear-gradient(180deg, rgba(34,46,72,0.96), rgba(20,28,44,0.96))"
                             : "transparent",
-                          color: active ? "#FFFFFF" : "rgba(194,212,245,0.75)",
+                          color: active ? "#F7FAFF" : "rgba(198,210,232,0.76)",
                           fontWeight: 900,
+                          fontSize: 14,
                           cursor: "pointer",
+                          boxShadow: active
+                            ? "0 10px 24px rgba(0,0,0,0.18), inset 0 1px 0 rgba(255,255,255,0.03)"
+                            : "none",
                         }}
                       >
                         {item.label}
@@ -724,7 +744,7 @@ export default function LoginPage() {
 
                 <form
                   onSubmit={onSubmit}
-                  style={{ marginTop: 18, display: "grid", gap: 12 }}
+                  style={{ marginTop: 18, display: "grid", gap: 14 }}
                 >
                   <label style={{ display: "grid", gap: 8 }}>
                     <span style={labelStyle}>Email</span>
@@ -754,26 +774,13 @@ export default function LoginPage() {
                             ? "Enter your password"
                             : "Create a password"
                         }
-                        style={{ ...inputStyle, paddingRight: 62 }}
+                        style={{ ...inputStyle, paddingRight: 74 }}
                       />
 
                       <button
                         type="button"
                         onClick={() => setShowPass((v) => !v)}
-                        style={{
-                          position: "absolute",
-                          top: "50%",
-                          right: 10,
-                          transform: "translateY(-50%)",
-                          height: 34,
-                          padding: "0 10px",
-                          borderRadius: 12,
-                          border: "1px solid rgba(255,255,255,0.10)",
-                          background: "rgba(255,255,255,0.04)",
-                          color: "rgba(219,230,255,0.84)",
-                          fontWeight: 800,
-                          cursor: "pointer",
-                        }}
+                        style={showPassButtonStyle}
                       >
                         {showPass ? "Hide" : "Show"}
                       </button>
@@ -784,19 +791,19 @@ export default function LoginPage() {
                     type="submit"
                     disabled={disabled}
                     style={{
-                      height: 54,
-                      borderRadius: 16,
-                      border: "1px solid rgba(96,165,250,0.30)",
+                      height: 56,
+                      borderRadius: 18,
+                      border: "1px solid rgba(196,144,81,0.16)",
                       background: disabled
-                        ? "rgba(255,255,255,0.08)"
-                        : "linear-gradient(135deg, #2563EB 0%, #1D4ED8 38%, #0F766E 100%)",
+                        ? "rgba(255,255,255,0.06)"
+                        : "linear-gradient(180deg, rgba(39,44,57,0.98), rgba(18,21,29,0.98))",
                       color: "#FFFFFF",
-                      fontWeight: 950,
-                      fontSize: 15,
+                      fontWeight: 900,
+                      fontSize: 16,
                       cursor: disabled ? "not-allowed" : "pointer",
                       boxShadow: disabled
                         ? "none"
-                        : "0 18px 40px rgba(37,99,235,0.22)",
+                        : "0 18px 38px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.04)",
                     }}
                   >
                     {loading
@@ -809,10 +816,10 @@ export default function LoginPage() {
 
                 <div
                   style={{
-                    margin: "16px 0",
+                    margin: "18px 0",
                     display: "flex",
                     alignItems: "center",
-                    gap: 10,
+                    gap: 12,
                   }}
                 >
                   <div
@@ -825,8 +832,9 @@ export default function LoginPage() {
                   <div
                     style={{
                       fontSize: 12,
-                      color: "rgba(209,223,250,0.60)",
                       fontWeight: 800,
+                      letterSpacing: 1,
+                      color: "rgba(204,215,236,0.58)",
                     }}
                   >
                     OR
@@ -846,14 +854,17 @@ export default function LoginPage() {
                   disabled={loading}
                   style={{
                     width: "100%",
-                    height: 54,
-                    borderRadius: 16,
-                    border: "1px solid rgba(255,255,255,0.12)",
-                    background: "rgba(255,255,255,0.04)",
-                    color: "#F7FBFF",
-                    fontWeight: 900,
+                    height: 56,
+                    borderRadius: 18,
+                    border: "1px solid rgba(255,255,255,0.10)",
+                    background:
+                      "linear-gradient(180deg, rgba(18,22,31,0.94), rgba(12,15,21,0.96))",
+                    color: "#F5F8FD",
+                    fontWeight: 800,
                     fontSize: 15,
                     cursor: loading ? "not-allowed" : "pointer",
+                    boxShadow:
+                      "0 12px 28px rgba(0,0,0,0.20), inset 0 1px 0 rgba(255,255,255,0.03)",
                   }}
                 >
                   Continue with Google
@@ -861,7 +872,7 @@ export default function LoginPage() {
 
                 <div
                   style={{
-                    marginTop: 12,
+                    marginTop: 16,
                     display: "flex",
                     justifyContent: "space-between",
                     gap: 12,
@@ -913,7 +924,7 @@ export default function LoginPage() {
                       style={{
                         marginTop: 6,
                         fontSize: 13,
-                        lineHeight: 1.6,
+                        lineHeight: 1.65,
                       }}
                     >
                       {msg}
@@ -926,16 +937,26 @@ export default function LoginPage() {
         </div>
 
         <style jsx>{`
-          @media (max-width: 980px) {
-            section {
-              grid-template-columns: 1fr !important;
+          .login-grid {
+            display: grid;
+            grid-template-columns: 1.08fr 0.92fr;
+            gap: 24px;
+            align-items: stretch;
+          }
+
+          @media (max-width: 1100px) {
+            .login-grid {
+              grid-template-columns: 1fr;
             }
           }
 
-          @media (max-width: 720px) {
-            h1 {
-              max-width: 100% !important;
-              font-size: clamp(34px, 12vw, 52px) !important;
+          @media (max-width: 760px) {
+            .stats-grid {
+              grid-template-columns: 1fr !important;
+            }
+
+            .bottom-grid {
+              grid-template-columns: 1fr !important;
             }
           }
 
@@ -953,26 +974,43 @@ export default function LoginPage() {
 const labelStyle = {
   fontSize: 13,
   fontWeight: 800,
-  color: "rgba(220,232,255,0.84)",
+  color: "rgba(225,233,245,0.84)",
 };
 
 const inputStyle = {
   width: "100%",
-  height: 52,
-  borderRadius: 16,
+  height: 54,
+  borderRadius: 18,
   border: "1px solid rgba(255,255,255,0.10)",
-  background: "rgba(255,255,255,0.045)",
-  color: "#F7FBFF",
-  padding: "0 16px",
+  background:
+    "linear-gradient(180deg, rgba(255,255,255,0.97), rgba(246,248,252,0.96))",
+  color: "#101722",
+  padding: "0 18px",
   outline: "none",
   fontSize: 15,
+  boxShadow: "inset 0 1px 0 rgba(255,255,255,0.55)",
+};
+
+const showPassButtonStyle = {
+  position: "absolute",
+  top: "50%",
+  right: 10,
+  transform: "translateY(-50%)",
+  height: 34,
+  padding: "0 12px",
+  borderRadius: 12,
+  border: "1px solid rgba(255,255,255,0.10)",
+  background: "rgba(16,20,29,0.92)",
+  color: "rgba(226,234,245,0.82)",
+  fontWeight: 800,
+  cursor: "pointer",
 };
 
 const textButtonStyle = {
   background: "transparent",
   border: "none",
   padding: 0,
-  color: "rgba(151,188,255,0.92)",
+  color: "rgba(174,192,225,0.88)",
   fontSize: 13,
   fontWeight: 800,
   cursor: "pointer",
