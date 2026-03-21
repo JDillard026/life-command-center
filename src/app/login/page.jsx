@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
@@ -10,27 +11,181 @@ function safeEmail(v) {
   return String(v || "").trim().toLowerCase();
 }
 
-function niceErr(e) {
-  return e?.message || "Something went wrong.";
+function niceErr(err) {
+  return err?.message || "Something went wrong.";
+}
+
+function BrandLogo({ size = 88, priority = false, glow = true }) {
+  return (
+    <div
+      style={{
+        width: size,
+        height: size,
+        position: "relative",
+        borderRadius: Math.round(size * 0.28),
+        overflow: "hidden",
+        boxShadow: glow
+          ? "0 0 0 1px rgba(96,165,250,0.12), 0 18px 60px rgba(37,99,235,0.22)"
+          : "none",
+        flexShrink: 0,
+      }}
+    >
+      <Image
+        src="/brand/lcc-logo.png"
+        alt="Life Command Center logo"
+        fill
+        priority={priority}
+        sizes={`${size}px`}
+        style={{
+          objectFit: "cover",
+        }}
+      />
+    </div>
+  );
+}
+
+function MiniStat({ title, value, tone = "blue" }) {
+  const toneMap = {
+    blue: {
+      border: "rgba(96,165,250,0.20)",
+      bg: "rgba(37,99,235,0.08)",
+      glow: "rgba(37,99,235,0.14)",
+    },
+    green: {
+      border: "rgba(34,197,94,0.20)",
+      bg: "rgba(34,197,94,0.07)",
+      glow: "rgba(34,197,94,0.12)",
+    },
+    amber: {
+      border: "rgba(245,158,11,0.20)",
+      bg: "rgba(245,158,11,0.07)",
+      glow: "rgba(245,158,11,0.12)",
+    },
+  };
+
+  const t = toneMap[tone] || toneMap.blue;
+
+  return (
+    <div
+      style={{
+        border: `1px solid ${t.border}`,
+        background: `linear-gradient(180deg, ${t.bg}, rgba(255,255,255,0.02))`,
+        boxShadow: `0 14px 36px ${t.glow}`,
+        borderRadius: 20,
+        padding: 14,
+        minWidth: 0,
+      }}
+    >
+      <div
+        style={{
+          fontSize: 12,
+          color: "rgba(224,232,255,0.68)",
+          fontWeight: 800,
+          letterSpacing: 0.35,
+          textTransform: "uppercase",
+        }}
+      >
+        {title}
+      </div>
+
+      <div
+        style={{
+          marginTop: 8,
+          fontSize: 22,
+          fontWeight: 950,
+          letterSpacing: "-0.03em",
+          color: "#F7FBFF",
+        }}
+      >
+        {value}
+      </div>
+    </div>
+  );
+}
+
+function SplashIntro({ leaving }) {
+  return (
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 60,
+        display: "grid",
+        placeItems: "center",
+        background:
+          "radial-gradient(circle at 50% 35%, rgba(37,99,235,0.24), transparent 18%), radial-gradient(circle at 50% 60%, rgba(59,130,246,0.10), transparent 28%), linear-gradient(180deg, #040A13 0%, #06101D 55%, #091423 100%)",
+        transform: leaving ? "translateY(-100%)" : "translateY(0)",
+        opacity: leaving ? 0 : 1,
+        transition:
+          "transform 760ms cubic-bezier(0.22, 1, 0.36, 1), opacity 520ms ease",
+        pointerEvents: "none",
+      }}
+    >
+      <div
+        style={{
+          textAlign: "center",
+          transform: leaving ? "scale(0.96)" : "scale(1)",
+          transition: "transform 420ms ease",
+          padding: 24,
+        }}
+      >
+        <div style={{ display: "grid", placeItems: "center" }}>
+          <BrandLogo size={132} priority glow />
+        </div>
+
+        <div
+          style={{
+            marginTop: 22,
+            fontSize: 13,
+            fontWeight: 900,
+            letterSpacing: 2,
+            textTransform: "uppercase",
+            color: "rgba(186,211,255,0.86)",
+          }}
+        >
+          Life Command Center
+        </div>
+
+        <div
+          style={{
+            marginTop: 14,
+            fontSize: "clamp(32px, 5vw, 60px)",
+            lineHeight: 1.05,
+            fontWeight: 950,
+            letterSpacing: "-0.05em",
+            color: "#F8FBFF",
+          }}
+        >
+          Your financial system,
+          <br />
+          one command center
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export default function LoginPage() {
   const router = useRouter();
 
-  const [mode, setMode] = useState("login"); // login | signup | reset
+  const [mode, setMode] = useState("login");
   const [email, setEmail] = useState("");
   const [pass, setPass] = useState("");
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState("");
-  const [msgType, setMsgType] = useState("info"); // info | success | error
+  const [msgType, setMsgType] = useState("info");
+  const [showSplash, setShowSplash] = useState(true);
+  const [splashLeaving, setSplashLeaving] = useState(false);
 
-  const disabled = useMemo(() => {
-    if (loading) return true;
-    if (!safeEmail(email)) return true;
-    if (mode === "reset") return false;
-    return String(pass || "").length < 6;
-  }, [loading, email, pass, mode]);
+  useEffect(() => {
+    const t1 = setTimeout(() => setSplashLeaving(true), 850);
+    const t2 = setTimeout(() => setShowSplash(false), 1600);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
+  }, []);
 
   useEffect(() => {
     (async () => {
@@ -45,53 +200,48 @@ export default function LoginPage() {
     setMsgType(type);
   }
 
-  async function onEmailAuth(e) {
+  const disabled = useMemo(() => {
+    if (loading) return true;
+    if (!safeEmail(email)) return true;
+    return String(pass || "").length < 6;
+  }, [loading, email, pass]);
+
+  async function onSubmit(e) {
     e.preventDefault();
     setStatus("");
 
     if (!supabase) {
-      setStatus("Missing Supabase env vars in Render or .env.local.", "error");
+      setStatus("Missing Supabase environment variables.", "error");
       return;
     }
 
     setLoading(true);
 
     try {
-      const em = safeEmail(email);
+      const cleanEmail = safeEmail(email);
 
       if (mode === "signup") {
         const { error } = await supabase.auth.signUp({
-          email: em,
+          email: cleanEmail,
           password: pass,
         });
         if (error) throw error;
 
         setStatus(
-          "Account created. If email confirmation is enabled, check your inbox, then log in.",
+          "Account created. Check your email if confirmation is enabled, then log in.",
           "success"
         );
         setMode("login");
         setPass("");
-        return;
-      }
-
-      if (mode === "reset") {
-        const { error } = await supabase.auth.resetPasswordForEmail(em, {
-          redirectTo: `${window.location.origin}/reset-password`,
+      } else {
+        const { error } = await supabase.auth.signInWithPassword({
+          email: cleanEmail,
+          password: pass,
         });
         if (error) throw error;
 
-        setStatus("Password reset email sent. Check your inbox.", "success");
-        return;
+        router.replace("/");
       }
-
-      const { error } = await supabase.auth.signInWithPassword({
-        email: em,
-        password: pass,
-      });
-      if (error) throw error;
-
-      router.replace("/");
     } catch (err) {
       setStatus(niceErr(err), "error");
     } finally {
@@ -103,7 +253,7 @@ export default function LoginPage() {
     setStatus("");
 
     if (!supabase) {
-      setStatus("Missing Supabase env vars in Render or .env.local.", "error");
+      setStatus("Missing Supabase environment variables.", "error");
       return;
     }
 
@@ -124,578 +274,706 @@ export default function LoginPage() {
     }
   }
 
-  const title =
-    mode === "login"
-      ? "Welcome back"
-      : mode === "signup"
-      ? "Create your account"
-      : "Reset password";
+  async function onForgotPassword() {
+    setStatus("");
 
-  const subtitle =
-    mode === "login"
-      ? "Sign in to your Life Command Center."
-      : mode === "signup"
-      ? "Create a private account for your own data."
-      : "Enter your email and we’ll send you a reset link.";
+    if (!supabase) {
+      setStatus("Missing Supabase environment variables.", "error");
+      return;
+    }
 
-  const cardBg = "rgba(12, 18, 30, 0.78)";
-  const softBorder = "rgba(255,255,255,0.10)";
-  const strongBorder = "rgba(255,255,255,0.16)";
-  const muted = "rgba(226,232,240,0.68)";
-  const inputBg = "rgba(255,255,255,0.045)";
+    if (!safeEmail(email)) {
+      setStatus("Enter your email first.", "error");
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(
+        safeEmail(email),
+        {
+          redirectTo: `${window.location.origin}/reset-password`,
+        }
+      );
+
+      if (error) throw error;
+
+      setStatus("Password reset email sent. Check your inbox.", "success");
+    } catch (err) {
+      setStatus(niceErr(err), "error");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const messageStyles =
+    msgType === "error"
+      ? {
+          border: "1px solid rgba(239,68,68,0.28)",
+          background: "rgba(127,29,29,0.18)",
+          color: "#FFD4D4",
+        }
+      : msgType === "success"
+      ? {
+          border: "1px solid rgba(34,197,94,0.24)",
+          background: "rgba(20,83,45,0.18)",
+          color: "#DDFEE7",
+        }
+      : {
+          border: "1px solid rgba(255,255,255,0.10)",
+          background: "rgba(255,255,255,0.04)",
+          color: "#E5EEFF",
+        };
 
   return (
-    <main
-      style={{
-        minHeight: "100vh",
-        color: "#e8eef8",
-        background:
-          "radial-gradient(circle at top left, rgba(29,78,216,0.18), transparent 28%), radial-gradient(circle at top right, rgba(16,185,129,0.12), transparent 24%), linear-gradient(180deg, #07111f 0%, #091423 42%, #0a1420 100%)",
-        padding: "32px 18px",
-      }}
-    >
-      <div
+    <>
+      {showSplash ? <SplashIntro leaving={splashLeaving} /> : null}
+
+      <main
         style={{
-          maxWidth: 1180,
-          margin: "0 auto",
-          display: "grid",
-          gridTemplateColumns: "1.05fr 0.95fr",
-          gap: 22,
+          minHeight: "100vh",
+          color: "#ECF4FF",
+          background:
+            "radial-gradient(circle at top left, rgba(29,78,216,0.18), transparent 26%), radial-gradient(circle at top right, rgba(16,185,129,0.10), transparent 22%), linear-gradient(180deg, #07111F 0%, #091423 42%, #0A1420 100%)",
+          overflow: "hidden",
+          position: "relative",
         }}
       >
-        <section
+        <div
           style={{
-            border: `1px solid ${softBorder}`,
-            background: cardBg,
-            borderRadius: 28,
-            padding: 28,
-            boxShadow: "0 30px 80px rgba(0,0,0,0.42)",
-            backdropFilter: "blur(18px)",
+            position: "absolute",
+            inset: 0,
+            backgroundImage:
+              "linear-gradient(rgba(255,255,255,0.028) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.028) 1px, transparent 1px)",
+            backgroundSize: "44px 44px",
+            maskImage: "linear-gradient(180deg, rgba(0,0,0,0.65), transparent 82%)",
+            pointerEvents: "none",
+          }}
+        />
+
+        <div
+          style={{
             position: "relative",
-            overflow: "hidden",
+            zIndex: 1,
+            maxWidth: 1320,
+            margin: "0 auto",
+            padding: "18px 16px 28px",
           }}
         >
-          <div
-            style={{
-              position: "absolute",
-              inset: 0,
-              background:
-                "radial-gradient(circle at 18% 18%, rgba(59,130,246,0.14), transparent 22%), radial-gradient(circle at 82% 14%, rgba(34,197,94,0.10), transparent 20%)",
-              pointerEvents: "none",
-            }}
-          />
-
-          <div style={{ position: "relative", zIndex: 1 }}>
-            <div
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 8,
-                border: `1px solid ${softBorder}`,
-                background: "rgba(255,255,255,0.04)",
-                borderRadius: 999,
-                padding: "8px 12px",
-                fontSize: 12,
-                fontWeight: 700,
-                letterSpacing: 0.4,
-                textTransform: "uppercase",
-                color: "#c6d4ea",
-              }}
-            >
-              Life Command Center
-            </div>
-
-            <div style={{ height: 18 }} />
-
-            <h1
-              style={{
-                margin: 0,
-                fontSize: "clamp(30px, 4vw, 54px)",
-                lineHeight: 1.02,
-                fontWeight: 950,
-                letterSpacing: "-0.04em",
-              }}
-            >
-              Secure login for your
-              <br />
-              financial operating system
-            </h1>
-
-            <p
-              style={{
-                marginTop: 16,
-                maxWidth: 620,
-                color: muted,
-                fontSize: 16,
-                lineHeight: 1.65,
-              }}
-            >
-              Separate accounts. Private user data. Cross-device access.
-              Cleaner auth. Less chaos.
-            </p>
-
-            <div
-              style={{
-                marginTop: 22,
-                display: "grid",
-                gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-                gap: 14,
-              }}
-            >
-              {[
-                {
-                  title: "Private by user",
-                  text: "Each person gets their own account and their own data boundaries.",
-                },
-                {
-                  title: "Works across devices",
-                  text: "Phone and desktop stay in sync once your modules are database-backed.",
-                },
-                {
-                  title: "Built to scale",
-                  text: "Clean auth now makes the rest of the app easier later.",
-                },
-              ].map((item) => (
-                <div
-                  key={item.title}
-                  style={{
-                    border: `1px solid ${softBorder}`,
-                    background: "rgba(255,255,255,0.035)",
-                    borderRadius: 20,
-                    padding: 16,
-                  }}
-                >
-                  <div style={{ fontWeight: 900, fontSize: 14 }}>{item.title}</div>
-                  <div
-                    style={{
-                      marginTop: 8,
-                      color: muted,
-                      fontSize: 13,
-                      lineHeight: 1.55,
-                    }}
-                  >
-                    {item.text}
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <div
-              style={{
-                marginTop: 18,
-                border: `1px solid ${softBorder}`,
-                background:
-                  "linear-gradient(135deg, rgba(34,197,94,0.10), rgba(59,130,246,0.08))",
-                borderRadius: 22,
-                padding: 18,
-              }}
-            >
-              <div style={{ fontWeight: 900, fontSize: 14 }}>Current direction</div>
-              <div
-                style={{
-                  marginTop: 8,
-                  color: muted,
-                  fontSize: 13,
-                  lineHeight: 1.6,
-                }}
-              >
-                Email/password and Google login stay here. Apple can come later.
-                This version is built for your real Next.js + Supabase setup.
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section
-          style={{
-            border: `1px solid ${strongBorder}`,
-            background: "rgba(10, 16, 28, 0.92)",
-            borderRadius: 28,
-            padding: 28,
-            boxShadow: "0 26px 80px rgba(0,0,0,0.50)",
-            backdropFilter: "blur(18px)",
-          }}
-        >
-          <div
+          <header
             style={{
               display: "flex",
               alignItems: "center",
               justifyContent: "space-between",
-              gap: 12,
-              flexWrap: "wrap",
+              gap: 16,
+              padding: "8px 0 18px",
             }}
           >
-            <div>
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <BrandLogo size={56} glow />
+              <div>
+                <div
+                  style={{
+                    fontSize: 18,
+                    fontWeight: 950,
+                    letterSpacing: "-0.03em",
+                  }}
+                >
+                  Life Command Center
+                </div>
+                <div
+                  style={{
+                    marginTop: 2,
+                    fontSize: 12,
+                    color: "rgba(214,228,255,0.66)",
+                    fontWeight: 800,
+                    letterSpacing: 0.35,
+                    textTransform: "uppercase",
+                  }}
+                >
+                  Personal financial operating system
+                </div>
+              </div>
+            </div>
+          </header>
+
+          <section
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1.04fr 0.96fr",
+              gap: 24,
+              alignItems: "stretch",
+            }}
+          >
+            <div
+              style={{
+                position: "relative",
+                borderRadius: 30,
+                border: "1px solid rgba(255,255,255,0.10)",
+                background:
+                  "linear-gradient(180deg, rgba(12,18,30,0.74), rgba(8,13,24,0.84))",
+                boxShadow: "0 24px 80px rgba(0,0,0,0.40)",
+                padding: 24,
+                overflow: "hidden",
+              }}
+            >
               <div
                 style={{
-                  fontSize: 13,
-                  textTransform: "uppercase",
-                  letterSpacing: 0.32,
-                  color: "#8fb2df",
-                  fontWeight: 800,
+                  position: "absolute",
+                  top: -140,
+                  right: -120,
+                  width: 320,
+                  height: 320,
+                  borderRadius: "50%",
+                  background: "rgba(37,99,235,0.16)",
+                  filter: "blur(80px)",
                 }}
-              >
-                Account access
+              />
+              <div
+                style={{
+                  position: "absolute",
+                  bottom: -120,
+                  left: -100,
+                  width: 260,
+                  height: 260,
+                  borderRadius: "50%",
+                  background: "rgba(16,185,129,0.12)",
+                  filter: "blur(90px)",
+                }}
+              />
+
+              <div style={{ position: "relative", zIndex: 1 }}>
+                <div
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 8,
+                    borderRadius: 999,
+                    padding: "8px 12px",
+                    border: "1px solid rgba(255,255,255,0.12)",
+                    background: "rgba(255,255,255,0.04)",
+                    fontSize: 12,
+                    fontWeight: 900,
+                    letterSpacing: 0.5,
+                    textTransform: "uppercase",
+                    color: "rgba(198,217,255,0.88)",
+                  }}
+                >
+                  Built for control
+                </div>
+
+                <h1
+                  style={{
+                    margin: "18px 0 0 0",
+                    fontSize: "clamp(34px, 5vw, 62px)",
+                    lineHeight: 0.98,
+                    fontWeight: 950,
+                    letterSpacing: "-0.05em",
+                    maxWidth: 700,
+                  }}
+                >
+                  Run your entire
+                  <br />
+                  financial life
+                  <br />
+                  from one command
+                  <br />
+                  center
+                </h1>
+
+                <p
+                  style={{
+                    marginTop: 18,
+                    maxWidth: 620,
+                    color: "rgba(226,236,255,0.72)",
+                    fontSize: 16,
+                    lineHeight: 1.7,
+                  }}
+                >
+                  Track income, bills, spending, debt, savings, investments, and
+                  your real day-to-day money flow in one private system.
+                </p>
+
+                <div
+                  style={{
+                    marginTop: 24,
+                    display: "grid",
+                    gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+                    gap: 14,
+                  }}
+                >
+                  <MiniStat title="Spending" value="$1,284" tone="amber" />
+                  <MiniStat title="Bills due" value="4 upcoming" tone="blue" />
+                  <MiniStat title="Net flow" value="+$842" tone="green" />
+                </div>
+
+                <div
+                  style={{
+                    marginTop: 18,
+                    display: "grid",
+                    gridTemplateColumns: "1.1fr 0.9fr",
+                    gap: 14,
+                  }}
+                >
+                  <div
+                    style={{
+                      borderRadius: 22,
+                      border: "1px solid rgba(255,255,255,0.10)",
+                      background: "rgba(255,255,255,0.035)",
+                      padding: 18,
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontSize: 12,
+                        color: "rgba(206,222,255,0.70)",
+                        fontWeight: 800,
+                        textTransform: "uppercase",
+                        letterSpacing: 0.35,
+                      }}
+                    >
+                      Why it feels different
+                    </div>
+
+                    <div
+                      style={{
+                        marginTop: 10,
+                        fontSize: 15,
+                        lineHeight: 1.7,
+                        color: "rgba(232,240,255,0.80)",
+                      }}
+                    >
+                      Less scattered apps. Less guessing. More visibility into
+                      what is due, what is coming in, and where your money is
+                      actually going.
+                    </div>
+                  </div>
+
+                  <div
+                    style={{
+                      borderRadius: 22,
+                      border: "1px solid rgba(255,255,255,0.10)",
+                      background:
+                        "linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.025))",
+                      padding: 18,
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontSize: 12,
+                        color: "rgba(206,222,255,0.70)",
+                        fontWeight: 800,
+                        textTransform: "uppercase",
+                        letterSpacing: 0.35,
+                      }}
+                    >
+                      Core modules
+                    </div>
+
+                    <div
+                      style={{
+                        marginTop: 10,
+                        display: "flex",
+                        flexWrap: "wrap",
+                        gap: 8,
+                      }}
+                    >
+                      {[
+                        "Income",
+                        "Bills",
+                        "Spending",
+                        "Debt",
+                        "Savings",
+                        "Investments",
+                        "Calendar",
+                      ].map((item) => (
+                        <span
+                          key={item}
+                          style={{
+                            padding: "7px 10px",
+                            borderRadius: 999,
+                            border: "1px solid rgba(255,255,255,0.10)",
+                            background: "rgba(255,255,255,0.04)",
+                            fontSize: 12,
+                            fontWeight: 800,
+                            color: "rgba(236,244,255,0.82)",
+                          }}
+                        >
+                          {item}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
               </div>
-              <h2
-                style={{
-                  margin: "8px 0 0 0",
-                  fontSize: 32,
-                  lineHeight: 1.08,
-                  fontWeight: 950,
-                  letterSpacing: "-0.03em",
-                }}
-              >
-                {title}
-              </h2>
-              <p
-                style={{
-                  margin: "10px 0 0 0",
-                  color: muted,
-                  fontSize: 14,
-                  lineHeight: 1.6,
-                }}
-              >
-                {subtitle}
-              </p>
             </div>
 
             <div
               style={{
-                border: `1px solid ${softBorder}`,
-                borderRadius: 999,
-                padding: "9px 12px",
-                background: "rgba(255,255,255,0.04)",
-                fontSize: 12,
-                color: "#cfe0f7",
-                fontWeight: 800,
+                position: "relative",
+                borderRadius: 30,
+                border: "1px solid rgba(255,255,255,0.12)",
+                background:
+                  "linear-gradient(180deg, rgba(9,15,26,0.94), rgba(10,16,28,0.96))",
+                boxShadow: "0 26px 80px rgba(0,0,0,0.48)",
+                padding: 24,
+                overflow: "hidden",
               }}
             >
-              Mode: {mode}
-            </div>
-          </div>
-
-          <div style={{ height: 18 }} />
-
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(3, 1fr)",
-              gap: 8,
-              padding: 6,
-              borderRadius: 18,
-              background: "rgba(255,255,255,0.03)",
-              border: `1px solid ${softBorder}`,
-            }}
-          >
-            {[
-              { key: "login", label: "Login" },
-              { key: "signup", label: "Create account" },
-              { key: "reset", label: "Reset password" },
-            ].map((item) => {
-              const active = mode === item.key;
-              return (
-                <button
-                  key={item.key}
-                  type="button"
-                  onClick={() => {
-                    setMode(item.key);
-                    setMsg("");
-                  }}
-                  disabled={loading}
-                  style={{
-                    borderRadius: 14,
-                    border: active ? "1px solid rgba(96,165,250,0.45)" : "1px solid transparent",
-                    background: active
-                      ? "linear-gradient(135deg, rgba(37,99,235,0.30), rgba(16,185,129,0.18))"
-                      : "transparent",
-                    color: active ? "#f3f8ff" : "#afc2dd",
-                    fontWeight: 800,
-                    padding: "12px 10px",
-                    cursor: "pointer",
-                    transition: "0.2s ease",
-                  }}
-                >
-                  {item.label}
-                </button>
-              );
-            })}
-          </div>
-
-          <div style={{ height: 18 }} />
-
-          <form onSubmit={onEmailAuth} style={{ display: "grid", gap: 12 }}>
-            <label style={{ display: "grid", gap: 8 }}>
-              <span style={{ fontSize: 13, color: "#cfe0f7", fontWeight: 700 }}>
-                Email
-              </span>
-              <input
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                autoComplete="email"
-                placeholder="you@example.com"
+              <div
                 style={{
-                  width: "100%",
-                  height: 52,
-                  borderRadius: 16,
-                  border: `1px solid ${softBorder}`,
-                  background: inputBg,
-                  color: "#f4f8ff",
-                  padding: "0 16px",
-                  outline: "none",
-                  fontSize: 15,
+                  position: "absolute",
+                  top: -70,
+                  right: -60,
+                  width: 180,
+                  height: 180,
+                  borderRadius: "50%",
+                  background: "rgba(96,165,250,0.15)",
+                  filter: "blur(60px)",
                 }}
               />
-            </label>
 
-            {mode !== "reset" ? (
-              <label style={{ display: "grid", gap: 8 }}>
-                <span style={{ fontSize: 13, color: "#cfe0f7", fontWeight: 700 }}>
-                  Password
-                </span>
+              <div style={{ position: "relative", zIndex: 1 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                  <BrandLogo size={64} glow />
+                  <div>
+                    <div
+                      style={{
+                        fontSize: 14,
+                        textTransform: "uppercase",
+                        letterSpacing: 0.45,
+                        color: "rgba(151,188,255,0.86)",
+                        fontWeight: 900,
+                      }}
+                    >
+                      Account access
+                    </div>
 
-                <div style={{ position: "relative" }}>
-                  <input
-                    value={pass}
-                    onChange={(e) => setPass(e.target.value)}
-                    type={showPass ? "text" : "password"}
-                    autoComplete={mode === "login" ? "current-password" : "new-password"}
-                    placeholder={mode === "signup" ? "Create a password" : "Enter your password"}
+                    <div
+                      style={{
+                        marginTop: 4,
+                        fontSize: 28,
+                        fontWeight: 950,
+                        letterSpacing: "-0.04em",
+                      }}
+                    >
+                      {mode === "login" ? "Welcome back" : "Create your account"}
+                    </div>
+                  </div>
+                </div>
+
+                <p
+                  style={{
+                    marginTop: 14,
+                    color: "rgba(226,236,255,0.70)",
+                    fontSize: 14,
+                    lineHeight: 1.65,
+                  }}
+                >
+                  Sign in to continue or create a private account for your own
+                  data.
+                </p>
+
+                <div
+                  style={{
+                    marginTop: 18,
+                    display: "grid",
+                    gridTemplateColumns: "1fr 1fr",
+                    gap: 8,
+                    padding: 6,
+                    borderRadius: 18,
+                    border: "1px solid rgba(255,255,255,0.10)",
+                    background: "rgba(255,255,255,0.03)",
+                  }}
+                >
+                  {[
+                    { key: "login", label: "Login" },
+                    { key: "signup", label: "Sign Up" },
+                  ].map((item) => {
+                    const active = mode === item.key;
+
+                    return (
+                      <button
+                        key={item.key}
+                        type="button"
+                        onClick={() => {
+                          setMode(item.key);
+                          setMsg("");
+                        }}
+                        disabled={loading}
+                        style={{
+                          height: 46,
+                          borderRadius: 14,
+                          border: active
+                            ? "1px solid rgba(96,165,250,0.36)"
+                            : "1px solid transparent",
+                          background: active
+                            ? "linear-gradient(135deg, rgba(37,99,235,0.24), rgba(16,185,129,0.14))"
+                            : "transparent",
+                          color: active ? "#FFFFFF" : "rgba(194,212,245,0.75)",
+                          fontWeight: 900,
+                          cursor: "pointer",
+                        }}
+                      >
+                        {item.label}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <form
+                  onSubmit={onSubmit}
+                  style={{ marginTop: 18, display: "grid", gap: 12 }}
+                >
+                  <label style={{ display: "grid", gap: 8 }}>
+                    <span style={labelStyle}>Email</span>
+                    <input
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      type="email"
+                      autoComplete="email"
+                      placeholder="you@example.com"
+                      style={inputStyle}
+                    />
+                  </label>
+
+                  <label style={{ display: "grid", gap: 8 }}>
+                    <span style={labelStyle}>Password</span>
+
+                    <div style={{ position: "relative" }}>
+                      <input
+                        value={pass}
+                        onChange={(e) => setPass(e.target.value)}
+                        type={showPass ? "text" : "password"}
+                        autoComplete={
+                          mode === "login" ? "current-password" : "new-password"
+                        }
+                        placeholder={
+                          mode === "login"
+                            ? "Enter your password"
+                            : "Create a password"
+                        }
+                        style={{ ...inputStyle, paddingRight: 62 }}
+                      />
+
+                      <button
+                        type="button"
+                        onClick={() => setShowPass((v) => !v)}
+                        style={{
+                          position: "absolute",
+                          top: "50%",
+                          right: 10,
+                          transform: "translateY(-50%)",
+                          height: 34,
+                          padding: "0 10px",
+                          borderRadius: 12,
+                          border: "1px solid rgba(255,255,255,0.10)",
+                          background: "rgba(255,255,255,0.04)",
+                          color: "rgba(219,230,255,0.84)",
+                          fontWeight: 800,
+                          cursor: "pointer",
+                        }}
+                      >
+                        {showPass ? "Hide" : "Show"}
+                      </button>
+                    </div>
+                  </label>
+
+                  <button
+                    type="submit"
+                    disabled={disabled}
                     style={{
-                      width: "100%",
-                      height: 52,
+                      height: 54,
                       borderRadius: 16,
-                      border: `1px solid ${softBorder}`,
-                      background: inputBg,
-                      color: "#f4f8ff",
-                      padding: "0 54px 0 16px",
-                      outline: "none",
+                      border: "1px solid rgba(96,165,250,0.30)",
+                      background: disabled
+                        ? "rgba(255,255,255,0.08)"
+                        : "linear-gradient(135deg, #2563EB 0%, #1D4ED8 38%, #0F766E 100%)",
+                      color: "#FFFFFF",
+                      fontWeight: 950,
                       fontSize: 15,
+                      cursor: disabled ? "not-allowed" : "pointer",
+                      boxShadow: disabled
+                        ? "none"
+                        : "0 18px 40px rgba(37,99,235,0.22)",
+                    }}
+                  >
+                    {loading
+                      ? "Working..."
+                      : mode === "login"
+                      ? "Enter Command Center"
+                      : "Create Account"}
+                  </button>
+                </form>
+
+                <div
+                  style={{
+                    margin: "16px 0",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 10,
+                  }}
+                >
+                  <div
+                    style={{
+                      flex: 1,
+                      height: 1,
+                      background: "rgba(255,255,255,0.08)",
                     }}
                   />
+                  <div
+                    style={{
+                      fontSize: 12,
+                      color: "rgba(209,223,250,0.60)",
+                      fontWeight: 800,
+                    }}
+                  >
+                    OR
+                  </div>
+                  <div
+                    style={{
+                      flex: 1,
+                      height: 1,
+                      background: "rgba(255,255,255,0.08)",
+                    }}
+                  />
+                </div>
+
+                <button
+                  type="button"
+                  onClick={onGoogle}
+                  disabled={loading}
+                  style={{
+                    width: "100%",
+                    height: 54,
+                    borderRadius: 16,
+                    border: "1px solid rgba(255,255,255,0.12)",
+                    background: "rgba(255,255,255,0.04)",
+                    color: "#F7FBFF",
+                    fontWeight: 900,
+                    fontSize: 15,
+                    cursor: loading ? "not-allowed" : "pointer",
+                  }}
+                >
+                  Continue with Google
+                </button>
+
+                <div
+                  style={{
+                    marginTop: 12,
+                    display: "flex",
+                    justifyContent: "space-between",
+                    gap: 12,
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <button
+                    type="button"
+                    onClick={onForgotPassword}
+                    disabled={loading}
+                    style={textButtonStyle}
+                  >
+                    Forgot password?
+                  </button>
 
                   <button
                     type="button"
-                    onClick={() => setShowPass((v) => !v)}
-                    style={{
-                      position: "absolute",
-                      top: "50%",
-                      right: 10,
-                      transform: "translateY(-50%)",
-                      border: `1px solid ${softBorder}`,
-                      background: "rgba(255,255,255,0.05)",
-                      color: "#cfe0f7",
-                      borderRadius: 12,
-                      height: 34,
-                      padding: "0 10px",
-                      cursor: "pointer",
-                      fontWeight: 700,
+                    onClick={() => {
+                      setMode((m) => (m === "login" ? "signup" : "login"));
+                      setMsg("");
                     }}
+                    disabled={loading}
+                    style={textButtonStyle}
                   >
-                    {showPass ? "Hide" : "Show"}
+                    {mode === "login"
+                      ? "Need an account?"
+                      : "Already have an account?"}
                   </button>
                 </div>
 
-                <span style={{ fontSize: 12, color: muted }}>
-                  {mode === "signup"
-                    ? "Use at least 6 characters."
-                    : "Use the password tied to this account."}
-                </span>
-              </label>
-            ) : null}
+                {msg ? (
+                  <div
+                    style={{
+                      marginTop: 16,
+                      borderRadius: 18,
+                      padding: 14,
+                      ...messageStyles,
+                    }}
+                  >
+                    <div style={{ fontWeight: 900, fontSize: 13 }}>
+                      {msgType === "error"
+                        ? "Error"
+                        : msgType === "success"
+                        ? "Success"
+                        : "Status"}
+                    </div>
 
-            <button
-              type="submit"
-              disabled={disabled}
-              style={{
-                marginTop: 4,
-                height: 54,
-                borderRadius: 16,
-                border: "1px solid rgba(96,165,250,0.28)",
-                background: disabled
-                  ? "rgba(255,255,255,0.08)"
-                  : "linear-gradient(135deg, #2563eb 0%, #1d4ed8 34%, #0f766e 100%)",
-                color: "#ffffff",
-                fontWeight: 900,
-                fontSize: 15,
-                cursor: disabled ? "not-allowed" : "pointer",
-                boxShadow: disabled ? "none" : "0 18px 40px rgba(37,99,235,0.22)",
-              }}
-            >
-              {loading
-                ? "Working..."
-                : mode === "login"
-                ? "Enter Command Center"
-                : mode === "signup"
-                ? "Create Account"
-                : "Send Reset Email"}
-            </button>
-          </form>
-
-          <div
-            style={{
-              margin: "16px 0",
-              display: "flex",
-              alignItems: "center",
-              gap: 10,
-            }}
-          >
-            <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.08)" }} />
-            <div style={{ color: muted, fontSize: 12, fontWeight: 700 }}>OR</div>
-            <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.08)" }} />
-          </div>
-
-          <button
-            type="button"
-            onClick={onGoogle}
-            disabled={loading}
-            style={{
-              width: "100%",
-              height: 54,
-              borderRadius: 16,
-              border: `1px solid ${softBorder}`,
-              background: "rgba(255,255,255,0.04)",
-              color: "#f4f8ff",
-              fontWeight: 850,
-              fontSize: 15,
-              cursor: loading ? "not-allowed" : "pointer",
-            }}
-          >
-            Continue with Google
-          </button>
-
-          {msg ? (
-            <div
-              style={{
-                marginTop: 16,
-                borderRadius: 18,
-                padding: 14,
-                border:
-                  msgType === "error"
-                    ? "1px solid rgba(239,68,68,0.35)"
-                    : msgType === "success"
-                    ? "1px solid rgba(34,197,94,0.28)"
-                    : `1px solid ${softBorder}`,
-                background:
-                  msgType === "error"
-                    ? "rgba(127,29,29,0.20)"
-                    : msgType === "success"
-                    ? "rgba(20,83,45,0.18)"
-                    : "rgba(255,255,255,0.04)",
-              }}
-            >
-              <div
-                style={{
-                  fontWeight: 900,
-                  fontSize: 13,
-                  color:
-                    msgType === "error"
-                      ? "#fecaca"
-                      : msgType === "success"
-                      ? "#bbf7d0"
-                      : "#d9e7f8",
-                }}
-              >
-                {msgType === "error"
-                  ? "Error"
-                  : msgType === "success"
-                  ? "Success"
-                  : "Status"}
-              </div>
-
-              <div
-                style={{
-                  marginTop: 6,
-                  color:
-                    msgType === "error"
-                      ? "#ffd4d4"
-                      : msgType === "success"
-                      ? "#dcfce7"
-                      : muted,
-                  fontSize: 13,
-                  lineHeight: 1.6,
-                }}
-              >
-                {msg}
+                    <div
+                      style={{
+                        marginTop: 6,
+                        fontSize: 13,
+                        lineHeight: 1.6,
+                      }}
+                    >
+                      {msg}
+                    </div>
+                  </div>
+                ) : null}
               </div>
             </div>
-          ) : null}
+          </section>
+        </div>
 
-          <div
-            style={{
-              marginTop: 18,
-              paddingTop: 18,
-              borderTop: "1px solid rgba(255,255,255,0.08)",
-              display: "grid",
-              gap: 8,
-              color: muted,
-              fontSize: 13,
-            }}
-          >
-            <div>
-              {mode !== "login" ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMode("login");
-                    setMsg("");
-                  }}
-                  disabled={loading}
-                  style={textButtonStyle}
-                >
-                  Back to login
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMode("signup");
-                    setMsg("");
-                  }}
-                  disabled={loading}
-                  style={textButtonStyle}
-                >
-                  Need an account? Create one
-                </button>
-              )}
-            </div>
-
-            {mode === "login" ? (
-              <div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMode("reset");
-                    setMsg("");
-                  }}
-                  disabled={loading}
-                  style={textButtonStyle}
-                >
-                  Forgot your password?
-                </button>
-              </div>
-            ) : null}
-          </div>
-        </section>
-      </div>
-
-      <style jsx>{`
-        @media (max-width: 980px) {
-          main > div {
-            grid-template-columns: 1fr !important;
+        <style jsx>{`
+          @media (max-width: 980px) {
+            section {
+              grid-template-columns: 1fr !important;
+            }
           }
-        }
-      `}</style>
-    </main>
+
+          @media (max-width: 720px) {
+            h1 {
+              max-width: 100% !important;
+              font-size: clamp(34px, 12vw, 52px) !important;
+            }
+          }
+
+          @media (max-width: 640px) {
+            main {
+              min-height: 100dvh;
+            }
+          }
+        `}</style>
+      </main>
+    </>
   );
 }
+
+const labelStyle = {
+  fontSize: 13,
+  fontWeight: 800,
+  color: "rgba(220,232,255,0.84)",
+};
+
+const inputStyle = {
+  width: "100%",
+  height: 52,
+  borderRadius: 16,
+  border: "1px solid rgba(255,255,255,0.10)",
+  background: "rgba(255,255,255,0.045)",
+  color: "#F7FBFF",
+  padding: "0 16px",
+  outline: "none",
+  fontSize: 15,
+};
 
 const textButtonStyle = {
   background: "transparent",
   border: "none",
-  color: "#8fb2df",
   padding: 0,
-  cursor: "pointer",
-  fontWeight: 800,
+  color: "rgba(151,188,255,0.92)",
   fontSize: 13,
+  fontWeight: 800,
+  cursor: "pointer",
 };
