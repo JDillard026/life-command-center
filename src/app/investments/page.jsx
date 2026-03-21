@@ -1,13 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 
 function money(n) {
   const num = Number(n);
   if (!Number.isFinite(num)) return "—";
-  return num.toLocaleString(undefined, { style: "currency", currency: "USD" });
+  return num.toLocaleString(undefined, {
+    style: "currency",
+    currency: "USD",
+  });
 }
 
 function fmtNumber(n) {
@@ -34,30 +37,54 @@ function toneByValue(value) {
 function tintVars(tone = "neutral") {
   if (tone === "good") {
     return {
-      border: "rgba(16,185,129,.24)",
-      glow: "rgba(16,185,129,.16)",
-      top: "rgba(16,185,129,.10)",
-      accent: "#34d399",
-      text: "#86efac",
+      border: "rgba(16,185,129,.38)",
+      glow: "rgba(16,185,129,.22)",
+      top: "rgba(16,185,129,.13)",
+      accent: "#86efac",
+      soft: "#d1fae5",
     };
   }
 
   if (tone === "bad") {
     return {
-      border: "rgba(244,63,94,.24)",
-      glow: "rgba(244,63,94,.16)",
-      top: "rgba(244,63,94,.10)",
-      accent: "#fb7185",
-      text: "#fda4af",
+      border: "rgba(244,63,94,.38)",
+      glow: "rgba(244,63,94,.22)",
+      top: "rgba(244,63,94,.13)",
+      accent: "#fda4af",
+      soft: "#ffe4e6",
     };
   }
 
   return {
-    border: "rgba(59,130,246,.20)",
-    glow: "rgba(59,130,246,.14)",
-    top: "rgba(59,130,246,.08)",
-    accent: "#60a5fa",
-    text: "#dbeafe",
+    border: "rgba(96,165,250,.28)",
+    glow: "rgba(96,165,250,.14)",
+    top: "rgba(96,165,250,.08)",
+    accent: "#e5efff",
+    soft: "#f3f7ff",
+  };
+}
+
+function pageSurface() {
+  return {
+    background: `
+      radial-gradient(circle at top left, rgba(37,99,235,.10) 0%, rgba(0,0,0,0) 25%),
+      radial-gradient(circle at top right, rgba(16,185,129,.05) 0%, rgba(0,0,0,0) 18%),
+      linear-gradient(180deg, #05101a 0%, #081320 56%, #0a1724 100%)
+    `,
+  };
+}
+
+function heroPanel() {
+  return {
+    borderRadius: 32,
+    border: "1px solid rgba(96,165,250,.18)",
+    background: `
+      radial-gradient(circle at top left, rgba(96,165,250,.10) 0%, rgba(255,255,255,0) 28%),
+      linear-gradient(180deg, rgba(7,14,27,.98) 0%, rgba(6,11,22,.98) 100%)
+    `,
+    boxShadow:
+      "0 24px 56px rgba(0,0,0,.30), 0 0 0 1px rgba(255,255,255,.025) inset",
+    backdropFilter: "blur(10px)",
   };
 }
 
@@ -65,15 +92,15 @@ function shellPanel(tone = "neutral", strong = false) {
   const t = tintVars(tone);
 
   return {
-    borderRadius: 26,
-    border: `1px solid ${t.border}`,
+    borderRadius: 28,
+    border: `1px solid ${strong ? "rgba(255,255,255,.12)" : t.border}`,
     background: `
-      radial-gradient(circle at top left, ${t.top} 0%, rgba(255,255,255,0) 26%),
-      linear-gradient(180deg, rgba(5,10,22,.94) 0%, rgba(3,8,20,.98) 100%)
+      radial-gradient(circle at top left, ${t.top} 0%, rgba(255,255,255,0) 30%),
+      linear-gradient(180deg, rgba(10,18,34,.97) 0%, rgba(7,13,25,.97) 100%)
     `,
     boxShadow: strong
-      ? `0 0 0 1px rgba(255,255,255,.02) inset, 0 18px 55px rgba(0,0,0,.42), 0 0 34px ${t.glow}`
-      : `0 0 0 1px rgba(255,255,255,.02) inset, 0 16px 42px rgba(0,0,0,.34), 0 0 20px ${t.glow}`,
+      ? `0 18px 42px rgba(0,0,0,.28), 0 0 0 1px rgba(255,255,255,.025) inset, 0 0 18px ${t.glow}`
+      : `0 14px 28px rgba(0,0,0,.22), 0 0 0 1px rgba(255,255,255,.02) inset, 0 0 12px ${t.glow}`,
     backdropFilter: "blur(10px)",
   };
 }
@@ -85,10 +112,10 @@ function softPanel(tone = "neutral") {
     borderRadius: 22,
     border: `1px solid ${t.border}`,
     background: `
-      radial-gradient(circle at top left, ${t.top} 0%, rgba(255,255,255,0) 24%),
-      linear-gradient(180deg, rgba(7,12,26,.90) 0%, rgba(4,9,22,.96) 100%)
+      radial-gradient(circle at top left, ${t.top} 0%, rgba(255,255,255,0) 26%),
+      linear-gradient(180deg, rgba(12,20,37,.96) 0%, rgba(9,15,29,.96) 100%)
     `,
-    boxShadow: `0 14px 32px rgba(0,0,0,.28), 0 0 18px ${t.glow}`,
+    boxShadow: `0 12px 24px rgba(0,0,0,.18), 0 0 12px ${t.glow}`,
   };
 }
 
@@ -100,17 +127,39 @@ function microPanel(tone = "neutral") {
     border: `1px solid ${t.border}`,
     background: `
       radial-gradient(circle at top left, ${t.top} 0%, rgba(255,255,255,0) 28%),
-      linear-gradient(180deg, rgba(10,15,30,.86) 0%, rgba(5,9,20,.94) 100%)
+      linear-gradient(180deg, rgba(14,23,41,.94) 0%, rgba(10,16,30,.94) 100%)
     `,
-    boxShadow: `0 10px 24px rgba(0,0,0,.24), 0 0 14px ${t.glow}`,
+    boxShadow: `0 8px 16px rgba(0,0,0,.14), 0 0 10px ${t.glow}`,
   };
 }
+
+const sectionTitleStyle = {
+  fontWeight: 950,
+  fontSize: 24,
+  letterSpacing: "-0.03em",
+  color: "rgba(255,255,255,.99)",
+};
+
+const sectionSubStyle = {
+  marginTop: 8,
+  fontSize: 14,
+  lineHeight: 1.6,
+  color: "rgba(255,255,255,.84)",
+};
+
+const overlineStyle = {
+  fontSize: 12,
+  fontWeight: 900,
+  textTransform: "uppercase",
+  letterSpacing: "0.18em",
+  color: "rgba(255,255,255,.74)",
+};
 
 export default function InvestmentsPage() {
   const [assets, setAssets] = useState([]);
   const [txns, setTxns] = useState([]);
-  const [prices, setPrices] = useState({});
   const [favorites, setFavorites] = useState([]);
+  const [prices, setPrices] = useState({});
   const [tab, setTab] = useState("overview");
   const [loadingPrices, setLoadingPrices] = useState(false);
   const [status, setStatus] = useState("");
@@ -120,6 +169,12 @@ export default function InvestmentsPage() {
   const [txnAsset, setTxnAsset] = useState("");
   const [txnQty, setTxnQty] = useState("");
   const [txnPrice, setTxnPrice] = useState("");
+
+  const [holdingsMenuOpen, setHoldingsMenuOpen] = useState(false);
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedHoldingIds, setSelectedHoldingIds] = useState([]);
+
+  const menuRef = useRef(null);
 
   useEffect(() => {
     async function load() {
@@ -164,6 +219,18 @@ export default function InvestmentsPage() {
   }, []);
 
   useEffect(() => {
+    function onDocClick(e) {
+      if (!menuRef.current) return;
+      if (!menuRef.current.contains(e.target)) {
+        setHoldingsMenuOpen(false);
+      }
+    }
+
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, []);
+
+  useEffect(() => {
     async function loadPrices() {
       const symbolsToLoad = [
         ...new Set(
@@ -201,6 +268,11 @@ export default function InvestmentsPage() {
 
     loadPrices();
   }, [assets, favorites]);
+
+  useEffect(() => {
+    const validIds = new Set(assets.map((a) => a.id));
+    setSelectedHoldingIds((prev) => prev.filter((id) => validIds.has(id)));
+  }, [assets]);
 
   async function addAsset() {
     setError("");
@@ -323,6 +395,7 @@ export default function InvestmentsPage() {
     }
 
     const cleanSymbol = String(holding.symbol || "").toUpperCase().trim();
+
     if (!cleanSymbol) {
       setError("Invalid symbol.");
       return;
@@ -377,6 +450,145 @@ export default function InvestmentsPage() {
     setStatus("Favorite removed.");
   }
 
+  function toggleHoldingSelected(id) {
+    setSelectedHoldingIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  }
+
+  function startSelectMode() {
+    setSelectMode(true);
+    setHoldingsMenuOpen(false);
+    setStatus("");
+    setError("");
+  }
+
+  function cancelSelectMode() {
+    setSelectMode(false);
+    setSelectedHoldingIds([]);
+    setHoldingsMenuOpen(false);
+  }
+
+  function selectAllHoldings() {
+    setSelectedHoldingIds(assets.map((a) => a.id));
+  }
+
+  async function deleteHoldingsByIds(assetIds) {
+    setError("");
+    setStatus("");
+
+    if (!assetIds.length) {
+      setError("No holdings selected.");
+      return;
+    }
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      setError("You must be logged in.");
+      return;
+    }
+
+    const targetAssets = assets.filter((a) => assetIds.includes(a.id));
+    const targetSymbols = [
+      ...new Set(
+        targetAssets
+          .map((a) => String(a.symbol || "").toUpperCase().trim())
+          .filter(Boolean)
+      ),
+    ];
+
+    const { error: txDeleteError } = await supabase
+      .from("investment_transactions")
+      .delete()
+      .in("asset_id", assetIds)
+      .eq("user_id", user.id);
+
+    if (txDeleteError) {
+      console.error(txDeleteError);
+      setError("Could not remove related transactions.");
+      return;
+    }
+
+    if (targetSymbols.length) {
+      const { error: favoritesDeleteError } = await supabase
+        .from("investment_favorites")
+        .delete()
+        .eq("user_id", user.id)
+        .in("symbol", targetSymbols);
+
+      if (favoritesDeleteError) {
+        console.error(favoritesDeleteError);
+        setError("Could not remove matching favorites.");
+        return;
+      }
+    }
+
+    const { error: assetDeleteError } = await supabase
+      .from("investment_assets")
+      .delete()
+      .in("id", assetIds)
+      .eq("user_id", user.id);
+
+    if (assetDeleteError) {
+      console.error(assetDeleteError);
+      setError("Could not delete holdings.");
+      return;
+    }
+
+    setAssets((prev) => prev.filter((a) => !assetIds.includes(a.id)));
+    setTxns((prev) => prev.filter((t) => !assetIds.includes(t.asset_id)));
+    setFavorites((prev) =>
+      prev.filter(
+        (f) => !targetSymbols.includes(String(f.symbol || "").toUpperCase().trim())
+      )
+    );
+
+    setSelectedHoldingIds([]);
+    setSelectMode(false);
+    setStatus(
+      assetIds.length === 1
+        ? "Holding deleted."
+        : `${assetIds.length} holdings deleted.`
+    );
+  }
+
+  async function handleDeleteSelected() {
+    if (!selectedHoldingIds.length) {
+      setError("Pick at least one holding first.");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Delete ${selectedHoldingIds.length} selected holding${
+        selectedHoldingIds.length === 1 ? "" : "s"
+      }?\n\nThis will also remove related transactions and matching favorites.`
+    );
+
+    if (!confirmed) return;
+
+    await deleteHoldingsByIds(selectedHoldingIds);
+    setHoldingsMenuOpen(false);
+  }
+
+  async function handleDeleteAllHoldings() {
+    if (!assets.length) {
+      setError("There are no holdings to delete.");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Delete all ${assets.length} holdings?\n\nThis will also remove all related transactions and matching favorites tied to those holdings.`
+    );
+
+    if (!confirmed) return;
+
+    await deleteHoldingsByIds(assets.map((a) => a.id));
+    setHoldingsMenuOpen(false);
+  }
+
   const portfolio = useMemo(() => {
     let totalValue = 0;
     let totalCost = 0;
@@ -423,8 +635,6 @@ export default function InvestmentsPage() {
             shares = 0;
             cost = 0;
           }
-
-          continue;
         }
       }
 
@@ -539,9 +749,7 @@ export default function InvestmentsPage() {
       .slice(0, 8);
   }, [portfolio.holdings]);
 
-  const recentTxns = useMemo(() => {
-    return [...txns].slice(0, 6);
-  }, [txns]);
+  const recentTxns = useMemo(() => [...txns].slice(0, 6), [txns]);
 
   const favoriteCards = useMemo(() => {
     return favorites.map((f) => {
@@ -562,54 +770,126 @@ export default function InvestmentsPage() {
     ? toneByValue(portfolio.totalPnl)
     : "neutral";
 
-  const pageBg = {
-    background:
-      "radial-gradient(circle at top left, rgba(37,99,235,.10) 0%, rgba(0,0,0,0) 22%), radial-gradient(circle at top right, rgba(168,85,247,.06) 0%, rgba(0,0,0,0) 22%), linear-gradient(180deg, #030712 0%, #050a16 100%)",
-  };
-
   return (
     <main
       style={{
-        ...pageBg,
-        padding: "34px 28px 46px",
-        maxWidth: "1320px",
+        ...pageSurface(),
+        padding: "30px 24px 48px",
+        maxWidth: 1480,
         margin: "0 auto",
-        color: "rgba(255,255,255,.96)",
+        color: "rgba(255,255,255,.97)",
         minHeight: "100vh",
       }}
     >
+      <style jsx>{`
+        .btn,
+        .btnGhost,
+        .input,
+        .select {
+          transition: all 0.18s ease;
+        }
+
+        .btn {
+          min-width: 110px;
+          height: 46px;
+          padding: 0 18px;
+          border-radius: 999px;
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          background: linear-gradient(
+            180deg,
+            rgba(122, 178, 255, 0.98) 0%,
+            rgba(98, 160, 245, 0.96) 100%
+          );
+          color: white;
+          font-weight: 900;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          text-decoration: none;
+          box-shadow: 0 10px 22px rgba(59, 130, 246, 0.22);
+          cursor: pointer;
+        }
+
+        .btn:hover {
+          transform: translateY(-1px);
+          filter: brightness(1.03);
+        }
+
+        .btnGhost {
+          min-width: 110px;
+          height: 46px;
+          padding: 0 18px;
+          border-radius: 999px;
+          border: 1px solid rgba(255, 255, 255, 0.10);
+          background: linear-gradient(
+            180deg,
+            rgba(14, 22, 39, 0.95) 0%,
+            rgba(8, 13, 25, 0.96) 100%
+          );
+          color: rgba(255, 255, 255, 0.96);
+          font-weight: 850;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          text-decoration: none;
+          box-shadow: 0 8px 16px rgba(0, 0, 0, 0.14);
+          cursor: pointer;
+        }
+
+        .btnGhost:hover {
+          transform: translateY(-1px);
+          border-color: rgba(255, 255, 255, 0.16);
+        }
+
+        .input,
+        .select {
+          height: 52px;
+          padding: 0 16px;
+          border-radius: 16px;
+          border: 1px solid rgba(255, 255, 255, 0.10);
+          background: linear-gradient(
+            180deg,
+            rgba(19, 28, 47, 0.95) 0%,
+            rgba(12, 19, 35, 0.96) 100%
+          );
+          color: rgba(255, 255, 255, 0.98);
+          outline: none;
+          box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.015);
+        }
+
+        .input::placeholder {
+          color: rgba(255, 255, 255, 0.46);
+        }
+
+        .input:focus,
+        .select:focus {
+          border-color: rgba(96, 165, 250, 0.34);
+          box-shadow: 0 0 0 4px rgba(96, 165, 250, 0.08);
+        }
+      `}</style>
+
       <div
         style={{
-          ...shellPanel("neutral", true),
-          padding: 22,
+          ...heroPanel(),
+          padding: 28,
           marginBottom: 18,
           display: "grid",
           gridTemplateColumns: "1fr auto",
-          gap: 16,
+          gap: 18,
           alignItems: "end",
         }}
       >
         <div>
-          <div
-            style={{
-              fontSize: 12,
-              fontWeight: 900,
-              textTransform: "uppercase",
-              letterSpacing: "0.22em",
-              marginBottom: 8,
-              color: "rgba(134,239,172,.82)",
-            }}
-          >
-            Life Command Center
-          </div>
+          <div style={overlineStyle}>Life Command Center</div>
 
           <h1
             style={{
-              margin: 0,
-              fontSize: "clamp(2rem, 4vw, 3rem)",
-              lineHeight: 1.04,
+              margin: "12px 0 0",
+              fontSize: "clamp(2.6rem, 5.4vw, 4.25rem)",
+              lineHeight: 0.98,
               fontWeight: 950,
-              letterSpacing: "-0.03em",
+              letterSpacing: "-0.05em",
+              color: "rgba(255,255,255,.995)",
             }}
           >
             Investments Command
@@ -617,13 +897,14 @@ export default function InvestmentsPage() {
 
           <div
             style={{
-              marginTop: 10,
-              fontSize: 15,
-              maxWidth: 760,
-              color: "rgba(255,255,255,.68)",
+              marginTop: 16,
+              fontSize: 16,
+              maxWidth: 820,
+              color: "rgba(255,255,255,.84)",
+              lineHeight: 1.65,
             }}
           >
-            Track portfolio value, monitor position pressure, and open deeper trader detail only when you want it.
+            Track portfolio value, monitor position pressure, and open deeper detail only when you want it.
           </div>
         </div>
 
@@ -631,15 +912,12 @@ export default function InvestmentsPage() {
           <Link href="/investments/discover" className="btnGhost">
             Discover
           </Link>
-
           <TabBtn active={tab === "overview"} onClick={() => setTab("overview")}>
             Overview
           </TabBtn>
-
           <TabBtn active={tab === "holdings"} onClick={() => setTab("holdings")}>
             Holdings
           </TabBtn>
-
           <TabBtn active={tab === "transactions"} onClick={() => setTab("transactions")}>
             Transactions
           </TabBtn>
@@ -650,12 +928,16 @@ export default function InvestmentsPage() {
         <div
           style={{
             ...softPanel(error ? "bad" : "good"),
-            padding: 14,
+            padding: 16,
             marginBottom: 18,
           }}
         >
-          <div style={{ fontWeight: 900 }}>{error ? "Fix this" : "Status"}</div>
-          <div style={{ marginTop: 6, color: "rgba(255,255,255,.70)" }}>{error || status}</div>
+          <div style={{ fontWeight: 900, fontSize: 15 }}>
+            {error ? "Fix this" : "Status"}
+          </div>
+          <div style={{ marginTop: 6, color: "rgba(255,255,255,.88)", lineHeight: 1.55 }}>
+            {error || status}
+          </div>
         </div>
       )}
 
@@ -671,30 +953,21 @@ export default function InvestmentsPage() {
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: "1.15fr .85fr",
+                gridTemplateColumns: "1.12fr .88fr",
                 gap: 18,
                 alignItems: "center",
               }}
             >
               <div>
-                <div
-                  style={{
-                    fontSize: 12,
-                    fontWeight: 900,
-                    textTransform: "uppercase",
-                    letterSpacing: "0.18em",
-                    color: "rgba(255,255,255,.54)",
-                  }}
-                >
-                  Portfolio Pulse
-                </div>
+                <div style={overlineStyle}>Portfolio Pulse</div>
 
                 <div
                   style={{
-                    marginTop: 10,
-                    fontSize: "clamp(2rem, 4vw, 3.1rem)",
+                    marginTop: 12,
+                    fontSize: "clamp(2.2rem, 4.6vw, 3.8rem)",
                     fontWeight: 950,
-                    letterSpacing: "-0.03em",
+                    letterSpacing: "-0.04em",
+                    color: "rgba(255,255,255,.99)",
                   }}
                 >
                   {portfolio.hasAnyLivePrices ? money(portfolio.totalValue) : "Waiting on live data"}
@@ -702,22 +975,22 @@ export default function InvestmentsPage() {
 
                 <div
                   style={{
-                    marginTop: 10,
-                    fontSize: 16,
-                    fontWeight: 850,
+                    marginTop: 12,
+                    fontSize: 18,
+                    fontWeight: 900,
                     color:
                       portfolioTone === "good"
                         ? "#86efac"
                         : portfolioTone === "bad"
-                          ? "#fda4af"
-                          : "rgba(255,255,255,.82)",
+                        ? "#fda4af"
+                        : "rgba(255,255,255,.90)",
                   }}
                 >
                   {portfolio.hasAnyLivePrices
                     ? `${portfolio.totalPnl >= 0 ? "+" : ""}${money(portfolio.totalPnl)} vs remaining cost basis`
                     : loadingPrices
-                      ? "Checking live market prices..."
-                      : "Live pricing returns when quote fetch succeeds."}
+                    ? "Checking live market prices..."
+                    : "Live pricing returns when quote fetch succeeds."}
                 </div>
               </div>
 
@@ -725,27 +998,12 @@ export default function InvestmentsPage() {
                 style={{
                   display: "grid",
                   gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-                  gap: 12,
+                  gap: 14,
                 }}
               >
-                <PulseMiniCard
-                  label="Holdings"
-                  value={String(portfolio.holdings.length)}
-                  sub="Tracked positions"
-                  tone="neutral"
-                />
-                <PulseMiniCard
-                  label="Favorites"
-                  value={String(favoriteCards.length)}
-                  sub="Pinned symbols"
-                  tone="good"
-                />
-                <PulseMiniCard
-                  label="Trades"
-                  value={String(txns.length)}
-                  sub="Recorded transactions"
-                  tone="bad"
-                />
+                <PulseMiniCard label="Holdings" value={String(portfolio.holdings.length)} sub="Tracked positions" tone="neutral" />
+                <PulseMiniCard label="Favorites" value={String(favoriteCards.length)} sub="Pinned symbols" tone="good" />
+                <PulseMiniCard label="Trades" value={String(txns.length)} sub="Recorded transactions" tone="bad" />
               </div>
             </div>
           </div>
@@ -765,7 +1023,6 @@ export default function InvestmentsPage() {
               tone="neutral"
               strong
             />
-
             <MetricCard
               title="Remaining Cost Basis"
               value={money(portfolio.totalCost)}
@@ -773,7 +1030,6 @@ export default function InvestmentsPage() {
               tone="good"
               strong
             />
-
             <MetricCard
               title="Unrealized P/L"
               value={portfolio.hasAnyLivePrices ? money(portfolio.totalPnl) : "Pending live data"}
@@ -788,7 +1044,6 @@ export default function InvestmentsPage() {
               valueTone={portfolioTone}
               strong
             />
-
             <MetricCard
               title="Realized P/L"
               value={money(portfolio.totalRealizedPnl)}
@@ -799,31 +1054,25 @@ export default function InvestmentsPage() {
             />
           </div>
 
-          <div style={{ ...shellPanel("neutral", false), padding: 18, marginBottom: 18 }}>
-            <div style={{ fontWeight: 950, fontSize: 22, letterSpacing: "-0.02em" }}>
-              Portfolio Signals
-            </div>
-            <div style={{ marginTop: 6, fontSize: 14, color: "rgba(255,255,255,.66)" }}>
+          <div style={{ ...shellPanel("neutral"), padding: 20, marginBottom: 18 }}>
+            <div style={sectionTitleStyle}>Portfolio Signals</div>
+            <div style={sectionSubStyle}>
               Live portfolio intelligence. No fake history. Just what is true right now.
             </div>
 
-            <div style={{ height: 16 }} />
+            <div style={{ height: 18 }} />
 
             <div
               style={{
                 display: "grid",
                 gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-                gap: 12,
+                gap: 14,
               }}
             >
               <SignalCard
                 label="Best Holding"
                 title={signals.bestHolding?.symbol || "None"}
-                value={
-                  signals.bestHolding?.hasLivePrice
-                    ? money(signals.bestHolding.pnl)
-                    : "No live data"
-                }
+                value={signals.bestHolding?.hasLivePrice ? money(signals.bestHolding.pnl) : "No live data"}
                 secondary={
                   signals.bestHolding?.pnlPct != null
                     ? `${signals.bestHolding.pnlPct >= 0 ? "+" : ""}${signals.bestHolding.pnlPct.toFixed(2)}%`
@@ -831,9 +1080,7 @@ export default function InvestmentsPage() {
                 }
                 sub={
                   signals.bestHolding?.hasLivePrice
-                    ? `${fmtNumber(signals.bestHolding.shares)} shares • ${money(
-                        signals.bestHolding.value
-                      )} value`
+                    ? `${fmtNumber(signals.bestHolding.shares)} shares • ${money(signals.bestHolding.value)} value`
                     : "Shows top unrealized winner."
                 }
                 tone={signals.bestHolding ? "good" : "neutral"}
@@ -842,11 +1089,7 @@ export default function InvestmentsPage() {
               <SignalCard
                 label="Worst Holding"
                 title={signals.worstHolding?.symbol || "None"}
-                value={
-                  signals.worstHolding?.hasLivePrice
-                    ? money(signals.worstHolding.pnl)
-                    : "No live data"
-                }
+                value={signals.worstHolding?.hasLivePrice ? money(signals.worstHolding.pnl) : "No live data"}
                 secondary={
                   signals.worstHolding?.pnlPct != null
                     ? `${signals.worstHolding.pnlPct >= 0 ? "+" : ""}${signals.worstHolding.pnlPct.toFixed(2)}%`
@@ -854,9 +1097,7 @@ export default function InvestmentsPage() {
                 }
                 sub={
                   signals.worstHolding?.hasLivePrice
-                    ? `${fmtNumber(signals.worstHolding.shares)} shares • ${money(
-                        signals.worstHolding.value
-                      )} value`
+                    ? `${fmtNumber(signals.worstHolding.shares)} shares • ${money(signals.worstHolding.value)} value`
                     : "Shows biggest unrealized drag."
                 }
                 tone={signals.worstHolding ? "bad" : "neutral"}
@@ -865,11 +1106,7 @@ export default function InvestmentsPage() {
               <SignalCard
                 label="Largest Position"
                 title={signals.largestPosition?.symbol || "None"}
-                value={
-                  signals.largestPosition?.hasLivePrice
-                    ? money(signals.largestPosition.value)
-                    : "No live data"
-                }
+                value={signals.largestPosition?.hasLivePrice ? money(signals.largestPosition.value) : "No live data"}
                 secondary={
                   signals.largestWeightPct != null
                     ? `${signals.largestWeightPct.toFixed(1)}% of portfolio`
@@ -877,9 +1114,7 @@ export default function InvestmentsPage() {
                 }
                 sub={
                   signals.largestPosition?.hasLivePrice
-                    ? `${fmtNumber(signals.largestPosition.shares)} shares at ${money(
-                        signals.largestPosition.livePrice
-                      )}`
+                    ? `${fmtNumber(signals.largestPosition.shares)} shares at ${money(signals.largestPosition.livePrice)}`
                     : "Largest live-priced position."
                 }
                 tone="neutral"
@@ -888,16 +1123,8 @@ export default function InvestmentsPage() {
               <SignalCard
                 label="Live Price Coverage"
                 title={`${signals.liveCoverageCount}/${signals.totalHoldingsCount}`}
-                value={
-                  signals.totalHoldingsCount
-                    ? `${signals.liveCoveragePct.toFixed(0)}%`
-                    : "0%"
-                }
-                sub={
-                  loadingPrices
-                    ? "Checking quote coverage now."
-                    : "How much of the portfolio has live prices."
-                }
+                value={signals.totalHoldingsCount ? `${signals.liveCoveragePct.toFixed(0)}%` : "0%"}
+                sub={loadingPrices ? "Checking quote coverage now." : "How much of the portfolio has live prices."}
                 tone="neutral"
               />
 
@@ -919,73 +1146,61 @@ export default function InvestmentsPage() {
             </div>
           </div>
 
-          <div style={{ ...shellPanel("neutral", false), padding: 18, marginBottom: 18 }}>
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                gap: 12,
-                alignItems: "center",
-                flexWrap: "wrap",
-              }}
-            >
-              <div>
-                <div style={{ fontWeight: 950, fontSize: 22, letterSpacing: "-0.02em" }}>
-                  Favorites
-                </div>
-                <div style={{ marginTop: 6, fontSize: 14, color: "rgba(255,255,255,.66)" }}>
-                  Quick-access symbols you want to keep close.
-                </div>
-              </div>
-            </div>
+          <div style={{ ...shellPanel("neutral"), padding: 20, marginBottom: 18 }}>
+            <div style={sectionTitleStyle}>Favorites</div>
+            <div style={sectionSubStyle}>Quick access symbols you want close without clutter.</div>
 
-            <div style={{ height: 16 }} />
+            <div style={{ height: 18 }} />
 
             {favoriteCards.length ? (
               <div
                 style={{
                   display: "grid",
                   gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
-                  gap: 12,
+                  gap: 14,
                 }}
               >
                 {favoriteCards.map((f) => (
-                  <div
-                    key={f.id}
-                    style={{
-                      ...softPanel("neutral"),
-                      padding: 16,
-                    }}
-                  >
+                  <div key={f.id} style={{ ...softPanel("neutral"), padding: 18 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
                       <div>
-                        <div style={{ fontWeight: 950, fontSize: 18 }}>{f.symbol}</div>
-                        <div style={{ fontSize: 12, marginTop: 4, color: "rgba(255,255,255,.56)" }}>
+                        <div style={{ fontWeight: 950, fontSize: 18, color: "rgba(255,255,255,.98)" }}>{f.symbol}</div>
+                        <div style={{ fontSize: 12, marginTop: 4, color: "rgba(255,255,255,.72)" }}>
                           {f.asset_type || "stock"}
                         </div>
                       </div>
 
-                      <button
-                        className="btnGhost"
-                        onClick={() => removeFavorite(f.id)}
-                        style={{ minWidth: 82 }}
-                      >
+                      <button className="btnGhost" onClick={() => removeFavorite(f.id)} style={{ minWidth: 82 }}>
                         Remove
                       </button>
                     </div>
 
-                    <div style={{ marginTop: 12, fontWeight: 800, minHeight: 22 }}>
+                    <div
+                      style={{
+                        marginTop: 14,
+                        fontWeight: 850,
+                        minHeight: 24,
+                        color: "rgba(255,255,255,.94)",
+                      }}
+                    >
                       {f.name || f.symbol}
                     </div>
 
-                    <div style={{ marginTop: 14 }}>
-                      <div style={{ fontSize: 12, color: "rgba(255,255,255,.54)" }}>Live Price</div>
-                      <div style={{ marginTop: 4, fontWeight: 950, fontSize: 22 }}>
+                    <div style={{ marginTop: 16 }}>
+                      <div style={{ fontSize: 12, color: "rgba(255,255,255,.76)" }}>Live Price</div>
+                      <div
+                        style={{
+                          marginTop: 6,
+                          fontWeight: 950,
+                          fontSize: 26,
+                          color: "rgba(255,255,255,.99)",
+                        }}
+                      >
                         {f.hasLivePrice ? money(f.livePrice) : "Pending"}
                       </div>
                     </div>
 
-                    <div style={{ marginTop: 14 }}>
+                    <div style={{ marginTop: 16 }}>
                       <Link href={`/market/${encodeURIComponent(f.symbol)}`} className="btn">
                         Open Market
                       </Link>
@@ -1009,15 +1224,13 @@ export default function InvestmentsPage() {
               marginBottom: 18,
             }}
           >
-            <div style={{ ...shellPanel("neutral", false), padding: 18 }}>
-              <div style={{ fontWeight: 950, fontSize: 22, letterSpacing: "-0.02em" }}>
-                Top Holdings
-              </div>
-              <div style={{ marginTop: 6, fontSize: 14, color: "rgba(255,255,255,.66)" }}>
-                Clean account summary. Open an asset only when you want chart detail.
+            <div style={{ ...shellPanel("neutral"), padding: 20 }}>
+              <div style={sectionTitleStyle}>Top Holdings</div>
+              <div style={sectionSubStyle}>
+                Clean account summary. Open an asset only when you want deeper detail.
               </div>
 
-              <div style={{ height: 16 }} />
+              <div style={{ height: 18 }} />
 
               {!portfolio.holdings.length ? (
                 <EmptyState
@@ -1025,7 +1238,7 @@ export default function InvestmentsPage() {
                   sub="Add your first asset, then log a trade to start building your portfolio."
                 />
               ) : (
-                <div style={{ display: "grid", gap: 12 }}>
+                <div style={{ display: "grid", gap: 14 }}>
                   {portfolio.holdings.slice(0, 8).map((h) => {
                     const isFavorite = favorites.some(
                       (f) =>
@@ -1038,30 +1251,29 @@ export default function InvestmentsPage() {
                         key={h.id}
                         style={{
                           ...softPanel(h.hasLivePrice ? toneByValue(h.pnl) : "neutral"),
-                          padding: 16,
+                          padding: 18,
                         }}
                       >
                         <div
                           style={{
                             display: "grid",
-                            gridTemplateColumns: "1.25fr .75fr .95fr .95fr auto auto",
+                            gridTemplateColumns: "1.2fr .8fr .95fr 1fr auto auto",
                             gap: 12,
                             alignItems: "center",
                           }}
                         >
                           <div>
-                            <div style={{ fontWeight: 950, fontSize: 17 }}>{h.symbol}</div>
-                            <div style={{ fontSize: 12, marginTop: 5, color: "rgba(255,255,255,.56)" }}>
+                            <div style={{ fontWeight: 950, fontSize: 17, color: "rgba(255,255,255,.98)" }}>
+                              {h.symbol}
+                            </div>
+                            <div style={{ fontSize: 12, marginTop: 6, color: "rgba(255,255,255,.72)" }}>
                               {h.account || "Main"} • {h.asset_type || "stock"} • {h.txCount} trade
                               {h.txCount === 1 ? "" : "s"}
                             </div>
                           </div>
 
                           <HoldingMiniStat label="Shares" value={fmtNumber(h.shares)} />
-                          <HoldingMiniStat
-                            label="Value"
-                            value={h.hasLivePrice ? money(h.value) : "Pending"}
-                          />
+                          <HoldingMiniStat label="Value" value={h.hasLivePrice ? money(h.value) : "Pending"} />
                           <HoldingMiniStat
                             label="P/L"
                             value={
@@ -1072,11 +1284,7 @@ export default function InvestmentsPage() {
                             tone={h.hasLivePrice ? toneByValue(h.pnl) : "neutral"}
                           />
 
-                          <button
-                            className="btnGhost"
-                            onClick={() => addFavoriteFromHolding(h)}
-                            style={{ minWidth: 98 }}
-                          >
+                          <button className="btnGhost" onClick={() => addFavoriteFromHolding(h)} style={{ minWidth: 98 }}>
                             {isFavorite ? "Favorited" : "Favorite"}
                           </button>
 
@@ -1091,18 +1299,14 @@ export default function InvestmentsPage() {
               )}
             </div>
 
-            <div style={{ ...shellPanel("neutral", false), padding: 18 }}>
-              <div style={{ fontWeight: 950, fontSize: 22, letterSpacing: "-0.02em" }}>
-                Allocation View
-              </div>
-              <div style={{ marginTop: 6, fontSize: 14, color: "rgba(255,255,255,.66)" }}>
-                Portfolio weights by live market value.
-              </div>
+            <div style={{ ...shellPanel("neutral"), padding: 20 }}>
+              <div style={sectionTitleStyle}>Allocation View</div>
+              <div style={sectionSubStyle}>Portfolio weights by live market value.</div>
 
-              <div style={{ height: 16 }} />
+              <div style={{ height: 18 }} />
 
               {allocation.length ? (
-                <div style={{ display: "grid", gap: 14 }}>
+                <div style={{ display: "grid", gap: 16 }}>
                   {allocation.map((h) => (
                     <div key={h.id}>
                       <div
@@ -1114,20 +1318,20 @@ export default function InvestmentsPage() {
                           alignItems: "center",
                         }}
                       >
-                        <div style={{ fontWeight: 900 }}>{h.symbol}</div>
-                        <div style={{ fontSize: 13, color: "rgba(255,255,255,.62)" }}>
+                        <div style={{ fontWeight: 900, color: "rgba(255,255,255,.96)" }}>{h.symbol}</div>
+                        <div style={{ fontSize: 13, color: "rgba(255,255,255,.80)" }}>
                           {h.weight.toFixed(1)}%
                         </div>
                       </div>
 
                       <div
                         style={{
-                          height: 10,
+                          height: 12,
                           borderRadius: 999,
-                          background: "rgba(255,255,255,.05)",
+                          background: "rgba(255,255,255,.09)",
                           overflow: "hidden",
                           position: "relative",
-                          border: "1px solid rgba(255,255,255,.05)",
+                          border: "1px solid rgba(255,255,255,.07)",
                         }}
                       >
                         <div
@@ -1136,8 +1340,8 @@ export default function InvestmentsPage() {
                             height: "100%",
                             borderRadius: 999,
                             background:
-                              "linear-gradient(90deg, rgba(52,211,153,.95), rgba(59,130,246,.85))",
-                            boxShadow: "0 0 18px rgba(59,130,246,.18)",
+                              "linear-gradient(90deg, rgba(74,222,128,.96), rgba(59,130,246,.86))",
+                            boxShadow: "0 0 16px rgba(59,130,246,.14)",
                           }}
                         />
                       </div>
@@ -1147,13 +1351,11 @@ export default function InvestmentsPage() {
                           display: "flex",
                           justifyContent: "space-between",
                           gap: 10,
-                          marginTop: 6,
+                          marginTop: 8,
                         }}
                       >
-                        <div style={{ fontSize: 12, color: "rgba(255,255,255,.58)" }}>
-                          {money(h.value)}
-                        </div>
-                        <div style={{ fontSize: 12, color: "rgba(255,255,255,.58)" }}>
+                        <div style={{ fontSize: 12, color: "rgba(255,255,255,.74)" }}>{money(h.value)}</div>
+                        <div style={{ fontSize: 12, color: "rgba(255,255,255,.74)" }}>
                           {compactNumber(h.shares)} shares
                         </div>
                       </div>
@@ -1176,15 +1378,11 @@ export default function InvestmentsPage() {
               gap: 18,
             }}
           >
-            <div style={{ ...shellPanel("neutral", false), padding: 18 }}>
-              <div style={{ fontWeight: 950, fontSize: 22, letterSpacing: "-0.02em" }}>
-                Recent Activity
-              </div>
-              <div style={{ marginTop: 6, fontSize: 14, color: "rgba(255,255,255,.66)" }}>
-                Latest buys and sells across your portfolio.
-              </div>
+            <div style={{ ...shellPanel("neutral"), padding: 20 }}>
+              <div style={sectionTitleStyle}>Recent Activity</div>
+              <div style={sectionSubStyle}>Latest buys and sells across your portfolio.</div>
 
-              <div style={{ height: 16 }} />
+              <div style={{ height: 18 }} />
 
               {recentTxns.length ? (
                 <div style={{ display: "grid", gap: 10 }}>
@@ -1195,23 +1393,15 @@ export default function InvestmentsPage() {
                       txnType === "BUY" ? "good" : txnType === "SELL" ? "bad" : "neutral";
 
                     return (
-                      <div
-                        key={t.id}
-                        style={{
-                          ...microPanel(tone),
-                          padding: 14,
-                        }}
-                      >
+                      <div key={t.id} style={{ ...microPanel(tone), padding: 15 }}>
                         <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-                          <div style={{ fontWeight: 900 }}>
+                          <div style={{ fontWeight: 900, color: "rgba(255,255,255,.97)" }}>
                             {asset?.symbol || "—"} • {t.txn_type}
                           </div>
-                          <div style={{ fontSize: 12, color: "rgba(255,255,255,.56)" }}>
-                            {t.txn_date}
-                          </div>
+                          <div style={{ fontSize: 12, color: "rgba(255,255,255,.74)" }}>{t.txn_date}</div>
                         </div>
 
-                        <div style={{ marginTop: 8, fontSize: 13, color: "rgba(255,255,255,.66)" }}>
+                        <div style={{ marginTop: 8, fontSize: 13, color: "rgba(255,255,255,.84)" }}>
                           {fmtNumber(t.qty)} shares at {money(t.price)}
                         </div>
                       </div>
@@ -1226,19 +1416,33 @@ export default function InvestmentsPage() {
               )}
             </div>
 
-            <div style={{ ...shellPanel("neutral", false), padding: 18 }}>
-              <div style={{ fontWeight: 950, fontSize: 22, letterSpacing: "-0.02em" }}>
-                What Actually Comes Next
-              </div>
-              <div style={{ marginTop: 8, lineHeight: 1.5, color: "rgba(255,255,255,.68)" }}>
+            <div style={{ ...shellPanel("neutral"), padding: 20 }}>
+              <div style={sectionTitleStyle}>What Actually Comes Next</div>
+              <div style={{ marginTop: 8, lineHeight: 1.65, color: "rgba(255,255,255,.84)" }}>
                 The next real backend upgrade is daily portfolio snapshots. That is what unlocks honest performance charts.
               </div>
 
-              <div style={{ display: "grid", gap: 10, marginTop: 16 }}>
-                <MiniPoint title="Daily snapshots" sub="Store total portfolio value once per day." tone="good" />
-                <MiniPoint title="Real performance cards" sub="1D / 1W / 1M / YTD based on stored history." tone="neutral" />
-                <MiniPoint title="Portfolio chart" sub="Actual account curve, not fake reconstructed history." tone="bad" />
-                <MiniPoint title="Signal expansion" sub="Add % gainers, losers, and watchlist alerts after snapshots." tone="neutral" />
+              <div style={{ display: "grid", gap: 12, marginTop: 18 }}>
+                <MiniPoint
+                  title="Daily snapshots"
+                  sub="Store total portfolio value once per day."
+                  tone="good"
+                />
+                <MiniPoint
+                  title="Real performance cards"
+                  sub="1D / 1W / 1M / YTD based on stored history."
+                  tone="neutral"
+                />
+                <MiniPoint
+                  title="Portfolio chart"
+                  sub="Actual account curve, not fake reconstructed history."
+                  tone="bad"
+                />
+                <MiniPoint
+                  title="Signal expansion"
+                  sub="Add gainers, losers, and watchlist alerts after snapshots."
+                  tone="neutral"
+                />
               </div>
             </div>
           </div>
@@ -1247,7 +1451,16 @@ export default function InvestmentsPage() {
 
       {tab === "holdings" && (
         <>
-          <div style={{ ...shellPanel("neutral", false), padding: 18, marginBottom: 18 }}>
+          <div
+            style={{
+              ...shellPanel("neutral"),
+              padding: 20,
+              marginBottom: 18,
+              position: "relative",
+              zIndex: 30,
+              overflow: "visible",
+            }}
+          >
             <div
               style={{
                 display: "flex",
@@ -1258,25 +1471,135 @@ export default function InvestmentsPage() {
                 marginBottom: 14,
               }}
             >
-              <div style={{ fontWeight: 950, fontSize: 20 }}>Add Asset</div>
+              <div>
+                <div style={{ fontWeight: 950, fontSize: 22, letterSpacing: "-0.02em" }}>
+                  Holdings
+                </div>
+                <div style={{ marginTop: 6, fontSize: 14, color: "rgba(255,255,255,.82)" }}>
+                  Manage assets quietly. Bulk actions stay tucked away until you need them.
+                </div>
+              </div>
 
-              <Link href="/investments/discover" className="btnGhost">
-                Discover Stocks
-              </Link>
+              <div
+                style={{
+                  display: "flex",
+                  gap: 10,
+                  alignItems: "center",
+                  flexWrap: "wrap",
+                  position: "relative",
+                  zIndex: 80,
+                }}
+              >
+                {selectMode ? (
+                  <>
+                    <div
+                      style={{
+                        padding: "10px 14px",
+                        borderRadius: 999,
+                        border: "1px solid rgba(255,255,255,.12)",
+                        background: "rgba(255,255,255,.04)",
+                        color: "rgba(255,255,255,.92)",
+                        fontWeight: 800,
+                      }}
+                    >
+                      {selectedHoldingIds.length} selected
+                    </div>
+
+                    <button className="btnGhost" onClick={selectAllHoldings}>
+                      Select All
+                    </button>
+
+                    <button className="btnGhost" onClick={cancelSelectMode}>
+                      Cancel
+                    </button>
+
+                    <button
+                      onClick={handleDeleteSelected}
+                      style={{
+                        minWidth: 138,
+                        height: 46,
+                        padding: "0 18px",
+                        borderRadius: 999,
+                        border: "1px solid rgba(244,63,94,.34)",
+                        background:
+                          "linear-gradient(180deg, rgba(80,10,24,.95) 0%, rgba(56,8,18,.96) 100%)",
+                        color: "#ffd5dc",
+                        fontWeight: 900,
+                        boxShadow: "0 8px 16px rgba(0,0,0,.18), 0 0 10px rgba(244,63,94,.10)",
+                        cursor: "pointer",
+                      }}
+                    >
+                      Delete Selected
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <Link href="/investments/discover" className="btnGhost">
+                      Discover Stocks
+                    </Link>
+
+                    <div
+                      style={{ position: "relative", zIndex: 100 }}
+                      ref={menuRef}
+                    >
+                      <button
+                        onClick={() => setHoldingsMenuOpen((prev) => !prev)}
+                        style={{
+                          width: 46,
+                          height: 46,
+                          borderRadius: 999,
+                          border: "1px solid rgba(255,255,255,.10)",
+                          background:
+                            "linear-gradient(180deg, rgba(12,19,35,.95) 0%, rgba(8,13,25,.96) 100%)",
+                          color: "rgba(255,255,255,.96)",
+                          fontSize: 22,
+                          fontWeight: 900,
+                          cursor: "pointer",
+                          boxShadow: "0 8px 16px rgba(0,0,0,.14)",
+                        }}
+                        aria-label="Manage holdings"
+                        title="Manage holdings"
+                      >
+                        …
+                      </button>
+
+                      {holdingsMenuOpen ? (
+                        <div
+                          style={{
+                            position: "absolute",
+                            right: 0,
+                            top: 54,
+                            width: 220,
+                            borderRadius: 18,
+                            border: "1px solid rgba(255,255,255,.10)",
+                            background:
+                              "linear-gradient(180deg, rgba(16,24,42,.99) 0%, rgba(11,17,31,.99) 100%)",
+                            boxShadow: "0 20px 40px rgba(0,0,0,.32)",
+                            padding: 8,
+                            zIndex: 9999,
+                          }}
+                        >
+                          <MenuAction label="Select multiple" onClick={startSelectMode} />
+                          <MenuAction
+                            label="Delete all holdings"
+                            onClick={handleDeleteAllHoldings}
+                            danger
+                          />
+                        </div>
+                      ) : null}
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
 
-            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 14 }}>
               <input
                 className="input"
                 placeholder="Symbol (VOO, QQQ)"
                 value={symbol}
                 onChange={(e) => setSymbol(e.target.value)}
-                style={{
-                  minWidth: 240,
-                  background: "rgba(255,255,255,.04)",
-                  border: "1px solid rgba(255,255,255,.10)",
-                  borderRadius: 16,
-                }}
+                style={{ minWidth: 240 }}
               />
               <button className="btn" onClick={addAsset}>
                 Add Asset
@@ -1286,23 +1609,28 @@ export default function InvestmentsPage() {
 
           <div
             style={{
-              ...shellPanel("neutral", false),
+              ...shellPanel("neutral"),
               padding: 0,
               overflow: "hidden",
+              position: "relative",
+              zIndex: 1,
             }}
           >
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: "1.05fr .75fr .9fr .9fr .9fr .95fr 110px 120px",
+                gridTemplateColumns: selectMode
+                  ? "64px 1.05fr .75fr .9fr .9fr .9fr 1fr 110px 120px"
+                  : "1.05fr .75fr .9fr .9fr .9fr 1fr 110px 120px",
                 gap: 12,
                 padding: "16px 18px",
-                borderBottom: "1px solid rgba(255,255,255,.08)",
+                borderBottom: "1px solid rgba(255,255,255,.09)",
                 fontWeight: 900,
-                color: "rgba(255,255,255,.68)",
-                background: "rgba(255,255,255,.02)",
+                color: "rgba(255,255,255,.76)",
+                background: "rgba(255,255,255,.035)",
               }}
             >
+              {selectMode ? <div>Select</div> : null}
               <div>Symbol</div>
               <div>Shares</div>
               <div>Cost Basis</div>
@@ -1323,26 +1651,54 @@ export default function InvestmentsPage() {
 
                 const tone = h.hasLivePrice ? toneByValue(h.pnl) : "neutral";
                 const tint = tintVars(tone);
+                const selected = selectedHoldingIds.includes(h.id);
 
                 return (
                   <div
                     key={h.id}
                     style={{
                       display: "grid",
-                      gridTemplateColumns: "1.05fr .75fr .9fr .9fr .9fr .95fr 110px 120px",
+                      gridTemplateColumns: selectMode
+                        ? "64px 1.05fr .75fr .9fr .9fr .9fr 1fr 110px 120px"
+                        : "1.05fr .75fr .9fr .9fr .9fr 1fr 110px 120px",
                       gap: 12,
                       padding: "16px 18px",
                       borderBottom: "1px solid rgba(255,255,255,.06)",
                       alignItems: "center",
                       background: `
-                        linear-gradient(90deg, ${tint.top}, rgba(255,255,255,0) 26%),
-                        rgba(255,255,255,.01)
+                        linear-gradient(90deg, ${selected ? "rgba(96,165,250,.10)" : tint.top}, rgba(255,255,255,0) 28%),
+                        rgba(255,255,255,.014)
                       `,
                     }}
                   >
+                    {selectMode ? (
+                      <div>
+                        <button
+                          onClick={() => toggleHoldingSelected(h.id)}
+                          style={{
+                            width: 30,
+                            height: 30,
+                            borderRadius: 10,
+                            border: selected
+                              ? "1px solid rgba(96,165,250,.44)"
+                              : "1px solid rgba(255,255,255,.12)",
+                            background: selected
+                              ? "linear-gradient(180deg, rgba(30,64,175,.95) 0%, rgba(29,78,216,.95) 100%)"
+                              : "rgba(255,255,255,.04)",
+                            color: "white",
+                            fontWeight: 900,
+                            cursor: "pointer",
+                          }}
+                          title={selected ? "Deselect" : "Select"}
+                        >
+                          {selected ? "✓" : ""}
+                        </button>
+                      </div>
+                    ) : null}
+
                     <div>
-                      <div style={{ fontWeight: 900 }}>{h.symbol}</div>
-                      <div style={{ fontSize: 12, marginTop: 4, color: "rgba(255,255,255,.56)" }}>
+                      <div style={{ fontWeight: 900, color: "rgba(255,255,255,.98)" }}>{h.symbol}</div>
+                      <div style={{ fontSize: 12, marginTop: 4, color: "rgba(255,255,255,.70)" }}>
                         {h.account || "Main"}
                       </div>
                     </div>
@@ -1354,8 +1710,12 @@ export default function InvestmentsPage() {
 
                     <div
                       style={{
-                        color: h.hasLivePrice ? (h.pnl >= 0 ? "#86efac" : "#fda4af") : "inherit",
-                        fontWeight: 850,
+                        color: h.hasLivePrice
+                          ? h.pnl >= 0
+                            ? "#86efac"
+                            : "#fda4af"
+                          : "rgba(255,255,255,.94)",
+                        fontWeight: 900,
                       }}
                     >
                       {h.hasLivePrice
@@ -1391,20 +1751,17 @@ export default function InvestmentsPage() {
 
       {tab === "transactions" && (
         <>
-          <div style={{ ...shellPanel("neutral", false), padding: 18, marginBottom: 18 }}>
-            <div style={{ fontWeight: 950, fontSize: 20, marginBottom: 14 }}>Add Trade</div>
+          <div style={{ ...shellPanel("neutral"), padding: 20, marginBottom: 18 }}>
+            <div style={{ fontWeight: 950, fontSize: 22, marginBottom: 14, letterSpacing: "-0.02em" }}>
+              Add Trade
+            </div>
 
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
               <select
-                className="input"
+                className="select"
                 value={txnAsset}
                 onChange={(e) => setTxnAsset(e.target.value)}
-                style={{
-                  minWidth: 220,
-                  background: "rgba(255,255,255,.04)",
-                  border: "1px solid rgba(255,255,255,.10)",
-                  borderRadius: 16,
-                }}
+                style={{ minWidth: 220 }}
               >
                 <option value="">Select Asset</option>
                 {assets.map((a) => (
@@ -1419,12 +1776,7 @@ export default function InvestmentsPage() {
                 placeholder="Qty"
                 value={txnQty}
                 onChange={(e) => setTxnQty(e.target.value)}
-                style={{
-                  minWidth: 120,
-                  background: "rgba(255,255,255,.04)",
-                  border: "1px solid rgba(255,255,255,.10)",
-                  borderRadius: 16,
-                }}
+                style={{ minWidth: 120 }}
               />
 
               <input
@@ -1432,12 +1784,7 @@ export default function InvestmentsPage() {
                 placeholder="Price"
                 value={txnPrice}
                 onChange={(e) => setTxnPrice(e.target.value)}
-                style={{
-                  minWidth: 120,
-                  background: "rgba(255,255,255,.04)",
-                  border: "1px solid rgba(255,255,255,.10)",
-                  borderRadius: 16,
-                }}
+                style={{ minWidth: 120 }}
               />
 
               <button className="btn" onClick={addTrade}>
@@ -1455,7 +1802,7 @@ export default function InvestmentsPage() {
           >
             <div
               style={{
-                ...shellPanel("neutral", false),
+                ...shellPanel("neutral"),
                 padding: 0,
                 overflow: "hidden",
               }}
@@ -1467,11 +1814,7 @@ export default function InvestmentsPage() {
                   const asset = assets.find((a) => a.id === t.asset_id);
                   const txnType = String(t.txn_type || "").toUpperCase();
                   const tone =
-                    txnType === "BUY"
-                      ? "good"
-                      : txnType === "SELL"
-                        ? "bad"
-                        : "neutral";
+                    txnType === "BUY" ? "good" : txnType === "SELL" ? "bad" : "neutral";
 
                   const tint = tintVars(tone);
 
@@ -1480,26 +1823,26 @@ export default function InvestmentsPage() {
                       key={t.id}
                       style={{
                         display: "grid",
-                        gridTemplateColumns: "1fr 1fr 1fr 1fr 1fr",
+                        gridTemplateColumns: "repeat(5, minmax(0, 1fr))",
                         gap: 12,
                         padding: "16px 18px",
                         borderBottom: "1px solid rgba(255,255,255,.06)",
                         alignItems: "center",
                         background: `
                           linear-gradient(90deg, ${tint.top}, rgba(255,255,255,0) 28%),
-                          rgba(255,255,255,.01)
+                          rgba(255,255,255,.012)
                         `,
                       }}
                     >
                       <div
                         style={{
-                          fontWeight: 850,
+                          fontWeight: 900,
                           color:
                             txnType === "BUY"
                               ? "#86efac"
                               : txnType === "SELL"
-                                ? "#fda4af"
-                                : "inherit",
+                              ? "#fda4af"
+                              : "rgba(255,255,255,.96)",
                         }}
                       >
                         {t.txn_type}
@@ -1521,11 +1864,9 @@ export default function InvestmentsPage() {
               )}
             </div>
 
-            <div style={{ ...shellPanel("neutral", false), padding: 18 }}>
-              <div style={{ fontWeight: 950, fontSize: 20 }}>Recent Activity</div>
-              <div style={{ marginTop: 8, fontSize: 14, color: "rgba(255,255,255,.66)" }}>
-                Latest portfolio moves at a glance.
-              </div>
+            <div style={{ ...shellPanel("neutral"), padding: 20 }}>
+              <div style={sectionTitleStyle}>Recent Activity</div>
+              <div style={sectionSubStyle}>Latest portfolio moves at a glance.</div>
 
               <div style={{ display: "grid", gap: 10, marginTop: 16 }}>
                 {recentTxns.length ? (
@@ -1536,23 +1877,17 @@ export default function InvestmentsPage() {
                       txnType === "BUY" ? "good" : txnType === "SELL" ? "bad" : "neutral";
 
                     return (
-                      <div
-                        key={t.id}
-                        style={{
-                          ...microPanel(tone),
-                          padding: 14,
-                        }}
-                      >
+                      <div key={t.id} style={{ ...microPanel(tone), padding: 15 }}>
                         <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-                          <div style={{ fontWeight: 900 }}>
+                          <div style={{ fontWeight: 900, color: "rgba(255,255,255,.97)" }}>
                             {asset?.symbol || "—"} • {t.txn_type}
                           </div>
-                          <div style={{ fontSize: 12, color: "rgba(255,255,255,.56)" }}>
+                          <div style={{ fontSize: 12, color: "rgba(255,255,255,.74)" }}>
                             {t.txn_date}
                           </div>
                         </div>
 
-                        <div style={{ marginTop: 8, fontSize: 13, color: "rgba(255,255,255,.66)" }}>
+                        <div style={{ marginTop: 8, fontSize: 13, color: "rgba(255,255,255,.84)" }}>
                           {fmtNumber(t.qty)} shares at {money(t.price)}
                         </div>
                       </div>
@@ -1578,21 +1913,21 @@ function TabBtn({ active, children, onClick }) {
     <button
       onClick={onClick}
       style={{
-        minWidth: 112,
-        height: 44,
+        minWidth: 118,
+        height: 46,
         padding: "0 18px",
         borderRadius: 999,
         border: active
-          ? "1px solid rgba(255,255,255,.12)"
-          : "1px solid rgba(255,255,255,.10)",
+          ? "1px solid rgba(255,255,255,.15)"
+          : "1px solid rgba(255,255,255,.11)",
         background: active
-          ? "linear-gradient(180deg, rgba(255,255,255,.96) 0%, rgba(235,235,235,.92) 100%)"
-          : "linear-gradient(180deg, rgba(10,15,28,.88) 0%, rgba(5,10,22,.96) 100%)",
-        color: active ? "#0b1120" : "rgba(255,255,255,.88)",
-        fontWeight: 800,
+          ? "linear-gradient(180deg, rgba(255,255,255,.98) 0%, rgba(236,236,236,.95) 100%)"
+          : "linear-gradient(180deg, rgba(12,19,35,.95) 0%, rgba(8,13,25,.96) 100%)",
+        color: active ? "#111827" : "rgba(255,255,255,.95)",
+        fontWeight: 850,
         boxShadow: active
-          ? "0 10px 24px rgba(255,255,255,.08)"
-          : "0 10px 22px rgba(0,0,0,.26)",
+          ? "0 8px 18px rgba(255,255,255,.08)"
+          : "0 8px 16px rgba(0,0,0,.14)",
         cursor: "pointer",
       }}
     >
@@ -1613,15 +1948,21 @@ function MetricCard({
     valueTone === "good"
       ? "#86efac"
       : valueTone === "bad"
-        ? "#fda4af"
-        : "inherit";
+      ? "#fda4af"
+      : "rgba(255,255,255,.99)";
+
+  const panel = softPanel(tone);
 
   return (
     <div
       style={{
-        ...softPanel(tone),
-        padding: 18,
-        ...(strong ? { boxShadow: `${softPanel(tone).boxShadow}, 0 0 0 1px rgba(255,255,255,.02) inset` } : {}),
+        ...panel,
+        padding: 20,
+        ...(strong
+          ? {
+              boxShadow: `${panel.boxShadow}, 0 0 0 1px rgba(255,255,255,.025) inset`,
+            }
+          : {}),
       }}
     >
       <div
@@ -1629,15 +1970,15 @@ function MetricCard({
           fontSize: 12,
           textTransform: "uppercase",
           letterSpacing: "0.14em",
-          color: "rgba(255,255,255,.54)",
+          color: "rgba(255,255,255,.74)",
         }}
       >
         {title}
       </div>
-      <div style={{ marginTop: 10, fontSize: 20, fontWeight: 950, color: toneColor }}>
+      <div style={{ marginTop: 12, fontSize: 26, fontWeight: 950, color: toneColor }}>
         {value}
       </div>
-      <div style={{ marginTop: 10, fontSize: 13, lineHeight: 1.45, color: "rgba(255,255,255,.64)" }}>
+      <div style={{ marginTop: 12, fontSize: 14, lineHeight: 1.6, color: "rgba(255,255,255,.82)" }}>
         {sub}
       </div>
     </div>
@@ -1646,24 +1987,23 @@ function MetricCard({
 
 function PulseMiniCard({ label, value, sub, tone = "neutral" }) {
   return (
-    <div
-      style={{
-        ...microPanel(tone),
-        padding: 14,
-      }}
-    >
+    <div style={{ ...microPanel(tone), padding: 18 }}>
       <div
         style={{
           fontSize: 11,
           textTransform: "uppercase",
           letterSpacing: "0.12em",
-          color: "rgba(255,255,255,.54)",
+          color: "rgba(255,255,255,.72)",
         }}
       >
         {label}
       </div>
-      <div style={{ marginTop: 8, fontWeight: 950, fontSize: 22 }}>{value}</div>
-      <div style={{ marginTop: 6, fontSize: 12, color: "rgba(255,255,255,.62)" }}>{sub}</div>
+      <div style={{ marginTop: 10, fontWeight: 950, fontSize: 28, color: "rgba(255,255,255,.99)" }}>
+        {value}
+      </div>
+      <div style={{ marginTop: 8, fontSize: 13, lineHeight: 1.5, color: "rgba(255,255,255,.82)" }}>
+        {sub}
+      </div>
     </div>
   );
 }
@@ -1673,13 +2013,13 @@ function HoldingMiniStat({ label, value, tone = "neutral" }) {
     tone === "good"
       ? "#86efac"
       : tone === "bad"
-        ? "#fda4af"
-        : "rgba(255,255,255,.92)";
+      ? "#fda4af"
+      : "rgba(255,255,255,.97)";
 
   return (
     <div>
-      <div style={{ fontSize: 12, color: "rgba(255,255,255,.54)" }}>{label}</div>
-      <div style={{ fontWeight: 850, marginTop: 4, color }}>{value}</div>
+      <div style={{ fontSize: 12, color: "rgba(255,255,255,.72)" }}>{label}</div>
+      <div style={{ fontWeight: 900, marginTop: 6, color }}>{value}</div>
     </div>
   );
 }
@@ -1689,42 +2029,37 @@ function SignalCard({ label, title, value, secondary = null, sub, tone = "neutra
     tone === "good"
       ? "#86efac"
       : tone === "bad"
-        ? "#fda4af"
-        : "rgba(255,255,255,.92)";
+      ? "#fda4af"
+      : "rgba(255,255,255,.98)";
 
   return (
-    <div
-      style={{
-        ...softPanel(tone),
-        padding: 16,
-      }}
-    >
+    <div style={{ ...softPanel(tone), padding: 18 }}>
       <div
         style={{
           fontSize: 11,
           textTransform: "uppercase",
           letterSpacing: "0.12em",
-          color: "rgba(255,255,255,.54)",
+          color: "rgba(255,255,255,.72)",
         }}
       >
         {label}
       </div>
 
-      <div style={{ marginTop: 10, fontSize: 18, fontWeight: 950 }}>
+      <div style={{ marginTop: 12, fontSize: 18, fontWeight: 950, color: "rgba(255,255,255,.99)" }}>
         {title}
       </div>
 
-      <div style={{ marginTop: 8, fontSize: 22, fontWeight: 950, color: valueColor }}>
+      <div style={{ marginTop: 10, fontSize: 28, fontWeight: 950, color: valueColor }}>
         {value}
       </div>
 
       {secondary ? (
-        <div style={{ marginTop: 4, fontSize: 13, fontWeight: 700, color: "rgba(255,255,255,.62)" }}>
+        <div style={{ marginTop: 6, fontSize: 14, fontWeight: 800, color: "rgba(255,255,255,.82)" }}>
           {secondary}
         </div>
       ) : null}
 
-      <div style={{ marginTop: 8, fontSize: 12, lineHeight: 1.45, color: "rgba(255,255,255,.64)" }}>
+      <div style={{ marginTop: 10, fontSize: 13, lineHeight: 1.6, color: "rgba(255,255,255,.82)" }}>
         {sub}
       </div>
     </div>
@@ -1741,8 +2076,8 @@ function TableHeader({ cols }) {
         padding: "16px 18px",
         borderBottom: "1px solid rgba(255,255,255,.08)",
         fontWeight: 900,
-        color: "rgba(255,255,255,.68)",
-        background: "rgba(255,255,255,.02)",
+        color: "rgba(255,255,255,.76)",
+        background: "rgba(255,255,255,.03)",
       }}
     >
       {cols.map((c) => (
@@ -1756,17 +2091,17 @@ function EmptyState({ title, sub }) {
   return (
     <div
       style={{
-        borderRadius: 20,
-        border: "1px dashed rgba(255,255,255,.14)",
-        padding: "26px 18px",
+        borderRadius: 22,
+        border: "1px dashed rgba(255,255,255,.17)",
+        padding: "30px 18px",
         background:
-          "linear-gradient(180deg, rgba(8,13,26,.84) 0%, rgba(4,8,18,.94) 100%)",
+          "linear-gradient(180deg, rgba(15,24,42,.92) 0%, rgba(11,17,32,.92) 100%)",
         textAlign: "center",
-        boxShadow: "0 14px 32px rgba(0,0,0,.24)",
+        boxShadow: "0 10px 18px rgba(0,0,0,.12)",
       }}
     >
-      <div style={{ fontWeight: 900, fontSize: 16 }}>{title}</div>
-      <div style={{ marginTop: 8, fontSize: 14, lineHeight: 1.45, color: "rgba(255,255,255,.62)" }}>
+      <div style={{ fontWeight: 900, fontSize: 16, color: "rgba(255,255,255,.98)" }}>{title}</div>
+      <div style={{ marginTop: 8, fontSize: 14, lineHeight: 1.6, color: "rgba(255,255,255,.82)" }}>
         {sub}
       </div>
     </div>
@@ -1775,16 +2110,32 @@ function EmptyState({ title, sub }) {
 
 function MiniPoint({ title, sub, tone = "neutral" }) {
   return (
-    <div
-      style={{
-        ...microPanel(tone),
-        padding: 14,
-      }}
-    >
-      <div style={{ fontWeight: 850 }}>{title}</div>
-      <div style={{ marginTop: 6, fontSize: 13, lineHeight: 1.45, color: "rgba(255,255,255,.64)" }}>
+    <div style={{ ...microPanel(tone), padding: 15 }}>
+      <div style={{ fontWeight: 900, fontSize: 17, color: "rgba(255,255,255,.98)" }}>{title}</div>
+      <div style={{ marginTop: 8, fontSize: 14, lineHeight: 1.65, color: "rgba(255,255,255,.84)" }}>
         {sub}
       </div>
     </div>
+  );
+}
+
+function MenuAction({ label, onClick, danger = false }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        width: "100%",
+        textAlign: "left",
+        padding: "12px 14px",
+        borderRadius: 12,
+        border: "none",
+        background: danger ? "rgba(244,63,94,.08)" : "transparent",
+        color: danger ? "#ffc9d3" : "rgba(255,255,255,.94)",
+        fontWeight: 800,
+        cursor: "pointer",
+      }}
+    >
+      {label}
+    </button>
   );
 }
