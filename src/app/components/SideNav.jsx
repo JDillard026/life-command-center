@@ -1,164 +1,206 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import {
+  ArrowUpRight,
+  Circle,
+  Diamond,
+  Hexagon,
+  PieChart,
+  Settings,
+  Square,
+  Target,
+  Triangle,
+  UserCircle2,
+  Wallet,
+} from "lucide-react";
 
-const MAIN_LINKS = [
-  { href: "/", label: "Dashboard", meta: "Today + next moves", icon: "◈" },
-  { href: "/calendar", label: "Calendar", meta: "Timeline + recurring", icon: "○" },
-  { href: "/accounts", label: "Accounts", meta: "Balances + cash view", icon: "◍" },
-  { href: "/bills", label: "Bills", meta: "Due dates + payments", icon: "◉" },
-  { href: "/debt", label: "Debt", meta: "Payoff + balances", icon: "△" },
-  { href: "/income", label: "Income", meta: "Pay + goals", icon: "▣" },
-  { href: "/spending", label: "Spending", meta: "Daily control center", icon: "◐" },
-  { href: "/investments", label: "Investments", meta: "Portfolio tracking", icon: "⬡" },
-  { href: "/savings", label: "Savings", meta: "Targets + progress", icon: "◎" },
+const NAV_ITEMS = [
+  {
+    label: "Dashboard",
+    href: "/dashboard",
+    subtitle: "Today + next moves",
+    icon: Diamond,
+    accent: {
+      icon: "#7ea7ff",
+      ring: "rgba(82,122,255,0.16)",
+      glow: "rgba(82,122,255,0.10)",
+    },
+  },
+  {
+    label: "Calendar",
+    href: "/calendar",
+    subtitle: "Timeline + recurring",
+    icon: Circle,
+    accent: {
+      icon: "#45e7df",
+      ring: "rgba(31,211,201,0.16)",
+      glow: "rgba(31,211,201,0.10)",
+    },
+  },
+  {
+    label: "Accounts",
+    href: "/accounts",
+    subtitle: "Balances + cash view",
+    icon: Wallet,
+    accent: {
+      icon: "#e7edf8",
+      ring: "rgba(205,217,234,0.12)",
+      glow: "rgba(205,217,234,0.08)",
+    },
+  },
+  {
+    label: "Bills",
+    href: "/bills",
+    subtitle: "Due dates + payments",
+    icon: Circle,
+    accent: {
+      icon: "#ffc86b",
+      ring: "rgba(255,193,92,0.14)",
+      glow: "rgba(255,193,92,0.10)",
+    },
+  },
+  {
+    label: "Debt",
+    href: "/debt",
+    subtitle: "Payoff + balances",
+    icon: Triangle,
+    accent: {
+      icon: "#ffb4c0",
+      ring: "rgba(255,127,149,0.14)",
+      glow: "rgba(255,127,149,0.10)",
+    },
+  },
+  {
+    label: "Income",
+    href: "/income",
+    subtitle: "Pay + goals",
+    icon: Square,
+    accent: {
+      icon: "#7ff0b5",
+      ring: "rgba(69,225,143,0.14)",
+      glow: "rgba(69,225,143,0.10)",
+    },
+  },
+  {
+    label: "Spending",
+    href: "/spending",
+    subtitle: "Daily control center",
+    icon: PieChart,
+    accent: {
+      icon: "#5ce9de",
+      ring: "rgba(56,219,208,0.14)",
+      glow: "rgba(56,219,208,0.10)",
+    },
+  },
+  {
+    label: "Investments",
+    href: "/investments",
+    subtitle: "Portfolio tracking",
+    icon: Hexagon,
+    accent: {
+      icon: "#d7e4ff",
+      ring: "rgba(103,137,255,0.20)",
+      glow: "rgba(103,137,255,0.12)",
+    },
+    badge: "LIVE",
+  },
+  {
+    label: "Savings",
+    href: "/savings",
+    subtitle: "Targets + progress",
+    icon: Target,
+    accent: {
+      icon: "#88f7b8",
+      ring: "rgba(66,228,136,0.14)",
+      glow: "rgba(66,228,136,0.10)",
+    },
+  },
 ];
 
-const SYSTEM_LINKS = [
-  { href: "/settings", label: "Settings", meta: "Account + integrations", icon: "✦" },
-];
-
-function isActive(path, href) {
-  if (href === "/") return path === "/";
-  return path === href || path.startsWith(`${href}/`);
+function isActive(pathname, href) {
+  return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-function NavItem({ href, label, meta, icon, active }) {
+function NavCard({ item, active }) {
+  const Icon = item.icon;
+
   return (
     <Link
-      href={href}
-      className="group relative block"
-      style={{ textDecoration: "none" }}
+      href={item.href}
+      className="group relative block overflow-hidden rounded-[22px] border px-3 py-2.5 transition-all duration-300"
+      style={{
+        background: active
+          ? "linear-gradient(180deg, rgba(8,15,32,0.97), rgba(4,9,20,0.99))"
+          : "linear-gradient(180deg, rgba(5,11,24,0.90), rgba(2,7,16,0.95))",
+        borderColor: active
+          ? "rgba(104,139,255,0.32)"
+          : "rgba(255,255,255,0.06)",
+        boxShadow: active
+          ? "0 0 0 1px rgba(98,132,255,0.08), 0 0 20px rgba(72,108,255,0.12), inset 0 1px 0 rgba(255,255,255,0.04)"
+          : "0 10px 20px rgba(0,0,0,0.20), inset 0 1px 0 rgba(255,255,255,0.03)",
+      }}
     >
-      <div
-        style={{
-          position: "relative",
-          overflow: "hidden",
-          borderRadius: 22,
-          border: active
-            ? "1px solid rgba(80,190,255,0.28)"
-            : "1px solid rgba(255,255,255,0.07)",
-          background: active
-            ? "linear-gradient(180deg, rgba(19,55,87,0.88), rgba(8,24,42,0.92))"
-            : "linear-gradient(180deg, rgba(8,12,24,0.86), rgba(6,10,20,0.94))",
-          boxShadow: active
-            ? "0 16px 34px rgba(24,119,242,0.16), inset 0 1px 0 rgba(255,255,255,0.04)"
-            : "0 12px 28px rgba(0,0,0,0.16), inset 0 1px 0 rgba(255,255,255,0.02)",
-          transition: "all .18s ease",
-          transform: active ? "translateY(-1px)" : "translateY(0)",
-        }}
-      >
-        {active ? (
-          <>
-            <div
-              style={{
-                position: "absolute",
-                left: 0,
-                top: 14,
-                bottom: 14,
-                width: 3,
-                borderRadius: "0 999px 999px 0",
-                background: "linear-gradient(180deg, #7dd3fc, #38bdf8)",
-                boxShadow: "0 0 18px rgba(56,189,248,0.7)",
-              }}
-            />
-            <div
-              style={{
-                position: "absolute",
-                inset: 0,
-                background:
-                  "radial-gradient(circle at 0% 50%, rgba(56,189,248,0.12), transparent 32%)",
-                pointerEvents: "none",
-              }}
-            />
-          </>
-        ) : null}
+      {active && (
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_left_center,_rgba(86,124,255,0.11),_transparent_44%)]" />
+      )}
 
+      <div className="relative z-10 flex items-center gap-3">
         <div
+          className="flex h-[44px] w-[44px] shrink-0 items-center justify-center rounded-[14px] border"
           style={{
-            display: "flex",
-            gap: 12,
-            alignItems: "flex-start",
-            padding: "14px 14px 14px 16px",
+            borderColor: item.accent.ring,
+            background:
+              "linear-gradient(180deg, rgba(8,14,28,0.98), rgba(4,9,18,0.98))",
+            boxShadow: `0 0 14px ${item.accent.glow}`,
           }}
         >
+          <Icon
+            className="h-[18px] w-[18px]"
+            strokeWidth={2.2}
+            style={{ color: item.accent.icon }}
+          />
+        </div>
+
+        <div className="min-w-0 flex-1 pr-1">
+          <div className="truncate text-[13px] font-black leading-[1.02] tracking-[-0.02em] text-white">
+            {item.label}
+          </div>
+          <div className="mt-0.5 text-[10px] font-medium leading-[1.12] text-white/60">
+            {item.subtitle}
+          </div>
+        </div>
+
+        <div className="flex shrink-0 items-center gap-2">
+          {item.badge ? (
+            <div
+              className="rounded-full border px-2 py-1 text-[9px] font-black tracking-[0.14em] text-white"
+              style={{
+                borderColor: active
+                  ? "rgba(116,149,255,0.28)"
+                  : "rgba(255,255,255,0.10)",
+                background:
+                  "linear-gradient(180deg, rgba(17,24,41,0.90), rgba(10,16,30,0.98))",
+                boxShadow: active ? "0 0 10px rgba(70,108,255,0.12)" : "none",
+              }}
+            >
+              {item.badge}
+            </div>
+          ) : null}
+
           <div
+            className="flex h-[30px] w-[30px] items-center justify-center rounded-full border transition-all duration-300 group-hover:translate-x-0.5"
             style={{
-              width: 40,
-              height: 40,
-              borderRadius: 16,
-              display: "grid",
-              placeItems: "center",
-              flexShrink: 0,
-              fontSize: 13,
-              fontWeight: 900,
-              color: active ? "#d9f3ff" : "rgba(255,255,255,0.66)",
-              border: active
-                ? "1px solid rgba(125,211,252,0.18)"
-                : "1px solid rgba(255,255,255,0.08)",
-              background: active
-                ? "linear-gradient(180deg, rgba(56,189,248,0.14), rgba(56,189,248,0.08))"
-                : "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02))",
-              boxShadow: active
-                ? "0 0 24px rgba(56,189,248,0.14)"
-                : "none",
+              borderColor: active
+                ? "rgba(110,145,255,0.18)"
+                : "rgba(255,255,255,0.06)",
+              background:
+                "linear-gradient(180deg, rgba(15,22,38,0.72), rgba(10,16,28,0.90))",
             }}
           >
-            {icon}
-          </div>
-
-          <div style={{ minWidth: 0, flex: 1 }}>
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                gap: 8,
-                alignItems: "center",
-              }}
-            >
-              <div
-                style={{
-                  fontSize: 15,
-                  fontWeight: 900,
-                  color: active ? "rgba(255,255,255,0.98)" : "rgba(255,255,255,0.88)",
-                  lineHeight: 1.1,
-                }}
-              >
-                {label}
-              </div>
-
-              <div
-                style={{
-                  fontSize: 10,
-                  fontWeight: 900,
-                  letterSpacing: "0.18em",
-                  textTransform: "uppercase",
-                  padding: "4px 8px",
-                  borderRadius: 999,
-                  color: active ? "#c7eeff" : "rgba(255,255,255,0.34)",
-                  background: active
-                    ? "rgba(56,189,248,0.12)"
-                    : "rgba(255,255,255,0.04)",
-                  border: active
-                    ? "1px solid rgba(125,211,252,0.10)"
-                    : "1px solid rgba(255,255,255,0.04)",
-                }}
-              >
-                {active ? "Live" : "Go"}
-              </div>
-            </div>
-
-            <div
-              style={{
-                marginTop: 5,
-                fontSize: 12,
-                lineHeight: 1.35,
-                color: active ? "rgba(255,255,255,0.58)" : "rgba(255,255,255,0.42)",
-              }}
-            >
-              {meta}
-            </div>
+            <ArrowUpRight className="h-3.5 w-3.5 text-white/62" />
           </div>
         </div>
       </div>
@@ -167,277 +209,150 @@ function NavItem({ href, label, meta, icon, active }) {
 }
 
 export default function SideNav() {
-  const path = usePathname();
+  const pathname = usePathname();
+  const settingsActive = isActive(pathname, "/settings");
 
   return (
-    <aside
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        height: "100%",
-        gap: 14,
-      }}
-    >
-      <div
-        style={{
-          borderRadius: 28,
-          border: "1px solid rgba(255,255,255,0.08)",
-          background:
-            "radial-gradient(circle at 0% 0%, rgba(59,130,246,0.18), transparent 34%), linear-gradient(180deg, rgba(8,12,24,0.96), rgba(6,10,19,0.98))",
-          boxShadow: "0 22px 44px rgba(0,0,0,0.22), inset 0 1px 0 rgba(255,255,255,0.03)",
-          padding: 16,
-        }}
-      >
-        <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
-          <div
-            style={{
-              width: 44,
-              height: 44,
-              borderRadius: 18,
-              display: "grid",
-              placeItems: "center",
-              flexShrink: 0,
-              fontSize: 22,
-              fontWeight: 950,
-              color: "#d7f0ff",
-              border: "1px solid rgba(125,211,252,0.16)",
-              background:
-                "linear-gradient(180deg, rgba(56,189,248,0.14), rgba(37,99,235,0.10))",
-              boxShadow: "0 0 26px rgba(56,189,248,0.12)",
-            }}
-          >
-            LC
-          </div>
-
-          <div>
-            <div
-              style={{
-                fontSize: 11,
-                letterSpacing: "0.24em",
-                textTransform: "uppercase",
-                color: "rgba(125,211,252,0.78)",
-                fontWeight: 900,
-              }}
-            >
-              Financial OS
-            </div>
-
-            <div
-              style={{
-                marginTop: 6,
-                fontSize: 18,
-                fontWeight: 950,
-                lineHeight: 1.1,
-                color: "rgba(255,255,255,0.98)",
-              }}
-            >
-              Life Command Center
-            </div>
-
-            <div
-              style={{
-                marginTop: 8,
-                fontSize: 13,
-                lineHeight: 1.5,
-                color: "rgba(255,255,255,0.54)",
-              }}
-            >
-              Control your money, bills, debt, investing, and goals in one place.
-            </div>
-          </div>
-        </div>
-      </div>
+    <aside className="relative min-h-screen w-full overflow-hidden border-r border-white/8 bg-[#040915] text-white">
+      <div className="absolute inset-0 bg-[linear-gradient(180deg,#07122b_0%,#040915_45%,#07111d_100%)]" />
 
       <div
+        className="absolute inset-0 opacity-[0.10]"
         style={{
-          borderRadius: 28,
-          border: "1px solid rgba(255,255,255,0.08)",
-          background:
-            "radial-gradient(circle at 100% 0%, rgba(34,197,94,0.08), transparent 28%), linear-gradient(180deg, rgba(8,12,24,0.94), rgba(6,10,18,0.98))",
-          boxShadow: "0 18px 38px rgba(0,0,0,0.18)",
-          padding: 16,
-        }}
-      >
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            gap: 10,
-          }}
-        >
-          <div>
-            <div
-              style={{
-                fontSize: 11,
-                letterSpacing: "0.22em",
-                textTransform: "uppercase",
-                color: "rgba(255,255,255,0.42)",
-                fontWeight: 900,
-              }}
-            >
-              Command Panel
-            </div>
-            <div
-              style={{
-                marginTop: 6,
-                fontSize: 15,
-                fontWeight: 900,
-                color: "rgba(255,255,255,0.96)",
-              }}
-            >
-              Daily system status
-            </div>
-          </div>
-
-          <div
-            style={{
-              padding: "6px 10px",
-              borderRadius: 999,
-              fontSize: 10,
-              fontWeight: 900,
-              letterSpacing: "0.18em",
-              textTransform: "uppercase",
-              color: "#9ef0c7",
-              background: "rgba(34,197,94,0.10)",
-              border: "1px solid rgba(34,197,94,0.14)",
-            }}
-          >
-            Online
-          </div>
-        </div>
-
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(3,1fr)",
-            gap: 10,
-            marginTop: 14,
-          }}
-        >
-          {[
-            { top: "Focus", value: "Budget" },
-            { top: "Mode", value: "Track" },
-            { top: "Sync", value: "Live" },
-          ].map((item) => (
-            <div
-              key={item.top}
-              style={{
-                borderRadius: 18,
-                border: "1px solid rgba(255,255,255,0.06)",
-                background: "rgba(255,255,255,0.03)",
-                padding: "12px 10px",
-              }}
-            >
-              <div
-                style={{
-                  fontSize: 10,
-                  letterSpacing: "0.16em",
-                  textTransform: "uppercase",
-                  color: "rgba(255,255,255,0.34)",
-                  marginBottom: 5,
-                }}
-              >
-                {item.top}
-              </div>
-              <div
-                style={{
-                  fontSize: 13,
-                  fontWeight: 900,
-                  color: "rgba(255,255,255,0.86)",
-                }}
-              >
-                {item.value}
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div
-        style={{
-          fontSize: 11,
-          letterSpacing: "0.26em",
-          textTransform: "uppercase",
-          color: "rgba(255,255,255,0.40)",
-          fontWeight: 900,
-          padding: "2px 4px 0",
-        }}
-      >
-        Core
-      </div>
-
-      <nav style={{ display: "grid", gap: 10 }}>
-        {MAIN_LINKS.map((link) => (
-          <NavItem
-            key={link.href}
-            {...link}
-            active={isActive(path, link.href)}
-          />
-        ))}
-      </nav>
-
-      <div
-        style={{
-          height: 1,
-          margin: "4px 0 0",
-          background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.10), transparent)",
+          backgroundImage: `
+            linear-gradient(rgba(120,150,220,0.08) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(120,150,220,0.08) 1px, transparent 1px)
+          `,
+          backgroundSize: "32px 32px",
         }}
       />
 
       <div
+        className="absolute inset-0 opacity-[0.70]"
         style={{
-          fontSize: 11,
-          letterSpacing: "0.26em",
-          textTransform: "uppercase",
-          color: "rgba(255,255,255,0.40)",
-          fontWeight: 900,
-          padding: "2px 4px 0",
+          backgroundImage: `
+            radial-gradient(1.2px 1.2px at 20px 22px, rgba(255,255,255,0.70), transparent 60%),
+            radial-gradient(1px 1px at 92px 108px, rgba(124,170,255,0.58), transparent 60%),
+            radial-gradient(1px 1px at 154px 58px, rgba(255,255,255,0.48), transparent 60%),
+            radial-gradient(1px 1px at 52px 182px, rgba(89,228,226,0.24), transparent 60%),
+            radial-gradient(1px 1px at 188px 146px, rgba(255,255,255,0.38), transparent 60%),
+            radial-gradient(1px 1px at 118px 232px, rgba(124,170,255,0.34), transparent 60%)
+          `,
+          backgroundSize: "220px 220px",
         }}
-      >
-        System
-      </div>
+      />
 
-      <nav style={{ display: "grid", gap: 10 }}>
-        {SYSTEM_LINKS.map((link) => (
-          <NavItem
-            key={link.href}
-            {...link}
-            active={isActive(path, link.href)}
-          />
-        ))}
-      </nav>
+      <div className="pointer-events-none absolute -left-24 top-0 h-56 w-56 rounded-full bg-blue-500/12 blur-3xl" />
+      <div className="pointer-events-none absolute bottom-12 right-0 h-64 w-64 rounded-full bg-cyan-400/8 blur-3xl" />
 
-      <div style={{ marginTop: "auto", paddingTop: 8 }}>
+      <div className="relative z-10 flex min-h-screen flex-col px-3 pb-4 pt-4">
         <div
+          className="mb-4 rounded-[24px] border border-white/10 p-3"
           style={{
-            borderRadius: 20,
-            border: "1px solid rgba(255,255,255,0.06)",
-            background: "rgba(255,255,255,0.03)",
-            padding: "12px 14px",
-            display: "flex",
-            justifyContent: "space-between",
-            gap: 10,
-            alignItems: "center",
-            fontSize: 12,
-            color: "rgba(255,255,255,0.44)",
+            background:
+              "linear-gradient(180deg, rgba(7,14,28,0.92), rgba(3,8,18,0.96))",
+            boxShadow:
+              "0 12px 28px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.04)",
           }}
         >
-          <span>Supabase • Auth Enabled</span>
-          <span
+          <div className="flex items-center gap-3">
+            <div
+              className="relative h-[60px] w-[60px] shrink-0 overflow-hidden rounded-[18px] border border-white/14"
+              style={{
+                background:
+                  "radial-gradient(circle at 50% 35%, rgba(86,140,255,0.20), transparent 58%), linear-gradient(180deg, rgba(16,26,46,0.98), rgba(6,11,20,1))",
+                boxShadow:
+                  "0 0 0 1px rgba(108,142,255,0.06), 0 0 16px rgba(73,110,220,0.10), inset 0 1px 0 rgba(255,255,255,0.06)",
+              }}
+            >
+              <Image
+                src="/brand/lcc-logo.png"
+                alt="Life Command Center logo"
+                fill
+                sizes="60px"
+                className="object-contain p-2"
+                priority
+              />
+            </div>
+
+            <div className="min-w-0 flex-1">
+              <div className="mb-1 text-[9px] font-semibold uppercase tracking-[0.24em] text-[#7fb2ff]">
+                Financial OS
+              </div>
+              <div className="text-[15px] font-black leading-[0.96] tracking-[-0.03em] text-white">
+                Life Command
+                <br />
+                Center
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="mb-3 px-1 text-[11px] font-bold uppercase tracking-[0.30em] text-white/42">
+          Core
+        </div>
+
+        <nav className="flex flex-col gap-3">
+          {NAV_ITEMS.map((item) => (
+            <NavCard
+              key={item.label}
+              item={item}
+              active={isActive(pathname, item.href)}
+            />
+          ))}
+        </nav>
+
+        <div className="mt-4">
+          <Link
+            href="/settings"
+            className="group relative block overflow-hidden rounded-[22px] border px-3 py-2.5 transition-all duration-300"
             style={{
-              fontSize: 10,
-              fontWeight: 900,
-              letterSpacing: "0.16em",
-              textTransform: "uppercase",
-              color: "rgba(255,255,255,0.56)",
-              background: "rgba(255,255,255,0.05)",
-              borderRadius: 999,
-              padding: "4px 8px",
+              background: settingsActive
+                ? "linear-gradient(180deg, rgba(8,15,32,0.97), rgba(4,9,20,0.99))"
+                : "linear-gradient(180deg, rgba(5,11,24,0.90), rgba(2,7,16,0.95))",
+              borderColor: settingsActive
+                ? "rgba(104,139,255,0.32)"
+                : "rgba(255,255,255,0.06)",
+              boxShadow: settingsActive
+                ? "0 0 0 1px rgba(98,132,255,0.08), 0 0 20px rgba(72,108,255,0.12), inset 0 1px 0 rgba(255,255,255,0.04)"
+                : "0 10px 20px rgba(0,0,0,0.20), inset 0 1px 0 rgba(255,255,255,0.03)",
             }}
           >
-            V1
-          </span>
+            <div className="relative z-10 flex items-center gap-3">
+              <div
+                className="flex h-[44px] w-[44px] shrink-0 items-center justify-center rounded-[14px] border"
+                style={{
+                  borderColor: "rgba(190,210,255,0.14)",
+                  background:
+                    "linear-gradient(180deg, rgba(8,14,28,0.98), rgba(4,9,18,0.98))",
+                }}
+              >
+                <UserCircle2 className="h-[18px] w-[18px] text-white/82" />
+              </div>
+
+              <div className="min-w-0 flex-1 pr-1">
+                <div className="truncate text-[13px] font-black leading-[1.02] tracking-[-0.02em] text-white">
+                  Settings
+                </div>
+                <div className="mt-0.5 text-[10px] font-medium leading-[1.12] text-white/60">
+                  Profile + app preferences
+                </div>
+              </div>
+
+              <div
+                className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-full border"
+                style={{
+                  borderColor: settingsActive
+                    ? "rgba(110,145,255,0.18)"
+                    : "rgba(255,255,255,0.06)",
+                  background:
+                    "linear-gradient(180deg, rgba(15,22,38,0.72), rgba(10,16,28,0.90))",
+                }}
+              >
+                <Settings className="h-3.5 w-3.5 text-white/62" />
+              </div>
+            </div>
+          </Link>
         </div>
       </div>
     </aside>
