@@ -152,13 +152,14 @@ function isActive(pathname, href) {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-function NavCard({ item, active, collapsed = false }) {
+function NavCard({ item, active, collapsed = false, onNavigate }) {
   const Icon = item.icon;
 
   return (
     <Link
       href={item.href}
       title={item.label}
+      onClick={onNavigate}
       className={[
         "group relative block w-full overflow-hidden rounded-[24px] border py-3 transition-all duration-300",
         "pl-5 pr-4",
@@ -321,18 +322,20 @@ export default function SideNav({
     };
   }, []);
 
-  useEffect(() => {
-    if (typeof window !== "undefined" && window.innerWidth < 1024) {
-      onCloseMobile?.();
-    }
-  }, [pathname, onCloseMobile]);
-
   function handleLogoClick() {
     if (typeof window !== "undefined" && window.innerWidth < 1024) {
       onCloseMobile?.();
       return;
     }
     onToggle?.();
+  }
+
+  function handleNavigate() {
+    if (typeof window !== "undefined" && window.innerWidth < 1024) {
+      setTimeout(() => {
+        onCloseMobile?.();
+      }, 120);
+    }
   }
 
   return (
@@ -462,6 +465,7 @@ export default function SideNav({
               item={item}
               active={isActive(pathname, item.href)}
               collapsed={collapsed}
+              onNavigate={handleNavigate}
             />
           ))}
 
@@ -470,6 +474,7 @@ export default function SideNav({
               item={ADMIN_ITEM}
               active={isActive(pathname, ADMIN_ITEM.href)}
               collapsed={collapsed}
+              onNavigate={handleNavigate}
             />
           )}
         </nav>
@@ -479,6 +484,7 @@ export default function SideNav({
             item={SETTINGS_ITEM}
             active={isActive(pathname, SETTINGS_ITEM.href)}
             collapsed={collapsed}
+            onNavigate={handleNavigate}
           />
         </div>
       </div>
