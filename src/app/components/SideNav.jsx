@@ -321,6 +321,12 @@ export default function SideNav({
     };
   }, []);
 
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.innerWidth < 1024) {
+      onCloseMobile?.();
+    }
+  }, [pathname, onCloseMobile]);
+
   function handleLogoClick() {
     if (typeof window !== "undefined" && window.innerWidth < 1024) {
       onCloseMobile?.();
