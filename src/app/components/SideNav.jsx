@@ -331,11 +331,7 @@ export default function SideNav({
   }
 
   function handleNavigate() {
-    if (typeof window !== "undefined" && window.innerWidth < 1024) {
-      setTimeout(() => {
-        onCloseMobile?.();
-      }, 120);
-    }
+    onCloseMobile?.();
   }
 
   return (
