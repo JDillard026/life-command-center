@@ -5,14 +5,16 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   ArrowUpRight,
-  Circle,
-  Diamond,
+  CalendarDays,
+  CreditCard,
+  Gem,
   Hexagon,
-  PieChart,
+  LayoutDashboard,
+  PiggyBank,
+  Receipt,
   Settings,
-  Square,
   Target,
-  Triangle,
+  TrendingUp,
   UserCircle2,
   Wallet,
 } from "lucide-react";
@@ -20,9 +22,9 @@ import {
 const NAV_ITEMS = [
   {
     label: "Dashboard",
-    href: "/dashboard",
+    href: "/",
     subtitle: "Today + next moves",
-    icon: Diamond,
+    icon: LayoutDashboard,
     accent: {
       icon: "#7ea7ff",
       ring: "rgba(82,122,255,0.16)",
@@ -33,7 +35,7 @@ const NAV_ITEMS = [
     label: "Calendar",
     href: "/calendar",
     subtitle: "Timeline + recurring",
-    icon: Circle,
+    icon: CalendarDays,
     accent: {
       icon: "#45e7df",
       ring: "rgba(31,211,201,0.16)",
@@ -55,7 +57,7 @@ const NAV_ITEMS = [
     label: "Bills",
     href: "/bills",
     subtitle: "Due dates + payments",
-    icon: Circle,
+    icon: Receipt,
     accent: {
       icon: "#ffc86b",
       ring: "rgba(255,193,92,0.14)",
@@ -66,7 +68,7 @@ const NAV_ITEMS = [
     label: "Debt",
     href: "/debt",
     subtitle: "Payoff + balances",
-    icon: Triangle,
+    icon: CreditCard,
     accent: {
       icon: "#ffb4c0",
       ring: "rgba(255,127,149,0.14)",
@@ -77,7 +79,7 @@ const NAV_ITEMS = [
     label: "Income",
     href: "/income",
     subtitle: "Pay + goals",
-    icon: Square,
+    icon: Gem,
     accent: {
       icon: "#7ff0b5",
       ring: "rgba(69,225,143,0.14)",
@@ -88,7 +90,7 @@ const NAV_ITEMS = [
     label: "Spending",
     href: "/spending",
     subtitle: "Daily control center",
-    icon: PieChart,
+    icon: PiggyBank,
     accent: {
       icon: "#5ce9de",
       ring: "rgba(56,219,208,0.14)",
@@ -99,7 +101,7 @@ const NAV_ITEMS = [
     label: "Investments",
     href: "/investments",
     subtitle: "Portfolio tracking",
-    icon: Hexagon,
+    icon: TrendingUp,
     accent: {
       icon: "#d7e4ff",
       ring: "rgba(103,137,255,0.20)",
@@ -121,6 +123,7 @@ const NAV_ITEMS = [
 ];
 
 function isActive(pathname, href) {
+  if (href === "/") return pathname === "/";
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
@@ -213,7 +216,7 @@ export default function SideNav() {
   const settingsActive = isActive(pathname, "/settings");
 
   return (
-    <aside className="relative min-h-screen w-full overflow-hidden border-r border-white/8 bg-[#040915] text-white">
+    <aside className="relative min-h-screen w-[280px] overflow-hidden border-r border-white/8 bg-[#040915] text-white">
       <div className="absolute inset-0 bg-[linear-gradient(180deg,#07122b_0%,#040915_45%,#07111d_100%)]" />
 
       <div
