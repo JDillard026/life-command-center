@@ -152,13 +152,12 @@ function isActive(pathname, href) {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-function NavCard({ item, active, collapsed = false, onNavigate }) {
+function NavCard({ item, active, collapsed = false }) {
   const Icon = item.icon;
 
   return (
     <Link
       href={item.href}
-      onClick={onNavigate}
       title={item.label}
       className={[
         "group relative block w-full overflow-hidden rounded-[24px] border py-3 transition-all duration-300",
@@ -330,12 +329,6 @@ export default function SideNav({
     onToggle?.();
   }
 
-  function handleNavClick() {
-    if (typeof window !== "undefined" && window.innerWidth < 1024) {
-      onCloseMobile?.();
-    }
-  }
-
   return (
     <aside className="relative h-full w-full overflow-x-hidden overflow-y-auto border-r border-white/8 bg-[#040915] text-white">
       <div className="absolute inset-0 bg-[linear-gradient(180deg,#07122b_0%,#040915_45%,#07111d_100%)]" />
@@ -463,7 +456,6 @@ export default function SideNav({
               item={item}
               active={isActive(pathname, item.href)}
               collapsed={collapsed}
-              onNavigate={handleNavClick}
             />
           ))}
 
@@ -472,7 +464,6 @@ export default function SideNav({
               item={ADMIN_ITEM}
               active={isActive(pathname, ADMIN_ITEM.href)}
               collapsed={collapsed}
-              onNavigate={handleNavClick}
             />
           )}
         </nav>
@@ -482,7 +473,6 @@ export default function SideNav({
             item={SETTINGS_ITEM}
             active={isActive(pathname, SETTINGS_ITEM.href)}
             collapsed={collapsed}
-            onNavigate={handleNavClick}
           />
         </div>
       </div>

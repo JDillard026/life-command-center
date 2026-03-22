@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 import SideNav from "./SideNav";
 import RippleProvider from "./RippleProvider";
 import AiHelpPanel from "./AiHelpPanel";
@@ -9,6 +10,7 @@ import AiHelpPanel from "./AiHelpPanel";
 const SIDEBAR_STORAGE_KEY = "lcc-sidebar-collapsed";
 
 export default function AppShell({ children }) {
+  const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -37,6 +39,10 @@ export default function AppShell({ children }) {
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
+  useEffect(() => {
+    setMobileOpen(false);
+  }, [pathname]);
+
   function openMobileNav() {
     setMobileOpen(true);
   }
@@ -52,7 +58,6 @@ export default function AppShell({ children }) {
   return (
     <RippleProvider>
       <div className="relative min-h-screen overflow-x-hidden bg-[#050913] text-white">
-        {/* Full-shell background */}
         <div
           aria-hidden="true"
           className="pointer-events-none absolute inset-0"
@@ -93,7 +98,6 @@ export default function AppShell({ children }) {
           />
         </div>
 
-        {/* Mobile logo launcher */}
         <button
           type="button"
           onClick={openMobileNav}
@@ -117,7 +121,6 @@ export default function AppShell({ children }) {
           />
         </button>
 
-        {/* Mobile overlay */}
         <button
           type="button"
           aria-label="Close navigation overlay"
