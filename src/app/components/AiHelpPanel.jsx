@@ -29,6 +29,7 @@ export default function AiHelpPanel() {
   useEffect(() => {
     setMessages((prev) => {
       const hasRealConversation = prev.some((m) => m.role === "user");
+
       if (!hasRealConversation) {
         return [starterMessage(guide)];
       }
@@ -125,25 +126,30 @@ export default function AiHelpPanel() {
 
   return (
     <>
+      {/* Floating button */}
       {!open && (
         <button
           type="button"
           onClick={() => setOpen(true)}
-          className="fixed bottom-5 right-5 z-[80] rounded-full border border-white/15 bg-white/10 px-4 py-3 text-sm font-semibold text-white shadow-[0_12px_40px_rgba(0,0,0,0.35)] backdrop-blur-xl transition hover:bg-white/16"
+          className="fixed bottom-5 right-5 z-[40] rounded-full border border-white/15 bg-white/10 px-4 py-3 text-sm font-semibold text-white shadow-[0_12px_40px_rgba(0,0,0,0.35)] backdrop-blur-xl transition hover:bg-white/16"
         >
           Help AI
         </button>
       )}
 
+      {/* Panel */}
       {open && (
-        <div className="fixed inset-0 z-[90]">
+        <div className="fixed inset-0 z-[70]">
+          {/* Overlay */}
           <div
             className="absolute inset-0 bg-black/45"
             onClick={() => setOpen(false)}
           />
 
+          {/* Drawer */}
           <aside className="absolute right-0 top-0 h-full w-full max-w-md border-l border-white/10 bg-[#07101a]/95 text-white shadow-2xl backdrop-blur-2xl">
             <div className="flex h-full flex-col">
+              {/* Header */}
               <div className="border-b border-white/10 px-4 py-4">
                 <div className="flex items-start justify-between gap-3">
                   <div>
@@ -181,6 +187,7 @@ export default function AiHelpPanel() {
                 </div>
               </div>
 
+              {/* Messages */}
               <div className="flex-1 overflow-y-auto px-4 py-4">
                 <div className="space-y-3">
                   {messages.map((message, index) => {
@@ -220,6 +227,7 @@ export default function AiHelpPanel() {
                 </div>
               </div>
 
+              {/* Input */}
               <div className="border-t border-white/10 px-4 py-4">
                 <div className="mb-3 flex gap-2">
                   <button
