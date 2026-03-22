@@ -3,21 +3,23 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
 import {
   ArrowUpRight,
   CalendarDays,
   CreditCard,
   Gem,
-  Hexagon,
   LayoutDashboard,
   PiggyBank,
   Receipt,
   Settings,
+  Shield,
   Target,
   TrendingUp,
   UserCircle2,
   Wallet,
 } from "lucide-react";
+import { getCurrentUserRole } from "@/lib/getCurrentUserRole";
 
 const NAV_ITEMS = [
   {
@@ -122,6 +124,18 @@ const NAV_ITEMS = [
   },
 ];
 
+const ADMIN_ITEM = {
+  label: "Admin",
+  href: "/admin",
+  subtitle: "Restricted controls",
+  icon: Shield,
+  accent: {
+    icon: "#ffcf70",
+    ring: "rgba(255,207,112,0.18)",
+    glow: "rgba(255,207,112,0.12)",
+  },
+};
+
 function isActive(pathname, href) {
   if (href === "/") return pathname === "/";
   return pathname === href || pathname.startsWith(`${href}/`);
@@ -214,6 +228,23 @@ function NavCard({ item, active }) {
 export default function SideNav() {
   const pathname = usePathname();
   const settingsActive = isActive(pathname, "/settings");
+  const [role, setRole] = useState(null);
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function loadRole() {
+      const { role } = await getCurrentUserRole();
+      if (!mounted) return;
+      setRole(role ?? "user");
+    }
+
+    loadRole();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   return (
     <aside className="relative min-h-screen w-[280px] overflow-hidden border-r border-white/8 bg-[#040915] text-white">
@@ -287,6 +318,12 @@ export default function SideNav() {
                 <br />
                 Center
               </div>
+
+              {role === "admin" && (
+                <div className="mt-2 inline-flex items-center rounded-full border border-amber-400/25 bg-amber-400/10 px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.18em] text-amber-300">
+                  Admin Access
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -303,6 +340,13 @@ export default function SideNav() {
               active={isActive(pathname, item.href)}
             />
           ))}
+
+          {role === "admin" && (
+            <NavCard
+              item={ADMIN_ITEM}
+              active={isActive(pathname, ADMIN_ITEM.href)}
+            />
+          )}
         </nav>
 
         <div className="mt-4">

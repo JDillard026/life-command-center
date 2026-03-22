@@ -4,6 +4,7 @@ import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
+import { getCurrentUserRole } from "@/lib/getCurrentUserRole";
 
 export const dynamic = "force-dynamic";
 
@@ -228,11 +229,31 @@ export default function LoginPage() {
   }, []);
 
   useEffect(() => {
-    (async () => {
+    let mounted = true;
+
+    async function checkSession() {
       if (!supabase) return;
-      const { data } = await supabase.auth.getSession();
-      if (data?.session) router.replace("/");
-    })();
+
+      const { user, isDisabled } = await getCurrentUserRole();
+
+      if (!mounted) return;
+
+      if (user && isDisabled) {
+        await supabase.auth.signOut();
+        setStatus("This account has been disabled.", "error");
+        return;
+      }
+
+      if (user) {
+        router.replace("/");
+      }
+    }
+
+    checkSession();
+
+    return () => {
+      mounted = false;
+    };
   }, [router]);
 
   function setStatus(text, type = "info") {
@@ -281,6 +302,19 @@ export default function LoginPage() {
         });
 
         if (error) throw error;
+
+        const { user, isDisabled } = await getCurrentUserRole();
+
+        if (!user) {
+          throw new Error("Login succeeded but user data could not be loaded.");
+        }
+
+        if (isDisabled) {
+          await supabase.auth.signOut();
+          setStatus("This account has been disabled.", "error");
+          return;
+        }
+
         router.replace("/");
       }
     } catch (err) {
