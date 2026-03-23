@@ -4,7 +4,6 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  ArrowUpRight,
   CalendarDays,
   CreditCard,
   Gem,
@@ -30,7 +29,8 @@ const NAV_ITEMS = [
     accent: {
       icon: "#7ea7ff",
       ring: "rgba(82,122,255,0.18)",
-      glow: "rgba(82,122,255,0.14)",
+      glow: "rgba(82,122,255,0.18)",
+      border: "rgba(110,145,255,0.42)",
     },
   },
   {
@@ -41,7 +41,8 @@ const NAV_ITEMS = [
     accent: {
       icon: "#45e7df",
       ring: "rgba(31,211,201,0.18)",
-      glow: "rgba(31,211,201,0.14)",
+      glow: "rgba(31,211,201,0.18)",
+      border: "rgba(75,231,223,0.34)",
     },
   },
   {
@@ -52,7 +53,8 @@ const NAV_ITEMS = [
     accent: {
       icon: "#e7edf8",
       ring: "rgba(205,217,234,0.14)",
-      glow: "rgba(205,217,234,0.08)",
+      glow: "rgba(205,217,234,0.10)",
+      border: "rgba(205,217,234,0.24)",
     },
   },
   {
@@ -63,7 +65,8 @@ const NAV_ITEMS = [
     accent: {
       icon: "#ffc86b",
       ring: "rgba(255,193,92,0.16)",
-      glow: "rgba(255,193,92,0.14)",
+      glow: "rgba(255,193,92,0.16)",
+      border: "rgba(255,200,107,0.34)",
     },
   },
   {
@@ -74,7 +77,8 @@ const NAV_ITEMS = [
     accent: {
       icon: "#ffb4c0",
       ring: "rgba(255,127,149,0.16)",
-      glow: "rgba(255,127,149,0.14)",
+      glow: "rgba(255,127,149,0.16)",
+      border: "rgba(255,180,192,0.32)",
     },
   },
   {
@@ -85,7 +89,8 @@ const NAV_ITEMS = [
     accent: {
       icon: "#7ff0b5",
       ring: "rgba(69,225,143,0.16)",
-      glow: "rgba(69,225,143,0.14)",
+      glow: "rgba(69,225,143,0.16)",
+      border: "rgba(127,240,181,0.32)",
     },
   },
   {
@@ -96,7 +101,8 @@ const NAV_ITEMS = [
     accent: {
       icon: "#5ce9de",
       ring: "rgba(56,219,208,0.16)",
-      glow: "rgba(56,219,208,0.14)",
+      glow: "rgba(56,219,208,0.16)",
+      border: "rgba(92,233,222,0.32)",
     },
   },
   {
@@ -108,7 +114,8 @@ const NAV_ITEMS = [
     accent: {
       icon: "#d7e4ff",
       ring: "rgba(103,137,255,0.22)",
-      glow: "rgba(103,137,255,0.14)",
+      glow: "rgba(103,137,255,0.16)",
+      border: "rgba(140,170,255,0.34)",
     },
   },
   {
@@ -119,7 +126,8 @@ const NAV_ITEMS = [
     accent: {
       icon: "#88f7b8",
       ring: "rgba(66,228,136,0.16)",
-      glow: "rgba(66,228,136,0.14)",
+      glow: "rgba(66,228,136,0.16)",
+      border: "rgba(136,247,184,0.30)",
     },
   },
   {
@@ -130,7 +138,8 @@ const NAV_ITEMS = [
     accent: {
       icon: "#ffcf70",
       ring: "rgba(255,207,112,0.18)",
-      glow: "rgba(255,207,112,0.14)",
+      glow: "rgba(255,207,112,0.16)",
+      border: "rgba(255,207,112,0.32)",
     },
   },
   {
@@ -141,7 +150,8 @@ const NAV_ITEMS = [
     accent: {
       icon: "#dce6ff",
       ring: "rgba(181,203,255,0.16)",
-      glow: "rgba(131,163,255,0.12)",
+      glow: "rgba(131,163,255,0.14)",
+      border: "rgba(181,203,255,0.28)",
     },
   },
 ];
@@ -166,48 +176,21 @@ function NavCard({ item, active, collapsed = false, onNavigate }) {
       ].join(" ")}
       style={{
         background: active
-          ? "linear-gradient(180deg, rgba(8,15,32,0.98), rgba(4,9,20,1))"
+          ? "linear-gradient(180deg, rgba(10,18,38,0.98), rgba(5,10,22,1))"
           : "linear-gradient(180deg, rgba(5,11,24,0.92), rgba(2,7,16,0.98))",
-        borderColor: active
-          ? "rgba(104,139,255,0.34)"
-          : "rgba(255,255,255,0.07)",
+        borderColor: active ? item.accent.border : "rgba(255,255,255,0.07)",
         boxShadow: active
-          ? "0 0 0 1px rgba(98,132,255,0.08), 0 0 24px rgba(72,108,255,0.14), inset 0 1px 0 rgba(255,255,255,0.04)"
+          ? `0 0 0 1px ${item.accent.border}, 0 0 28px ${item.accent.glow}, 0 0 56px rgba(22,30,60,0.34), inset 0 1px 0 rgba(255,255,255,0.05)`
           : "0 12px 24px rgba(0,0,0,0.24), inset 0 1px 0 rgba(255,255,255,0.03)",
       }}
     >
-      {active && (
-        <>
-          <div
-            className="pointer-events-none absolute inset-0"
-            style={{
-              background:
-                "radial-gradient(circle at 18% 50%, rgba(86,124,255,0.14), transparent 34%)",
-            }}
-          />
-
-          <div
-            className={[
-              "pointer-events-none absolute left-0 top-1/2 h-[64%] w-[2px] -translate-y-1/2 rounded-r-full",
-              collapsed ? "lg:hidden" : "",
-            ].join(" ")}
-            style={{
-              background: item.accent.icon,
-              boxShadow: `0 0 12px ${item.accent.icon}`,
-            }}
-          />
-
-          <div
-            className={[
-              "pointer-events-none absolute left-[7px] top-1/2 h-2.5 w-2.5 -translate-y-1/2 rounded-full",
-              collapsed ? "lg:hidden" : "",
-            ].join(" ")}
-            style={{
-              background: item.accent.icon,
-              boxShadow: `0 0 0 4px ${item.accent.glow}, 0 0 14px ${item.accent.icon}`,
-            }}
-          />
-        </>
+      {active && !collapsed && (
+        <div
+          className="pointer-events-none absolute inset-0 rounded-[24px]"
+          style={{
+            background: `radial-gradient(circle at 78% 50%, ${item.accent.glow}, transparent 30%), radial-gradient(circle at 20% 50%, rgba(255,255,255,0.03), transparent 42%)`,
+          }}
+        />
       )}
 
       <div
@@ -236,7 +219,7 @@ function NavCard({ item, active, collapsed = false, onNavigate }) {
         </div>
 
         <div className={["min-w-0 flex-1", collapsed ? "lg:hidden" : ""].join(" ")}>
-          <div className="truncate text-[15px] font-black leading-[1.02] tracking-[-0.025em] text-white">
+          <div className="text-[15px] font-black leading-[1.02] tracking-[-0.025em] text-white">
             {item.label}
           </div>
           <div className="mt-0.5 text-[12px] font-medium leading-[1.15] text-white/62">
@@ -252,7 +235,7 @@ function NavCard({ item, active, collapsed = false, onNavigate }) {
         >
           {item.badge ? (
             <div
-              className="rounded-full border px-2.5 py-1 text-[10px] font-black tracking-[0.16em] text-white"
+              className="rounded-full border px-2 py-0.5 text-[10px] font-black tracking-[0.13em] text-white"
               style={{
                 borderColor: active
                   ? "rgba(116,149,255,0.28)"
@@ -267,17 +250,30 @@ function NavCard({ item, active, collapsed = false, onNavigate }) {
           ) : null}
 
           <div
-            className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-full border transition-all duration-300 group-hover:translate-x-0.5"
+            className="flex h-[32px] w-[32px] shrink-0 items-center justify-center rounded-full border transition-all duration-300"
             style={{
               borderColor: active
-                ? "rgba(110,145,255,0.18)"
-                : "rgba(255,255,255,0.07)",
-              background:
-                "linear-gradient(180deg, rgba(15,22,38,0.74), rgba(10,16,28,0.92))",
-              boxShadow: active ? "0 0 10px rgba(82,122,255,0.08)" : "none",
+                ? item.accent.border
+                : "rgba(255,255,255,0.08)",
+              background: active
+                ? "linear-gradient(180deg, rgba(18,28,48,0.96), rgba(10,16,30,0.98))"
+                : "linear-gradient(180deg, rgba(15,22,38,0.74), rgba(10,16,28,0.92))",
+              boxShadow: active
+                ? `0 0 14px ${item.accent.glow}, inset 0 0 10px rgba(255,255,255,0.02)`
+                : "none",
             }}
           >
-            <ArrowUpRight className="h-3.5 w-3.5 text-white/66" />
+            <span
+              className="block rounded-full transition-all duration-300"
+              style={{
+                width: active ? "10px" : "7px",
+                height: active ? "10px" : "7px",
+                background: active ? item.accent.icon : "rgba(255,255,255,0.28)",
+                boxShadow: active
+                  ? `0 0 0 5px ${item.accent.glow}, 0 0 14px ${item.accent.icon}`
+                  : "none",
+              }}
+            />
           </div>
         </div>
       </div>
@@ -313,8 +309,8 @@ export default function SideNav({
       >
         <div
           className={[
-            "mb-4 rounded-[24px] border border-white/10 p-4 transition-all duration-300",
-            collapsed ? "lg:px-2 lg:py-3" : "",
+            "mb-4 rounded-[26px] border border-white/10 p-4 transition-all duration-300",
+            collapsed ? "lg:px-2.5 lg:py-3" : "",
           ].join(" ")}
           style={{
             background:
@@ -326,15 +322,13 @@ export default function SideNav({
           <div
             className={[
               "flex items-start gap-3.5",
-              collapsed ? "lg:flex-col lg:items-center lg:justify-center lg:gap-3" : "",
+              collapsed
+                ? "lg:flex-col lg:items-center lg:justify-center lg:gap-3"
+                : "",
             ].join(" ")}
           >
-            <button
-              type="button"
-              onClick={onToggle}
-              aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-              title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-              className="group relative flex h-[68px] w-[68px] shrink-0 items-center justify-center overflow-hidden rounded-[20px] border border-white/14 transition-all duration-300"
+            <div
+              className="relative flex h-[72px] w-[72px] shrink-0 items-center justify-center overflow-hidden rounded-[22px] border border-white/14"
               style={{
                 background:
                   "radial-gradient(circle at 50% 35%, rgba(86,140,255,0.20), transparent 58%), linear-gradient(180deg, rgba(16,26,46,0.98), rgba(6,11,20,1))",
@@ -346,24 +340,24 @@ export default function SideNav({
                 src="/brand/lcc-logo.png"
                 alt="Life Command Center logo"
                 fill
-                sizes="68px"
+                sizes="72px"
                 className="object-contain p-2.5"
                 priority
               />
-            </button>
+            </div>
 
             <div className={["min-w-0 flex-1", collapsed ? "lg:hidden" : ""].join(" ")}>
               <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.26em] text-[#7fb2ff]">
                 Financial OS
               </div>
-              <div className="text-[16px] font-black leading-[0.96] tracking-[-0.03em] text-white">
+              <div className="text-[15px] font-black leading-[0.98] tracking-[-0.03em] text-white">
                 Life Command
                 <br />
                 Center
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="ml-auto flex items-center gap-2">
               <button
                 type="button"
                 onClick={onToggle}
@@ -400,7 +394,7 @@ export default function SideNav({
           Core
         </div>
 
-        <nav className="flex flex-col gap-2.5">
+        <nav className="flex flex-col gap-2.5 pb-4">
           {NAV_ITEMS.map((item) => (
             <NavCard
               key={item.label}

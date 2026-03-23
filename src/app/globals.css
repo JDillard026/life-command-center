@@ -3,8 +3,7 @@
 @tailwind utilities;
 
 /* =========================================================
-   LIFE COMMAND CENTER — WAVE 1 FOUNDATION
-   Mobile-first shell + shared layout system
+   LIFE COMMAND CENTER — SHELL FOUNDATION
    ========================================================= */
 
 :root {
@@ -37,12 +36,12 @@
   --lcc-radius-xl: 28px;
 
   --shell-mobile-topbar-h: 72px;
-  --shell-sidebar-w: 290px;
+  --shell-sidebar-w: 310px;
   --shell-sidebar-collapsed-w: 112px;
-  --shell-page-max: 1500px;
-  --shell-page-x: clamp(14px, 2vw, 28px);
-  --shell-page-y: clamp(18px, 2vw, 28px);
-  --shell-content-gap: clamp(16px, 2vw, 24px);
+  --shell-page-max: 1410px;
+  --shell-page-x: clamp(14px, 1.8vw, 24px);
+  --shell-page-y: clamp(18px, 1.8vw, 26px);
+  --shell-content-gap: 16px;
 }
 
 @layer base {
@@ -149,7 +148,7 @@
   }
 
   label {
-    color: rgba(255, 255, 255, 0.90);
+    color: rgba(255, 255, 255, 0.9);
   }
 
   ::selection {
@@ -186,7 +185,7 @@
 }
 
 /* =========================================================
-   Foundation layout helpers
+   Foundation helpers
    ========================================================= */
 
 .container,
@@ -331,7 +330,7 @@
   left: 0;
   bottom: 0;
   z-index: 80;
-  width: min(86vw, 320px);
+  width: min(86vw, 340px);
   transform: translateX(-102%);
   transition:
     transform 260ms cubic-bezier(0.22, 1, 0.36, 1),
@@ -347,20 +346,23 @@
   position: relative;
   z-index: 10;
   min-width: 0;
-  padding-top: calc(var(--shell-mobile-topbar-h) + 10px);
+  padding-top: calc(var(--shell-mobile-topbar-h) + 12px);
+  padding-right: var(--shell-page-x);
   padding-bottom: 28px;
+  padding-left: var(--shell-page-x);
 }
 
 .app-page {
-  width: min(var(--shell-page-max), calc(100% - (var(--shell-page-x) * 2)));
+  width: min(100%, var(--shell-page-max));
   margin-inline: auto;
   min-width: 0;
 }
 
 .app-ai-rail {
   position: fixed;
-  top: 24px;
-  right: 20px;
+  right: 18px;
+  bottom: 18px;
+  top: auto;
   z-index: 30;
 }
 
@@ -373,6 +375,7 @@
   border-right: 1px solid rgba(255, 255, 255, 0.08);
   background: #040915;
   color: white;
+  box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.04);
 }
 
 .side-nav-bg {
@@ -406,7 +409,7 @@
 }
 
 /* =========================================================
-   Shared responsive system
+   Responsive system
    ========================================================= */
 
 @media (min-width: 560px) {
@@ -417,8 +420,8 @@
 
 @media (min-width: 768px) {
   :root {
-    --shell-page-x: clamp(18px, 2vw, 30px);
-    --shell-page-y: clamp(20px, 2vw, 30px);
+    --shell-page-x: clamp(16px, 1.8vw, 24px);
+    --shell-page-y: clamp(18px, 1.8vw, 26px);
   }
 
   .lcc-card-grid.three-up {
@@ -450,8 +453,9 @@
 
   .app-main {
     padding-top: var(--shell-page-y);
-    padding-left: calc(var(--shell-sidebar-w) + var(--shell-content-gap));
     padding-right: var(--shell-page-x);
+    padding-bottom: 32px;
+    padding-left: calc(var(--shell-sidebar-w) + var(--shell-content-gap));
     transition: padding-left 220ms ease;
   }
 
@@ -460,18 +464,13 @@
   }
 
   .app-page {
-    width: 100%;
-    max-width: calc(var(--shell-page-max) - var(--shell-sidebar-w));
-    margin-inline: 0 auto;
-  }
-
-  .app-shell.sidebar-collapsed .app-page {
-    max-width: calc(var(--shell-page-max) - var(--shell-sidebar-collapsed-w));
+    width: min(100%, var(--shell-page-max));
+    margin-inline: auto;
   }
 }
 
-@media (min-width: 1280px) {
+@media (min-width: 1536px) {
   .app-main {
-    padding-right: 340px;
+    padding-right: 20px;
   }
 }

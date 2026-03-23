@@ -6,8 +6,10 @@ import SideNav from "./SideNav";
 import RippleProvider from "./RippleProvider";
 import AiHelpPanel from "./AiHelpPanel";
 
+const SIDEBAR_STORAGE_KEY = "lcc-sidebar-collapsed";
+
 export default function AppShell({ children }) {
-  const pathname = usePathname();
+  const pathname = usePathname() || "";
   const [mobileOpen, setMobileOpen] = useState(false);
   const [desktopCollapsed, setDesktopCollapsed] = useState(false);
 
@@ -16,19 +18,20 @@ export default function AppShell({ children }) {
   }, [pathname]);
 
   useEffect(() => {
-    const key = "lcc-sidebar-collapsed";
-
     try {
-      const saved = window.localStorage.getItem(key);
-      if (saved === "true") setDesktopCollapsed(true);
-    } catch {}
+      const saved = window.localStorage.getItem(SIDEBAR_STORAGE_KEY);
+      setDesktopCollapsed(saved === "true");
+    } catch {
+      setDesktopCollapsed(false);
+    }
   }, []);
 
   useEffect(() => {
-    const key = "lcc-sidebar-collapsed";
-
     try {
-      window.localStorage.setItem(key, String(desktopCollapsed));
+      window.localStorage.setItem(
+        SIDEBAR_STORAGE_KEY,
+        String(desktopCollapsed)
+      );
     } catch {}
   }, [desktopCollapsed]);
 
@@ -83,7 +86,7 @@ export default function AppShell({ children }) {
           <div className="app-page">{children}</div>
         </main>
 
-        <div className="app-ai-rail hidden xl:block">
+        <div className="app-ai-rail hidden 2xl:block">
           <AiHelpPanel />
         </div>
       </div>
