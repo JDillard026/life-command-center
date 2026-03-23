@@ -17,6 +17,7 @@ import {
   Wallet,
   PanelLeftClose,
   PanelLeftOpen,
+  TriangleAlert,
   X,
 } from "lucide-react";
 
@@ -161,6 +162,61 @@ function isActive(pathname, href) {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
+function NavIndicator({ item, active }) {
+  const isAdmin = item.href === "/admin";
+
+  if (isAdmin && active) {
+    return (
+      <div
+        className="flex h-[32px] w-[32px] shrink-0 items-center justify-center rounded-full border transition-all duration-300"
+        style={{
+          borderColor: "rgba(255,207,112,0.38)",
+          background:
+            "linear-gradient(180deg, rgba(34,27,14,0.96), rgba(20,16,9,0.98))",
+          boxShadow:
+            "0 0 16px rgba(255,207,112,0.18), inset 0 0 10px rgba(255,255,255,0.02)",
+        }}
+      >
+        <TriangleAlert
+          className="h-[14px] w-[14px]"
+          strokeWidth={2.2}
+          style={{
+            color: "#ffcf70",
+            filter: "drop-shadow(0 0 6px rgba(255,207,112,0.45))",
+          }}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="flex h-[32px] w-[32px] shrink-0 items-center justify-center rounded-full border transition-all duration-300"
+      style={{
+        borderColor: active ? item.accent.border : "rgba(255,255,255,0.08)",
+        background: active
+          ? "linear-gradient(180deg, rgba(18,28,48,0.96), rgba(10,16,30,0.98))"
+          : "linear-gradient(180deg, rgba(15,22,38,0.74), rgba(10,16,28,0.92))",
+        boxShadow: active
+          ? `0 0 14px ${item.accent.glow}, inset 0 0 10px rgba(255,255,255,0.02)`
+          : "none",
+      }}
+    >
+      <span
+        className="block rounded-full transition-all duration-300"
+        style={{
+          width: active ? "10px" : "7px",
+          height: active ? "10px" : "7px",
+          background: active ? item.accent.icon : "rgba(255,255,255,0.28)",
+          boxShadow: active
+            ? `0 0 0 5px ${item.accent.glow}, 0 0 14px ${item.accent.icon}`
+            : "none",
+        }}
+      />
+    </div>
+  );
+}
+
 function NavCard({ item, active, collapsed = false, onNavigate }) {
   const Icon = item.icon;
 
@@ -249,32 +305,7 @@ function NavCard({ item, active, collapsed = false, onNavigate }) {
             </div>
           ) : null}
 
-          <div
-            className="flex h-[32px] w-[32px] shrink-0 items-center justify-center rounded-full border transition-all duration-300"
-            style={{
-              borderColor: active
-                ? item.accent.border
-                : "rgba(255,255,255,0.08)",
-              background: active
-                ? "linear-gradient(180deg, rgba(18,28,48,0.96), rgba(10,16,30,0.98))"
-                : "linear-gradient(180deg, rgba(15,22,38,0.74), rgba(10,16,28,0.92))",
-              boxShadow: active
-                ? `0 0 14px ${item.accent.glow}, inset 0 0 10px rgba(255,255,255,0.02)`
-                : "none",
-            }}
-          >
-            <span
-              className="block rounded-full transition-all duration-300"
-              style={{
-                width: active ? "10px" : "7px",
-                height: active ? "10px" : "7px",
-                background: active ? item.accent.icon : "rgba(255,255,255,0.28)",
-                boxShadow: active
-                  ? `0 0 0 5px ${item.accent.glow}, 0 0 14px ${item.accent.icon}`
-                  : "none",
-              }}
-            />
-          </div>
+          <NavIndicator item={item} active={active} />
         </div>
       </div>
     </Link>
