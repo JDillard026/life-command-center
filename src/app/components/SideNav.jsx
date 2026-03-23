@@ -17,6 +17,8 @@ import {
   TrendingUp,
   UserCircle2,
   Wallet,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from "lucide-react";
 import { getCurrentUserRole } from "@/lib/getCurrentUserRole";
 
@@ -161,9 +163,9 @@ function NavCard({ item, active, collapsed = false, onNavigate }) {
       title={item.label}
       onClick={onNavigate}
       className={[
-        "group relative block w-full overflow-hidden rounded-[24px] border py-3 transition-all duration-300",
-        "pl-5 pr-4",
-        collapsed ? "lg:px-0" : "",
+        "group relative block w-full overflow-hidden rounded-[24px] border transition-all duration-300",
+        "px-4 py-3.5",
+        collapsed ? "lg:px-3" : "",
       ].join(" ")}
       style={{
         background: active
@@ -206,22 +208,13 @@ function NavCard({ item, active, collapsed = false, onNavigate }) {
               boxShadow: `0 0 0 4px ${item.accent.glow}, 0 0 14px ${item.accent.icon}`,
             }}
           />
-          {collapsed && (
-            <div
-              className="pointer-events-none absolute right-2 top-2 hidden h-2.5 w-2.5 rounded-full lg:block"
-              style={{
-                background: item.accent.icon,
-                boxShadow: `0 0 10px ${item.accent.icon}`,
-              }}
-            />
-          )}
         </>
       )}
 
       <div
         className={[
           "relative z-10 flex items-center gap-3",
-          collapsed ? "lg:justify-center lg:gap-0" : "",
+          collapsed ? "lg:justify-center" : "",
         ].join(" ")}
       >
         <div
@@ -322,55 +315,23 @@ export default function SideNav({
     };
   }, []);
 
-  function handleLogoClick() {
-    if (typeof window !== "undefined" && window.innerWidth < 1024) {
-      onCloseMobile?.();
-      return;
-    }
-    onToggle?.();
-  }
-
   function handleNavigate() {
     onCloseMobile?.();
   }
 
   return (
-    <aside className="relative h-full w-full overflow-x-hidden overflow-y-auto border-r border-white/8 bg-[#040915] text-white">
-      <div className="absolute inset-0 bg-[linear-gradient(180deg,#07122b_0%,#040915_45%,#07111d_100%)]" />
-
-      <div
-        className="absolute inset-0 opacity-[0.10]"
-        style={{
-          backgroundImage: `
-            linear-gradient(rgba(120,150,220,0.08) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(120,150,220,0.08) 1px, transparent 1px)
-          `,
-          backgroundSize: "32px 32px",
-        }}
-      />
-
-      <div
-        className="absolute inset-0 opacity-[0.70]"
-        style={{
-          backgroundImage: `
-            radial-gradient(1.2px 1.2px at 20px 22px, rgba(255,255,255,0.70), transparent 60%),
-            radial-gradient(1px 1px at 92px 108px, rgba(124,170,255,0.58), transparent 60%),
-            radial-gradient(1px 1px at 154px 58px, rgba(255,255,255,0.48), transparent 60%),
-            radial-gradient(1px 1px at 52px 182px, rgba(89,228,226,0.24), transparent 60%),
-            radial-gradient(1px 1px at 188px 146px, rgba(255,255,255,0.38), transparent 60%),
-            radial-gradient(1px 1px at 118px 232px, rgba(124,170,255,0.34), transparent 60%)
-          `,
-          backgroundSize: "220px 220px",
-        }}
-      />
+    <div className="side-nav-shell">
+      <div className="side-nav-bg" />
+      <div className="side-nav-grid" />
+      <div className="side-nav-stars" />
 
       <div className="pointer-events-none absolute -left-24 top-0 h-56 w-56 rounded-full bg-blue-500/12 blur-3xl" />
       <div className="pointer-events-none absolute bottom-12 right-0 h-64 w-64 rounded-full bg-cyan-400/8 blur-3xl" />
 
       <div
         className={[
-          "relative z-10 flex min-h-full flex-col pb-5 pt-4",
-          collapsed ? "px-4 lg:px-3" : "px-4",
+          "relative z-10 flex min-h-full flex-col px-4 pb-5 pt-4",
+          collapsed ? "lg:px-3" : "",
         ].join(" ")}
       >
         <div
@@ -387,13 +348,13 @@ export default function SideNav({
         >
           <div
             className={[
-              "flex items-center gap-3.5",
-              collapsed ? "lg:flex-col lg:justify-center lg:gap-3" : "",
+              "flex items-start gap-3.5",
+              collapsed ? "lg:flex-col lg:items-center lg:justify-center lg:gap-3" : "",
             ].join(" ")}
           >
             <button
               type="button"
-              onClick={handleLogoClick}
+              onClick={onToggle}
               aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
               title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
               className="group relative h-[68px] w-[68px] shrink-0 overflow-hidden rounded-[20px] border border-white/14 transition-all duration-300"
@@ -404,10 +365,6 @@ export default function SideNav({
                   "0 0 0 1px rgba(108,142,255,0.06), 0 0 18px rgba(73,110,220,0.11), inset 0 1px 0 rgba(255,255,255,0.06)",
               }}
             >
-              <div className="pointer-events-none absolute inset-0 opacity-0 transition-opacity duration-300 group-hover:opacity-100">
-                <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_35%,rgba(110,160,255,0.18),transparent_58%)]" />
-              </div>
-
               <Image
                 src="/brand/lcc-logo.png"
                 alt="Life Command Center logo"
@@ -435,13 +392,21 @@ export default function SideNav({
               )}
             </div>
 
-            {collapsed && role === "admin" && (
-              <div className="hidden lg:flex">
-                <div className="rounded-full border border-amber-400/25 bg-amber-400/10 px-2 py-1 text-[8px] font-black uppercase tracking-[0.16em] text-amber-300">
-                  Admin
-                </div>
-              </div>
-            )}
+            <div className={["hidden lg:flex", collapsed ? "lg:justify-center" : ""].join(" ")}>
+              <button
+                type="button"
+                onClick={onToggle}
+                className="flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] text-white/72 transition hover:bg-white/[0.07]"
+                aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+                title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+              >
+                {collapsed ? (
+                  <PanelLeftOpen className="h-4.5 w-4.5" />
+                ) : (
+                  <PanelLeftClose className="h-4.5 w-4.5" />
+                )}
+              </button>
+            </div>
           </div>
         </div>
 
@@ -484,6 +449,6 @@ export default function SideNav({
           />
         </div>
       </div>
-    </aside>
+    </div>
   );
 }

@@ -8,81 +8,84 @@ import AiHelpPanel from "./AiHelpPanel";
 
 export default function AppShell({ children }) {
   const pathname = usePathname();
-
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [desktopCollapsed, setDesktopCollapsed] = useState(false);
 
-  // Close menu when navigating
   useEffect(() => {
     setMobileOpen(false);
   }, [pathname]);
 
-  // Lock scroll ONLY when menu open
   useEffect(() => {
-    if (mobileOpen) {
-      document.body.style.overflow = "hidden";
-    } else {
+    const key = "lcc-sidebar-collapsed";
+
+    try {
+      const saved = window.localStorage.getItem(key);
+      if (saved === "true") setDesktopCollapsed(true);
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    const key = "lcc-sidebar-collapsed";
+
+    try {
+      window.localStorage.setItem(key, String(desktopCollapsed));
+    } catch {}
+  }, [desktopCollapsed]);
+
+  useEffect(() => {
+    document.body.style.overflow = mobileOpen ? "hidden" : "";
+    return () => {
       document.body.style.overflow = "";
-    }
+    };
   }, [mobileOpen]);
 
   return (
     <RippleProvider>
-      <div className="relative min-h-screen bg-[#050913] text-white overflow-x-hidden">
-        
-        {/* ===== MOBILE TOP BAR ===== */}
-        <div className="fixed top-0 left-0 right-0 z-[50] flex items-center justify-between px-4 py-3 bg-[#081120]/90 backdrop-blur border-b border-white/10 lg:hidden">
+      <div
+        className={`app-shell ${desktopCollapsed ? "sidebar-collapsed" : ""}`}
+      >
+        <header className="mobile-topbar lg:hidden">
           <button
+            type="button"
+            className="mobile-topbar__menu"
+            aria-label="Open navigation"
+            aria-expanded={mobileOpen}
             onClick={() => setMobileOpen(true)}
-            className="h-10 w-10 rounded-xl bg-white/10 flex items-center justify-center"
           >
-            ☰
+            <span />
+            <span />
+            <span />
           </button>
 
-          <div className="text-sm font-bold tracking-widest">
-            LCC
-          </div>
+          <div className="mobile-topbar__brand">LCC</div>
 
-          <div className="w-10" />
-        </div>
+          <div className="mobile-topbar__spacer" />
+        </header>
 
-        {/* ===== OVERLAY (FIXED) ===== */}
-        {mobileOpen && (
-          <div
-            className="fixed inset-0 z-[60] bg-black/60"
-            onClick={() => setMobileOpen(false)}
-          />
-        )}
+        <div
+          className={`mobile-overlay ${mobileOpen ? "is-open" : ""}`}
+          onClick={() => setMobileOpen(false)}
+          aria-hidden={!mobileOpen}
+        />
 
-        {/* ===== SIDEBAR ===== */}
         <aside
-          className={`
-            fixed top-0 left-0 h-full w-[85%] max-w-[320px]
-            z-[70] bg-[#07101d]
-            transform transition-transform duration-300
-            ${mobileOpen ? "translate-x-0" : "-translate-x-full"}
-            
-            lg:translate-x-0 lg:static lg:w-[300px]
-          `}
+          className={`app-sidebar ${mobileOpen ? "is-open" : ""}`}
+          aria-label="Primary navigation"
         >
-          <SideNav onNavigate={() => setMobileOpen(false)} />
+          <SideNav
+            collapsed={desktopCollapsed}
+            onToggle={() => setDesktopCollapsed((v) => !v)}
+            onCloseMobile={() => setMobileOpen(false)}
+          />
         </aside>
 
-        {/* ===== MAIN CONTENT ===== */}
-        <main
-          className={`
-            relative z-[10]
-            pt-[70px] px-3 pb-20
-            lg:pt-6 lg:pl-[300px]
-          `}
-        >
-          {children}
+        <main className="app-main">
+          <div className="app-page">{children}</div>
         </main>
 
-        {/* ===== AI PANEL (DESKTOP ONLY) ===== */}
-        <div className="hidden xl:block">
+        <div className="app-ai-rail hidden xl:block">
           <AiHelpPanel />
         </div>
-
       </div>
     </RippleProvider>
   );
