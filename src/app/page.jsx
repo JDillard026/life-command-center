@@ -2,13 +2,16 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import {
+  AlertTriangle,
+  ArrowRight,
+  ChevronRight,
+  X,
+} from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 
 export const dynamic = "force-dynamic";
 
-/* =========================
-   utils
-========================= */
 function safeNum(n, fallback = 0) {
   const x = Number(n);
   return Number.isFinite(x) ? x : fallback;
@@ -17,7 +20,24 @@ function safeNum(n, fallback = 0) {
 function money(n) {
   const num = Number(n);
   if (!Number.isFinite(num)) return "—";
-  return num.toLocaleString(undefined, { style: "currency", currency: "USD" });
+  return num.toLocaleString(undefined, {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
+  });
+}
+
+function signedMoney(n) {
+  const num = Number(n);
+  if (!Number.isFinite(num)) return "—";
+  const abs = Math.abs(num).toLocaleString(undefined, {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
+  });
+  if (num > 0) return `+${abs}`;
+  if (num < 0) return `-${abs}`;
+  return abs;
 }
 
 function isoDate(d = new Date()) {
@@ -32,29 +52,35 @@ function monthKeyFromISO(iso) {
   return s.length >= 7 ? s.slice(0, 7) : "";
 }
 
+function fmtMonthLabel(ym) {
+  if (!ym || ym.length < 7) return "—";
+  const [y, m] = ym.split("-").map(Number);
+  if (!Number.isFinite(y) || !Number.isFinite(m)) return ym;
+  const d = new Date(y, m - 1, 1);
+  return d.toLocaleDateString(undefined, {
+    month: "long",
+    year: "numeric",
+  });
+}
+
 function fmtShort(iso) {
   if (!iso) return "—";
   const d = new Date(`${iso}T00:00:00`);
   if (Number.isNaN(d.getTime())) return "—";
   return d.toLocaleDateString(undefined, {
-    weekday: "short",
     month: "short",
     day: "numeric",
   });
 }
 
-function fmtMonthLabel(ym) {
-  if (!ym || ym.length < 7) return "—";
-  const [y, m] = ym.split("-").map((x) => Number(x));
-  if (!Number.isFinite(y) || !Number.isFinite(m)) return ym;
-  const d = new Date(y, m - 1, 1);
-  return d.toLocaleDateString(undefined, { month: "long", year: "numeric" });
-}
-
 function daysUntil(iso) {
   if (!iso) return null;
   const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const today = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate()
+  ).getTime();
   const due = new Date(`${iso}T00:00:00`).getTime();
   if (!Number.isFinite(due)) return null;
   return Math.round((due - today) / 86400000);
@@ -67,17 +93,6 @@ function startOfMonthISO(d = new Date()) {
 function endOfMonthISO(d = new Date()) {
   const end = new Date(d.getFullYear(), d.getMonth() + 1, 0);
   return isoDate(end);
-}
-
-function clamp(n, min, max) {
-  const x = Number(n);
-  if (!Number.isFinite(x)) return min;
-  return Math.max(min, Math.min(max, x));
-}
-
-function pct(n, d) {
-  if (!Number.isFinite(n) || !Number.isFinite(d) || d <= 0) return 0;
-  return (n / d) * 100;
 }
 
 function freqToMonthlyMult(freq) {
@@ -98,19 +113,6 @@ function freqToMonthlyMult(freq) {
   }
 }
 
-function typeLabel(t) {
-  const v = String(t || "other").toLowerCase();
-  if (v === "checking") return "Checking";
-  if (v === "savings") return "Savings";
-  if (v === "cash") return "Cash";
-  if (v === "credit") return "Credit Card";
-  if (v === "investment") return "Investment";
-  return "Other";
-}
-
-/* =========================
-   db mappers
-========================= */
 function mapAccountRowToClient(row) {
   return {
     id: row.id,
@@ -150,16 +152,6 @@ function mapSpendingTxRowToClient(row) {
   };
 }
 
-function mapPlannedRowToClient(row) {
-  return {
-    id: row.id,
-    amount: safeNum(row.amount, 0),
-    date: row.planned_date || "",
-    merchant: row.merchant || "",
-    note: row.note || "",
-  };
-}
-
 function mapIncomeDepositRowToClient(row) {
   return {
     id: row.id,
@@ -170,16 +162,1578 @@ function mapIncomeDepositRowToClient(row) {
   };
 }
 
+function toneConfig(tone = "ice") {
+  if (tone === "green") {
+    return {
+      border: "rgba(110, 241, 171, 0.18)",
+      text: "#8bf3c2",
+      accent: "#6ef1ab",
+      glow: "rgba(110, 241, 171, 0.10)",
+      tint: "rgba(4, 12, 8, 0.10)",
+      iconBack:
+        "linear-gradient(180deg, rgba(8,14,10,0.46), rgba(4,8,6,0.22))",
+      softBg: "rgba(110, 241, 171, 0.08)",
+    };
+  }
+
+  if (tone === "amber") {
+    return {
+      border: "rgba(255, 197, 108, 0.18)",
+      text: "#ffd79a",
+      accent: "#ffc56c",
+      glow: "rgba(255, 197, 108, 0.10)",
+      tint: "rgba(14, 10, 4, 0.10)",
+      iconBack:
+        "linear-gradient(180deg, rgba(15,11,7,0.46), rgba(8,6,4,0.22))",
+      softBg: "rgba(255, 197, 108, 0.08)",
+    };
+  }
+
+  if (tone === "red") {
+    return {
+      border: "rgba(255, 127, 153, 0.18)",
+      text: "#ffbfd0",
+      accent: "#ff7f99",
+      glow: "rgba(255, 127, 153, 0.10)",
+      tint: "rgba(14, 4, 8, 0.11)",
+      iconBack:
+        "linear-gradient(180deg, rgba(14,8,10,0.46), rgba(8,4,6,0.22))",
+      softBg: "rgba(255, 127, 153, 0.08)",
+    };
+  }
+
+  return {
+    border: "rgba(255, 255, 255, 0.12)",
+    text: "#f7f9fc",
+    accent: "#f7fbff",
+    glow: "rgba(255, 255, 255, 0.08)",
+    tint: "rgba(5, 8, 12, 0.10)",
+    iconBack:
+      "linear-gradient(180deg, rgba(10,12,16,0.42), rgba(5,7,10,0.18))",
+    softBg: "rgba(255,255,255,0.05)",
+  };
+}
+
+function glassStyle(tone = "ice", padding = 18, radius = 28) {
+  const t = toneConfig(tone);
+
+  return {
+    position: "relative",
+    overflow: "hidden",
+    padding,
+    borderRadius: radius,
+    border: `1px solid ${t.border}`,
+    background: `
+      linear-gradient(
+        180deg,
+        rgba(255,255,255,0.065) 0%,
+        rgba(255,255,255,0.022) 10%,
+        rgba(255,255,255,0.008) 20%,
+        rgba(255,255,255,0) 34%
+      ),
+      ${t.tint}
+    `,
+    backdropFilter: "blur(10px) saturate(110%)",
+    WebkitBackdropFilter: "blur(10px) saturate(110%)",
+    boxShadow: `
+      inset 0 1px 0 rgba(255,255,255,0.12),
+      inset 0 -1px 0 rgba(255,255,255,0.02),
+      0 0 0 1px rgba(255,255,255,0.018),
+      0 20px 46px rgba(0,0,0,0.18),
+      0 0 18px ${t.glow}
+    `,
+  };
+}
+
+function Pane({
+  children,
+  tone = "ice",
+  padding = 18,
+  radius = 28,
+  style = {},
+  overlayOpacity = 1,
+}) {
+  const t = toneConfig(tone);
+
+  return (
+    <section style={{ ...glassStyle(tone, padding, radius), ...style }}>
+      <div
+        style={{
+          position: "absolute",
+          inset: 0,
+          pointerEvents: "none",
+          opacity: overlayOpacity,
+          background: `
+            linear-gradient(
+              135deg,
+              rgba(255,255,255,0.11) 0%,
+              rgba(255,255,255,0.026) 12%,
+              rgba(255,255,255,0.006) 21%,
+              rgba(255,255,255,0) 34%
+            ),
+            radial-gradient(
+              circle at 86% 12%,
+              rgba(255,255,255,0.035),
+              transparent 22%
+            ),
+            radial-gradient(
+              circle at 100% 100%,
+              ${t.glow},
+              transparent 42%
+            )
+          `,
+          mixBlendMode: "screen",
+        }}
+      />
+      <div
+        style={{
+          position: "absolute",
+          inset: 1,
+          borderRadius: Math.max(radius - 1, 0),
+          pointerEvents: "none",
+          boxShadow: `
+            inset 0 1px 0 rgba(255,255,255,0.06),
+            inset 1px 0 0 rgba(255,255,255,0.01),
+            inset -1px 0 0 rgba(255,255,255,0.01)
+          `,
+        }}
+      />
+      <div style={{ position: "relative", zIndex: 1 }}>{children}</div>
+    </section>
+  );
+}
+
+function HeaderPill({ children }) {
+  return (
+    <div
+      style={{
+        padding: "11px 15px",
+        borderRadius: 16,
+        border: "1px solid rgba(255,255,255,0.08)",
+        background:
+          "linear-gradient(180deg, rgba(255,255,255,0.036), rgba(255,255,255,0.01))",
+        color: "rgba(255,255,255,0.88)",
+        fontSize: 12,
+        fontWeight: 800,
+        whiteSpace: "nowrap",
+        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05)",
+        backdropFilter: "blur(10px)",
+        WebkitBackdropFilter: "blur(10px)",
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+function HeaderBar({ monthLabel, primaryName }) {
+  return (
+    <Pane
+      padding={18}
+      radius={28}
+      overlayOpacity={0.72}
+      style={{
+        background: `
+          linear-gradient(
+            180deg,
+            rgba(255,255,255,0.05) 0%,
+            rgba(255,255,255,0.012) 10%,
+            rgba(255,255,255,0) 24%
+          ),
+          rgba(5,8,12,0.08)
+        `,
+      }}
+    >
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "minmax(0, 1fr) auto",
+          gap: 14,
+          alignItems: "center",
+        }}
+      >
+        <div>
+          <div
+            style={{
+              fontSize: "clamp(28px, 3vw, 42px)",
+              lineHeight: 0.95,
+              fontWeight: 950,
+              letterSpacing: "-0.05em",
+              color: "#fff",
+            }}
+          >
+            Financial Command
+          </div>
+
+          <div
+            style={{
+              marginTop: 8,
+              fontSize: 12,
+              color: "rgba(255,255,255,0.48)",
+              letterSpacing: ".16em",
+              textTransform: "uppercase",
+              fontWeight: 800,
+            }}
+          >
+            cash • pressure • movement
+          </div>
+        </div>
+
+        <div
+          style={{
+            display: "flex",
+            gap: 10,
+            flexWrap: "wrap",
+            justifyContent: "flex-end",
+          }}
+        >
+          <HeaderPill>{monthLabel}</HeaderPill>
+          <HeaderPill>{primaryName || "Primary account"}</HeaderPill>
+        </div>
+      </div>
+    </Pane>
+  );
+}
+
+function StatCard({
+  label,
+  value,
+  detail,
+  tone = "ice",
+  badge = "",
+  onClick,
+  footerText = "",
+}) {
+  const t = toneConfig(tone);
+  const clickable = typeof onClick === "function";
+
+  return (
+    <div
+      role={clickable ? "button" : undefined}
+      tabIndex={clickable ? 0 : undefined}
+      onClick={clickable ? onClick : undefined}
+      onKeyDown={
+        clickable
+          ? (e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onClick();
+              }
+            }
+          : undefined
+      }
+      style={{
+        cursor: clickable ? "pointer" : "default",
+        height: "100%",
+      }}
+    >
+      <Pane
+        tone={tone}
+        padding={18}
+        radius={24}
+        overlayOpacity={0.64}
+        style={{ height: "100%" }}
+      >
+        <div
+          style={{
+            minHeight: 154,
+            height: "100%",
+            display: "grid",
+            gridTemplateRows: "auto auto 1fr auto",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              gap: 10,
+              alignItems: "start",
+            }}
+          >
+            <div
+              style={{
+                fontSize: 11,
+                textTransform: "uppercase",
+                letterSpacing: ".18em",
+                fontWeight: 900,
+                color: "rgba(255,255,255,0.40)",
+              }}
+            >
+              {label}
+            </div>
+
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              {badge ? (
+                <div
+                  style={{
+                    padding: "4px 8px",
+                    borderRadius: 999,
+                    fontSize: 10,
+                    fontWeight: 900,
+                    letterSpacing: ".12em",
+                    textTransform: "uppercase",
+                    color: t.text,
+                    border: `1px solid ${t.border}`,
+                    background: "rgba(255,255,255,0.03)",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {badge}
+                </div>
+              ) : null}
+
+              <div
+                style={{
+                  width: 9,
+                  height: 9,
+                  borderRadius: 999,
+                  background: t.accent,
+                  boxShadow: `0 0 14px ${t.accent}`,
+                  flexShrink: 0,
+                  marginTop: 2,
+                }}
+              />
+            </div>
+          </div>
+
+          <div
+            style={{
+              marginTop: 16,
+              fontSize: "clamp(24px, 3vw, 40px)",
+              lineHeight: 0.96,
+              fontWeight: 950,
+              letterSpacing: "-0.05em",
+              color: t.text,
+            }}
+          >
+            {value}
+          </div>
+
+          <div
+            style={{
+              marginTop: 10,
+              fontSize: 12,
+              color: "rgba(255,255,255,0.64)",
+              lineHeight: 1.45,
+            }}
+          >
+            {detail}
+          </div>
+
+          <div
+            style={{
+              marginTop: 14,
+              minHeight: 18,
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              color: footerText ? "rgba(255,255,255,0.82)" : "transparent",
+              fontSize: 12,
+              fontWeight: 900,
+              letterSpacing: ".04em",
+              textTransform: "uppercase",
+            }}
+          >
+            {footerText ? (
+              <>
+                <span>{footerText}</span>
+                {clickable ? <ChevronRight size={14} /> : null}
+              </>
+            ) : (
+              <>
+                <span>reserved</span>
+                <ChevronRight size={14} />
+              </>
+            )}
+          </div>
+        </div>
+      </Pane>
+    </div>
+  );
+}
+
+function SectionHeader({ title, subcopy, action }) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        justifyContent: "space-between",
+        gap: 12,
+        alignItems: "flex-end",
+        flexWrap: "wrap",
+        marginBottom: 14,
+      }}
+    >
+      <div>
+        <div
+          style={{
+            fontSize: 18,
+            lineHeight: 1.02,
+            fontWeight: 900,
+            letterSpacing: "-0.03em",
+            color: "#fff",
+          }}
+        >
+          {title}
+        </div>
+
+        {subcopy ? (
+          <div
+            style={{
+              marginTop: 6,
+              fontSize: 12,
+              color: "rgba(255,255,255,0.54)",
+              lineHeight: 1.45,
+            }}
+          >
+            {subcopy}
+          </div>
+        ) : null}
+      </div>
+
+      {action || null}
+    </div>
+  );
+}
+
+function RangeChip({ children, active = false }) {
+  return (
+    <button
+      type="button"
+      style={{
+        minHeight: 34,
+        padding: "8px 12px",
+        borderRadius: 14,
+        border: active
+          ? "1px solid rgba(255,255,255,0.14)"
+          : "1px solid rgba(255,255,255,0.06)",
+        background: active
+          ? "linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012))"
+          : "rgba(255,255,255,0.01)",
+        color: active ? "#fff" : "rgba(255,255,255,0.66)",
+        fontWeight: 800,
+        fontSize: 12,
+        boxShadow: active ? "inset 0 1px 0 rgba(255,255,255,0.04)" : "none",
+        cursor: "default",
+        backdropFilter: "blur(10px)",
+        WebkitBackdropFilter: "blur(10px)",
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
+function samplePoints(points, maxPoints = 6) {
+  if (points.length <= maxPoints) return points;
+  if (maxPoints < 3) return [points[0], points[points.length - 1]];
+
+  const sampled = [points[0]];
+  const middleCount = maxPoints - 2;
+  const step = (points.length - 2) / middleCount;
+
+  for (let i = 1; i <= middleCount; i += 1) {
+    const index = Math.min(
+      points.length - 2,
+      Math.max(1, Math.round(i * step))
+    );
+    sampled.push(points[index]);
+  }
+
+  sampled.push(points[points.length - 1]);
+
+  const deduped = [];
+  const seen = new Set();
+
+  for (const point of sampled) {
+    const key = `${point.iso}-${point.value}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      deduped.push(point);
+    }
+  }
+
+  return deduped;
+}
+
+function buildCashMovementPoints(monthStart, today, spendingTx, incomeDeposits) {
+  const daily = new Map();
+
+  function addDelta(date, delta) {
+    if (!date) return;
+    const current = safeNum(daily.get(date), 0);
+    daily.set(date, current + safeNum(delta, 0));
+  }
+
+  incomeDeposits.forEach((row) => {
+    addDelta(row.date, row.amount);
+  });
+
+  spendingTx.forEach((row) => {
+    const type = String(row.type || "").toLowerCase();
+    if (type === "income") addDelta(row.date, row.amount);
+    else addDelta(row.date, -safeNum(row.amount, 0));
+  });
+
+  const dates = [...daily.keys()].sort((a, b) => String(a).localeCompare(String(b)));
+
+  let running = 0;
+  const rawPoints = [{ iso: monthStart, label: "Start", value: 0 }];
+
+  dates.forEach((date) => {
+    running += safeNum(daily.get(date), 0);
+    rawPoints.push({
+      iso: date,
+      label: fmtShort(date),
+      value: running,
+    });
+  });
+
+  const lastPoint = rawPoints[rawPoints.length - 1];
+
+  if (!lastPoint || lastPoint.iso !== today) {
+    rawPoints.push({
+      iso: today,
+      label: fmtShort(today),
+      value: running,
+    });
+  }
+
+  return samplePoints(rawPoints, 6);
+}
+
+function CashMovementChart({ points, chartValue, chartTone = "ice" }) {
+  const width = 980;
+  const height = 304;
+  const padLeft = 22;
+  const padRight = 70;
+  const padTop = 18;
+  const padBottom = 34;
+
+  const values = points.length ? points.map((p) => safeNum(p.value, 0)) : [0];
+  const minVal = Math.min(0, ...values);
+  const maxVal = Math.max(0, ...values);
+  const range = Math.max(maxVal - minVal, 1);
+
+  const innerW = width - padLeft - padRight;
+  const innerH = height - padTop - padBottom;
+  const step = points.length > 1 ? innerW / (points.length - 1) : innerW;
+
+  const coords = points.map((point, index) => {
+    const x = padLeft + index * step;
+    const y =
+      height - padBottom - ((safeNum(point.value, 0) - minVal) / range) * innerH;
+    return { ...point, x, y };
+  });
+
+  const linePath = coords
+    .map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`)
+    .join(" ");
+
+  const areaPath = [
+    `M ${coords[0]?.x || padLeft} ${height - padBottom}`,
+    ...coords.map((p) => `L ${p.x} ${p.y}`),
+    `L ${coords[coords.length - 1]?.x || width - padRight} ${height - padBottom}`,
+    "Z",
+  ].join(" ");
+
+  const zeroY = height - padBottom - ((0 - minVal) / range) * innerH;
+
+  const tone =
+    chartTone === "red"
+      ? {
+          bubbleBorder: "rgba(255,127,153,0.20)",
+          bubbleText: "#ffb7c5",
+          bubbleGlow: "rgba(255,127,153,0.10)",
+        }
+      : chartTone === "green"
+      ? {
+          bubbleBorder: "rgba(110,241,171,0.20)",
+          bubbleText: "#83f0bc",
+          bubbleGlow: "rgba(110,241,171,0.10)",
+        }
+      : {
+          bubbleBorder: "rgba(255,255,255,0.12)",
+          bubbleText: "#ffffff",
+          bubbleGlow: "rgba(255,255,255,0.07)",
+        };
+
+  return (
+    <Pane
+      padding={18}
+      radius={30}
+      overlayOpacity={0.44}
+      style={{
+        background: `
+          linear-gradient(
+            180deg,
+            rgba(255,255,255,0.035) 0%,
+            rgba(255,255,255,0.010) 10%,
+            rgba(255,255,255,0) 22%
+          ),
+          rgba(5,8,12,0.08)
+        `,
+      }}
+    >
+      <SectionHeader
+        title="Cash Movement"
+        subcopy="Month-to-date movement from actual logged income and spending."
+        action={
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <RangeChip>1W</RangeChip>
+            <RangeChip active>1M</RangeChip>
+            <RangeChip>YTD</RangeChip>
+            <RangeChip>All</RangeChip>
+          </div>
+        }
+      />
+
+      <div
+        style={{
+          position: "relative",
+          minHeight: "clamp(200px, 44vw, 280px)",
+        }}
+      >
+        <svg
+          viewBox={`0 0 ${width} ${height}`}
+          style={{ width: "100%", display: "block" }}
+          aria-hidden="true"
+        >
+          <defs>
+            <linearGradient id="lccCashArea" x1="0" x2="0" y1="0" y2="1">
+              <stop offset="0%" stopColor="rgba(255,255,255,0.09)" />
+              <stop offset="55%" stopColor="rgba(255,255,255,0.02)" />
+              <stop offset="100%" stopColor="rgba(255,255,255,0)" />
+            </linearGradient>
+
+            <linearGradient id="lccCashLine" x1="0" x2="1" y1="0" y2="0">
+              <stop offset="0%" stopColor="rgba(255,255,255,0.98)" />
+              <stop offset="100%" stopColor="rgba(244,247,255,0.90)" />
+            </linearGradient>
+          </defs>
+
+          {[0, 0.25, 0.5, 0.75, 1].map((ratio) => {
+            const y = padTop + innerH * ratio;
+            return (
+              <line
+                key={ratio}
+                x1={padLeft}
+                x2={width - padRight}
+                y1={y}
+                y2={y}
+                stroke="rgba(255,255,255,0.022)"
+                strokeWidth="1"
+                strokeDasharray="5 10"
+              />
+            );
+          })}
+
+          <line
+            x1={padLeft}
+            x2={width - padRight}
+            y1={zeroY}
+            y2={zeroY}
+            stroke="rgba(255,255,255,0.06)"
+            strokeWidth="1"
+          />
+
+          {coords.map((p) => (
+            <line
+              key={`${p.iso}-grid`}
+              x1={p.x}
+              x2={p.x}
+              y1={padTop}
+              y2={height - padBottom}
+              stroke="rgba(255,255,255,0.012)"
+              strokeWidth="1"
+            />
+          ))}
+
+          <path d={areaPath} fill="url(#lccCashArea)" />
+
+          <path
+            d={linePath}
+            fill="none"
+            stroke="url(#lccCashLine)"
+            strokeWidth="4"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            style={{
+              filter: "drop-shadow(0 0 6px rgba(255,255,255,0.12))",
+            }}
+          />
+
+          {coords.map((p) => (
+            <g key={`${p.iso}-dot`}>
+              <circle
+                cx={p.x}
+                cy={p.y}
+                r="7"
+                fill="rgba(5,7,10,0.84)"
+                stroke="rgba(255,255,255,0.92)"
+                strokeWidth="2.4"
+              />
+              <circle cx={p.x} cy={p.y} r="2.3" fill="rgba(255,255,255,0.98)" />
+            </g>
+          ))}
+
+          {coords.map((p) => (
+            <text
+              key={`${p.iso}-label`}
+              x={p.x}
+              y={height - 10}
+              fill="rgba(255,255,255,0.42)"
+              fontSize="11"
+              fontWeight="700"
+              textAnchor="middle"
+            >
+              {p.label}
+            </text>
+          ))}
+        </svg>
+
+        <div
+          style={{
+            position: "absolute",
+            top: 18,
+            right: 20,
+            padding: "10px 16px",
+            borderRadius: 18,
+            border: `1px solid ${tone.bubbleBorder}`,
+            background:
+              "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.010))",
+            boxShadow: `
+              inset 0 1px 0 rgba(255,255,255,0.05),
+              0 12px 22px rgba(0,0,0,0.16),
+              0 0 16px ${tone.bubbleGlow}
+            `,
+            color: tone.bubbleText,
+            fontSize: 18,
+            fontWeight: 950,
+            letterSpacing: "-0.03em",
+            backdropFilter: "blur(10px)",
+            WebkitBackdropFilter: "blur(10px)",
+          }}
+        >
+          {chartValue}
+        </div>
+      </div>
+    </Pane>
+  );
+}
+
+function AccountRow({ name, sub, balance, tone = "ice" }) {
+  const t = toneConfig(tone);
+
+  return (
+    <div
+      style={{
+        ...glassStyle(tone, 14, 20),
+        display: "grid",
+        gridTemplateColumns: "54px minmax(0, 1fr) auto",
+        gap: 12,
+        alignItems: "center",
+      }}
+    >
+      <div
+        style={{
+          width: 54,
+          height: 54,
+          borderRadius: 16,
+          display: "grid",
+          placeItems: "center",
+          background: t.iconBack,
+          border: `1px solid ${t.border}`,
+          boxShadow: `0 0 12px ${t.glow}, inset 0 1px 0 rgba(255,255,255,0.04)`,
+          color: t.text,
+          fontWeight: 900,
+        }}
+      >
+        {String(name || "A").charAt(0).toUpperCase()}
+      </div>
+
+      <div style={{ minWidth: 0 }}>
+        <div
+          style={{
+            fontSize: 15,
+            fontWeight: 900,
+            color: "#fff",
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+          }}
+        >
+          {name}
+        </div>
+        <div
+          style={{
+            marginTop: 4,
+            fontSize: 12,
+            color: "rgba(255,255,255,0.52)",
+            textTransform: "capitalize",
+          }}
+        >
+          {sub}
+        </div>
+      </div>
+
+      <div
+        style={{
+          fontSize: 16,
+          fontWeight: 950,
+          color: t.text,
+          paddingLeft: 8,
+          whiteSpace: "nowrap",
+        }}
+      >
+        {balance}
+      </div>
+    </div>
+  );
+}
+
+function ActivityRow({ title, detail, amount, tone = "ice" }) {
+  const t = toneConfig(tone);
+
+  return (
+    <div
+      style={{
+        ...glassStyle(tone, 14, 20),
+        display: "grid",
+        gridTemplateColumns: "50px minmax(0, 1fr) auto",
+        gap: 12,
+        alignItems: "center",
+      }}
+    >
+      <div
+        style={{
+          width: 50,
+          height: 50,
+          borderRadius: 16,
+          display: "grid",
+          placeItems: "center",
+          background: t.iconBack,
+          border: `1px solid ${t.border}`,
+          boxShadow: `0 0 12px ${t.glow}, inset 0 1px 0 rgba(255,255,255,0.04)`,
+        }}
+      >
+        <div
+          style={{
+            width: 9,
+            height: 9,
+            borderRadius: 999,
+            background: t.accent,
+            boxShadow: `0 0 12px ${t.accent}`,
+          }}
+        />
+      </div>
+
+      <div style={{ minWidth: 0 }}>
+        <div
+          style={{
+            fontSize: 15,
+            fontWeight: 900,
+            color: "#fff",
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+          }}
+        >
+          {title}
+        </div>
+        <div
+          style={{
+            marginTop: 5,
+            fontSize: 12,
+            color: "rgba(255,255,255,0.52)",
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+          }}
+        >
+          {detail}
+        </div>
+      </div>
+
+      <div
+        style={{
+          fontSize: 15,
+          fontWeight: 950,
+          color: t.text,
+          paddingLeft: 8,
+          whiteSpace: "nowrap",
+        }}
+      >
+        {amount}
+      </div>
+    </div>
+  );
+}
+
+function LinkButton({ href, children, full = false }) {
+  return (
+    <Link
+      href={href}
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        width: full ? "100%" : undefined,
+        minHeight: 42,
+        padding: "10px 14px",
+        borderRadius: 16,
+        border: "1px solid rgba(255,255,255,0.08)",
+        background:
+          "linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.008))",
+        color: "#f7fbff",
+        textDecoration: "none",
+        fontWeight: 900,
+        fontSize: 13,
+        boxShadow:
+          "inset 0 1px 0 rgba(255,255,255,0.04), 0 10px 20px rgba(0,0,0,0.14)",
+        backdropFilter: "blur(10px)",
+        WebkitBackdropFilter: "blur(10px)",
+      }}
+    >
+      {children}
+    </Link>
+  );
+}
+
+function ActionButton({ href, onClick, children }) {
+  const commonStyle = {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    minHeight: 46,
+    padding: "12px 16px",
+    borderRadius: 16,
+    border: "1px solid rgba(255,255,255,0.10)",
+    background:
+      "linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012))",
+    color: "#fff",
+    textDecoration: "none",
+    fontWeight: 900,
+    fontSize: 13,
+    boxShadow:
+      "inset 0 1px 0 rgba(255,255,255,0.05), 0 12px 22px rgba(0,0,0,0.18)",
+    backdropFilter: "blur(10px)",
+    WebkitBackdropFilter: "blur(10px)",
+  };
+
+  if (href) {
+    return <Link href={href} style={commonStyle}>{children}</Link>;
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{ ...commonStyle, cursor: "pointer" }}
+    >
+      {children}
+    </button>
+  );
+}
+
+function AlertSeverityBadge({ severity }) {
+  const style =
+    severity === "critical"
+      ? {
+          border: "rgba(255,127,153,0.18)",
+          text: "#ffb7c5",
+          bg: "rgba(255,127,153,0.08)",
+        }
+      : severity === "warning"
+      ? {
+          border: "rgba(255,197,108,0.18)",
+          text: "#ffd491",
+          bg: "rgba(255,197,108,0.08)",
+        }
+      : {
+          border: "rgba(110,241,171,0.18)",
+          text: "#83f0bc",
+          bg: "rgba(110,241,171,0.08)",
+        };
+
+  return (
+    <div
+      style={{
+        padding: "4px 8px",
+        borderRadius: 999,
+        fontSize: 10,
+        fontWeight: 900,
+        letterSpacing: ".12em",
+        textTransform: "uppercase",
+        border: `1px solid ${style.border}`,
+        color: style.text,
+        background: style.bg,
+        whiteSpace: "nowrap",
+      }}
+    >
+      {severity}
+    </div>
+  );
+}
+
+function AlertRow({ item }) {
+  const tone =
+    item.severity === "critical"
+      ? "red"
+      : item.severity === "warning"
+      ? "amber"
+      : "green";
+
+  return (
+    <Pane tone={tone} padding={14} radius={20} overlayOpacity={0.5}>
+      <div style={{ display: "grid", gap: 12 }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "start",
+            justifyContent: "space-between",
+            gap: 12,
+            flexWrap: "wrap",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <div
+              style={{
+                width: 40,
+                height: 40,
+                borderRadius: 14,
+                display: "grid",
+                placeItems: "center",
+                border: "1px solid rgba(255,255,255,0.08)",
+                background: "rgba(255,255,255,0.03)",
+              }}
+            >
+              <AlertTriangle size={18} />
+            </div>
+
+            <div>
+              <div
+                style={{
+                  fontSize: 15,
+                  fontWeight: 900,
+                  color: "#fff",
+                }}
+              >
+                {item.title}
+              </div>
+              <div
+                style={{
+                  marginTop: 4,
+                  fontSize: 12,
+                  color: "rgba(255,255,255,0.6)",
+                  lineHeight: 1.45,
+                }}
+              >
+                {item.detail}
+              </div>
+            </div>
+          </div>
+
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              flexWrap: "wrap",
+            }}
+          >
+            {item.amount ? (
+              <div
+                style={{
+                  fontSize: 14,
+                  fontWeight: 900,
+                  color: "rgba(255,255,255,0.9)",
+                }}
+              >
+                {item.amount}
+              </div>
+            ) : null}
+            <AlertSeverityBadge severity={item.severity} />
+          </div>
+        </div>
+
+        {item.href ? (
+          <div>
+            <LinkButton href={item.href}>
+              {item.hrefLabel || "Open"}{" "}
+              <ChevronRight size={14} style={{ marginLeft: 6 }} />
+            </LinkButton>
+          </div>
+        ) : null}
+      </div>
+    </Pane>
+  );
+}
+
+function AlertPanel({
+  open,
+  onClose,
+  statusLabel,
+  statusTone,
+  alertItems,
+  cashPosition,
+  cashMovement,
+  dueSoonTotal,
+}) {
+  useEffect(() => {
+    if (!open) return;
+
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    function onKey(e) {
+      if (e.key === "Escape") onClose();
+    }
+
+    window.addEventListener("keydown", onKey);
+
+    return () => {
+      document.body.style.overflow = prev;
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [open, onClose]);
+
+  if (!open) return null;
+
+  const summaryTone =
+    statusTone === "red"
+      ? "red"
+      : statusTone === "amber"
+      ? "amber"
+      : "green";
+
+  return (
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 120,
+        background: "rgba(0,0,0,0.66)",
+        backdropFilter: "blur(10px)",
+        WebkitBackdropFilter: "blur(10px)",
+        display: "flex",
+        alignItems: "flex-end",
+        justifyContent: "center",
+        padding: 12,
+      }}
+      onClick={onClose}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          width: "min(100%, 680px)",
+          maxHeight: "88vh",
+          overflowY: "auto",
+          borderRadius: 28,
+        }}
+      >
+        <Pane tone={summaryTone} padding={18} radius={28} overlayOpacity={0.58}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "start",
+              justifyContent: "space-between",
+              gap: 14,
+            }}
+          >
+            <div>
+              <div
+                style={{
+                  fontSize: 12,
+                  textTransform: "uppercase",
+                  letterSpacing: ".18em",
+                  fontWeight: 900,
+                  color: "rgba(255,255,255,0.42)",
+                }}
+              >
+                Alert Center
+              </div>
+
+              <div
+                style={{
+                  marginTop: 10,
+                  fontSize: "clamp(24px, 5vw, 34px)",
+                  lineHeight: 0.98,
+                  fontWeight: 950,
+                  letterSpacing: "-0.05em",
+                  color: "#fff",
+                }}
+              >
+                {statusLabel}
+              </div>
+
+              <div
+                style={{
+                  marginTop: 8,
+                  fontSize: 13,
+                  color: "rgba(255,255,255,0.64)",
+                  lineHeight: 1.5,
+                }}
+              >
+                This is where the dashboard tells you exactly what needs attention.
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Close alerts"
+              style={{
+                width: 42,
+                height: 42,
+                borderRadius: 16,
+                border: "1px solid rgba(255,255,255,0.08)",
+                background: "rgba(255,255,255,0.03)",
+                color: "#fff",
+                display: "grid",
+                placeItems: "center",
+                flexShrink: 0,
+                cursor: "pointer",
+              }}
+            >
+              <X size={18} />
+            </button>
+          </div>
+
+          <div
+            style={{
+              marginTop: 16,
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
+              gap: 10,
+            }}
+          >
+            <Pane tone="ice" padding={12} radius={18} overlayOpacity={0.45}>
+              <div
+                style={{
+                  fontSize: 11,
+                  letterSpacing: ".14em",
+                  textTransform: "uppercase",
+                  color: "rgba(255,255,255,0.42)",
+                  fontWeight: 900,
+                }}
+              >
+                Account Balances
+              </div>
+              <div
+                style={{
+                  marginTop: 8,
+                  fontSize: 22,
+                  fontWeight: 950,
+                  color: "#fff",
+                }}
+              >
+                {money(cashPosition)}
+              </div>
+            </Pane>
+
+            <Pane
+              tone={cashMovement < 0 ? "red" : cashMovement > 0 ? "green" : "ice"}
+              padding={12}
+              radius={18}
+              overlayOpacity={0.45}
+            >
+              <div
+                style={{
+                  fontSize: 11,
+                  letterSpacing: ".14em",
+                  textTransform: "uppercase",
+                  color: "rgba(255,255,255,0.42)",
+                  fontWeight: 900,
+                }}
+              >
+                Cash Movement
+              </div>
+              <div
+                style={{
+                  marginTop: 8,
+                  fontSize: 22,
+                  fontWeight: 950,
+                  color: "#fff",
+                }}
+              >
+                {signedMoney(cashMovement)}
+              </div>
+            </Pane>
+
+            <Pane
+              tone={dueSoonTotal > 0 ? "amber" : "green"}
+              padding={12}
+              radius={18}
+              overlayOpacity={0.45}
+            >
+              <div
+                style={{
+                  fontSize: 11,
+                  letterSpacing: ".14em",
+                  textTransform: "uppercase",
+                  color: "rgba(255,255,255,0.42)",
+                  fontWeight: 900,
+                }}
+              >
+                Due Soon
+              </div>
+              <div
+                style={{
+                  marginTop: 8,
+                  fontSize: 22,
+                  fontWeight: 950,
+                  color: "#fff",
+                }}
+              >
+                {money(dueSoonTotal)}
+              </div>
+            </Pane>
+          </div>
+
+          <div style={{ marginTop: 18, display: "grid", gap: 10 }}>
+            {alertItems.length === 0 ? (
+              <Pane tone="green" padding={16} radius={20} overlayOpacity={0.46}>
+                <div style={{ fontSize: 16, fontWeight: 900, color: "#fff" }}>
+                  No active problems
+                </div>
+                <div
+                  style={{
+                    marginTop: 6,
+                    fontSize: 13,
+                    color: "rgba(255,255,255,0.66)",
+                    lineHeight: 1.5,
+                  }}
+                >
+                  Right now the dashboard does not see any critical or warning issues.
+                </div>
+              </Pane>
+            ) : (
+              alertItems.map((item) => <AlertRow key={item.id} item={item} />)
+            )}
+          </div>
+        </Pane>
+      </div>
+    </div>
+  );
+}
+
+function ActionMiniStat({ label, value, tone = "ice" }) {
+  const t = toneConfig(tone);
+
+  return (
+    <div
+      style={{
+        minWidth: 0,
+        padding: "12px 14px",
+        borderRadius: 18,
+        border: `1px solid ${t.border}`,
+        background:
+          "linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.008))",
+        boxShadow: `inset 0 1px 0 rgba(255,255,255,0.04), 0 0 16px ${t.glow}`,
+      }}
+    >
+      <div
+        style={{
+          fontSize: 10,
+          letterSpacing: ".14em",
+          textTransform: "uppercase",
+          fontWeight: 900,
+          color: "rgba(255,255,255,0.40)",
+        }}
+      >
+        {label}
+      </div>
+      <div
+        style={{
+          marginTop: 8,
+          fontSize: 17,
+          fontWeight: 950,
+          color: t.text,
+          whiteSpace: "nowrap",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+        }}
+      >
+        {value}
+      </div>
+    </div>
+  );
+}
+
+function ActionStrip({
+  action,
+  cashPosition,
+  cashMovement,
+  dueSoonTotal,
+  alertCount,
+  onOpenAlerts,
+}) {
+  const tone = action?.tone || "ice";
+  const t = toneConfig(tone);
+
+  return (
+    <Pane
+      tone={tone}
+      padding={18}
+      radius={28}
+      overlayOpacity={0.62}
+      style={{
+        background: `
+          linear-gradient(
+            180deg,
+            rgba(255,255,255,0.05) 0%,
+            rgba(255,255,255,0.014) 12%,
+            rgba(255,255,255,0) 28%
+          ),
+          ${t.tint}
+        `,
+      }}
+    >
+      <div style={{ display: "grid", gap: 16 }}>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "minmax(0, 1fr) auto",
+            gap: 14,
+            alignItems: "center",
+          }}
+        >
+          <div style={{ minWidth: 0 }}>
+            <div
+              style={{
+                fontSize: 11,
+                textTransform: "uppercase",
+                letterSpacing: ".18em",
+                fontWeight: 900,
+                color: "rgba(255,255,255,0.44)",
+              }}
+            >
+              Next move
+            </div>
+
+            <div
+              style={{
+                marginTop: 10,
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
+                flexWrap: "wrap",
+              }}
+            >
+              {action.badge ? (
+                <div
+                  style={{
+                    padding: "5px 9px",
+                    borderRadius: 999,
+                    fontSize: 10,
+                    fontWeight: 900,
+                    letterSpacing: ".12em",
+                    textTransform: "uppercase",
+                    color: t.text,
+                    border: `1px solid ${t.border}`,
+                    background: "rgba(255,255,255,0.035)",
+                  }}
+                >
+                  {action.badge}
+                </div>
+              ) : null}
+
+              <div
+                style={{
+                  width: 9,
+                  height: 9,
+                  borderRadius: 999,
+                  background: t.accent,
+                  boxShadow: `0 0 14px ${t.accent}`,
+                  flexShrink: 0,
+                }}
+              />
+            </div>
+
+            <div
+              style={{
+                marginTop: 12,
+                fontSize: "clamp(22px, 4vw, 34px)",
+                lineHeight: 1,
+                fontWeight: 950,
+                letterSpacing: "-0.05em",
+                color: "#fff",
+              }}
+            >
+              {action.title}
+            </div>
+
+            <div
+              style={{
+                marginTop: 10,
+                maxWidth: 760,
+                fontSize: 13,
+                lineHeight: 1.55,
+                color: "rgba(255,255,255,0.68)",
+              }}
+            >
+              {action.detail}
+            </div>
+          </div>
+
+          <div style={{ alignSelf: "start" }}>
+            {action.actionType === "alerts" ? (
+              <ActionButton onClick={onOpenAlerts}>
+                {action.buttonLabel} <ArrowRight size={14} />
+              </ActionButton>
+            ) : (
+              <ActionButton href={action.href}>
+                {action.buttonLabel} <ArrowRight size={14} />
+              </ActionButton>
+            )}
+          </div>
+        </div>
+
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
+            gap: 10,
+          }}
+        >
+          <ActionMiniStat
+            label="Cash Position"
+            value={money(cashPosition)}
+            tone="ice"
+          />
+          <ActionMiniStat
+            label="Cash Movement"
+            value={signedMoney(cashMovement)}
+            tone={cashMovement < 0 ? "red" : cashMovement > 0 ? "green" : "ice"}
+          />
+          <ActionMiniStat
+            label="Due Soon"
+            value={money(dueSoonTotal)}
+            tone={dueSoonTotal > 0 ? "amber" : "green"}
+          />
+          <ActionMiniStat
+            label="Alert Load"
+            value={alertCount > 0 ? `${alertCount} active` : "clear"}
+            tone={alertCount > 0 ? tone : "green"}
+          />
+        </div>
+      </div>
+    </Pane>
+  );
+}
+
 export default function DashboardPage() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [pageError, setPageError] = useState("");
+  const [alertsOpen, setAlertsOpen] = useState(false);
 
   const [accounts, setAccounts] = useState([]);
   const [primaryId, setPrimaryId] = useState("");
   const [bills, setBills] = useState([]);
   const [spendingTx, setSpendingTx] = useState([]);
-  const [plannedSpending, setPlannedSpending] = useState([]);
   const [incomeDeposits, setIncomeDeposits] = useState([]);
 
   useEffect(() => {
@@ -188,7 +1742,9 @@ export default function DashboardPage() {
     async function bootstrap() {
       try {
         if (!supabase) {
-          throw new Error("Supabase is not configured. Check your environment variables.");
+          throw new Error(
+            "Supabase is not configured. Check your environment variables."
+          );
         }
 
         const {
@@ -210,7 +1766,7 @@ export default function DashboardPage() {
         const monthStart = startOfMonthISO(now);
         const monthEnd = endOfMonthISO(now);
 
-        const [accRes, settingsRes, billsRes, spendingRes, plannedRes, incomeRes] =
+        const [accRes, settingsRes, billsRes, spendingRes, incomeRes] =
           await Promise.all([
             supabase
               .from("accounts")
@@ -240,14 +1796,6 @@ export default function DashboardPage() {
               .order("tx_date", { ascending: true }),
 
             supabase
-              .from("spending_planned_items")
-              .select("*")
-              .eq("user_id", currentUser.id)
-              .gte("planned_date", monthStart)
-              .lte("planned_date", monthEnd)
-              .order("planned_date", { ascending: true }),
-
-            supabase
               .from("income_deposits")
               .select("*")
               .eq("user_id", currentUser.id)
@@ -260,13 +1808,11 @@ export default function DashboardPage() {
         if (settingsRes.error) throw settingsRes.error;
         if (billsRes.error) throw billsRes.error;
         if (spendingRes.error) throw spendingRes.error;
-        if (plannedRes.error) throw plannedRes.error;
         if (incomeRes.error) throw incomeRes.error;
 
         const loadedAccounts = (accRes.data || []).map(mapAccountRowToClient);
         const loadedBills = (billsRes.data || []).map(mapBillRowToClient);
         const loadedSpending = (spendingRes.data || []).map(mapSpendingTxRowToClient);
-        const loadedPlanned = (plannedRes.data || []).map(mapPlannedRowToClient);
         const loadedIncome = (incomeRes.data || []).map(mapIncomeDepositRowToClient);
 
         const nextPrimary =
@@ -281,7 +1827,6 @@ export default function DashboardPage() {
         setPrimaryId(nextPrimary);
         setBills(loadedBills);
         setSpendingTx(loadedSpending);
-        setPlannedSpending(loadedPlanned);
         setIncomeDeposits(loadedIncome);
         setPageError("");
       } catch (err) {
@@ -293,6 +1838,7 @@ export default function DashboardPage() {
     }
 
     bootstrap();
+
     return () => {
       mounted = false;
     };
@@ -301,40 +1847,56 @@ export default function DashboardPage() {
   const computed = useMemo(() => {
     const today = isoDate();
     const thisMonth = monthKeyFromISO(today);
+    const monthStart = startOfMonthISO();
 
     const primary = accounts.find((a) => a.id === primaryId) || accounts[0] || null;
 
     const liquidAccounts = accounts.filter((a) =>
       ["checking", "savings", "cash"].includes(String(a.type || "").toLowerCase())
     );
-    const creditAccounts = accounts.filter(
-      (a) => String(a.type || "").toLowerCase() === "credit"
-    );
+
     const investmentAccounts = accounts.filter(
       (a) => String(a.type || "").toLowerCase() === "investment"
     );
 
-    const liquidTotal = liquidAccounts.reduce((s, a) => s + safeNum(a.balance, 0), 0);
-    const debtTotal = creditAccounts.reduce((s, a) => s + safeNum(a.balance, 0), 0);
-    const investTotal = investmentAccounts.reduce((s, a) => s + safeNum(a.balance, 0), 0);
+    const creditAccounts = accounts.filter(
+      (a) => String(a.type || "").toLowerCase() === "credit"
+    );
+
+    const visibleBalanceAccounts = accounts.filter((a) => {
+      const type = String(a.type || "").toLowerCase();
+      return type !== "investment" && type !== "credit";
+    });
+
+    const accountBalancesExInvestments = visibleBalanceAccounts.reduce(
+      (s, a) => s + safeNum(a.balance, 0),
+      0
+    );
 
     const nonDebtAssets = accounts
       .filter((a) => String(a.type || "").toLowerCase() !== "credit")
       .reduce((s, a) => s + safeNum(a.balance, 0), 0);
 
+    const debtTotal = creditAccounts.reduce((s, a) => s + safeNum(a.balance, 0), 0);
+    const liquidTotal = liquidAccounts.reduce((s, a) => s + safeNum(a.balance, 0), 0);
     const netWorth = nonDebtAssets - debtTotal;
 
-    const incomeMonth = incomeDeposits.reduce((s, d) => s + safeNum(d.amount, 0), 0);
+    const incomeDepositsTotal = incomeDeposits.reduce(
+      (s, d) => s + safeNum(d.amount, 0),
+      0
+    );
+
+    const spendingIncomeLogged = spendingTx
+      .filter((t) => String(t.type || "").toLowerCase() === "income")
+      .reduce((s, t) => s + safeNum(t.amount, 0), 0);
+
+    const totalLoggedIncome = incomeDepositsTotal + spendingIncomeLogged;
 
     const spendingActual = spendingTx
       .filter((t) => String(t.type || "").toLowerCase() === "expense")
       .reduce((s, t) => s + safeNum(t.amount, 0), 0);
 
-    const spendingIncomeLoggedOnSpendingPage = spendingTx
-      .filter((t) => String(t.type || "").toLowerCase() === "income")
-      .reduce((s, t) => s + safeNum(t.amount, 0), 0);
-
-    const plannedMonth = plannedSpending.reduce((s, p) => s + safeNum(p.amount, 0), 0);
+    const cashMovement = totalLoggedIncome - spendingActual;
 
     const activeBills = bills.filter((b) => b.active !== false);
 
@@ -352,7 +1914,10 @@ export default function DashboardPage() {
         dueIn: daysUntil(b.dueDate),
         displayAmount:
           b.type === "controllable"
-            ? Math.max(0, safeNum(b.minPay, 0) + safeNum(b.extraPay, 0) || safeNum(b.amount, 0))
+            ? Math.max(
+                0,
+                safeNum(b.minPay, 0) + safeNum(b.extraPay, 0) || safeNum(b.amount, 0)
+              )
             : safeNum(b.amount, 0),
       }))
       .sort((a, b) => {
@@ -361,209 +1926,322 @@ export default function DashboardPage() {
         return ad - bd;
       });
 
-    const dueNextSeven = dueSoon
-      .filter((b) => Number.isFinite(b.dueIn) && b.dueIn <= 7)
-      .slice(0, 10);
+    const lateBills = dueSoon.filter(
+      (b) => Number.isFinite(b.dueIn) && b.dueIn < 0
+    );
 
-    const dueSoonTotal = dueNextSeven.reduce((s, b) => s + safeNum(b.displayAmount, 0), 0);
-
-    const netMonthCashFlow = incomeMonth - spendingActual - billsMonthlyPressure;
-    const projectedMonthCashFlow =
-      incomeMonth - spendingActual - plannedMonth - billsMonthlyPressure;
-
-    const burnTotal = spendingActual + billsMonthlyPressure;
-    const pressurePct = incomeMonth > 0 ? clamp(pct(burnTotal, incomeMonth), 0, 100) : 0;
-
-    const attention = [];
-
-    if (!accounts.length) {
-      attention.push({
-        title: "No accounts loaded",
-        body: "Add at least one account so this page can show your real position.",
-        tone: "bad",
-      });
-    }
-
-    if (primary && safeNum(primary.balance, 0) < 0) {
-      attention.push({
-        title: "Primary account is negative",
-        body: `${primary.name} is at ${money(primary.balance)}.`,
-        tone: "bad",
-      });
-    }
-
-    if (netMonthCashFlow < 0) {
-      attention.push({
-        title: "Month cash flow is negative",
-        body: `Income minus spending and bills is ${money(netMonthCashFlow)}.`,
-        tone: "bad",
-      });
-    }
-
-    if (projectedMonthCashFlow < 0) {
-      attention.push({
-        title: "Planned spending makes this worse",
-        body: `Projected cash flow falls to ${money(projectedMonthCashFlow)}.`,
-        tone: "warn",
-      });
-    }
-
-    const urgentBill = dueSoon.find((b) => Number.isFinite(b.dueIn) && b.dueIn <= 3);
-    if (urgentBill) {
-      attention.push({
-        title: "Bill due now",
-        body: `${urgentBill.name} is ${
-          urgentBill.dueIn < 0
-            ? `${Math.abs(urgentBill.dueIn)} day(s) late`
-            : urgentBill.dueIn === 0
-            ? "due today"
-            : `due in ${urgentBill.dueIn} day(s)`
-        }.`,
-        tone: urgentBill.dueIn <= 0 ? "bad" : "warn",
-      });
-    }
-
-    if (attention.length === 0) {
-      attention.push({
-        title: "No immediate red flags",
-        body: "Nothing major is screaming for attention right now.",
-        tone: "good",
-      });
-    }
-
-    const biggestBill =
-      activeBills
-        .map((b) => ({
-          ...b,
-          monthlyValue:
-            b.type === "controllable"
-              ? safeNum(b.minPay, 0) + safeNum(b.extraPay, 0)
-              : safeNum(b.amount, 0) * freqToMonthlyMult(b.frequency),
-        }))
-        .sort((a, b) => safeNum(b.monthlyValue, 0) - safeNum(a.monthlyValue, 0))[0] || null;
-
-    const incomeSources = [...incomeDeposits].reduce((map, row) => {
-      const key = String(row.source || "Income").trim() || "Income";
-      map.set(key, (map.get(key) || 0) + safeNum(row.amount, 0));
-      return map;
-    }, new Map());
-
-    const topIncomeSources = Array.from(incomeSources.entries())
-      .map(([source, total]) => ({ source, total }))
-      .sort((a, b) => b.total - a.total)
+    const dueNextFour = dueSoon
+      .filter((b) => Number.isFinite(b.dueIn) && b.dueIn <= 14)
       .slice(0, 4);
 
-    const accountMix = [
-      {
-        label: "Checking",
-        value: accounts
-          .filter((a) => String(a.type || "").toLowerCase() === "checking")
-          .reduce((s, a) => s + safeNum(a.balance, 0), 0),
-      },
-      {
-        label: "Savings",
-        value: accounts
-          .filter((a) => String(a.type || "").toLowerCase() === "savings")
-          .reduce((s, a) => s + safeNum(a.balance, 0), 0),
-      },
-      {
-        label: "Cash",
-        value: accounts
-          .filter((a) => String(a.type || "").toLowerCase() === "cash")
-          .reduce((s, a) => s + safeNum(a.balance, 0), 0),
-      },
-      {
-        label: "Credit",
-        value: accounts
-          .filter((a) => String(a.type || "").toLowerCase() === "credit")
-          .reduce((s, a) => s + safeNum(a.balance, 0), 0),
-      },
-      {
-        label: "Investments",
-        value: accounts
-          .filter((a) => String(a.type || "").toLowerCase() === "investment")
-          .reduce((s, a) => s + safeNum(a.balance, 0), 0),
-      },
-    ];
+    const dueThisWeek = dueSoon.filter(
+      (b) => Number.isFinite(b.dueIn) && b.dueIn >= 0 && b.dueIn <= 7
+    );
 
-    const pressureIncomeBase = Math.max(safeNum(incomeMonth, 0), 0);
-    const pressureBills = Math.max(safeNum(billsMonthlyPressure, 0), 0);
-    const pressureSpending = Math.max(safeNum(spendingActual, 0), 0);
-    const pressureRemaining = Math.max(pressureIncomeBase - pressureBills - pressureSpending, 0);
-    const pressureOverflow = Math.max(pressureBills + pressureSpending - pressureIncomeBase, 0);
-    const pressureDenominator =
-      pressureIncomeBase > 0
-        ? pressureIncomeBase
-        : Math.max(pressureBills + pressureSpending, 1);
+    const dueSoonTotal = dueNextFour.reduce(
+      (s, b) => s + safeNum(b.displayAmount, 0),
+      0
+    );
 
-    const pressureBillsPct = pct(pressureBills, pressureDenominator);
-    const pressureSpendingPct = pct(pressureSpending, pressureDenominator);
-    const pressureRemainingPct = pct(pressureRemaining, pressureDenominator);
+    const lateCount = lateBills.length;
+
+    const alertItems = [];
+
+    if (!accounts.length) {
+      alertItems.push({
+        id: "no-accounts",
+        severity: "critical",
+        title: "No accounts loaded",
+        detail:
+          "The dashboard cannot calculate a real position until accounts are added or synced.",
+        amount: "",
+        href: "/accounts",
+        hrefLabel: "Open accounts",
+      });
+    }
+
+    if (!primary) {
+      alertItems.push({
+        id: "no-primary",
+        severity: "warning",
+        title: "Primary account not selected",
+        detail:
+          "Pick a main account so the dashboard has a clear operating anchor.",
+        amount: "",
+        href: "/accounts",
+        hrefLabel: "Set primary account",
+      });
+    }
+
+    if (cashMovement < 0) {
+      alertItems.push({
+        id: "negative-cash-movement",
+        severity: "critical",
+        title: "Cash movement is negative",
+        detail: "Logged spending is outrunning logged income this month.",
+        amount: signedMoney(cashMovement),
+        href: "/spending",
+        hrefLabel: "Review spending",
+      });
+    }
+
+    if (lateCount > 0) {
+      const lateBillLead = lateBills[0];
+      alertItems.push({
+        id: "late-bills",
+        severity: "critical",
+        title: `${lateBillLead?.name || "A bill"} is late`,
+        detail:
+          lateCount > 1
+            ? `${lateCount} late bills need attention right now.`
+            : "This bill is already past due and needs attention now.",
+        amount: money(
+          lateBills.reduce((s, b) => s + safeNum(b.displayAmount, 0), 0)
+        ),
+        href: "/bills",
+        hrefLabel: "Open bills",
+      });
+    }
+
+    if (dueThisWeek.length > 0) {
+      const leadDue = dueThisWeek[0];
+      alertItems.push({
+        id: "due-this-week",
+        severity: "warning",
+        title: `${leadDue?.name || "A bill"} is due soon`,
+        detail:
+          dueThisWeek.length > 1
+            ? `${dueThisWeek.length} bills are due in the next 7 days.`
+            : `Due ${fmtShort(leadDue?.dueDate)}.`,
+        amount: money(
+          dueThisWeek.reduce((s, b) => s + safeNum(b.displayAmount, 0), 0)
+        ),
+        href: "/bills",
+        hrefLabel: "Check due dates",
+      });
+    }
+
+    if (dueSoonTotal > accountBalancesExInvestments && dueSoonTotal > 0) {
+      alertItems.push({
+        id: "due-vs-balances",
+        severity: "critical",
+        title: "Upcoming bills exceed account balances",
+        detail:
+          "Your near-term due amount is larger than your non-investment balances.",
+        amount: `${money(dueSoonTotal)} vs ${money(accountBalancesExInvestments)}`,
+        href: "/accounts",
+        hrefLabel: "Review balances",
+      });
+    }
+
+    if (liquidTotal < 0) {
+      alertItems.push({
+        id: "negative-liquid",
+        severity: "critical",
+        title: "Liquid cash is below zero",
+        detail:
+          "Checking, savings, or cash balances are showing negative overall.",
+        amount: money(liquidTotal),
+        href: "/accounts",
+        hrefLabel: "Inspect accounts",
+      });
+    }
+
+    if (!alertItems.length) {
+      alertItems.push({
+        id: "all-clear",
+        severity: "clear",
+        title: "No active pressure points",
+        detail:
+          "Nothing critical or warning-level is hitting the dashboard right now.",
+        amount: "",
+        href: "",
+        hrefLabel: "",
+      });
+    }
+
+    const topAccounts = [...accounts]
+      .sort(
+        (a, b) => safeNum(Math.abs(b.balance), 0) - safeNum(Math.abs(a.balance), 0)
+      )
+      .slice(0, 4);
+
+    const recentActivity = [
+      ...incomeDeposits.map((row) => ({
+        id: `income-${row.id}`,
+        date: row.date || today,
+        title: row.source || "Income",
+        detail: `Deposit • ${fmtShort(row.date)}`,
+        amount: `+${money(row.amount)}`,
+        tone: "green",
+      })),
+      ...spendingTx.map((row) => {
+        const type = String(row.type || "").toLowerCase();
+        const isIncome = type === "income";
+        return {
+          id: `spend-${row.id}`,
+          date: row.date || today,
+          title: row.merchant || row.note || (isIncome ? "Income" : "Expense"),
+          detail: `${isIncome ? "Income" : "Expense"} • ${fmtShort(row.date)}`,
+          amount: `${isIncome ? "+" : "-"}${money(row.amount)}`,
+          tone: isIncome ? "green" : "red",
+        };
+      }),
+    ]
+      .sort((a, b) => String(b.date).localeCompare(String(a.date)))
+      .slice(0, 4);
+
+    if (recentActivity.length < 4) {
+      dueNextFour.slice(0, 4 - recentActivity.length).forEach((bill) => {
+        recentActivity.push({
+          id: `due-${bill.id}`,
+          date: bill.dueDate || today,
+          title: bill.name,
+          detail:
+            bill.dueIn < 0
+              ? `${Math.abs(bill.dueIn)} day(s) late`
+              : `Due ${fmtShort(bill.dueDate)}`,
+          amount: money(bill.displayAmount),
+          tone: bill.dueIn < 0 ? "red" : "amber",
+        });
+      });
+    }
+
+    const chartPoints = buildCashMovementPoints(
+      monthStart,
+      today,
+      spendingTx,
+      incomeDeposits
+    );
+
+    const nonClearAlerts = alertItems.filter((a) => a.severity !== "clear");
+    const hasCritical = nonClearAlerts.some((a) => a.severity === "critical");
+    const hasWarning = nonClearAlerts.some((a) => a.severity === "warning");
+
+    let alertTone = "green";
+    let alertValue = "Clear";
+
+    if (hasCritical) {
+      alertTone = "red";
+      alertValue = "Critical";
+    } else if (hasWarning) {
+      alertTone = "amber";
+      alertValue = "Watch";
+    }
+
+    let nextAction = {
+      tone: "green",
+      badge: "stable",
+      title: "You are clear right now",
+      detail:
+        "Nothing urgent is hitting the board. Keep feeding real data into the system and use the dashboard to stay ahead.",
+      buttonLabel: "Open accounts",
+      href: "/accounts",
+      actionType: "link",
+    };
+
+    if (!accounts.length) {
+      nextAction = {
+        tone: "red",
+        badge: "blocked",
+        title: "Load accounts first",
+        detail:
+          "The dashboard cannot tell the truth until real account balances exist. Start there before trusting anything else on this page.",
+        buttonLabel: "Open accounts",
+        href: "/accounts",
+        actionType: "link",
+      };
+    } else if (lateBills.length > 0) {
+      const lead = lateBills[0];
+      nextAction = {
+        tone: "red",
+        badge: "urgent",
+        title: `${lead.name} is late`,
+        detail: `${
+          lead.dueIn ? Math.abs(lead.dueIn) : 0
+        } day(s) past due • ${money(lead.displayAmount)}. Handle the overdue bill before doing anything cosmetic.`,
+        buttonLabel: "View issues",
+        actionType: "alerts",
+      };
+    } else if (dueThisWeek.length > 0) {
+      const lead = dueThisWeek[0];
+      nextAction = {
+        tone: "amber",
+        badge: "upcoming",
+        title: `${lead.name} due ${fmtShort(lead.dueDate)}`,
+        detail:
+          dueThisWeek.length > 1
+            ? `${dueThisWeek.length} bills are due in the next 7 days. Stay ahead before they hit your balances at once.`
+            : `This is the next bill on deck. Knock it out before it turns into pressure.`,
+        buttonLabel: "Open bills",
+        href: "/bills",
+        actionType: "link",
+      };
+    } else if (cashMovement < 0) {
+      nextAction = {
+        tone: "red",
+        badge: "cash movement",
+        title: "Spending is outrunning income",
+        detail:
+          "Your actual logged movement is negative this month. Tighten spending before that turns into a real balance problem.",
+        buttonLabel: "Review spending",
+        href: "/spending",
+        actionType: "link",
+      };
+    } else if (incomeDeposits.length > 0) {
+      const latestDeposit = [...incomeDeposits].sort((a, b) =>
+        String(b.date).localeCompare(String(a.date))
+      )[0];
+
+      nextAction = {
+        tone: "green",
+        badge: "latest deposit",
+        title: `${money(latestDeposit.amount)} landed`,
+        detail: `${latestDeposit.source || "Deposit"} posted ${fmtShort(
+          latestDeposit.date
+        )}. Route it with intention before it gets absorbed by random spending.`,
+        buttonLabel: "Open income",
+        href: "/income",
+        actionType: "link",
+      };
+    }
 
     return {
-      today,
-      thisMonth,
-      primary,
-      liquidTotal,
-      debtTotal,
-      investTotal,
+      monthLabel: fmtMonthLabel(thisMonth),
+      primaryName: primary?.name || "",
       netWorth,
-      incomeMonth,
+      accountBalancesExInvestments,
+      alertValue,
+      alertTone,
+      alertCount: nonClearAlerts.length,
+      topAccounts,
+      recentActivity,
+      chartPoints,
+      chartValue: signedMoney(cashMovement),
+      chartTone: cashMovement < 0 ? "red" : cashMovement > 0 ? "green" : "ice",
+      totalLoggedIncome,
       spendingActual,
-      spendingIncomeLoggedOnSpendingPage,
-      plannedMonth,
       billsMonthlyPressure,
-      netMonthCashFlow,
-      projectedMonthCashFlow,
-      pressurePct,
-      dueSoon,
-      dueNextSeven,
+      liquidTotal,
       dueSoonTotal,
-      attention,
-      biggestBill,
-      topIncomeSources,
-      accountMix,
-      accountCount: accounts.length,
-      billCount: activeBills.length,
-      pressureIncomeBase,
-      pressureBills,
-      pressureSpending,
-      pressureRemaining,
-      pressureOverflow,
-      pressureBillsPct,
-      pressureSpendingPct,
-      pressureRemainingPct,
+      cashMovement,
+      alertItems,
+      investmentTotal: investmentAccounts.reduce(
+        (s, a) => s + safeNum(a.balance, 0),
+        0
+      ),
+      nextAction,
     };
-  }, [accounts, primaryId, bills, spendingTx, plannedSpending, incomeDeposits]);
-
-  const heroTone =
-    computed.netWorth < 0
-      ? "bad"
-      : computed.netMonthCashFlow < 0
-      ? "warn"
-      : "good";
-
-  const shellCard = {
-    border: "1px solid rgba(96,165,250,.12)",
-    background:
-      "radial-gradient(circle at top left, rgba(59,130,246,.08), transparent 42%), linear-gradient(180deg, rgba(10,16,32,.86), rgba(6,11,24,.94))",
-    boxShadow: "inset 0 1px 0 rgba(255,255,255,.03), 0 14px 30px rgba(2,8,23,.18)",
-  };
-
-  const actionBtn = {
-    textAlign: "center",
-    background: "linear-gradient(180deg, rgba(125,182,255,.95), rgba(107,165,245,.92))",
-    border: "1px solid rgba(186,217,255,.32)",
-    boxShadow: "0 10px 24px rgba(59,130,246,.22), inset 0 1px 0 rgba(255,255,255,.2)",
-    color: "#f8fbff",
-  };
+  }, [accounts, primaryId, bills, spendingTx, incomeDeposits]);
 
   if (loading) {
     return (
       <main className="container">
-        <div className="card" style={{ padding: 18 }}>
-          Loading dashboard...
-        </div>
+        <Pane>
+          <div style={{ fontWeight: 900, fontSize: 18, color: "#fff" }}>
+            Loading dashboard...
+          </div>
+        </Pane>
       </main>
     );
   }
@@ -571,973 +2249,269 @@ export default function DashboardPage() {
   if (!user) {
     return (
       <main className="container">
-        <div className="card" style={{ padding: 18 }}>
-          <div style={{ fontWeight: 900, fontSize: 18 }}>Please log in</div>
-          <div className="muted" style={{ marginTop: 8 }}>
-            This dashboard is Supabase-backed, so it needs an authenticated user.
+        <Pane>
+          <div style={{ fontWeight: 900, fontSize: 18, color: "#fff" }}>
+            Please log in
           </div>
-        </div>
+          <div
+            style={{
+              marginTop: 8,
+              fontSize: 14,
+              color: "rgba(255,255,255,0.66)",
+            }}
+          >
+            This dashboard needs an authenticated user.
+          </div>
+        </Pane>
       </main>
     );
   }
 
   return (
-    <main className="container">
-      <header style={{ marginBottom: 16 }}>
-        <div
-          className="muted"
-          style={{
-            fontSize: 12,
-            letterSpacing: ".08em",
-            textTransform: "uppercase",
-            marginBottom: 6,
-            color: "rgba(147,197,253,.92)",
-          }}
-        >
-          Dashboard
-        </div>
+    <>
+      <AlertPanel
+        open={alertsOpen}
+        onClose={() => setAlertsOpen(false)}
+        statusLabel={computed.alertValue}
+        statusTone={computed.alertTone}
+        alertItems={computed.alertItems}
+        cashPosition={computed.accountBalancesExInvestments}
+        cashMovement={computed.cashMovement}
+        dueSoonTotal={computed.dueSoonTotal}
+      />
 
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            gap: 14,
-            flexWrap: "wrap",
-            alignItems: "flex-end",
-          }}
-        >
-          <div>
-            <h1
-              style={{
-                margin: 0,
-                fontSize: "clamp(28px, 4.5vw, 42px)",
-                lineHeight: 1.02,
-                letterSpacing: "-0.03em",
-              }}
-            >
-              Financial Standing
-            </h1>
-            <div className="muted" style={{ marginTop: 8, maxWidth: 820 }}>
-              Total life numbers first. Monthly pressure second. Fast actions only.
-            </div>
-          </div>
-
-          <div
-            className="pill"
-            style={{
-              padding: "12px 14px",
-              borderRadius: 18,
-              display: "flex",
-              flexDirection: "column",
-              gap: 4,
-              minWidth: 220,
-              border: "1px solid rgba(59,130,246,.18)",
-              background:
-                "radial-gradient(circle at top, rgba(59,130,246,.1), transparent 55%), linear-gradient(180deg, rgba(8,14,28,.94), rgba(6,11,24,.98))",
-              boxShadow: "inset 0 1px 0 rgba(255,255,255,.03)",
-            }}
-          >
-            <span className="muted" style={{ fontSize: 12 }}>
-              Month
-            </span>
-            <span style={{ fontWeight: 950, fontSize: 20 }}>
-              {fmtMonthLabel(computed.thisMonth)}
-            </span>
-            <span className="muted" style={{ fontSize: 12 }}>
-              Today <b>{computed.today}</b>
-            </span>
-          </div>
-        </div>
-      </header>
-
-      {pageError ? (
-        <div
-          className="card"
-          style={{
-            padding: 12,
-            marginBottom: 16,
-            border: "1px solid rgba(239,68,68,.35)",
-            background: "rgba(127,29,29,.18)",
-          }}
-        >
-          <div style={{ fontWeight: 900 }}>Dashboard error</div>
-          <div className="muted" style={{ marginTop: 6 }}>{pageError}</div>
-        </div>
-      ) : null}
-
-      <section
-        className="card"
+      <main
+        className="container"
         style={{
-          ...shellCard,
-          padding: 18,
-          marginBottom: 14,
-          borderRadius: 26,
-          overflow: "hidden",
           position: "relative",
-          background:
-            heroTone === "bad"
-              ? "radial-gradient(circle at top left, rgba(239,68,68,.10), transparent 28%), radial-gradient(circle at top right, rgba(59,130,246,.08), transparent 32%), linear-gradient(180deg, rgba(10,16,32,.88), rgba(6,11,24,.98))"
-              : heroTone === "warn"
-              ? "radial-gradient(circle at top left, rgba(245,158,11,.08), transparent 26%), radial-gradient(circle at top right, rgba(59,130,246,.10), transparent 34%), linear-gradient(180deg, rgba(10,16,32,.88), rgba(6,11,24,.98))"
-              : "radial-gradient(circle at top left, rgba(59,130,246,.13), transparent 30%), radial-gradient(circle at top right, rgba(37,99,235,.09), transparent 34%), linear-gradient(180deg, rgba(10,16,32,.88), rgba(6,11,24,.98))",
-          border: "1px solid rgba(96,165,250,.14)",
+          isolation: "isolate",
         }}
       >
         <div
           style={{
+            position: "relative",
+            zIndex: 1,
+            width: "min(100%, 1180px)",
+            margin: "0 auto",
             display: "grid",
-            gridTemplateColumns: "minmax(0,1.18fr) minmax(320px,.82fr)",
-            gap: 16,
-            alignItems: "stretch",
+            gap: 14,
           }}
         >
-          <div>
-            <div
-              className="muted"
-              style={{ fontSize: 12, letterSpacing: ".08em", textTransform: "uppercase" }}
-            >
-              Whole life position
-            </div>
-
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "minmax(0,1fr) minmax(220px,.7fr)",
-                gap: 18,
-                alignItems: "end",
-                marginTop: 10,
-              }}
-            >
-              <div>
-                <div className="muted" style={{ fontSize: 12 }}>Liquid cash</div>
-                <div
-                  style={{
-                    fontWeight: 950,
-                    fontSize: "clamp(34px, 5vw, 56px)",
-                    lineHeight: 1,
-                    marginTop: 6,
-                  }}
-                >
-                  {money(computed.liquidTotal)}
-                </div>
+          {pageError ? (
+            <Pane tone="red" padding={14} radius={22}>
+              <div style={{ fontWeight: 900, fontSize: 16, color: "#fff" }}>
+                Dashboard error
               </div>
-
-              <div>
-                <div className="muted" style={{ fontSize: 12 }}>Net worth</div>
-                <div
-                  style={{
-                    fontWeight: 900,
-                    fontSize: "clamp(24px, 3vw, 34px)",
-                    lineHeight: 1.05,
-                    marginTop: 8,
-                    color: computed.netWorth < 0 ? "rgb(252 165 165)" : "inherit",
-                  }}
-                >
-                  {money(computed.netWorth)}
-                </div>
-              </div>
-            </div>
-
-            <div className="muted" style={{ marginTop: 12, fontSize: 14 }}>
-              {computed.primary
-                ? `Primary account ${computed.primary.name} • ${typeLabel(computed.primary.type)} • ${money(computed.primary.balance)}`
-                : "No primary account selected"}
-            </div>
-
-            <div className="muted" style={{ marginTop: 8, fontSize: 14 }}>
-              Debt <b>{money(computed.debtTotal)}</b>
-              {" • "}
-              Investments <b>{money(computed.investTotal)}</b>
-              {" • "}
-              Accounts <b>{computed.accountCount}</b>
-              {" • "}
-              Active bills <b>{computed.billCount}</b>
-            </div>
-
-            <div
-              className="card"
-              style={{
-                marginTop: 16,
-                padding: 14,
-                borderRadius: 18,
-                border: "1px solid rgba(96,165,250,.12)",
-                background:
-                  "radial-gradient(circle at top left, rgba(59,130,246,.08), transparent 35%), linear-gradient(180deg, rgba(8,14,28,.84), rgba(7,12,25,.96))",
-                boxShadow: "inset 0 1px 0 rgba(255,255,255,.03)",
-              }}
-            >
               <div
                 style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  gap: 10,
-                  alignItems: "baseline",
-                  flexWrap: "wrap",
-                  marginBottom: 10,
-                }}
-              >
-                <div style={{ fontWeight: 900, fontSize: 14 }}>Financial pressure bar</div>
-                <div className="muted" style={{ fontSize: 12 }}>
-                  Income vs bills vs spending vs remaining
-                </div>
-              </div>
-
-              <div
-                style={{
-                  height: 16,
-                  width: "100%",
-                  borderRadius: 999,
-                  overflow: "hidden",
-                  background: "rgba(255,255,255,.05)",
-                  border: "1px solid rgba(255,255,255,.06)",
-                  display: "flex",
-                }}
-              >
-                {computed.pressureIncomeBase > 0 ? (
-                  <>
-                    <div
-                      title={`Bills ${money(computed.pressureBills)}`}
-                      style={{
-                        width: `${clamp(computed.pressureBillsPct, 0, 100)}%`,
-                        background: "linear-gradient(180deg, rgba(251,191,36,.92), rgba(245,158,11,.84))",
-                      }}
-                    />
-                    <div
-                      title={`Spending ${money(computed.pressureSpending)}`}
-                      style={{
-                        width: `${clamp(computed.pressureSpendingPct, 0, 100)}%`,
-                        background: "linear-gradient(180deg, rgba(96,165,250,.96), rgba(59,130,246,.84))",
-                      }}
-                    />
-                    <div
-                      title={`Remaining ${money(computed.pressureRemaining)}`}
-                      style={{
-                        width: `${clamp(computed.pressureRemainingPct, 0, 100)}%`,
-                        background: "linear-gradient(180deg, rgba(74,222,128,.92), rgba(34,197,94,.82))",
-                      }}
-                    />
-                  </>
-                ) : (
-                  <div
-                    title={
-                      computed.pressureOverflow > 0
-                        ? `No income logged / pressure ${money(computed.pressureOverflow)}`
-                        : "No income logged"
-                    }
-                    style={{
-                      width: "100%",
-                      background:
-                        "linear-gradient(180deg, rgba(71,85,105,.76), rgba(51,65,85,.76))",
-                    }}
-                  />
-                )}
-              </div>
-
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
-                  gap: 10,
-                  marginTop: 10,
-                }}
-              >
-                <div>
-                  <div className="muted" style={{ fontSize: 11 }}>Income</div>
-                  <div style={{ fontWeight: 900, marginTop: 4 }}>
-                    {money(computed.incomeMonth)}
-                  </div>
-                </div>
-                <div>
-                  <div className="muted" style={{ fontSize: 11 }}>Bills</div>
-                  <div style={{ fontWeight: 900, marginTop: 4, color: "rgb(253 186 116)" }}>
-                    {money(computed.billsMonthlyPressure)}
-                  </div>
-                </div>
-                <div>
-                  <div className="muted" style={{ fontSize: 11 }}>Spending</div>
-                  <div style={{ fontWeight: 900, marginTop: 4, color: "rgb(147 197 253)" }}>
-                    {money(computed.spendingActual)}
-                  </div>
-                </div>
-                <div>
-                  <div className="muted" style={{ fontSize: 11 }}>
-                    {computed.netMonthCashFlow >= 0 ? "Remaining" : "Short"}
-                  </div>
-                  <div
-                    style={{
-                      fontWeight: 900,
-                      marginTop: 4,
-                      color:
-                        computed.netMonthCashFlow >= 0
-                          ? "rgb(134 239 172)"
-                          : "rgb(252 165 165)",
-                    }}
-                  >
-                    {money(Math.abs(computed.netMonthCashFlow))}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div
-            className="card"
-            style={{
-              padding: 14,
-              borderRadius: 22,
-              border: "1px solid rgba(96,165,250,.14)",
-              background:
-                "radial-gradient(circle at top left, rgba(59,130,246,.08), transparent 34%), linear-gradient(180deg, rgba(9,15,29,.9), rgba(7,12,25,.98))",
-              display: "grid",
-              gap: 12,
-              alignContent: "start",
-              boxShadow: "inset 0 1px 0 rgba(255,255,255,.03)",
-            }}
-          >
-            <div>
-              <div className="muted" style={{ fontSize: 12 }}>
-                This month pressure
-              </div>
-              <div style={{ fontWeight: 900, fontSize: 20, marginTop: 4 }}>
-                {computed.incomeMonth > 0
-                  ? `${Math.round(computed.pressurePct)}% of income`
-                  : "No income logged"}
-              </div>
-            </div>
-
-            <div
-              style={{
-                height: 10,
-                borderRadius: 999,
-                border: "1px solid rgba(255,255,255,.08)",
-                overflow: "hidden",
-                background: "rgba(255,255,255,.05)",
-              }}
-            >
-              <div
-                style={{
-                  height: "100%",
-                  width: `${clamp(computed.pressurePct, 0, 100)}%`,
-                  background:
-                    computed.pressurePct >= 100
-                      ? "linear-gradient(180deg, rgba(239,68,68,.88), rgba(220,38,38,.82))"
-                      : computed.pressurePct >= 80
-                      ? "linear-gradient(180deg, rgba(251,191,36,.88), rgba(245,158,11,.82))"
-                      : "linear-gradient(180deg, rgba(96,165,250,.92), rgba(59,130,246,.84))",
-                }}
-              />
-            </div>
-
-            <div className="muted" style={{ fontSize: 12 }}>
-              Income {money(computed.incomeMonth)} • Spending {money(computed.spendingActual)} • Bills {money(computed.billsMonthlyPressure)}
-            </div>
-
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "1fr 1fr",
-                gap: 10,
-              }}
-            >
-              <div
-                style={{
-                  padding: 10,
-                  borderRadius: 16,
-                  background: "rgba(255,255,255,.03)",
-                  border: "1px solid rgba(96,165,250,.08)",
-                }}
-              >
-                <div className="muted" style={{ fontSize: 11 }}>
-                  Month cash flow
-                </div>
-                <div
-                  style={{
-                    fontWeight: 900,
-                    fontSize: 18,
-                    marginTop: 4,
-                    color: computed.netMonthCashFlow < 0 ? "rgb(252 165 165)" : "rgb(134 239 172)",
-                  }}
-                >
-                  {money(computed.netMonthCashFlow)}
-                </div>
-              </div>
-
-              <div
-                style={{
-                  padding: 10,
-                  borderRadius: 16,
-                  background: "rgba(255,255,255,.03)",
-                  border: "1px solid rgba(96,165,250,.08)",
-                }}
-              >
-                <div className="muted" style={{ fontSize: 11 }}>
-                  Due next 7 days
-                </div>
-                <div style={{ fontWeight: 900, fontSize: 18, marginTop: 4 }}>
-                  {money(computed.dueSoonTotal)}
-                </div>
-              </div>
-            </div>
-
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
-                gap: 8,
-              }}
-            >
-              <Link className="btn" href="/accounts" style={actionBtn}>
-                Accounts
-              </Link>
-              <Link className="btn" href="/bills" style={actionBtn}>
-                Bills
-              </Link>
-              <Link className="btn" href="/debt" style={actionBtn}>
-                Debt
-              </Link>
-              <Link className="btn" href="/spending" style={actionBtn}>
-                Spending
-              </Link>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
-          gap: 12,
-          marginBottom: 14,
-        }}
-      >
-        <div className="card" style={{ ...shellCard, padding: 14, borderRadius: 22 }}>
-          <div className="muted" style={{ fontSize: 12 }}>Liquid cash</div>
-          <div style={{ fontWeight: 950, fontSize: 26, marginTop: 6 }}>
-            {money(computed.liquidTotal)}
-          </div>
-          <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
-            Checking, savings, and cash
-          </div>
-        </div>
-
-        <div className="card" style={{ ...shellCard, padding: 14, borderRadius: 22 }}>
-          <div className="muted" style={{ fontSize: 12 }}>Net worth</div>
-          <div
-            style={{
-              fontWeight: 950,
-              fontSize: 26,
-              marginTop: 6,
-              color: computed.netWorth < 0 ? "rgb(252 165 165)" : "inherit",
-            }}
-          >
-            {money(computed.netWorth)}
-          </div>
-          <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
-            Assets minus credit debt
-          </div>
-        </div>
-
-        <div
-          className="card"
-          style={{
-            ...shellCard,
-            padding: 14,
-            borderRadius: 22,
-            border: "1px solid rgba(239,68,68,.12)",
-            background:
-              "radial-gradient(circle at top left, rgba(239,68,68,.06), transparent 34%), linear-gradient(180deg, rgba(10,16,32,.86), rgba(6,11,24,.94))",
-          }}
-        >
-          <div className="muted" style={{ fontSize: 12 }}>Credit debt</div>
-          <div style={{ fontWeight: 950, fontSize: 26, marginTop: 6 }}>
-            {money(computed.debtTotal)}
-          </div>
-          <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
-            Total credit balances
-          </div>
-        </div>
-
-        <div className="card" style={{ ...shellCard, padding: 14, borderRadius: 22 }}>
-          <div className="muted" style={{ fontSize: 12 }}>Investments</div>
-          <div style={{ fontWeight: 950, fontSize: 26, marginTop: 6 }}>
-            {money(computed.investTotal)}
-          </div>
-          <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
-            Investment account total
-          </div>
-        </div>
-      </section>
-
-      <section
-        style={{
-          display: "grid",
-          gridTemplateColumns: "minmax(0,1.08fr) minmax(0,.92fr)",
-          gap: 16,
-          alignItems: "start",
-          marginBottom: 16,
-        }}
-      >
-        <div className="card" style={{ ...shellCard, padding: 16, borderRadius: 24 }}>
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              gap: 12,
-              alignItems: "baseline",
-              flexWrap: "wrap",
-            }}
-          >
-            <div>
-              <div style={{ fontWeight: 900, fontSize: 18 }}>Needs attention</div>
-              <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
-                Fast read only. Biggest problems first.
-              </div>
-            </div>
-
-            <Link className="btn" href="/spending" style={actionBtn}>
-              Open Spending
-            </Link>
-          </div>
-
-          <div style={{ height: 12 }} />
-
-          <div className="grid" style={{ gap: 10 }}>
-            {computed.attention.map((item, idx) => (
-              <div
-                key={`${item.title}-${idx}`}
-                className="card"
-                style={{
-                  padding: 12,
-                  borderRadius: 18,
-                  border:
-                    item.tone === "bad"
-                      ? "1px solid rgba(239,68,68,.24)"
-                      : item.tone === "warn"
-                      ? "1px solid rgba(245,158,11,.24)"
-                      : "1px solid rgba(34,197,94,.18)",
-                  background:
-                    item.tone === "bad"
-                      ? "linear-gradient(180deg, rgba(127,29,29,.16), rgba(36,12,18,.12))"
-                      : item.tone === "warn"
-                      ? "linear-gradient(180deg, rgba(120,53,15,.14), rgba(36,24,12,.1))"
-                      : "linear-gradient(180deg, rgba(20,83,45,.12), rgba(10,22,18,.1))",
-                }}
-              >
-                <div style={{ fontWeight: 900 }}>{item.title}</div>
-                <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
-                  {item.body}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="card" style={{ ...shellCard, padding: 16, borderRadius: 24 }}>
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              gap: 12,
-              alignItems: "baseline",
-              flexWrap: "wrap",
-            }}
-          >
-            <div style={{ fontWeight: 900, fontSize: 18 }}>Bills due soon</div>
-            <div className="muted" style={{ fontSize: 12 }}>
-              Next 7 days total <b>{money(computed.dueSoonTotal)}</b>
-            </div>
-          </div>
-
-          <div style={{ height: 12 }} />
-
-          {computed.dueNextSeven.length === 0 ? (
-            <div className="card" style={{ padding: 12, borderRadius: 18 }}>
-              <div style={{ fontWeight: 900 }}>Nothing immediate</div>
-              <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
-                No active bills are due in the next 7 days.
-              </div>
-            </div>
-          ) : (
-            <>
-              <div
-                className="grid"
-                style={{
-                  gap: 10,
-                  maxHeight: 330,
-                  overflowY: "auto",
-                  paddingRight: 4,
-                }}
-              >
-                {computed.dueNextSeven.map((b) => (
-                  <div
-                    key={b.id}
-                    className="card"
-                    style={{
-                      padding: 12,
-                      borderRadius: 18,
-                      border:
-                        b.dueIn <= 0
-                          ? "1px solid rgba(239,68,68,.24)"
-                          : b.dueIn <= 3
-                          ? "1px solid rgba(245,158,11,.24)"
-                          : "1px solid rgba(96,165,250,.1)",
-                      background:
-                        b.dueIn <= 0
-                          ? "linear-gradient(180deg, rgba(127,29,29,.14), rgba(36,12,18,.1))"
-                          : b.dueIn <= 3
-                          ? "linear-gradient(180deg, rgba(120,53,15,.14), rgba(36,24,12,.1))"
-                          : "linear-gradient(180deg, rgba(10,16,32,.66), rgba(6,11,24,.82))",
-                    }}
-                  >
-                    <div
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        gap: 12,
-                        alignItems: "flex-start",
-                      }}
-                    >
-                      <div>
-                        <div style={{ fontWeight: 900 }}>{b.name}</div>
-                        <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
-                          {fmtShort(b.dueDate)} • {b.type === "controllable" ? "Debt" : "Bill"}
-                          {b.autopay ? " • Autopay" : ""}
-                        </div>
-                      </div>
-
-                      <div style={{ textAlign: "right" }}>
-                        <div style={{ fontWeight: 900 }}>{money(b.displayAmount)}</div>
-                        <div
-                          className="muted"
-                          style={{
-                            fontSize: 12,
-                            marginTop: 6,
-                            color:
-                              b.dueIn <= 0
-                                ? "rgb(252 165 165)"
-                                : b.dueIn <= 3
-                                ? "rgb(253 186 116)"
-                                : "rgba(255,255,255,.72)",
-                          }}
-                        >
-                          {b.dueIn < 0
-                            ? `${Math.abs(b.dueIn)} day(s) late`
-                            : b.dueIn === 0
-                            ? "Due today"
-                            : `Due in ${b.dueIn} day(s)`}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              <div style={{ marginTop: 12 }}>
-                <Link className="btn" href="/bills" style={{ ...actionBtn, width: "100%" }}>
-                  View all bills
-                </Link>
-              </div>
-            </>
-          )}
-        </div>
-      </section>
-
-      <section
-        style={{
-          display: "grid",
-          gridTemplateColumns: "minmax(0,.96fr) minmax(0,1.04fr)",
-          gap: 16,
-          alignItems: "start",
-        }}
-      >
-        <div style={{ display: "grid", gap: 16 }}>
-          <div className="card" style={{ ...shellCard, padding: 16, borderRadius: 24 }}>
-            <div style={{ fontWeight: 900, fontSize: 18 }}>Life totals breakdown</div>
-            <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
-              Real totals by account type.
-            </div>
-
-            <div style={{ height: 12 }} />
-
-            <div className="grid" style={{ gap: 10 }}>
-              {computed.accountMix.map((row) => (
-                <div
-                  key={row.label}
-                  className="card"
-                  style={{
-                    padding: 12,
-                    borderRadius: 18,
-                    background:
-                      row.label === "Credit"
-                        ? "linear-gradient(180deg, rgba(127,29,29,.08), rgba(10,16,32,.88))"
-                        : "linear-gradient(180deg, rgba(10,16,32,.84), rgba(6,11,24,.95))",
-                    border:
-                      row.label === "Credit"
-                        ? "1px solid rgba(239,68,68,.12)"
-                        : "1px solid rgba(96,165,250,.08)",
-                  }}
-                >
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      gap: 12,
-                      alignItems: "center",
-                    }}
-                  >
-                    <div style={{ fontWeight: 800 }}>{row.label}</div>
-                    <div
-                      style={{
-                        fontWeight: 900,
-                        color: row.label === "Credit" && row.value > 0 ? "rgb(252 165 165)" : "inherit",
-                      }}
-                    >
-                      {money(row.value)}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="card" style={{ ...shellCard, padding: 16, borderRadius: 24 }}>
-            <div style={{ fontWeight: 900, fontSize: 18 }}>Quick links</div>
-            <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
-              Jump straight to the page that owns the detail.
-            </div>
-
-            <div style={{ height: 12 }} />
-
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-                gap: 10,
-              }}
-            >
-              <Link className="btn" href="/accounts" style={actionBtn}>
-                Open Accounts
-              </Link>
-              <Link className="btn" href="/bills" style={actionBtn}>
-                Open Bills
-              </Link>
-              <Link className="btn" href="/debt" style={actionBtn}>
-                Open Debt
-              </Link>
-              <Link className="btn" href="/income" style={actionBtn}>
-                Open Income
-              </Link>
-              <Link className="btn" href="/spending" style={actionBtn}>
-                Open Spending
-              </Link>
-              <Link className="btn" href="/investments" style={actionBtn}>
-                Open Investments
-              </Link>
-            </div>
-          </div>
-        </div>
-
-        <div style={{ display: "grid", gap: 16 }}>
-          <div className="card" style={{ ...shellCard, padding: 16, borderRadius: 24 }}>
-            <div style={{ fontWeight: 900, fontSize: 18 }}>Month breakdown</div>
-            <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
-              Monthly pressure lives here, but it stays secondary.
-            </div>
-
-            <div style={{ height: 14 }} />
-
-            <div className="grid" style={{ gap: 12 }}>
-              {[
-                {
-                  label: "Bills pressure",
-                  value: computed.billsMonthlyPressure,
-                  pct: computed.incomeMonth > 0 ? pct(computed.billsMonthlyPressure, computed.incomeMonth) : 0,
-                  fill: "linear-gradient(180deg, rgba(251,191,36,.88), rgba(245,158,11,.82))",
-                },
-                {
-                  label: "Actual spending",
-                  value: computed.spendingActual,
-                  pct: computed.incomeMonth > 0 ? pct(computed.spendingActual, computed.incomeMonth) : 0,
-                  fill: "linear-gradient(180deg, rgba(96,165,250,.92), rgba(59,130,246,.84))",
-                },
-                {
-                  label: "Planned spending",
-                  value: computed.plannedMonth,
-                  pct: computed.incomeMonth > 0 ? pct(computed.plannedMonth, computed.incomeMonth) : 0,
-                  fill: "linear-gradient(180deg, rgba(192,132,252,.88), rgba(168,85,247,.78))",
-                },
-              ].map((row) => (
-                <div key={row.label} style={{ display: "grid", gap: 8 }}>
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      gap: 10,
-                      alignItems: "baseline",
-                    }}
-                  >
-                    <div style={{ fontWeight: 800 }}>{row.label}</div>
-                    <div className="muted" style={{ fontWeight: 900 }}>
-                      {money(row.value)}
-                    </div>
-                  </div>
-
-                  <div
-                    style={{
-                      height: 10,
-                      borderRadius: 999,
-                      border: "1px solid rgba(255,255,255,.08)",
-                      overflow: "hidden",
-                      background: "rgba(255,255,255,.05)",
-                    }}
-                  >
-                    <div
-                      style={{
-                        height: "100%",
-                        width: `${clamp(row.pct, 0, 100)}%`,
-                        background: row.fill,
-                      }}
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <div style={{ height: 14 }} />
-
-            <div
-              className="card"
-              style={{
-                padding: 12,
-                borderRadius: 18,
-                background:
-                  computed.projectedMonthCashFlow < 0
-                    ? "linear-gradient(180deg, rgba(127,29,29,.1), rgba(10,16,32,.9))"
-                    : "linear-gradient(180deg, rgba(20,83,45,.1), rgba(10,16,32,.9))",
-                border:
-                  computed.projectedMonthCashFlow < 0
-                    ? "1px solid rgba(239,68,68,.14)"
-                    : "1px solid rgba(34,197,94,.14)",
-              }}
-            >
-              <div className="muted" style={{ fontSize: 12 }}>Projected after planned spending</div>
-              <div
-                style={{
-                  fontWeight: 950,
-                  fontSize: 24,
                   marginTop: 6,
-                  color: computed.projectedMonthCashFlow < 0 ? "rgb(252 165 165)" : "rgb(134 239 172)",
+                  fontSize: 13,
+                  color: "rgba(255,255,255,0.74)",
                 }}
               >
-                {money(computed.projectedMonthCashFlow)}
+                {pageError}
               </div>
-            </div>
-          </div>
+            </Pane>
+          ) : null}
 
-          <div className="card" style={{ ...shellCard, padding: 16, borderRadius: 24 }}>
-            <div style={{ fontWeight: 900, fontSize: 18 }}>What is driving the month</div>
-            <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
-              Kept lower on purpose. Useful, but not dashboard-first.
-            </div>
+          <HeaderBar
+            monthLabel={computed.monthLabel}
+            primaryName={computed.primaryName}
+          />
 
-            <div style={{ height: 12 }} />
+          <section
+            style={{
+              display: "grid",
+              gridTemplateColumns:
+                "repeat(auto-fit, minmax(min(100%, 220px), 1fr))",
+              gap: 12,
+              alignItems: "stretch",
+            }}
+          >
+            <StatCard
+              label="Net Worth"
+              value={money(computed.netWorth)}
+              detail="Assets minus credit debt"
+              tone="ice"
+            />
 
-            <div className="grid" style={{ gap: 10 }}>
-              <div
-                className="card"
-                style={{
-                  padding: 12,
-                  borderRadius: 18,
-                  background: "linear-gradient(180deg, rgba(10,16,32,.84), rgba(6,11,24,.95))",
-                  border: "1px solid rgba(96,165,250,.08)",
-                }}
-              >
-                <div className="muted" style={{ fontSize: 12 }}>Largest bill pressure</div>
-                <div style={{ fontWeight: 900, fontSize: 18, marginTop: 6 }}>
-                  {computed.biggestBill ? computed.biggestBill.name : "—"}
-                </div>
-                <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
-                  {computed.biggestBill
-                    ? `${money(
-                        computed.biggestBill.type === "controllable"
-                          ? safeNum(computed.biggestBill.minPay, 0) + safeNum(computed.biggestBill.extraPay, 0)
-                          : safeNum(computed.biggestBill.amount, 0) * freqToMonthlyMult(computed.biggestBill.frequency)
-                      )} monthly pressure`
-                    : "No bills loaded"}
-                </div>
-              </div>
+            <StatCard
+              label="Account Balances"
+              value={money(computed.accountBalancesExInvestments)}
+              detail="Non-investment balances across your accounts"
+              tone="ice"
+              badge={computed.investmentTotal > 0 ? "investments excluded" : ""}
+            />
 
-              <div
-                className="card"
-                style={{
-                  padding: 12,
-                  borderRadius: 18,
-                  background: "linear-gradient(180deg, rgba(10,16,32,.84), rgba(6,11,24,.95))",
-                  border: "1px solid rgba(96,165,250,.08)",
-                }}
-              >
-                <div className="muted" style={{ fontSize: 12 }}>Income sources</div>
-                {computed.topIncomeSources.length === 0 ? (
-                  <div style={{ fontWeight: 900, fontSize: 18, marginTop: 6 }}>
-                    No income logged
-                  </div>
+            <StatCard
+              label="Alerts"
+              value={computed.alertValue}
+              detail={
+                computed.alertCount > 0
+                  ? `${computed.alertCount} active signal(s)`
+                  : "No immediate alarms"
+              }
+              badge={computed.alertCount > 0 ? `${computed.alertCount} active` : ""}
+              tone={computed.alertTone}
+              onClick={() => setAlertsOpen(true)}
+              footerText="View issues"
+            />
+          </section>
+
+          <ActionStrip
+            action={computed.nextAction}
+            cashPosition={computed.accountBalancesExInvestments}
+            cashMovement={computed.cashMovement}
+            dueSoonTotal={computed.dueSoonTotal}
+            alertCount={computed.alertCount}
+            onOpenAlerts={() => setAlertsOpen(true)}
+          />
+
+          <CashMovementChart
+            points={computed.chartPoints}
+            chartValue={computed.chartValue}
+            chartTone={computed.chartTone}
+          />
+
+          <section
+            style={{
+              display: "grid",
+              gridTemplateColumns:
+                "repeat(auto-fit, minmax(min(100%, 320px), 1fr))",
+              gap: 14,
+              alignItems: "start",
+            }}
+          >
+            <Pane
+              padding={18}
+              radius={28}
+              overlayOpacity={0.56}
+              style={{
+                background: `
+                  linear-gradient(
+                    180deg,
+                    rgba(255,255,255,0.03) 0%,
+                    rgba(255,255,255,0.008) 10%,
+                    rgba(255,255,255,0) 22%
+                  ),
+                  rgba(5,8,12,0.08)
+                `,
+              }}
+            >
+              <SectionHeader
+                title="Top Accounts"
+                subcopy="Largest balances sitting on the board right now."
+              />
+
+              <div style={{ display: "grid", gap: 10 }}>
+                {computed.topAccounts.length === 0 ? (
+                  <Pane tone="amber" padding={14} radius={18}>
+                    <div style={{ fontWeight: 900, fontSize: 15, color: "#fff" }}>
+                      No accounts yet
+                    </div>
+                    <div
+                      style={{
+                        marginTop: 6,
+                        fontSize: 13,
+                        color: "rgba(255,255,255,0.72)",
+                      }}
+                    >
+                      Add accounts so this panel actually has something real to show.
+                    </div>
+                  </Pane>
                 ) : (
-                  <div className="grid" style={{ gap: 8, marginTop: 8 }}>
-                    {computed.topIncomeSources.map((s) => (
-                      <div
-                        key={s.source}
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          gap: 10,
-                          alignItems: "center",
-                        }}
-                      >
-                        <div style={{ fontWeight: 800 }}>{s.source}</div>
-                        <div className="muted" style={{ fontWeight: 900 }}>
-                          {money(s.total)}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+                  computed.topAccounts.map((account) => (
+                    <AccountRow
+                      key={account.id}
+                      name={account.name}
+                      sub={String(account.type || "other")}
+                      balance={money(account.balance)}
+                      tone={
+                        String(account.type || "").toLowerCase() === "credit"
+                          ? "red"
+                          : String(account.type || "").toLowerCase() === "investment"
+                          ? "green"
+                          : "ice"
+                      }
+                    />
+                  ))
+                )}
+              </div>
+
+              <div style={{ marginTop: 14 }}>
+                <LinkButton href="/accounts" full>
+                  Open accounts
+                </LinkButton>
+              </div>
+            </Pane>
+
+            <Pane
+              padding={18}
+              radius={28}
+              overlayOpacity={0.56}
+              style={{
+                background: `
+                  linear-gradient(
+                    180deg,
+                    rgba(255,255,255,0.03) 0%,
+                    rgba(255,255,255,0.008) 10%,
+                    rgba(255,255,255,0) 22%
+                  ),
+                  rgba(5,8,12,0.08)
+                `,
+              }}
+            >
+              <SectionHeader
+                title="Recent Transactions"
+                subcopy="Latest movement across income, spending, and upcoming due items."
+              />
+
+              <div style={{ display: "grid", gap: 10 }}>
+                {computed.recentActivity.length === 0 ? (
+                  <Pane tone="amber" padding={14} radius={18}>
+                    <div style={{ fontWeight: 900, fontSize: 15, color: "#fff" }}>
+                      No recent activity
+                    </div>
+                    <div
+                      style={{
+                        marginTop: 6,
+                        fontSize: 13,
+                        color: "rgba(255,255,255,0.72)",
+                      }}
+                    >
+                      Log income or spending and this panel will start to look alive.
+                    </div>
+                  </Pane>
+                ) : (
+                  computed.recentActivity.map((item) => (
+                    <ActivityRow
+                      key={item.id}
+                      title={item.title}
+                      detail={item.detail}
+                      amount={item.amount}
+                      tone={item.tone}
+                    />
+                  ))
                 )}
               </div>
 
               <div
-                className="card"
                 style={{
-                  padding: 12,
-                  borderRadius: 18,
-                  background: "linear-gradient(180deg, rgba(10,16,32,.84), rgba(6,11,24,.95))",
-                  border: "1px solid rgba(96,165,250,.08)",
+                  marginTop: 14,
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(132px, 1fr))",
+                  gap: 10,
                 }}
               >
-                <div className="muted" style={{ fontSize: 12 }}>Spending page income entries</div>
-                <div style={{ fontWeight: 900, fontSize: 18, marginTop: 6 }}>
-                  {money(computed.spendingIncomeLoggedOnSpendingPage)}
-                </div>
-                <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
-                  Separate from Income page deposits.
-                </div>
+                <LinkButton href="/bills">Bills</LinkButton>
+                <LinkButton href="/income">Income</LinkButton>
+                <LinkButton href="/spending">Spending</LinkButton>
+                <LinkButton href="/investments">Investments</LinkButton>
               </div>
-            </div>
-          </div>
-
-          {accounts.length === 0 ? (
-            <div className="card" style={{ padding: 16, borderRadius: 24 }}>
-              <div style={{ fontWeight: 900 }}>Setup required</div>
-              <div className="muted" style={{ marginTop: 8 }}>
-                Add accounts first so this page can show your actual standing.
-              </div>
-              <div style={{ height: 12 }} />
-              <Link className="btn" href="/accounts" style={actionBtn}>
-                Go to Accounts
-              </Link>
-            </div>
-          ) : null}
+            </Pane>
+          </section>
         </div>
-      </section>
-    </main>
+      </main>
+    </>
   );
 }

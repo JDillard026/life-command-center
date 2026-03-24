@@ -47,6 +47,16 @@ export default function AppShell({ children }) {
       <div
         className={`app-shell ${desktopCollapsed ? "sidebar-collapsed" : ""}`}
       >
+        <div className="shell-cosmos" aria-hidden="true">
+          <div className="shell-cosmos__void" />
+          <div className="shell-cosmos__nebula" />
+          <div className="shell-cosmos__stars shell-cosmos__stars--a" />
+          <div className="shell-cosmos__stars shell-cosmos__stars--b" />
+          <div className="shell-cosmos__stars shell-cosmos__stars--c" />
+          <div className="shell-cosmos__dust" />
+          <div className="shell-cosmos__vignette" />
+        </div>
+
         <header className="mobile-topbar lg:hidden">
           <button
             type="button"
@@ -60,7 +70,12 @@ export default function AppShell({ children }) {
             <span />
           </button>
 
-          <div className="mobile-topbar__brand">LCC</div>
+          <div className="mobile-topbar__brand">
+            <span className="mobile-topbar__brand-mark">LCC</span>
+            <span className="mobile-topbar__brand-text">
+              Life Command Center
+            </span>
+          </div>
 
           <div className="mobile-topbar__spacer" />
         </header>

@@ -8,16 +8,16 @@ import {
   CreditCard,
   Gem,
   LayoutDashboard,
+  PanelLeftClose,
+  PanelLeftOpen,
   PiggyBank,
   Receipt,
   Shield,
   Target,
   TrendingUp,
+  TriangleAlert,
   UserCircle2,
   Wallet,
-  PanelLeftClose,
-  PanelLeftOpen,
-  TriangleAlert,
   X,
 } from "lucide-react";
 
@@ -28,10 +28,10 @@ const NAV_ITEMS = [
     subtitle: "Today + next moves",
     icon: LayoutDashboard,
     accent: {
-      icon: "#7ea7ff",
-      ring: "rgba(82,122,255,0.18)",
-      glow: "rgba(82,122,255,0.18)",
-      border: "rgba(110,145,255,0.42)",
+      icon: "#f4f7ff",
+      ring: "rgba(255,255,255,0.16)",
+      glow: "rgba(255,255,255,0.10)",
+      border: "rgba(255,255,255,0.16)",
     },
   },
   {
@@ -40,10 +40,10 @@ const NAV_ITEMS = [
     subtitle: "Timeline + recurring",
     icon: CalendarDays,
     accent: {
-      icon: "#45e7df",
-      ring: "rgba(31,211,201,0.18)",
-      glow: "rgba(31,211,201,0.18)",
-      border: "rgba(75,231,223,0.34)",
+      icon: "#83f3ff",
+      ring: "rgba(131,243,255,0.16)",
+      glow: "rgba(131,243,255,0.11)",
+      border: "rgba(131,243,255,0.18)",
     },
   },
   {
@@ -52,10 +52,10 @@ const NAV_ITEMS = [
     subtitle: "Balances + cash view",
     icon: Wallet,
     accent: {
-      icon: "#e7edf8",
-      ring: "rgba(205,217,234,0.14)",
-      glow: "rgba(205,217,234,0.10)",
-      border: "rgba(205,217,234,0.24)",
+      icon: "#eef2ff",
+      ring: "rgba(238,242,255,0.14)",
+      glow: "rgba(238,242,255,0.08)",
+      border: "rgba(238,242,255,0.15)",
     },
   },
   {
@@ -64,10 +64,10 @@ const NAV_ITEMS = [
     subtitle: "Due dates + payments",
     icon: Receipt,
     accent: {
-      icon: "#ffc86b",
-      ring: "rgba(255,193,92,0.16)",
-      glow: "rgba(255,193,92,0.16)",
-      border: "rgba(255,200,107,0.34)",
+      icon: "#ffc978",
+      ring: "rgba(255,201,120,0.16)",
+      glow: "rgba(255,201,120,0.10)",
+      border: "rgba(255,201,120,0.18)",
     },
   },
   {
@@ -76,10 +76,10 @@ const NAV_ITEMS = [
     subtitle: "Payoff + balances",
     icon: CreditCard,
     accent: {
-      icon: "#ffb4c0",
-      ring: "rgba(255,127,149,0.16)",
-      glow: "rgba(255,127,149,0.16)",
-      border: "rgba(255,180,192,0.32)",
+      icon: "#ff9cb0",
+      ring: "rgba(255,156,176,0.16)",
+      glow: "rgba(255,156,176,0.10)",
+      border: "rgba(255,156,176,0.18)",
     },
   },
   {
@@ -88,10 +88,10 @@ const NAV_ITEMS = [
     subtitle: "Pay + goals",
     icon: Gem,
     accent: {
-      icon: "#7ff0b5",
-      ring: "rgba(69,225,143,0.16)",
-      glow: "rgba(69,225,143,0.16)",
-      border: "rgba(127,240,181,0.32)",
+      icon: "#7cf0b0",
+      ring: "rgba(124,240,176,0.16)",
+      glow: "rgba(124,240,176,0.10)",
+      border: "rgba(124,240,176,0.18)",
     },
   },
   {
@@ -100,10 +100,10 @@ const NAV_ITEMS = [
     subtitle: "Daily control center",
     icon: PiggyBank,
     accent: {
-      icon: "#5ce9de",
-      ring: "rgba(56,219,208,0.16)",
-      glow: "rgba(56,219,208,0.16)",
-      border: "rgba(92,233,222,0.32)",
+      icon: "#7cf6ed",
+      ring: "rgba(124,246,237,0.16)",
+      glow: "rgba(124,246,237,0.10)",
+      border: "rgba(124,246,237,0.18)",
     },
   },
   {
@@ -113,10 +113,10 @@ const NAV_ITEMS = [
     icon: TrendingUp,
     badge: "LIVE",
     accent: {
-      icon: "#d7e4ff",
-      ring: "rgba(103,137,255,0.22)",
-      glow: "rgba(103,137,255,0.16)",
-      border: "rgba(140,170,255,0.34)",
+      icon: "#f5f8ff",
+      ring: "rgba(245,248,255,0.14)",
+      glow: "rgba(245,248,255,0.09)",
+      border: "rgba(245,248,255,0.16)",
     },
   },
   {
@@ -125,10 +125,10 @@ const NAV_ITEMS = [
     subtitle: "Targets + progress",
     icon: Target,
     accent: {
-      icon: "#88f7b8",
-      ring: "rgba(66,228,136,0.16)",
-      glow: "rgba(66,228,136,0.16)",
-      border: "rgba(136,247,184,0.30)",
+      icon: "#93ffbb",
+      ring: "rgba(147,255,187,0.16)",
+      glow: "rgba(147,255,187,0.10)",
+      border: "rgba(147,255,187,0.18)",
     },
   },
   {
@@ -137,10 +137,10 @@ const NAV_ITEMS = [
     subtitle: "Restricted controls",
     icon: Shield,
     accent: {
-      icon: "#ffcf70",
-      ring: "rgba(255,207,112,0.18)",
-      glow: "rgba(255,207,112,0.16)",
-      border: "rgba(255,207,112,0.32)",
+      icon: "#ffd17d",
+      ring: "rgba(255,209,125,0.16)",
+      glow: "rgba(255,209,125,0.10)",
+      border: "rgba(255,209,125,0.18)",
     },
   },
   {
@@ -149,10 +149,10 @@ const NAV_ITEMS = [
     subtitle: "Profile + app preferences",
     icon: UserCircle2,
     accent: {
-      icon: "#dce6ff",
-      ring: "rgba(181,203,255,0.16)",
-      glow: "rgba(131,163,255,0.14)",
-      border: "rgba(181,203,255,0.28)",
+      icon: "#e8edf8",
+      ring: "rgba(232,237,248,0.14)",
+      glow: "rgba(232,237,248,0.08)",
+      border: "rgba(232,237,248,0.15)",
     },
   },
 ];
@@ -168,21 +168,21 @@ function NavIndicator({ item, active }) {
   if (isAdmin && active) {
     return (
       <div
-        className="flex h-[32px] w-[32px] shrink-0 items-center justify-center rounded-full border transition-all duration-300"
+        className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-full border transition-all duration-300"
         style={{
-          borderColor: "rgba(255,207,112,0.38)",
+          borderColor: "rgba(255,209,125,0.22)",
           background:
-            "linear-gradient(180deg, rgba(34,27,14,0.96), rgba(20,16,9,0.98))",
+            "linear-gradient(180deg, rgba(23,18,10,0.96), rgba(12,9,5,0.98))",
           boxShadow:
-            "0 0 16px rgba(255,207,112,0.18), inset 0 0 10px rgba(255,255,255,0.02)",
+            "0 0 18px rgba(255,209,125,0.10), inset 0 1px 0 rgba(255,255,255,0.04)",
         }}
       >
         <TriangleAlert
           className="h-[14px] w-[14px]"
           strokeWidth={2.2}
           style={{
-            color: "#ffcf70",
-            filter: "drop-shadow(0 0 6px rgba(255,207,112,0.45))",
+            color: "#ffd17d",
+            filter: "drop-shadow(0 0 6px rgba(255,209,125,0.28))",
           }}
         />
       </div>
@@ -191,25 +191,25 @@ function NavIndicator({ item, active }) {
 
   return (
     <div
-      className="flex h-[32px] w-[32px] shrink-0 items-center justify-center rounded-full border transition-all duration-300"
+      className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-full border transition-all duration-300"
       style={{
-        borderColor: active ? item.accent.border : "rgba(255,255,255,0.08)",
+        borderColor: active ? item.accent.border : "rgba(255,255,255,0.07)",
         background: active
-          ? "linear-gradient(180deg, rgba(18,28,48,0.96), rgba(10,16,30,0.98))"
-          : "linear-gradient(180deg, rgba(15,22,38,0.74), rgba(10,16,28,0.92))",
+          ? "linear-gradient(180deg, rgba(18,20,26,0.98), rgba(8,10,14,0.98))"
+          : "linear-gradient(180deg, rgba(12,14,19,0.88), rgba(6,8,12,0.94))",
         boxShadow: active
-          ? `0 0 14px ${item.accent.glow}, inset 0 0 10px rgba(255,255,255,0.02)`
-          : "none",
+          ? `0 0 18px ${item.accent.glow}, inset 0 1px 0 rgba(255,255,255,0.04)`
+          : "inset 0 1px 0 rgba(255,255,255,0.03)",
       }}
     >
       <span
         className="block rounded-full transition-all duration-300"
         style={{
-          width: active ? "10px" : "7px",
-          height: active ? "10px" : "7px",
-          background: active ? item.accent.icon : "rgba(255,255,255,0.28)",
+          width: active ? 10 : 7,
+          height: active ? 10 : 7,
+          background: active ? item.accent.icon : "rgba(255,255,255,0.24)",
           boxShadow: active
-            ? `0 0 0 5px ${item.accent.glow}, 0 0 14px ${item.accent.icon}`
+            ? `0 0 0 6px ${item.accent.glow}, 0 0 14px ${item.accent.icon}`
             : "none",
         }}
       />
@@ -226,28 +226,28 @@ function NavCard({ item, active, collapsed = false, onNavigate }) {
       title={item.label}
       onClick={onNavigate}
       className={[
-        "group relative block w-full overflow-hidden rounded-[24px] border transition-all duration-300",
+        "group relative block w-full overflow-hidden rounded-[26px] border transition-all duration-300",
         "px-4 py-3.5",
         collapsed ? "lg:px-3" : "",
       ].join(" ")}
       style={{
         background: active
-          ? "linear-gradient(180deg, rgba(10,18,38,0.98), rgba(5,10,22,1))"
-          : "linear-gradient(180deg, rgba(5,11,24,0.92), rgba(2,7,16,0.98))",
-        borderColor: active ? item.accent.border : "rgba(255,255,255,0.07)",
+          ? "linear-gradient(180deg, rgba(12,14,19,0.94), rgba(5,7,10,0.98))"
+          : "linear-gradient(180deg, rgba(10,12,17,0.84), rgba(4,6,9,0.94))",
+        borderColor: active ? item.accent.border : "rgba(255,255,255,0.06)",
         boxShadow: active
-          ? `0 0 0 1px ${item.accent.border}, 0 0 28px ${item.accent.glow}, 0 0 56px rgba(22,30,60,0.34), inset 0 1px 0 rgba(255,255,255,0.05)`
-          : "0 12px 24px rgba(0,0,0,0.24), inset 0 1px 0 rgba(255,255,255,0.03)",
+          ? `0 0 0 1px ${item.accent.border}, 0 18px 38px rgba(0,0,0,0.34), 0 0 26px ${item.accent.glow}, inset 0 1px 0 rgba(255,255,255,0.05)`
+          : "0 14px 26px rgba(0,0,0,0.24), inset 0 1px 0 rgba(255,255,255,0.03)",
       }}
     >
-      {active && !collapsed && (
-        <div
-          className="pointer-events-none absolute inset-0 rounded-[24px]"
-          style={{
-            background: `radial-gradient(circle at 78% 50%, ${item.accent.glow}, transparent 30%), radial-gradient(circle at 20% 50%, rgba(255,255,255,0.03), transparent 42%)`,
-          }}
-        />
-      )}
+      <div
+        className="pointer-events-none absolute inset-0 rounded-[26px]"
+        style={{
+          background: active
+            ? `linear-gradient(135deg, rgba(255,255,255,0.06), rgba(255,255,255,0.01) 20%, transparent 44%), radial-gradient(circle at 84% 50%, ${item.accent.glow}, transparent 26%)`
+            : "linear-gradient(135deg, rgba(255,255,255,0.035), rgba(255,255,255,0.008) 20%, transparent 44%)",
+        }}
+      />
 
       <div
         className={[
@@ -257,19 +257,19 @@ function NavCard({ item, active, collapsed = false, onNavigate }) {
       >
         <div
           className={[
-            "flex h-[50px] w-[50px] shrink-0 items-center justify-center rounded-[16px] border",
-            collapsed ? "lg:h-[54px] lg:w-[54px]" : "",
+            "flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-[18px] border",
+            collapsed ? "lg:h-[56px] lg:w-[56px]" : "",
           ].join(" ")}
           style={{
             borderColor: item.accent.ring,
             background:
-              "linear-gradient(180deg, rgba(8,14,28,0.98), rgba(4,9,18,0.98))",
-            boxShadow: `0 0 18px ${item.accent.glow}`,
+              "linear-gradient(180deg, rgba(16,18,24,0.96), rgba(7,9,13,0.98))",
+            boxShadow: `0 0 20px ${item.accent.glow}, inset 0 1px 0 rgba(255,255,255,0.04)`,
           }}
         >
           <Icon
             className="h-[19px] w-[19px]"
-            strokeWidth={2.15}
+            strokeWidth={2.1}
             style={{ color: item.accent.icon }}
           />
         </div>
@@ -278,7 +278,7 @@ function NavCard({ item, active, collapsed = false, onNavigate }) {
           <div className="text-[15px] font-black leading-[1.02] tracking-[-0.025em] text-white">
             {item.label}
           </div>
-          <div className="mt-0.5 text-[12px] font-medium leading-[1.15] text-white/62">
+          <div className="mt-0.5 text-[12px] font-medium leading-[1.15] text-white/56">
             {item.subtitle}
           </div>
         </div>
@@ -293,12 +293,12 @@ function NavCard({ item, active, collapsed = false, onNavigate }) {
             <div
               className="rounded-full border px-2 py-0.5 text-[10px] font-black tracking-[0.13em] text-white"
               style={{
-                borderColor: active
-                  ? "rgba(116,149,255,0.28)"
-                  : "rgba(255,255,255,0.10)",
+                borderColor: "rgba(124,240,176,0.18)",
                 background:
-                  "linear-gradient(180deg, rgba(17,24,41,0.90), rgba(10,16,30,0.98))",
-                boxShadow: active ? "0 0 10px rgba(70,108,255,0.12)" : "none",
+                  "linear-gradient(180deg, rgba(11,18,14,0.92), rgba(7,10,8,0.98))",
+                boxShadow: active
+                  ? "0 0 12px rgba(124,240,176,0.08)"
+                  : "none",
               }}
             >
               {item.badge}
@@ -329,8 +329,9 @@ export default function SideNav({
       <div className="side-nav-grid" />
       <div className="side-nav-stars" />
 
-      <div className="pointer-events-none absolute -left-24 top-0 h-56 w-56 rounded-full bg-blue-500/12 blur-3xl" />
-      <div className="pointer-events-none absolute bottom-12 right-0 h-64 w-64 rounded-full bg-cyan-400/8 blur-3xl" />
+      <div className="pointer-events-none absolute -left-16 top-6 h-48 w-48 rounded-full bg-white/[0.035] blur-3xl" />
+      <div className="pointer-events-none absolute bottom-10 right-[-40px] h-56 w-56 rounded-full bg-emerald-300/[0.035] blur-3xl" />
+      <div className="pointer-events-none absolute right-8 top-20 h-40 w-40 rounded-full bg-amber-200/[0.025] blur-3xl" />
 
       <div
         className={[
@@ -340,14 +341,14 @@ export default function SideNav({
       >
         <div
           className={[
-            "mb-4 rounded-[26px] border border-white/10 p-4 transition-all duration-300",
+            "mb-4 rounded-[28px] border border-white/10 p-4 transition-all duration-300",
             collapsed ? "lg:px-2.5 lg:py-3" : "",
           ].join(" ")}
           style={{
             background:
-              "linear-gradient(180deg, rgba(7,14,28,0.92), rgba(3,8,18,0.96))",
+              "linear-gradient(180deg, rgba(10,12,17,0.88), rgba(5,6,9,0.96))",
             boxShadow:
-              "0 12px 28px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.04)",
+              "0 18px 34px rgba(0,0,0,0.34), inset 0 1px 0 rgba(255,255,255,0.05)",
           }}
         >
           <div
@@ -359,29 +360,29 @@ export default function SideNav({
             ].join(" ")}
           >
             <div
-              className="relative flex h-[72px] w-[72px] shrink-0 items-center justify-center overflow-hidden rounded-[22px] border border-white/14"
+              className="relative flex h-[74px] w-[74px] shrink-0 items-center justify-center overflow-hidden rounded-[24px] border border-white/12"
               style={{
                 background:
-                  "radial-gradient(circle at 50% 35%, rgba(86,140,255,0.20), transparent 58%), linear-gradient(180deg, rgba(16,26,46,0.98), rgba(6,11,20,1))",
+                  "linear-gradient(180deg, rgba(20,22,28,0.96), rgba(7,8,12,1))",
                 boxShadow:
-                  "0 0 0 1px rgba(108,142,255,0.06), 0 0 18px rgba(73,110,220,0.11), inset 0 1px 0 rgba(255,255,255,0.06)",
+                  "0 0 0 1px rgba(255,255,255,0.03), 0 18px 28px rgba(0,0,0,0.34), inset 0 1px 0 rgba(255,255,255,0.06)",
               }}
             >
               <Image
                 src="/brand/lcc-logo.png"
                 alt="Life Command Center logo"
                 fill
-                sizes="72px"
+                sizes="74px"
                 className="object-contain p-2.5"
                 priority
               />
             </div>
 
             <div className={["min-w-0 flex-1", collapsed ? "lg:hidden" : ""].join(" ")}>
-              <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.26em] text-[#7fb2ff]">
+              <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.26em] text-white/48">
                 Financial OS
               </div>
-              <div className="text-[15px] font-black leading-[0.98] tracking-[-0.03em] text-white">
+              <div className="text-[16px] font-black leading-[0.98] tracking-[-0.03em] text-white">
                 Life Command
                 <br />
                 Center
@@ -392,7 +393,7 @@ export default function SideNav({
               <button
                 type="button"
                 onClick={onToggle}
-                className="hidden h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] text-white/72 transition hover:bg-white/[0.07] lg:flex"
+                className="hidden h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.035] text-white/72 transition hover:bg-white/[0.06] lg:flex"
                 aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
                 title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
               >
@@ -406,7 +407,7 @@ export default function SideNav({
               <button
                 type="button"
                 onClick={onCloseMobile}
-                className="flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] text-white/72 transition hover:bg-white/[0.07] lg:hidden"
+                className="flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.035] text-white/72 transition hover:bg-white/[0.06] lg:hidden"
                 aria-label="Close navigation"
                 title="Close navigation"
               >
@@ -418,7 +419,7 @@ export default function SideNav({
 
         <div
           className={[
-            "mb-3 px-1 text-[11px] font-bold uppercase tracking-[0.30em] text-white/42",
+            "mb-3 px-1 text-[11px] font-bold uppercase tracking-[0.30em] text-white/34",
             collapsed ? "lg:hidden" : "",
           ].join(" ")}
         >
