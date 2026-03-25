@@ -3,10 +3,14 @@
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import SideNav from "./SideNav";
-import RippleProvider from "./RippleProvider";
 import AiHelpPanel from "./AiHelpPanel";
+import styles from "./AppShell.module.css";
 
 const SIDEBAR_STORAGE_KEY = "lcc-sidebar-collapsed";
+
+function cx(...names) {
+  return names.filter(Boolean).join(" ");
+}
 
 export default function AppShell({ children }) {
   const pathname = usePathname() || "";
@@ -36,58 +40,68 @@ export default function AppShell({ children }) {
   }, [desktopCollapsed]);
 
   useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = mobileOpen ? "hidden" : "";
     return () => {
-      document.body.style.overflow = "";
+      document.body.style.overflow = previousOverflow;
     };
   }, [mobileOpen]);
 
   return (
-    <RippleProvider>
-      <div
-        className={`app-shell ${desktopCollapsed ? "sidebar-collapsed" : ""}`}
-      >
-        <div className="shell-cosmos" aria-hidden="true">
-          <div className="shell-cosmos__void" />
-          <div className="shell-cosmos__nebula" />
-          <div className="shell-cosmos__stars shell-cosmos__stars--a" />
-          <div className="shell-cosmos__stars shell-cosmos__stars--b" />
-          <div className="shell-cosmos__stars shell-cosmos__stars--c" />
-          <div className="shell-cosmos__dust" />
-          <div className="shell-cosmos__vignette" />
+    <div
+      className={cx(
+        styles.shell,
+        desktopCollapsed && styles.shellCollapsed
+      )}
+    >
+      <div className={styles.cosmos} aria-hidden="true">
+        <div className={styles.voidLayer} />
+        <div className={styles.dustLayerA} />
+        <div className={styles.dustLayerB} />
+        <div className={styles.starFieldFar} />
+        <div className={styles.starFieldMid} />
+        <div className={styles.starFieldNear} />
+        <div className={styles.vignette} />
+      </div>
+
+      <header className={styles.mobileTopbar}>
+        <button
+          type="button"
+          className={styles.mobileMenuButton}
+          aria-label="Open navigation"
+          aria-expanded={mobileOpen}
+          onClick={() => setMobileOpen(true)}
+        >
+          <span />
+          <span />
+          <span />
+        </button>
+
+        <div className={styles.mobileBrand}>
+          <div className={styles.mobileBrandMark}>LCC</div>
+          <div className={styles.mobileBrandText}>
+            Life Command Center
+          </div>
         </div>
 
-        <header className="mobile-topbar lg:hidden">
-          <button
-            type="button"
-            className="mobile-topbar__menu"
-            aria-label="Open navigation"
-            aria-expanded={mobileOpen}
-            onClick={() => setMobileOpen(true)}
-          >
-            <span />
-            <span />
-            <span />
-          </button>
+        <div className={styles.mobileTopbarSpacer} />
+      </header>
 
-          <div className="mobile-topbar__brand">
-            <span className="mobile-topbar__brand-mark">LCC</span>
-            <span className="mobile-topbar__brand-text">
-              Life Command Center
-            </span>
-          </div>
+      <div
+        className={cx(
+          styles.mobileOverlay,
+          mobileOpen && styles.mobileOverlayOpen
+        )}
+        onClick={() => setMobileOpen(false)}
+        aria-hidden={!mobileOpen}
+      />
 
-          <div className="mobile-topbar__spacer" />
-        </header>
-
-        <div
-          className={`mobile-overlay ${mobileOpen ? "is-open" : ""}`}
-          onClick={() => setMobileOpen(false)}
-          aria-hidden={!mobileOpen}
-        />
-
+      <div className={styles.layout}>
         <aside
-          className={`app-sidebar ${mobileOpen ? "is-open" : ""}`}
+          className={cx(
+            styles.sidebar,
+            mobileOpen && styles.sidebarOpen
+          )}
           aria-label="Primary navigation"
         >
           <SideNav
@@ -97,14 +111,14 @@ export default function AppShell({ children }) {
           />
         </aside>
 
-        <main className="app-main">
-          <div className="app-page">{children}</div>
+        <main className={styles.main}>
+          <div className={styles.page}>{children}</div>
         </main>
 
-        <div className="app-ai-rail hidden 2xl:block">
+        <aside className={styles.aiRail}>
           <AiHelpPanel />
-        </div>
+        </aside>
       </div>
-    </RippleProvider>
+    </div>
   );
 }

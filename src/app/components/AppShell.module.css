@@ -1,0 +1,352 @@
+.shell {
+  --shell-pad: clamp(14px, 1.8vw, 24px);
+  --sidebar-width: 320px;
+  position: relative;
+  min-height: 100vh;
+  isolation: isolate;
+  color: #f7fbff;
+}
+
+.shellCollapsed {
+  --sidebar-width: 108px;
+}
+
+.cosmos {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 18% 12%, rgba(132, 161, 218, 0.10), transparent 22%),
+    radial-gradient(circle at 74% 18%, rgba(255, 255, 255, 0.07), transparent 16%),
+    radial-gradient(circle at 66% 72%, rgba(90, 116, 162, 0.08), transparent 22%),
+    linear-gradient(180deg, #02060d 0%, #030813 35%, #02060d 100%);
+}
+
+.voidLayer {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 50% -8%, rgba(255,255,255,0.05), transparent 26%),
+    radial-gradient(circle at 48% 24%, rgba(77, 102, 144, 0.10), transparent 30%),
+    radial-gradient(circle at 20% 78%, rgba(26, 41, 65, 0.18), transparent 22%),
+    radial-gradient(circle at 84% 84%, rgba(17, 28, 48, 0.20), transparent 24%);
+  opacity: 0.95;
+}
+
+.dustLayerA,
+.dustLayerB {
+  position: absolute;
+  inset: -6%;
+  filter: blur(52px);
+  opacity: 0.85;
+  mix-blend-mode: screen;
+  animation: drift 22s ease-in-out infinite alternate;
+}
+
+.dustLayerA {
+  background:
+    radial-gradient(circle at 24% 18%, rgba(255,255,255,0.08), transparent 15%),
+    radial-gradient(circle at 52% 10%, rgba(168, 189, 225, 0.10), transparent 20%),
+    radial-gradient(circle at 72% 64%, rgba(130, 152, 196, 0.08), transparent 18%);
+}
+
+.dustLayerB {
+  animation-duration: 30s;
+  animation-delay: -6s;
+  background:
+    radial-gradient(circle at 16% 70%, rgba(255,255,255,0.05), transparent 14%),
+    radial-gradient(circle at 46% 42%, rgba(133, 158, 201, 0.08), transparent 18%),
+    radial-gradient(circle at 86% 26%, rgba(255,255,255,0.05), transparent 12%);
+}
+
+.starFieldFar,
+.starFieldMid,
+.starFieldNear {
+  position: absolute;
+  inset: 0;
+  background-repeat: no-repeat;
+}
+
+.starFieldFar {
+  opacity: 0.42;
+  background-image:
+    radial-gradient(circle at 4% 24%, rgba(255,255,255,0.55) 0 0.7px, transparent 1.2px),
+    radial-gradient(circle at 8% 8%, rgba(255,255,255,0.45) 0 0.8px, transparent 1.4px),
+    radial-gradient(circle at 12% 66%, rgba(255,255,255,0.50) 0 0.8px, transparent 1.4px),
+    radial-gradient(circle at 17% 38%, rgba(255,255,255,0.40) 0 0.7px, transparent 1.3px),
+    radial-gradient(circle at 22% 12%, rgba(255,255,255,0.55) 0 0.8px, transparent 1.4px),
+    radial-gradient(circle at 28% 52%, rgba(255,255,255,0.40) 0 0.7px, transparent 1.3px),
+    radial-gradient(circle at 31% 84%, rgba(255,255,255,0.52) 0 0.8px, transparent 1.4px),
+    radial-gradient(circle at 36% 30%, rgba(255,255,255,0.48) 0 0.7px, transparent 1.3px),
+    radial-gradient(circle at 42% 18%, rgba(255,255,255,0.45) 0 0.7px, transparent 1.3px),
+    radial-gradient(circle at 47% 58%, rgba(255,255,255,0.38) 0 0.7px, transparent 1.3px),
+    radial-gradient(circle at 52% 76%, rgba(255,255,255,0.50) 0 0.8px, transparent 1.4px),
+    radial-gradient(circle at 58% 24%, rgba(255,255,255,0.44) 0 0.7px, transparent 1.3px),
+    radial-gradient(circle at 63% 46%, rgba(255,255,255,0.52) 0 0.8px, transparent 1.4px),
+    radial-gradient(circle at 69% 82%, rgba(255,255,255,0.46) 0 0.8px, transparent 1.4px),
+    radial-gradient(circle at 74% 10%, rgba(255,255,255,0.56) 0 0.8px, transparent 1.4px),
+    radial-gradient(circle at 78% 33%, rgba(255,255,255,0.44) 0 0.7px, transparent 1.3px),
+    radial-gradient(circle at 82% 58%, rgba(255,255,255,0.50) 0 0.8px, transparent 1.4px),
+    radial-gradient(circle at 87% 22%, rgba(255,255,255,0.46) 0 0.7px, transparent 1.3px),
+    radial-gradient(circle at 91% 74%, rgba(255,255,255,0.44) 0 0.7px, transparent 1.3px),
+    radial-gradient(circle at 96% 40%, rgba(255,255,255,0.55) 0 0.8px, transparent 1.4px);
+  animation: drift 34s ease-in-out infinite alternate;
+}
+
+.starFieldMid {
+  opacity: 0.78;
+  background-image:
+    radial-gradient(circle at 6% 72%, rgba(255,255,255,0.92) 0 1px, transparent 2px),
+    radial-gradient(circle at 14% 18%, rgba(232,241,255,0.92) 0 1.2px, transparent 2.4px),
+    radial-gradient(circle at 21% 48%, rgba(255,255,255,0.90) 0 1.1px, transparent 2.2px),
+    radial-gradient(circle at 29% 14%, rgba(232,241,255,0.88) 0 1px, transparent 2px),
+    radial-gradient(circle at 37% 63%, rgba(255,255,255,0.88) 0 1.2px, transparent 2.4px),
+    radial-gradient(circle at 44% 28%, rgba(255,255,255,0.92) 0 1.1px, transparent 2.2px),
+    radial-gradient(circle at 53% 14%, rgba(230,241,255,0.90) 0 1.1px, transparent 2.2px),
+    radial-gradient(circle at 60% 54%, rgba(255,255,255,0.88) 0 1.1px, transparent 2.2px),
+    radial-gradient(circle at 68% 32%, rgba(255,255,255,0.86) 0 1px, transparent 2px),
+    radial-gradient(circle at 76% 74%, rgba(232,241,255,0.92) 0 1.1px, transparent 2.2px),
+    radial-gradient(circle at 84% 24%, rgba(255,255,255,0.90) 0 1.2px, transparent 2.4px),
+    radial-gradient(circle at 92% 60%, rgba(255,255,255,0.92) 0 1.1px, transparent 2.2px);
+  filter: drop-shadow(0 0 6px rgba(255,255,255,0.08));
+  animation: driftReverse 26s ease-in-out infinite alternate;
+}
+
+.starFieldNear {
+  opacity: 0.96;
+  background-image:
+    radial-gradient(circle at 10% 12%, rgba(255,255,255,0.98) 0 1.4px, rgba(255,255,255,0.18) 2.5px, transparent 5px),
+    radial-gradient(circle at 18% 58%, rgba(255,255,255,0.98) 0 1.6px, rgba(255,255,255,0.16) 2.8px, transparent 5.4px),
+    radial-gradient(circle at 34% 20%, rgba(255,255,255,0.98) 0 1.5px, rgba(255,255,255,0.16) 2.8px, transparent 5.5px),
+    radial-gradient(circle at 48% 44%, rgba(255,255,255,0.98) 0 1.5px, rgba(255,255,255,0.16) 2.8px, transparent 5.5px),
+    radial-gradient(circle at 56% 16%, rgba(255,255,255,0.98) 0 1.6px, rgba(255,255,255,0.16) 2.8px, transparent 5.5px),
+    radial-gradient(circle at 72% 12%, rgba(255,255,255,0.98) 0 1.5px, rgba(255,255,255,0.16) 2.8px, transparent 5.5px),
+    radial-gradient(circle at 82% 50%, rgba(255,255,255,0.98) 0 1.6px, rgba(255,255,255,0.16) 2.8px, transparent 5.5px),
+    radial-gradient(circle at 90% 22%, rgba(255,255,255,0.98) 0 1.5px, rgba(255,255,255,0.16) 2.8px, transparent 5.5px);
+  filter: drop-shadow(0 0 10px rgba(255,255,255,0.12));
+}
+
+.vignette {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at center, transparent 38%, rgba(0,0,0,0.24) 72%, rgba(0,0,0,0.52) 100%),
+    linear-gradient(180deg, rgba(0,0,0,0.12), transparent 18%, transparent 84%, rgba(0,0,0,0.16));
+}
+
+.layout {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
+  gap: clamp(16px, 1.6vw, 22px);
+  padding: var(--shell-pad);
+  min-height: 100vh;
+}
+
+.sidebar {
+  position: sticky;
+  top: var(--shell-pad);
+  height: calc(100vh - (var(--shell-pad) * 2));
+  z-index: 12;
+}
+
+.main {
+  min-width: 0;
+}
+
+.page {
+  position: relative;
+  min-width: 0;
+  min-height: calc(100vh - (var(--shell-pad) * 2));
+  z-index: 1;
+}
+
+.page :global(.container) {
+  width: min(100%, 1240px);
+  margin: 0 auto;
+  padding: 0;
+}
+
+.page :global(main.container) {
+  min-height: calc(100vh - (var(--shell-pad) * 2));
+}
+
+.aiRail {
+  display: none;
+}
+
+.mobileTopbar {
+  display: none;
+}
+
+.mobileOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 18;
+  opacity: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg, rgba(2,6,13,0.70), rgba(2,6,13,0.84)),
+    radial-gradient(circle at 50% 10%, rgba(255,255,255,0.04), transparent 24%);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  transition: opacity 0.25s ease;
+}
+
+.mobileOverlayOpen {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+@media (min-width: 1600px) {
+  .layout {
+    grid-template-columns: var(--sidebar-width) minmax(0, 1fr) 320px;
+  }
+
+  .aiRail {
+    display: block;
+    position: sticky;
+    top: var(--shell-pad);
+    height: calc(100vh - (var(--shell-pad) * 2));
+    z-index: 10;
+  }
+}
+
+@media (max-width: 1100px) {
+  .layout {
+    display: block;
+    padding-top: 84px;
+  }
+
+  .sidebar {
+    position: fixed;
+    top: 78px;
+    left: 14px;
+    bottom: 14px;
+    width: min(88vw, 360px);
+    height: auto;
+    transform: translateX(-112%);
+    transition: transform 0.28s ease;
+    z-index: 24;
+  }
+
+  .sidebarOpen {
+    transform: translateX(0);
+  }
+
+  .page {
+    min-height: calc(100vh - 98px);
+  }
+
+  .mobileTopbar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 26;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px;
+    background:
+      linear-gradient(180deg, rgba(7,11,18,0.76), rgba(7,11,18,0.26)),
+      linear-gradient(135deg, rgba(255,255,255,0.04), transparent 32%);
+    backdrop-filter: blur(16px) saturate(130%);
+    -webkit-backdrop-filter: blur(16px) saturate(130%);
+    border-bottom: 1px solid rgba(210, 224, 255, 0.08);
+    box-shadow: 0 14px 28px rgba(0,0,0,0.18);
+  }
+
+  .mobileMenuButton {
+    display: inline-flex;
+    width: 46px;
+    height: 46px;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 4px;
+    border-radius: 16px;
+    border: 1px solid rgba(214, 225, 255, 0.12);
+    background:
+      linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.015)),
+      rgba(8,12,20,0.40);
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.08),
+      0 10px 22px rgba(0,0,0,0.16);
+    color: #f7fbff;
+    cursor: pointer;
+  }
+
+  .mobileMenuButton span {
+    display: block;
+    width: 18px;
+    height: 2px;
+    border-radius: 999px;
+    background: rgba(247,251,255,0.92);
+  }
+
+  .mobileBrand {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .mobileBrandMark {
+    display: grid;
+    place-items: center;
+    width: 42px;
+    height: 42px;
+    border-radius: 14px;
+    border: 1px solid rgba(214, 225, 255, 0.12);
+    background:
+      linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.015)),
+      rgba(8,12,20,0.38);
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.08),
+      0 10px 22px rgba(0,0,0,0.16);
+    font-size: 12px;
+    font-weight: 900;
+    letter-spacing: 0.14em;
+    color: #f7fbff;
+  }
+
+  .mobileBrandText {
+    min-width: 0;
+    font-size: 14px;
+    font-weight: 900;
+    letter-spacing: -0.03em;
+    color: #ffffff;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .mobileTopbarSpacer {
+    margin-left: auto;
+    width: 46px;
+    height: 46px;
+    flex-shrink: 0;
+  }
+}
+
+@keyframes drift {
+  0% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  100% {
+    transform: translate3d(0, -10px, 0) scale(1.03);
+  }
+}
+
+@keyframes driftReverse {
+  0% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  100% {
+    transform: translate3d(0, 8px, 0) scale(1.02);
+  }
+}
