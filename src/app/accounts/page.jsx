@@ -9,7 +9,10 @@ export const dynamic = "force-dynamic";
    utils
 ========================= */
 function uid() {
-  return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  return (
+    globalThis.crypto?.randomUUID?.() ??
+    `${Date.now()}-${Math.random().toString(16).slice(2)}`
+  );
 }
 
 function parseMoneyInput(v) {
@@ -80,12 +83,17 @@ function typeIcon(type) {
 
 function typeAccent(type) {
   const t = String(type || "other").toLowerCase();
-  if (t === "checking") return "linear-gradient(135deg, rgba(59,130,246,.22), rgba(37,99,235,.08))";
-  if (t === "savings") return "linear-gradient(135deg, rgba(34,197,94,.22), rgba(21,128,61,.08))";
-  if (t === "cash") return "linear-gradient(135deg, rgba(245,158,11,.22), rgba(217,119,6,.08))";
-  if (t === "credit") return "linear-gradient(135deg, rgba(239,68,68,.22), rgba(185,28,28,.08))";
-  if (t === "investment") return "linear-gradient(135deg, rgba(168,85,247,.22), rgba(126,34,206,.08))";
-  return "linear-gradient(135deg, rgba(148,163,184,.18), rgba(100,116,139,.08))";
+  if (t === "checking")
+    return "linear-gradient(135deg, rgba(59,130,246,.18), rgba(37,99,235,.05))";
+  if (t === "savings")
+    return "linear-gradient(135deg, rgba(34,197,94,.18), rgba(21,128,61,.05))";
+  if (t === "cash")
+    return "linear-gradient(135deg, rgba(245,158,11,.18), rgba(217,119,6,.05))";
+  if (t === "credit")
+    return "linear-gradient(135deg, rgba(244,114,182,.18), rgba(190,24,93,.05))";
+  if (t === "investment")
+    return "linear-gradient(135deg, rgba(168,85,247,.18), rgba(126,34,206,.05))";
+  return "linear-gradient(135deg, rgba(148,163,184,.15), rgba(100,116,139,.05))";
 }
 
 function transactionLabel(kind) {
@@ -105,26 +113,28 @@ function transactionTone(kind) {
   const k = String(kind || "").toLowerCase();
   if (["deposit", "transfer_in"].includes(k)) return "good";
   if (["withdraw", "transfer_out", "bill_payment"].includes(k)) return "bad";
-  if (k === "set") return "neutral";
   return "neutral";
 }
 
 function transactionChipStyle(kind) {
   const tone = transactionTone(kind);
+
   if (tone === "good") {
     return {
-      background: "rgba(34,197,94,.15)",
-      border: "1px solid rgba(34,197,94,.28)",
+      background: "rgba(34,197,94,.13)",
+      border: "1px solid rgba(34,197,94,.24)",
       color: "rgb(134 239 172)",
     };
   }
+
   if (tone === "bad") {
     return {
-      background: "rgba(239,68,68,.15)",
-      border: "1px solid rgba(239,68,68,.28)",
-      color: "rgb(252 165 165)",
+      background: "rgba(244,114,182,.12)",
+      border: "1px solid rgba(244,114,182,.24)",
+      color: "rgb(251 207 232)",
     };
   }
+
   return {
     background: "rgba(148,163,184,.12)",
     border: "1px solid rgba(148,163,184,.22)",
@@ -148,8 +158,20 @@ function fmtDelta(n) {
 
 function defaultAccounts() {
   return [
-    { id: uid(), name: "Checking", type: "checking", balance: 0, updatedAt: nowTs() },
-    { id: uid(), name: "Savings", type: "savings", balance: 0, updatedAt: nowTs() },
+    {
+      id: uid(),
+      name: "Checking",
+      type: "checking",
+      balance: 0,
+      updatedAt: nowTs(),
+    },
+    {
+      id: uid(),
+      name: "Savings",
+      type: "savings",
+      balance: 0,
+      updatedAt: nowTs(),
+    },
   ];
 }
 
@@ -229,8 +251,8 @@ function Modal({ open, title, subtitle, onClose, children }) {
         position: "fixed",
         inset: 0,
         zIndex: 100,
-        background: "rgba(2,6,23,.72)",
-        backdropFilter: "blur(10px)",
+        background: "rgba(2,6,23,.78)",
+        backdropFilter: "blur(12px)",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
@@ -238,32 +260,48 @@ function Modal({ open, title, subtitle, onClose, children }) {
       }}
     >
       <div
-        className="card"
         style={{
           width: "min(760px, 100%)",
-          padding: 16,
-          borderRadius: 22,
-          border: "1px solid rgba(255,255,255,.08)",
-          boxShadow: "0 20px 80px rgba(0,0,0,.45)",
+          borderRadius: 28,
+          border: "1px solid rgba(255,255,255,.09)",
+          background:
+            "linear-gradient(180deg, rgba(13,19,34,.96), rgba(4,8,16,.94))",
+          boxShadow:
+            "0 30px 100px rgba(0,0,0,.48), inset 0 1px 0 rgba(255,255,255,.06)",
+          overflow: "hidden",
         }}
       >
-        <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start" }}>
+        <div
+          style={{
+            padding: 18,
+            borderBottom: "1px solid rgba(255,255,255,.06)",
+            display: "flex",
+            justifyContent: "space-between",
+            gap: 12,
+            alignItems: "flex-start",
+          }}
+        >
           <div>
-            <div style={{ fontWeight: 900, fontSize: 18 }}>{title}</div>
+            <div style={{ fontWeight: 900, fontSize: 20 }}>{title}</div>
             {subtitle ? (
-              <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
+              <div
+                style={{
+                  fontSize: 12,
+                  color: "rgba(220,228,255,.64)",
+                  marginTop: 6,
+                }}
+              >
                 {subtitle}
               </div>
             ) : null}
           </div>
 
-          <button className="btnGhost" type="button" onClick={onClose}>
+          <button className="ghostBtn" type="button" onClick={onClose}>
             Close
           </button>
         </div>
 
-        <div style={{ height: 14 }} />
-        {children}
+        <div style={{ padding: 18 }}>{children}</div>
       </div>
     </div>
   );
@@ -327,8 +365,18 @@ export default function AccountsPage() {
         }
 
         const [accRes, settingsRes, ledgerRes] = await Promise.all([
-          supabase.from("accounts").select("*").eq("user_id", currentUser.id).order("updated_at", { ascending: false }),
-          supabase.from("account_settings").select("*").eq("user_id", currentUser.id).maybeSingle(),
+          supabase
+            .from("accounts")
+            .select("*")
+            .eq("user_id", currentUser.id)
+            .order("updated_at", { ascending: false }),
+
+          supabase
+            .from("account_settings")
+            .select("*")
+            .eq("user_id", currentUser.id)
+            .maybeSingle(),
+
           supabase
             .from("account_transactions")
             .select("*")
@@ -344,14 +392,21 @@ export default function AccountsPage() {
 
         if (loadedAccounts.length === 0) {
           const seeded = defaultAccounts();
-          const insertRows = seeded.map((a) => mapAccountClientToRow(a, currentUser.id));
-          const insertRes = await supabase.from("accounts").insert(insertRows).select("*");
+          const insertRows = seeded.map((a) =>
+            mapAccountClientToRow(a, currentUser.id)
+          );
+          const insertRes = await supabase
+            .from("accounts")
+            .insert(insertRows)
+            .select("*");
+
           if (insertRes.error) throw insertRes.error;
           loadedAccounts = (insertRes.data || []).map(mapAccountRowToClient);
         }
 
         const primary =
-          settingsRes.data?.primary_account_id && loadedAccounts.some((a) => a.id === settingsRes.data.primary_account_id)
+          settingsRes.data?.primary_account_id &&
+          loadedAccounts.some((a) => a.id === settingsRes.data.primary_account_id)
             ? settingsRes.data.primary_account_id
             : loadedAccounts[0]?.id || "";
 
@@ -386,7 +441,11 @@ export default function AccountsPage() {
     };
   }, []);
 
-  const primary = useMemo(() => accounts.find((a) => a.id === primaryId) || null, [accounts, primaryId]);
+  const primary = useMemo(
+    () => accounts.find((a) => a.id === primaryId) || null,
+    [accounts, primaryId]
+  );
+
   const selectedAccount = useMemo(
     () => accounts.find((a) => a.id === selectedAccountId) || null,
     [accounts, selectedAccountId]
@@ -417,10 +476,24 @@ export default function AccountsPage() {
       .filter((a) => String(a.type || "").toLowerCase() !== "credit")
       .reduce((s, a) => s + safeNum(a.balance, 0), 0);
 
+    const liquid = checking + savings + cash;
     const netWorth = assets - debts;
-    const updatedMax = accounts.reduce((mx, a) => Math.max(mx, safeNum(a.updatedAt, 0)), 0);
+    const updatedMax = accounts.reduce(
+      (mx, a) => Math.max(mx, safeNum(a.updatedAt, 0)),
+      0
+    );
 
-    return { checking, savings, cash, invest, debts, assets, netWorth, updatedMax };
+    return {
+      checking,
+      savings,
+      cash,
+      invest,
+      debts,
+      assets,
+      liquid,
+      netWorth,
+      updatedMax,
+    };
   }, [accounts]);
 
   const filteredAccounts = useMemo(() => {
@@ -435,7 +508,9 @@ export default function AccountsPage() {
     }
 
     if (typeFilter !== "all") {
-      list = list.filter((a) => String(a.type || "other").toLowerCase() === typeFilter);
+      list = list.filter(
+        (a) => String(a.type || "other").toLowerCase() === typeFilter
+      );
     }
 
     if (sort === "name") {
@@ -455,13 +530,13 @@ export default function AccountsPage() {
 
   const selectedLedger = useMemo(() => {
     if (!selectedAccountId) return [];
-
     const q = ledgerSearch.trim().toLowerCase();
 
     return ledger
       .filter((x) => x.accountId === selectedAccountId)
       .filter((x) => {
         if (!q) return true;
+
         const hay = [
           transactionLabel(x.kind),
           x.note,
@@ -481,6 +556,7 @@ export default function AccountsPage() {
 
   async function savePrimary(nextId) {
     if (!user || !supabase || !nextId) return;
+
     setPrimaryId(nextId);
 
     const { error } = await supabase.from("account_settings").upsert(
@@ -506,7 +582,9 @@ export default function AccountsPage() {
       .select()
       .single();
 
-    if (error) return { ok: false, error: error.message || "Failed to save transaction." };
+    if (error) {
+      return { ok: false, error: error.message || "Failed to save transaction." };
+    }
 
     setLedger((prev) => [mapLedgerRowToClient(data), ...prev]);
     return { ok: true, entry: mapLedgerRowToClient(data) };
@@ -598,7 +676,9 @@ export default function AccountsPage() {
   }
 
   async function renameAccount(id, nextName) {
-    setAccounts((prev) => prev.map((a) => (a.id === id ? { ...a, name: nextName, updatedAt: nowTs() } : a)));
+    setAccounts((prev) =>
+      prev.map((a) => (a.id === id ? { ...a, name: nextName, updatedAt: nowTs() } : a))
+    );
 
     const { error } = await supabase
       .from("accounts")
@@ -613,7 +693,9 @@ export default function AccountsPage() {
   }
 
   async function retypeAccount(id, nextType) {
-    setAccounts((prev) => prev.map((a) => (a.id === id ? { ...a, type: nextType, updatedAt: nowTs() } : a)));
+    setAccounts((prev) =>
+      prev.map((a) => (a.id === id ? { ...a, type: nextType, updatedAt: nowTs() } : a))
+    );
 
     const { error } = await supabase
       .from("accounts")
@@ -642,7 +724,11 @@ export default function AccountsPage() {
     const next = accounts.filter((a) => a.id !== id);
     setAccounts(next);
 
-    const { error } = await supabase.from("accounts").delete().eq("id", id).eq("user_id", user.id);
+    const { error } = await supabase
+      .from("accounts")
+      .delete()
+      .eq("id", id)
+      .eq("user_id", user.id);
 
     if (error) {
       setPageError(error.message || "Failed to delete account.");
@@ -691,15 +777,14 @@ export default function AccountsPage() {
 
   async function applyModal() {
     setPageError("");
-
     if (!modalAccount) return;
 
     const amt = parseMoneyInput(amount);
-    if (!Number.isFinite(amt) || amt <= 0) return;
-
     const cur = safeNum(modalAccount.balance, 0);
 
     if (mode === "set") {
+      if (!Number.isFinite(amt) || amt < 0) return;
+
       const saveRes = await saveAccountBalance(modalAccount.id, amt);
       if (!saveRes.ok) {
         setPageError(saveRes.error || "Failed to set balance.");
@@ -724,6 +809,8 @@ export default function AccountsPage() {
       setModalOpen(false);
       return;
     }
+
+    if (!Number.isFinite(amt) || amt <= 0) return;
 
     if (mode === "transfer") {
       const target = accounts.find((a) => a.id === transferToId);
@@ -848,11 +935,609 @@ export default function AccountsPage() {
     });
   }
 
+  const currentMonth = new Date().toLocaleString(undefined, {
+    month: "long",
+    year: "numeric",
+  });
+
+  const pageStyles = (
+    <style jsx global>{`
+      .accountsPage {
+        --page-text: #f5f7ff;
+        --muted: rgba(220, 228, 255, 0.68);
+        --muted-2: rgba(220, 228, 255, 0.48);
+        --line: rgba(255, 255, 255, 0.1);
+        --line-strong: rgba(255, 255, 255, 0.16);
+        --card-bg: linear-gradient(
+          180deg,
+          rgba(9, 14, 28, 0.88),
+          rgba(4, 8, 16, 0.78)
+        );
+        --card-bg-2: linear-gradient(
+          180deg,
+          rgba(8, 13, 24, 0.82),
+          rgba(3, 7, 14, 0.76)
+        );
+        --shadow: 0 24px 80px rgba(0, 0, 0, 0.34),
+          inset 0 1px 0 rgba(255, 255, 255, 0.05);
+
+        color: var(--page-text);
+        color-scheme: dark;
+      }
+
+      .accountsPage *,
+      .accountsPage *::before,
+      .accountsPage *::after {
+        box-sizing: border-box;
+      }
+
+      .accountsPage .pageShell {
+        max-width: 1680px;
+        margin: 0 auto;
+        padding: 22px 18px 48px;
+      }
+
+      .accountsPage .heroCard,
+      .accountsPage .glassCard,
+      .accountsPage .metricCard,
+      .accountsPage .emptyState,
+      .accountsPage .errorCard {
+        position: relative;
+        overflow: hidden;
+        border-radius: 28px;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        background: var(--card-bg);
+        box-shadow: var(--shadow);
+        backdrop-filter: blur(16px);
+      }
+
+      .accountsPage .heroCard::before,
+      .accountsPage .glassCard::before,
+      .accountsPage .metricCard::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        background:
+          radial-gradient(circle at top left, rgba(80, 120, 255, 0.14), transparent 28%),
+          radial-gradient(circle at top right, rgba(255, 255, 255, 0.07), transparent 22%),
+          radial-gradient(circle at bottom center, rgba(56, 189, 248, 0.08), transparent 24%);
+      }
+
+      .accountsPage .heroCard {
+        padding: 22px 22px 20px;
+        margin-bottom: 16px;
+      }
+
+      .accountsPage .heroTop {
+        position: relative;
+        z-index: 1;
+        display: flex;
+        justify-content: space-between;
+        gap: 18px;
+        align-items: flex-start;
+        flex-wrap: wrap;
+      }
+
+      .accountsPage .eyebrow {
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.18em;
+        color: var(--muted-2);
+        margin-bottom: 10px;
+      }
+
+      .accountsPage .heroTitle {
+        margin: 0;
+        font-size: clamp(32px, 4.4vw, 56px);
+        line-height: 0.98;
+        font-weight: 950;
+        letter-spacing: -0.04em;
+      }
+
+      .accountsPage .heroSub {
+        margin: 10px 0 0;
+        max-width: 900px;
+        color: var(--muted);
+        line-height: 1.55;
+        font-size: 14px;
+      }
+
+      .accountsPage .heroMeta {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+      }
+
+      .accountsPage .metaPill,
+      .accountsPage .softChip,
+      .accountsPage .toneChip {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        min-height: 38px;
+        padding: 10px 14px;
+        border-radius: 999px;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        background: rgba(255, 255, 255, 0.04);
+        color: #f5f7ff;
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+      }
+
+      .accountsPage .chipRow {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-top: 14px;
+      }
+
+      .accountsPage .metricGrid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 14px;
+        margin-bottom: 16px;
+      }
+
+      .accountsPage .metricCard {
+        padding: 16px 18px;
+        min-height: 150px;
+      }
+
+      .accountsPage .metricLabel {
+        position: relative;
+        z-index: 1;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.18em;
+        color: var(--muted-2);
+      }
+
+      .accountsPage .metricValue {
+        position: relative;
+        z-index: 1;
+        margin-top: 12px;
+        font-size: clamp(28px, 3vw, 46px);
+        line-height: 1;
+        font-weight: 950;
+        letter-spacing: -0.04em;
+      }
+
+      .accountsPage .metricSub {
+        position: relative;
+        z-index: 1;
+        margin-top: 14px;
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.45;
+      }
+
+      .accountsPage .metricAccentPink {
+        color: #f7a9c4;
+      }
+
+      .accountsPage .mainGrid {
+        display: grid;
+        grid-template-columns: minmax(360px, 0.95fr) minmax(520px, 1.35fr);
+        gap: 16px;
+        align-items: start;
+      }
+
+      .accountsPage .glassCard {
+        padding: 18px;
+      }
+
+      .accountsPage .focusGrid {
+        display: grid;
+        grid-template-columns: 1.25fr 0.85fr;
+        gap: 16px;
+        margin-bottom: 16px;
+      }
+
+      .accountsPage .sectionTop {
+        display: flex;
+        justify-content: space-between;
+        gap: 14px;
+        align-items: flex-start;
+        flex-wrap: wrap;
+        margin-bottom: 14px;
+        position: relative;
+        z-index: 1;
+      }
+
+      .accountsPage .sectionTitle {
+        margin: 0;
+        font-size: 28px;
+        line-height: 1;
+        font-weight: 900;
+        letter-spacing: -0.03em;
+      }
+
+      .accountsPage .sectionMini {
+        margin: 0;
+        font-size: 18px;
+        line-height: 1.1;
+        font-weight: 900;
+      }
+
+      .accountsPage .sectionText {
+        margin-top: 8px;
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.5;
+      }
+
+      .accountsPage .tinyLabel {
+        color: var(--muted-2);
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        font-size: 10px;
+        margin-bottom: 8px;
+        font-weight: 700;
+      }
+
+      .accountsPage .mutedText {
+        color: var(--muted);
+      }
+
+      .accountsPage .mutedTiny {
+        color: var(--muted-2);
+        font-size: 12px;
+      }
+
+      .accountsPage .focusCardInner {
+        position: relative;
+        z-index: 1;
+        border-radius: 22px;
+        padding: 16px;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        background:
+          linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,.01));
+      }
+
+      .accountsPage .focusValue {
+        margin-top: 10px;
+        font-size: clamp(32px, 4vw, 54px);
+        line-height: 1;
+        font-weight: 950;
+        letter-spacing: -0.04em;
+      }
+
+      .accountsPage .valueBlock {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+
+      .accountsPage .actionRow {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+
+      .accountsPage .stack {
+        display: grid;
+        gap: 12px;
+      }
+
+      .accountsPage .field {
+        width: 100%;
+        min-height: 48px;
+        border-radius: 16px;
+        border: 1px solid rgba(177, 196, 255, 0.16);
+        background: rgba(8, 13, 24, 0.84) !important;
+        color: #f4f7ff !important;
+        font-size: 14px;
+        font-weight: 600;
+        padding: 0 14px;
+        outline: none;
+        box-shadow:
+          inset 0 1px 0 rgba(255, 255, 255, 0.03),
+          0 0 0 rgba(0, 0, 0, 0);
+        transition: border-color 0.18s ease, box-shadow 0.18s ease,
+          background 0.18s ease;
+      }
+
+      .accountsPage textarea.field {
+        min-height: 96px;
+        padding: 12px 14px;
+        resize: vertical;
+      }
+
+      .accountsPage .field::placeholder {
+        color: rgba(233, 238, 255, 0.44) !important;
+      }
+
+      .accountsPage .field:focus {
+        border-color: rgba(121, 163, 255, 0.48);
+        box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.12);
+      }
+
+      .accountsPage select.field {
+        cursor: pointer;
+      }
+
+      .accountsPage select.field option {
+        background: #08111f !important;
+        color: #f4f7ff !important;
+      }
+
+      .accountsPage input:-webkit-autofill,
+      .accountsPage input:-webkit-autofill:hover,
+      .accountsPage input:-webkit-autofill:focus,
+      .accountsPage textarea:-webkit-autofill,
+      .accountsPage select:-webkit-autofill {
+        -webkit-text-fill-color: #f4f7ff !important;
+        -webkit-box-shadow: 0 0 0px 1000px #0a1321 inset !important;
+        box-shadow: 0 0 0px 1000px #0a1321 inset !important;
+        transition: background-color 9999s ease-in-out 0s;
+      }
+
+      .accountsPage .controlGrid {
+        display: grid;
+        grid-template-columns: 1.2fr 0.9fr 0.9fr;
+        gap: 10px;
+        margin-bottom: 14px;
+      }
+
+      .accountsPage .accountList {
+        display: grid;
+        gap: 12px;
+      }
+
+      .accountsPage .accountItem {
+        position: relative;
+        overflow: hidden;
+        border-radius: 24px;
+        border: 1px solid rgba(255, 255, 255, 0.07);
+        background: var(--card-bg-2);
+        padding: 16px;
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+        cursor: pointer;
+        transition: transform 0.18s ease, border-color 0.18s ease,
+          box-shadow 0.18s ease;
+      }
+
+      .accountsPage .accountItem:hover {
+        transform: translateY(-1px);
+        border-color: rgba(255, 255, 255, 0.12);
+      }
+
+      .accountsPage .accountItem.selected {
+        border-color: rgba(109, 169, 255, 0.34);
+        box-shadow: 0 12px 34px rgba(6, 12, 24, 0.34),
+          inset 0 1px 0 rgba(255, 255, 255, 0.04);
+      }
+
+      .accountsPage .accountHeader {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        align-items: flex-start;
+        flex-wrap: wrap;
+        margin-bottom: 14px;
+      }
+
+      .accountsPage .accountActions {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+      }
+
+      .accountsPage .accountEditGrid {
+        display: grid;
+        grid-template-columns: 1fr 220px;
+        gap: 10px;
+        margin-bottom: 14px;
+      }
+
+      .accountsPage .balanceValue {
+        font-size: clamp(28px, 3vw, 40px);
+        line-height: 1;
+        font-weight: 950;
+        letter-spacing: -0.04em;
+      }
+
+      .accountsPage .ledgerList {
+        display: grid;
+        gap: 12px;
+      }
+
+      .accountsPage .ledgerItem {
+        position: relative;
+        overflow: hidden;
+        border-radius: 22px;
+        padding: 14px;
+        border: 1px solid rgba(255, 255, 255, 0.07);
+        background: linear-gradient(
+          180deg,
+          rgba(8, 13, 24, 0.78),
+          rgba(4, 8, 16, 0.72)
+        );
+      }
+
+      .accountsPage .ledgerGrid {
+        display: grid;
+        grid-template-columns: minmax(0, 1.5fr) auto auto;
+        gap: 14px;
+        align-items: center;
+      }
+
+      .accountsPage .ledgerRight {
+        text-align: right;
+      }
+
+      .accountsPage .emptyState {
+        padding: 16px;
+      }
+
+      .accountsPage .emptyStateTitle {
+        font-size: 18px;
+        line-height: 1.1;
+        font-weight: 900;
+        margin: 0;
+      }
+
+      .accountsPage .emptyStateText {
+        margin-top: 8px;
+        color: var(--muted);
+        line-height: 1.5;
+        font-size: 13px;
+      }
+
+      .accountsPage .errorCard {
+        padding: 14px 16px;
+        margin-bottom: 16px;
+        border-color: rgba(244, 114, 182, 0.26);
+        background:
+          linear-gradient(180deg, rgba(96, 17, 44, 0.38), rgba(36, 8, 18, 0.32));
+      }
+
+      .accountsPage .errorTitle {
+        font-weight: 900;
+        font-size: 15px;
+      }
+
+      .accountsPage .solidBtn,
+      .accountsPage .ghostBtn,
+      .accountsPage .dangerBtn {
+        min-height: 42px;
+        padding: 0 14px;
+        border-radius: 14px;
+        font-size: 13px;
+        font-weight: 800;
+        letter-spacing: 0.02em;
+        cursor: pointer;
+        transition: transform 0.18s ease, border-color 0.18s ease,
+          background 0.18s ease, box-shadow 0.18s ease;
+      }
+
+      .accountsPage .solidBtn:hover,
+      .accountsPage .ghostBtn:hover,
+      .accountsPage .dangerBtn:hover {
+        transform: translateY(-1px);
+      }
+
+      .accountsPage .solidBtn {
+        border: 1px solid rgba(130, 170, 255, 0.28);
+        background:
+          linear-gradient(180deg, rgba(77, 124, 255, 0.28), rgba(32, 74, 189, 0.16));
+        color: #f7f9ff;
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+      }
+
+      .accountsPage .ghostBtn {
+        border: 1px solid rgba(255, 255, 255, 0.09);
+        background: rgba(255, 255, 255, 0.04);
+        color: #f4f7ff;
+      }
+
+      .accountsPage .dangerBtn {
+        border: 1px solid rgba(244, 114, 182, 0.22);
+        background: rgba(244, 114, 182, 0.09);
+        color: #ffd5e5;
+      }
+
+      .accountsPage .modalTabs {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-bottom: 14px;
+      }
+
+      .accountsPage .divider {
+        height: 1px;
+        margin: 14px 0;
+        background: linear-gradient(
+          90deg,
+          transparent,
+          rgba(255, 255, 255, 0.08),
+          transparent
+        );
+      }
+
+      @media (max-width: 1380px) {
+        .accountsPage .metricGrid {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .accountsPage .focusGrid {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      @media (max-width: 1180px) {
+        .accountsPage .mainGrid {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      @media (max-width: 860px) {
+        .accountsPage .pageShell {
+          padding: 16px 12px 34px;
+        }
+
+        .accountsPage .heroCard,
+        .accountsPage .glassCard,
+        .accountsPage .metricCard {
+          border-radius: 22px;
+        }
+
+        .accountsPage .metricGrid {
+          grid-template-columns: 1fr;
+        }
+
+        .accountsPage .controlGrid {
+          grid-template-columns: 1fr;
+        }
+
+        .accountsPage .accountEditGrid {
+          grid-template-columns: 1fr;
+        }
+
+        .accountsPage .ledgerGrid {
+          grid-template-columns: 1fr;
+        }
+
+        .accountsPage .ledgerRight {
+          text-align: left;
+        }
+
+        .accountsPage .sectionTitle {
+          font-size: 24px;
+        }
+
+        .accountsPage .heroTitle {
+          font-size: 34px;
+        }
+
+        .accountsPage .actionRow,
+        .accountsPage .accountActions,
+        .accountsPage .heroMeta {
+          width: 100%;
+          justify-content: flex-start;
+        }
+      }
+    `}</style>
+  );
+
   if (loading) {
     return (
-      <main className="container">
-        <div className="card" style={{ padding: 18 }}>
-          Loading accounts...
+      <main className="accountsPage">
+        {pageStyles}
+        <div className="pageShell">
+          <section className="heroCard">
+            <div className="heroTop">
+              <div>
+                <div className="eyebrow">LIVE FINANCE BOARD</div>
+                <h1 className="heroTitle">Accounts Command</h1>
+                <p className="heroSub">Loading accounts...</p>
+              </div>
+            </div>
+          </section>
         </div>
       </main>
     );
@@ -860,285 +1545,143 @@ export default function AccountsPage() {
 
   if (!user) {
     return (
-      <main className="container">
-        <div className="card" style={{ padding: 18 }}>
-          <div style={{ fontWeight: 900, fontSize: 18 }}>Please log in</div>
-          <div className="muted" style={{ marginTop: 8 }}>
-            This page is now Supabase-backed, so it needs an authenticated user.
-          </div>
+      <main className="accountsPage">
+        {pageStyles}
+        <div className="pageShell">
+          <section className="heroCard">
+            <div className="heroTop">
+              <div>
+                <div className="eyebrow">LIVE FINANCE BOARD</div>
+                <h1 className="heroTitle">Accounts Command</h1>
+                <p className="heroSub">
+                  This page is now Supabase-backed, so it needs an authenticated
+                  user.
+                </p>
+              </div>
+            </div>
+          </section>
+
+          <section className="emptyState">
+            <h2 className="emptyStateTitle">Please log in</h2>
+            <div className="emptyStateText">
+              Once you sign in, this page will load your synced accounts and
+              transactions.
+            </div>
+          </section>
         </div>
       </main>
     );
   }
 
   return (
-    <main className="container">
-      <header style={{ marginBottom: 18 }}>
-        <div className="muted" style={{ fontSize: 12, letterSpacing: ".08em", textTransform: "uppercase", marginBottom: 6 }}>
-          Accounts
-        </div>
+    <main className="accountsPage">
+      {pageStyles}
 
-        <div style={{ display: "flex", justifyContent: "space-between", gap: 14, flexWrap: "wrap", alignItems: "flex-end" }}>
+      <div className="pageShell">
+        <header className="heroCard">
+          <div className="heroTop">
+            <div>
+              <div className="eyebrow">LIVE FINANCE BOARD</div>
+              <h1 className="heroTitle">Accounts Command</h1>
+              <p className="heroSub">
+                Clean balances, transfer-ready account control, and a real
+                ledger view. This version fixes the ugly white input and
+                dropdown bars so everything stays dark, readable, and on theme.
+              </p>
+
+              <div className="chipRow">
+                <span className="softChip">{accounts.length} ACCOUNTS</span>
+                <span className="softChip">
+                  LAST UPDATE {fmtWhen(totals.updatedMax)}
+                </span>
+                {primary ? (
+                  <span className="softChip">PRIMARY • {primary.name}</span>
+                ) : null}
+              </div>
+            </div>
+
+            <div className="heroMeta">
+              <span className="metaPill">{currentMonth}</span>
+              <span className="metaPill">
+                {primary ? primary.name.toUpperCase() : "NO PRIMARY ACCOUNT"}
+              </span>
+            </div>
+          </div>
+        </header>
+
+        {pageError ? (
+          <div className="errorCard">
+            <div className="errorTitle">Error</div>
+            <div className="sectionText" style={{ marginTop: 6 }}>
+              {pageError}
+            </div>
+          </div>
+        ) : null}
+
+        <section className="metricGrid">
+          <article className="metricCard">
+            <div className="metricLabel">Net Worth</div>
+            <div className="metricValue">{fmtMoney(totals.netWorth)}</div>
+            <div className="metricSub">
+              Assets {fmtMoney(totals.assets)} minus credit debt{" "}
+              {fmtMoney(totals.debts)}.
+            </div>
+          </article>
+
+          <article className="metricCard">
+            <div className="metricLabel">Liquid Balances</div>
+            <div className="metricValue">{fmtMoney(totals.liquid)}</div>
+            <div className="metricSub">
+              Checking, savings, and cash only. Investments excluded.
+            </div>
+          </article>
+
+          <article className="metricCard">
+            <div className="metricLabel">Investment Accounts</div>
+            <div className="metricValue">{fmtMoney(totals.invest)}</div>
+            <div className="metricSub">
+              Tracked investment account balances currently on the board.
+            </div>
+          </article>
+
+          <article className="metricCard">
+            <div className="metricLabel">Credit Exposure</div>
+            <div className="metricValue metricAccentPink">
+              {fmtMoney(totals.debts)}
+            </div>
+            <div className="metricSub">
+              Credit accounts should store the amount owed, not negative cash.
+            </div>
+          </article>
+        </section>
+
+        <section className="mainGrid">
           <div>
-            <h1 style={{ margin: 0, fontSize: "clamp(28px, 4vw, 40px)", lineHeight: 1.03 }}>
-              Account Command Center
-            </h1>
-            <div className="muted" style={{ marginTop: 10, maxWidth: 900 }}>
-              Banking-style account view. Clean balances. Transfer-ready. Bill-payment-ready. Primary account feeds your future forecast.
-            </div>
-          </div>
+            <article className="glassCard">
+              <div className="sectionTop">
+                <div>
+                  <h2 className="sectionTitle">Account Roster</h2>
+                  <div className="sectionText">
+                    Pick an account on the left, then work it on the right.
+                  </div>
+                </div>
 
-          <div
-            className="pill"
-            style={{
-              padding: "12px 14px",
-              borderRadius: 16,
-              display: "flex",
-              flexDirection: "column",
-              gap: 4,
-              minWidth: 260,
-            }}
-          >
-            <span className="muted" style={{ fontSize: 12 }}>Net Worth</span>
-            <span style={{ fontWeight: 950, fontSize: 22 }}>{fmtMoney(totals.netWorth)}</span>
-            <span className="muted" style={{ fontSize: 12 }}>
-              Assets <b>{fmtMoney(totals.assets)}</b> • Debts <b>{fmtMoney(totals.debts)}</b>
-            </span>
-          </div>
-        </div>
-      </header>
-
-      {pageError ? (
-        <div
-          className="card"
-          style={{
-            padding: 12,
-            marginBottom: 16,
-            border: "1px solid rgba(239,68,68,.35)",
-            background: "rgba(127,29,29,.18)",
-          }}
-        >
-          <div style={{ fontWeight: 900 }}>Error</div>
-          <div className="muted" style={{ marginTop: 6 }}>
-            {pageError}
-          </div>
-        </div>
-      ) : null}
-
-      {/* summary strip */}
-      <section
-        className="card"
-        style={{
-          padding: 14,
-          marginBottom: 16,
-          borderRadius: 22,
-          overflow: "hidden",
-          position: "relative",
-        }}
-      >
-        <div
-          style={{
-            position: "absolute",
-            inset: 0,
-            background:
-              "radial-gradient(circle at top left, rgba(59,130,246,.12), transparent 28%), radial-gradient(circle at top right, rgba(168,85,247,.10), transparent 24%), radial-gradient(circle at bottom center, rgba(34,197,94,.08), transparent 28%)",
-            pointerEvents: "none",
-          }}
-        />
-        <div
-          style={{
-            position: "relative",
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
-            gap: 12,
-          }}
-        >
-          {[
-            { label: "Checking", value: totals.checking, icon: "🏦" },
-            { label: "Savings", value: totals.savings, icon: "💰" },
-            { label: "Cash", value: totals.cash, icon: "💵" },
-            { label: "Investments", value: totals.invest, icon: "📈" },
-            { label: "Credit Debt", value: totals.debts, icon: "💳" },
-          ].map((item) => (
-            <div
-              key={item.label}
-              className="card"
-              style={{
-                padding: 12,
-                borderRadius: 18,
-                background: "rgba(255,255,255,.03)",
-                border: "1px solid rgba(255,255,255,.06)",
-              }}
-            >
-              <div className="muted" style={{ fontSize: 12 }}>
-                {item.icon} {item.label}
+                <div className="softChip">{filteredAccounts.length} SHOWING</div>
               </div>
-              <div style={{ fontWeight: 900, fontSize: 22, marginTop: 6 }}>{fmtMoney(item.value)}</div>
-            </div>
-          ))}
-        </div>
-      </section>
 
-      {/* top grid */}
-      <section
-        style={{
-          display: "grid",
-          gridTemplateColumns: "1.35fr .9fr",
-          gap: 16,
-          alignItems: "stretch",
-        }}
-      >
-        <div
-          className="card"
-          style={{
-            padding: 16,
-            borderRadius: 24,
-            background:
-              primary
-                ? `${typeAccent(primary.type)}, linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,.01))`
-                : "linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,.01))",
-            border: "1px solid rgba(255,255,255,.08)",
-          }}
-        >
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
-            <div>
-              <div className="muted" style={{ fontSize: 12, letterSpacing: ".08em", textTransform: "uppercase" }}>
-                Primary Account
-              </div>
-              <div style={{ fontSize: 28, fontWeight: 950, marginTop: 6 }}>
-                {primary ? primary.name : "No primary account"}
-              </div>
-              <div className="muted" style={{ marginTop: 6 }}>
-                {primary ? `${typeIcon(primary.type)} ${typeLabel(primary.type)} • Updated ${fmtWhen(primary.updatedAt)}` : "Set one below."}
-              </div>
-            </div>
+              <div className="controlGrid">
+                <input
+                  className="field"
+                  placeholder="Search accounts..."
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                />
 
-            <span
-              className="pill"
-              style={{
-                padding: "9px 12px",
-                borderRadius: 999,
-                background: "rgba(255,255,255,.08)",
-              }}
-            >
-              Used for forecast baseline
-            </span>
-          </div>
-
-          <div style={{ height: 18 }} />
-
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "1fr auto",
-              gap: 16,
-              alignItems: "end",
-            }}
-          >
-            <div>
-              <div className="muted" style={{ fontSize: 12 }}>Available view</div>
-              <div style={{ fontWeight: 950, fontSize: "clamp(32px, 5vw, 48px)", marginTop: 6 }}>
-                {primary ? fmtMoney(primary.balance) : "—"}
-              </div>
-            </div>
-
-            {primary ? (
-              <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "flex-end" }}>
-                <button className="btn" type="button" onClick={() => openModalFor(primary.id, "adjust")}>
-                  Adjust
-                </button>
-                <button className="btnGhost" type="button" onClick={() => openModalFor(primary.id, "transfer")}>
-                  Transfer
-                </button>
-                <button className="btnGhost" type="button" onClick={() => openModalFor(primary.id, "set")}>
-                  Set exact
-                </button>
-              </div>
-            ) : null}
-          </div>
-        </div>
-
-        <div className="card" style={{ padding: 16, borderRadius: 24 }}>
-          <div style={{ fontWeight: 900, fontSize: 18 }}>Add account</div>
-          <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
-            Keep it clean. Add real financial buckets only.
-          </div>
-
-          <div style={{ height: 12 }} />
-
-          <form onSubmit={addAccount} className="grid" style={{ gap: 10 }}>
-            <input
-              className="input"
-              placeholder="Account name"
-              value={adding.name}
-              onChange={(e) => setAdding((p) => ({ ...p, name: e.target.value }))}
-            />
-
-            <select
-              className="input"
-              value={adding.type}
-              onChange={(e) => setAdding((p) => ({ ...p, type: e.target.value }))}
-            >
-              <option value="checking">🏦 Checking</option>
-              <option value="savings">💰 Savings</option>
-              <option value="cash">💵 Cash</option>
-              <option value="credit">💳 Credit Card</option>
-              <option value="investment">📈 Investment</option>
-              <option value="other">📁 Other</option>
-            </select>
-
-            <input
-              className="input"
-              placeholder="Starting balance"
-              value={adding.balance}
-              onChange={(e) => setAdding((p) => ({ ...p, balance: e.target.value }))}
-            />
-
-            <button className="btn" type="submit">
-              Add account
-            </button>
-          </form>
-
-          <div style={{ height: 12 }} />
-          <div className="muted" style={{ fontSize: 12 }}>
-            Credit accounts should store the balance as the <b>amount owed</b>, not negative cash.
-          </div>
-        </div>
-      </section>
-
-      <div style={{ height: 16 }} />
-
-      {/* main body */}
-      <section
-        style={{
-          display: "grid",
-          gridTemplateColumns: "1.05fr 1.35fr",
-          gap: 16,
-          alignItems: "start",
-        }}
-      >
-        {/* left */}
-        <div style={{ display: "grid", gap: 16 }}>
-          <div className="card" style={{ padding: 16, borderRadius: 24 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
-              <div style={{ fontWeight: 900, fontSize: 18 }}>Account list</div>
-              <div className="muted" style={{ fontSize: 12 }}>
-                {accounts.length} total
-              </div>
-            </div>
-
-            <div style={{ height: 12 }} />
-
-            <div className="grid" style={{ gap: 10 }}>
-              <input
-                className="input"
-                placeholder="Search accounts..."
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-              />
-
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                <select className="input" value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
+                <select
+                  className="field"
+                  value={typeFilter}
+                  onChange={(e) => setTypeFilter(e.target.value)}
+                >
                   <option value="all">All types</option>
                   <option value="checking">Checking</option>
                   <option value="savings">Savings</option>
@@ -1148,56 +1691,55 @@ export default function AccountsPage() {
                   <option value="other">Other</option>
                 </select>
 
-                <select className="input" value={sort} onChange={(e) => setSort(e.target.value)}>
+                <select
+                  className="field"
+                  value={sort}
+                  onChange={(e) => setSort(e.target.value)}
+                >
                   <option value="updated">Recently updated</option>
                   <option value="name">Name</option>
                   <option value="balance">Balance high → low</option>
                 </select>
               </div>
-            </div>
 
-            <div style={{ height: 14 }} />
+              <div className="accountList">
+                {filteredAccounts.length === 0 ? (
+                  <div className="emptyState">
+                    <h3 className="emptyStateTitle">No accounts found</h3>
+                    <div className="emptyStateText">
+                      Clear filters or add another account.
+                    </div>
+                  </div>
+                ) : (
+                  filteredAccounts.map((a) => {
+                    const isPrimary = a.id === primaryId;
+                    const isSelected = a.id === selectedAccountId;
+                    const isCredit =
+                      String(a.type || "").toLowerCase() === "credit";
 
-            <div className="grid" style={{ gap: 12 }}>
-              {filteredAccounts.length === 0 ? (
-                <div className="card" style={{ padding: 12 }}>
-                  <div style={{ fontWeight: 900 }}>No accounts found</div>
-                  <div className="muted" style={{ marginTop: 6 }}>Clear filters or add another account.</div>
-                </div>
-              ) : (
-                filteredAccounts.map((a) => {
-                  const isPrimary = a.id === primaryId;
-                  const isSelected = a.id === selectedAccountId;
-
-                  return (
-                    <div
-                      key={a.id}
-                      className="card"
-                      style={{
-                        padding: 14,
-                        borderRadius: 20,
-                        border: isSelected ? "1px solid rgba(96,165,250,.45)" : "1px solid rgba(255,255,255,.06)",
-                        background: isSelected
-                          ? `${typeAccent(a.type)}, rgba(255,255,255,.02)`
-                          : "rgba(255,255,255,.02)",
-                        boxShadow: isSelected ? "0 10px 30px rgba(15,23,42,.28)" : "none",
-                        cursor: "pointer",
-                      }}
-                      onClick={() => setSelectedAccountId(a.id)}
-                    >
-                      <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start", flexWrap: "wrap" }}>
-                        <div style={{ flex: 1, minWidth: 220 }}>
-                          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 10 }}>
-                            <span className="pill" style={{ padding: "7px 10px" }}>
+                    return (
+                      <div
+                        key={a.id}
+                        className={`accountItem ${isSelected ? "selected" : ""}`}
+                        style={{
+                          background: isSelected
+                            ? `${typeAccent(a.type)}, linear-gradient(180deg, rgba(8,13,24,.86), rgba(4,8,16,.78))`
+                            : "linear-gradient(180deg, rgba(8,13,24,.78), rgba(4,8,16,.74))",
+                        }}
+                        onClick={() => setSelectedAccountId(a.id)}
+                      >
+                        <div className="accountHeader">
+                          <div className="chipRow" style={{ marginTop: 0 }}>
+                            <span className="softChip">
                               {typeIcon(a.type)} {badgeText(a.type)}
                             </span>
+
                             {isPrimary ? (
                               <span
-                                className="pill"
+                                className="softChip"
                                 style={{
-                                  padding: "7px 10px",
-                                  background: "rgba(59,130,246,.16)",
-                                  border: "1px solid rgba(59,130,246,.32)",
+                                  background: "rgba(77,124,255,.16)",
+                                  border: "1px solid rgba(77,124,255,.28)",
                                 }}
                               >
                                 Primary
@@ -1205,398 +1747,660 @@ export default function AccountsPage() {
                             ) : null}
                           </div>
 
-                          <input
-                            className="input"
-                            value={a.name}
-                            onClick={(e) => e.stopPropagation()}
-                            onChange={(e) => renameAccount(a.id, e.target.value)}
-                            style={{ marginBottom: 10 }}
-                          />
+                          <div className="accountActions">
+                            <button
+                              className="ghostBtn"
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openModalFor(a.id, "adjust");
+                              }}
+                            >
+                              Adjust
+                            </button>
 
-                          <select
-                            className="input"
-                            value={a.type || "other"}
-                            onClick={(e) => e.stopPropagation()}
-                            onChange={(e) => retypeAccount(a.id, e.target.value)}
-                          >
-                            <option value="checking">🏦 Checking</option>
-                            <option value="savings">💰 Savings</option>
-                            <option value="cash">💵 Cash</option>
-                            <option value="credit">💳 Credit Card</option>
-                            <option value="investment">📈 Investment</option>
-                            <option value="other">📁 Other</option>
-                          </select>
+                            <button
+                              className="ghostBtn"
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openModalFor(a.id, "transfer");
+                              }}
+                            >
+                              Transfer
+                            </button>
 
-                          <div style={{ height: 10 }} />
-                          <div className="muted" style={{ fontSize: 12 }}>Balance</div>
-                          <div style={{ fontSize: 26, fontWeight: 950, marginTop: 4 }}>{fmtMoney(a.balance)}</div>
-                          <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
-                            Updated {fmtWhen(a.updatedAt)}
+                            <button
+                              className={isPrimary ? "solidBtn" : "ghostBtn"}
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                savePrimary(a.id);
+                              }}
+                            >
+                              {isPrimary ? "Primary" : "Set Primary"}
+                            </button>
+
+                            <button
+                              className="dangerBtn"
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                deleteAccount(a.id);
+                              }}
+                            >
+                              Delete
+                            </button>
                           </div>
                         </div>
 
-                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
-                          <button
-                            className="btnGhost"
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              openModalFor(a.id, "adjust");
-                            }}
-                          >
-                            Adjust
-                          </button>
-                          <button
-                            className="btnGhost"
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              openModalFor(a.id, "transfer");
-                            }}
-                          >
-                            Transfer
-                          </button>
-                          <button
-                            className={isPrimary ? "btn" : "btnGhost"}
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              savePrimary(a.id);
-                            }}
-                          >
-                            {isPrimary ? "Primary" : "Set primary"}
-                          </button>
-                          <button
-                            className="btnGhost"
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              deleteAccount(a.id);
-                            }}
-                          >
-                            Delete
-                          </button>
+                        <div className="accountEditGrid">
+                          <div>
+                            <div className="tinyLabel">Account Name</div>
+                            <input
+                              className="field"
+                              value={a.name}
+                              onClick={(e) => e.stopPropagation()}
+                              onChange={(e) => renameAccount(a.id, e.target.value)}
+                            />
+                          </div>
+
+                          <div>
+                            <div className="tinyLabel">Account Type</div>
+                            <select
+                              className="field"
+                              value={a.type || "other"}
+                              onClick={(e) => e.stopPropagation()}
+                              onChange={(e) => retypeAccount(a.id, e.target.value)}
+                            >
+                              <option value="checking">🏦 Checking</option>
+                              <option value="savings">💰 Savings</option>
+                              <option value="cash">💵 Cash</option>
+                              <option value="credit">💳 Credit Card</option>
+                              <option value="investment">📈 Investment</option>
+                              <option value="other">📁 Other</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        <div className="tinyLabel">
+                          {isCredit ? "Amount Owed" : "Balance"}
+                        </div>
+                        <div className="balanceValue">{fmtMoney(a.balance)}</div>
+                        <div className="sectionText" style={{ marginTop: 10 }}>
+                          Updated {fmtWhen(a.updatedAt)}
                         </div>
                       </div>
-                    </div>
-                  );
-                })
-              )}
-            </div>
+                    );
+                  })
+                )}
+              </div>
+            </article>
           </div>
-        </div>
 
-        {/* right */}
-        <div style={{ display: "grid", gap: 16 }}>
-          <div className="card" style={{ padding: 16, borderRadius: 24 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
-              <div>
-                <div style={{ fontWeight: 900, fontSize: 18 }}>
-                  {selectedAccount ? `${selectedAccount.name} ledger` : "Transaction ledger"}
+          <div>
+            <div className="focusGrid">
+              <article className="glassCard">
+                <div className="sectionTop">
+                  <div>
+                    <h2 className="sectionTitle">
+                      {selectedAccount ? selectedAccount.name : "Selected Account"}
+                    </h2>
+                    <div className="sectionText">
+                      Focus card for the account you are actively working.
+                    </div>
+                  </div>
+
+                  {selectedAccount ? (
+                    <span className="softChip">
+                      {typeIcon(selectedAccount.type)} {typeLabel(selectedAccount.type)}
+                    </span>
+                  ) : null}
                 </div>
-                <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
-                  This is where the page starts feeling like a real bank account.
+
+                {selectedAccount ? (
+                  <div
+                    className="focusCardInner"
+                    style={{
+                      background: `${typeAccent(
+                        selectedAccount.type
+                      )}, linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,.01))`,
+                    }}
+                  >
+                    <div className="stack">
+                      <div className="valueBlock">
+                        <div className="tinyLabel">
+                          {String(selectedAccount.type || "").toLowerCase() === "credit"
+                            ? "Amount Owed"
+                            : "Current Balance"}
+                        </div>
+                        <div className="focusValue">
+                          {fmtMoney(selectedAccount.balance)}
+                        </div>
+                      </div>
+
+                      <div className="chipRow" style={{ marginTop: 0 }}>
+                        <span className="softChip">
+                          {selectedAccount.id === primaryId ? "PRIMARY" : "STANDARD"}
+                        </span>
+                        <span className="softChip">
+                          UPDATED {fmtWhen(selectedAccount.updatedAt)}
+                        </span>
+                      </div>
+
+                      <div className="actionRow">
+                        <button
+                          className="solidBtn"
+                          type="button"
+                          onClick={() => openModalFor(selectedAccount.id, "adjust")}
+                        >
+                          Add Transaction
+                        </button>
+
+                        <button
+                          className="ghostBtn"
+                          type="button"
+                          onClick={() => openModalFor(selectedAccount.id, "transfer")}
+                        >
+                          Transfer
+                        </button>
+
+                        <button
+                          className="ghostBtn"
+                          type="button"
+                          onClick={() => openModalFor(selectedAccount.id, "set")}
+                        >
+                          Set Exact
+                        </button>
+
+                        <button
+                          className="ghostBtn"
+                          type="button"
+                          onClick={addDemoBillPayment}
+                        >
+                          Demo Bill Payment
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="emptyState">
+                    <h3 className="emptyStateTitle">No account selected</h3>
+                    <div className="emptyStateText">
+                      Choose one from the roster to view and manage it here.
+                    </div>
+                  </div>
+                )}
+              </article>
+
+              <article className="glassCard">
+                <div className="sectionTop">
+                  <div>
+                    <h3 className="sectionMini">Add Account</h3>
+                    <div className="sectionText">
+                      Keep this clean. Real financial buckets only.
+                    </div>
+                  </div>
                 </div>
+
+                <form onSubmit={addAccount} className="stack">
+                  <div>
+                    <div className="tinyLabel">Account Name</div>
+                    <input
+                      className="field"
+                      placeholder="Account name"
+                      value={adding.name}
+                      onChange={(e) =>
+                        setAdding((p) => ({ ...p, name: e.target.value }))
+                      }
+                    />
+                  </div>
+
+                  <div>
+                    <div className="tinyLabel">Type</div>
+                    <select
+                      className="field"
+                      value={adding.type}
+                      onChange={(e) =>
+                        setAdding((p) => ({ ...p, type: e.target.value }))
+                      }
+                    >
+                      <option value="checking">🏦 Checking</option>
+                      <option value="savings">💰 Savings</option>
+                      <option value="cash">💵 Cash</option>
+                      <option value="credit">💳 Credit Card</option>
+                      <option value="investment">📈 Investment</option>
+                      <option value="other">📁 Other</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <div className="tinyLabel">Starting Balance</div>
+                    <input
+                      className="field"
+                      placeholder="Starting balance"
+                      value={adding.balance}
+                      onChange={(e) =>
+                        setAdding((p) => ({ ...p, balance: e.target.value }))
+                      }
+                    />
+                  </div>
+
+                  <button className="solidBtn" type="submit">
+                    Add Account
+                  </button>
+                </form>
+
+                <div className="divider" />
+
+                <div className="mutedTiny">
+                  Credit accounts should hold the amount owed as a positive
+                  number.
+                </div>
+              </article>
+            </div>
+
+            <article className="glassCard">
+              <div className="sectionTop">
+                <div>
+                  <h2 className="sectionTitle">
+                    {selectedAccount
+                      ? `${selectedAccount.name} Ledger`
+                      : "Transaction Ledger"}
+                  </h2>
+                  <div className="sectionText">
+                    Real movement history for the account you selected.
+                  </div>
+                </div>
+
+                {selectedAccount ? (
+                  <div className="actionRow">
+                    <button
+                      className="solidBtn"
+                      type="button"
+                      onClick={() => openModalFor(selectedAccount.id, "adjust")}
+                    >
+                      Add Transaction
+                    </button>
+
+                    <button
+                      className="ghostBtn"
+                      type="button"
+                      onClick={() => openModalFor(selectedAccount.id, "transfer")}
+                    >
+                      Transfer
+                    </button>
+                  </div>
+                ) : null}
               </div>
 
               {selectedAccount ? (
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  <button className="btn" type="button" onClick={() => openModalFor(selectedAccount.id, "adjust")}>
-                    Add transaction
-                  </button>
-                  <button className="btnGhost" type="button" onClick={() => openModalFor(selectedAccount.id, "transfer")}>
-                    Transfer
-                  </button>
-                  <button className="btnGhost" type="button" onClick={addDemoBillPayment}>
-                    Demo bill payment
-                  </button>
+                <div
+                  className="focusCardInner"
+                  style={{
+                    marginBottom: 14,
+                    background: `${typeAccent(
+                      selectedAccount.type
+                    )}, linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,.01))`,
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+                      gap: 12,
+                    }}
+                  >
+                    <div>
+                      <div className="tinyLabel">Account</div>
+                      <div style={{ fontWeight: 900, fontSize: 18 }}>
+                        {typeIcon(selectedAccount.type)} {selectedAccount.name}
+                      </div>
+                      <div className="sectionText" style={{ marginTop: 6 }}>
+                        {typeLabel(selectedAccount.type)}
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="tinyLabel">Current Balance</div>
+                      <div style={{ fontWeight: 950, fontSize: 30 }}>
+                        {fmtMoney(selectedAccount.balance)}
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="tinyLabel">Status</div>
+                      <div style={{ fontWeight: 900, fontSize: 18 }}>
+                        {selectedAccount.id === primaryId ? "Primary" : "Standard"}
+                      </div>
+                      <div className="sectionText" style={{ marginTop: 6 }}>
+                        Updated {fmtWhen(selectedAccount.updatedAt)}
+                      </div>
+                    </div>
+                  </div>
                 </div>
               ) : null}
-            </div>
 
-            <div style={{ height: 12 }} />
+              <input
+                className="field"
+                placeholder="Search this account's transactions..."
+                value={ledgerSearch}
+                onChange={(e) => setLedgerSearch(e.target.value)}
+              />
 
-            {selectedAccount ? (
-              <div
-                className="card"
-                style={{
-                  padding: 14,
-                  borderRadius: 20,
-                  background: `${typeAccent(selectedAccount.type)}, rgba(255,255,255,.02)`,
-                  border: "1px solid rgba(255,255,255,.08)",
-                  marginBottom: 14,
-                }}
-              >
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12 }}>
-                  <div>
-                    <div className="muted" style={{ fontSize: 12 }}>Account</div>
-                    <div style={{ fontWeight: 900, fontSize: 18, marginTop: 4 }}>
-                      {typeIcon(selectedAccount.type)} {selectedAccount.name}
-                    </div>
-                    <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
-                      {typeLabel(selectedAccount.type)}
-                    </div>
-                  </div>
+              <div style={{ height: 14 }} />
 
-                  <div>
-                    <div className="muted" style={{ fontSize: 12 }}>Current balance</div>
-                    <div style={{ fontWeight: 950, fontSize: 28, marginTop: 4 }}>
-                      {fmtMoney(selectedAccount.balance)}
-                    </div>
-                  </div>
-
-                  <div>
-                    <div className="muted" style={{ fontSize: 12 }}>Status</div>
-                    <div style={{ fontWeight: 900, marginTop: 4 }}>{selectedAccount.id === primaryId ? "Primary" : "Standard"}</div>
-                    <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
-                      Updated {fmtWhen(selectedAccount.updatedAt)}
-                    </div>
+              {!selectedAccount ? (
+                <div className="emptyState">
+                  <h3 className="emptyStateTitle">No account selected</h3>
+                  <div className="emptyStateText">
+                    Choose an account on the left to view the ledger.
                   </div>
                 </div>
-              </div>
-            ) : null}
-
-            <input
-              className="input"
-              placeholder="Search this account's transactions..."
-              value={ledgerSearch}
-              onChange={(e) => setLedgerSearch(e.target.value)}
-            />
-
-            <div style={{ height: 14 }} />
-
-            {!selectedAccount ? (
-              <div className="card" style={{ padding: 14 }}>
-                <div style={{ fontWeight: 900 }}>No account selected</div>
-                <div className="muted" style={{ marginTop: 6 }}>
-                  Choose an account on the left to view the ledger.
+              ) : selectedLedger.length === 0 ? (
+                <div className="emptyState">
+                  <h3 className="emptyStateTitle">No transactions yet</h3>
+                  <div className="emptyStateText">
+                    Use Adjust, Transfer, or bill-linked entries to build the
+                    history.
+                  </div>
                 </div>
-              </div>
-            ) : selectedLedger.length === 0 ? (
-              <div className="card" style={{ padding: 14 }}>
-                <div style={{ fontWeight: 900 }}>No transactions yet</div>
-                <div className="muted" style={{ marginTop: 6 }}>
-                  Use Adjust, Transfer, or future Bill Payments to build clean history.
-                </div>
-              </div>
-            ) : (
-              <div className="grid" style={{ gap: 12 }}>
-                {selectedLedger.map((entry) => {
-                  const tone = transactionTone(entry.kind);
-                  return (
-                    <div
-                      key={entry.id}
-                      className="card"
-                      style={{
-                        padding: 14,
-                        borderRadius: 20,
-                        border:
-                          tone === "good"
-                            ? "1px solid rgba(34,197,94,.18)"
-                            : tone === "bad"
-                              ? "1px solid rgba(239,68,68,.18)"
-                              : "1px solid rgba(255,255,255,.06)",
-                        background:
-                          tone === "good"
-                            ? "linear-gradient(180deg, rgba(34,197,94,.08), rgba(255,255,255,.02))"
-                            : tone === "bad"
-                              ? "linear-gradient(180deg, rgba(239,68,68,.08), rgba(255,255,255,.02))"
-                              : "rgba(255,255,255,.02)",
-                      }}
-                    >
-                      <div style={{ display: "grid", gridTemplateColumns: "1.35fr auto auto", gap: 12, alignItems: "center" }}>
-                        <div style={{ minWidth: 0 }}>
-                          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                            <span className="pill" style={{ padding: "7px 10px", ...transactionChipStyle(entry.kind) }}>
-                              {transactionLabel(entry.kind)}
-                            </span>
+              ) : (
+                <div className="ledgerList">
+                  {selectedLedger.map((entry) => {
+                    const tone = transactionTone(entry.kind);
 
-                            {entry.relatedAccountName ? (
-                              <span className="muted" style={{ fontSize: 12 }}>
-                                {String(entry.kind).includes("transfer") ? `with ${entry.relatedAccountName}` : entry.relatedAccountName}
-                              </span>
-                            ) : null}
-
-                            {entry.sourceType === "bill" ? (
+                    return (
+                      <div
+                        key={entry.id}
+                        className="ledgerItem"
+                        style={{
+                          border:
+                            tone === "good"
+                              ? "1px solid rgba(34,197,94,.18)"
+                              : tone === "bad"
+                                ? "1px solid rgba(244,114,182,.18)"
+                                : "1px solid rgba(255,255,255,.07)",
+                          background:
+                            tone === "good"
+                              ? "linear-gradient(180deg, rgba(34,197,94,.08), rgba(6,12,24,.75))"
+                              : tone === "bad"
+                                ? "linear-gradient(180deg, rgba(244,114,182,.08), rgba(6,12,24,.75))"
+                                : "linear-gradient(180deg, rgba(8,13,24,.78), rgba(4,8,16,.72))",
+                        }}
+                      >
+                        <div className="ledgerGrid">
+                          <div>
+                            <div
+                              style={{
+                                display: "flex",
+                                gap: 8,
+                                alignItems: "center",
+                                flexWrap: "wrap",
+                              }}
+                            >
                               <span
-                                className="pill"
+                                className="toneChip"
                                 style={{
-                                  padding: "7px 10px",
-                                  background: "rgba(59,130,246,.12)",
-                                  border: "1px solid rgba(59,130,246,.24)",
+                                  minHeight: 34,
+                                  padding: "8px 10px",
+                                  ...transactionChipStyle(entry.kind),
                                 }}
                               >
-                                Bill-linked
+                                {transactionLabel(entry.kind)}
                               </span>
+
+                              {entry.relatedAccountName ? (
+                                <span className="mutedTiny">
+                                  {String(entry.kind).includes("transfer")
+                                    ? `with ${entry.relatedAccountName}`
+                                    : entry.relatedAccountName}
+                                </span>
+                              ) : null}
+
+                              {entry.sourceType === "bill" ? (
+                                <span
+                                  className="softChip"
+                                  style={{
+                                    minHeight: 34,
+                                    padding: "8px 10px",
+                                    background: "rgba(77,124,255,.14)",
+                                    border: "1px solid rgba(77,124,255,.22)",
+                                  }}
+                                >
+                                  Bill-linked
+                                </span>
+                              ) : null}
+                            </div>
+
+                            <div className="sectionText" style={{ marginTop: 8 }}>
+                              {fmtWhen(entry.ts)}
+                            </div>
+
+                            {entry.note ? (
+                              <div
+                                style={{
+                                  marginTop: 8,
+                                  lineHeight: 1.5,
+                                  color: "#eef4ff",
+                                  fontSize: 14,
+                                }}
+                              >
+                                {entry.note}
+                              </div>
                             ) : null}
                           </div>
 
-                          <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>
-                            {fmtWhen(entry.ts)}
-                          </div>
-
-                          {entry.note ? (
-                            <div style={{ marginTop: 8, lineHeight: 1.4 }}>
-                              {entry.note}
+                          <div className="ledgerRight">
+                            <div className="tinyLabel">Change</div>
+                            <div
+                              style={{
+                                fontWeight: 950,
+                                fontSize: 20,
+                                color:
+                                  tone === "good"
+                                    ? "rgb(134 239 172)"
+                                    : tone === "bad"
+                                      ? "rgb(251 207 232)"
+                                      : "#f5f7ff",
+                              }}
+                            >
+                              {fmtDelta(entry.delta)}
                             </div>
-                          ) : null}
-                        </div>
-
-                        <div style={{ textAlign: "right" }}>
-                          <div className="muted" style={{ fontSize: 12 }}>Change</div>
-                          <div
-                            style={{
-                              fontWeight: 950,
-                              fontSize: 18,
-                              marginTop: 4,
-                              color:
-                                tone === "good"
-                                  ? "rgb(134 239 172)"
-                                  : tone === "bad"
-                                    ? "rgb(252 165 165)"
-                                    : "inherit",
-                            }}
-                          >
-                            {fmtDelta(entry.delta)}
                           </div>
-                        </div>
 
-                        <div style={{ textAlign: "right" }}>
-                          <div className="muted" style={{ fontSize: 12 }}>Balance after</div>
-                          <div style={{ fontWeight: 900, fontSize: 18, marginTop: 4 }}>
-                            {fmtMoney(entry.resultingBalance)}
+                          <div className="ledgerRight">
+                            <div className="tinyLabel">Balance After</div>
+                            <div style={{ fontWeight: 900, fontSize: 20 }}>
+                              {fmtMoney(entry.resultingBalance)}
+                            </div>
                           </div>
                         </div>
                       </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+                    );
+                  })}
+                </div>
+              )}
+            </article>
           </div>
-        </div>
-      </section>
+        </section>
+      </div>
 
       <Modal
         open={modalOpen}
         title={modalAccount ? `${modalAccount.name} transaction` : "Transaction"}
         subtitle={
           modalAccount
-            ? `${typeIcon(modalAccount.type)} ${typeLabel(modalAccount.type)} • Current balance ${fmtMoney(modalAccount.balance)}`
+            ? `${typeIcon(modalAccount.type)} ${typeLabel(
+                modalAccount.type
+              )} • Current balance ${fmtMoney(modalAccount.balance)}`
             : ""
         }
         onClose={() => setModalOpen(false)}
       >
         {!modalAccount ? (
-          <div className="muted">No account selected.</div>
+          <div className="mutedText">No account selected.</div>
         ) : (
           <>
-            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 14 }}>
-              <button className={mode === "adjust" ? "btn" : "btnGhost"} type="button" onClick={() => setMode("adjust")}>
+            <div className="modalTabs">
+              <button
+                className={mode === "adjust" ? "solidBtn" : "ghostBtn"}
+                type="button"
+                onClick={() => setMode("adjust")}
+              >
                 Deposit / Withdraw
               </button>
-              <button className={mode === "transfer" ? "btn" : "btnGhost"} type="button" onClick={() => setMode("transfer")}>
+
+              <button
+                className={mode === "transfer" ? "solidBtn" : "ghostBtn"}
+                type="button"
+                onClick={() => setMode("transfer")}
+              >
                 Transfer
               </button>
-              <button className={mode === "set" ? "btn" : "btnGhost"} type="button" onClick={() => setMode("set")}>
-                Set exact balance
+
+              <button
+                className={mode === "set" ? "solidBtn" : "ghostBtn"}
+                type="button"
+                onClick={() => setMode("set")}
+              >
+                Set Exact Balance
               </button>
 
-              <span className="pill" style={{ padding: "8px 10px", marginLeft: "auto" }}>
-                Primary: <b>{modalAccount.id === primaryId ? "Yes" : "No"}</b>
+              <span className="softChip" style={{ marginLeft: "auto" }}>
+                PRIMARY: {modalAccount.id === primaryId ? "YES" : "NO"}
               </span>
             </div>
 
             {mode === "adjust" ? (
-              <div className="grid" style={{ gap: 12 }}>
-                <div className="row" style={{ gap: 10, flexWrap: "wrap" }}>
-                  <button className={adjustSign === "deposit" ? "btn" : "btnGhost"} type="button" onClick={() => setAdjustSign("deposit")}>
+              <div className="stack">
+                <div className="actionRow">
+                  <button
+                    className={adjustSign === "deposit" ? "solidBtn" : "ghostBtn"}
+                    type="button"
+                    onClick={() => setAdjustSign("deposit")}
+                  >
                     Deposit
                   </button>
-                  <button className={adjustSign === "withdraw" ? "btn" : "btnGhost"} type="button" onClick={() => setAdjustSign("withdraw")}>
+
+                  <button
+                    className={adjustSign === "withdraw" ? "solidBtn" : "ghostBtn"}
+                    type="button"
+                    onClick={() => setAdjustSign("withdraw")}
+                  >
                     Withdraw
                   </button>
                 </div>
 
-                <input
-                  className="input"
-                  placeholder="Amount"
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                />
+                <div>
+                  <div className="tinyLabel">Amount</div>
+                  <input
+                    className="field"
+                    placeholder="Amount"
+                    value={amount}
+                    onChange={(e) => setAmount(e.target.value)}
+                  />
+                </div>
 
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <div className="actionRow">
                   {[10, 20, 50, 100, 200, 500, 1000].map((v) => (
-                    <button key={v} className="btnGhost" type="button" onClick={() => quickChip(v)}>
+                    <button
+                      key={v}
+                      className="ghostBtn"
+                      type="button"
+                      onClick={() => quickChip(v)}
+                    >
                       {fmtMoney(v)}
                     </button>
                   ))}
                 </div>
 
-                <input
-                  className="input"
-                  placeholder="Note (optional)"
-                  value={note}
-                  onChange={(e) => setNote(e.target.value)}
-                />
+                <div>
+                  <div className="tinyLabel">Note</div>
+                  <input
+                    className="field"
+                    placeholder="Note (optional)"
+                    value={note}
+                    onChange={(e) => setNote(e.target.value)}
+                  />
+                </div>
 
-                <button className="btn" type="button" onClick={applyModal}>
-                  Apply transaction
+                <button className="solidBtn" type="button" onClick={applyModal}>
+                  Apply Transaction
                 </button>
               </div>
             ) : null}
 
             {mode === "transfer" ? (
-              <div className="grid" style={{ gap: 12 }}>
-                <select className="input" value={transferToId} onChange={(e) => setTransferToId(e.target.value)}>
-                  <option value="">Choose destination account</option>
-                  {accounts
-                    .filter((a) => a.id !== modalAccount.id)
-                    .map((a) => (
-                      <option key={a.id} value={a.id}>
-                        {a.name} — {typeLabel(a.type)}
-                      </option>
-                    ))}
-                </select>
+              <div className="stack">
+                <div>
+                  <div className="tinyLabel">Destination Account</div>
+                  <select
+                    className="field"
+                    value={transferToId}
+                    onChange={(e) => setTransferToId(e.target.value)}
+                  >
+                    <option value="">Choose destination account</option>
+                    {accounts
+                      .filter((a) => a.id !== modalAccount.id)
+                      .map((a) => (
+                        <option key={a.id} value={a.id}>
+                          {a.name} — {typeLabel(a.type)}
+                        </option>
+                      ))}
+                  </select>
+                </div>
 
-                <input
-                  className="input"
-                  placeholder="Transfer amount"
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                />
+                <div>
+                  <div className="tinyLabel">Transfer Amount</div>
+                  <input
+                    className="field"
+                    placeholder="Transfer amount"
+                    value={amount}
+                    onChange={(e) => setAmount(e.target.value)}
+                  />
+                </div>
 
-                <input
-                  className="input"
-                  placeholder="Note (optional)"
-                  value={note}
-                  onChange={(e) => setNote(e.target.value)}
-                />
+                <div>
+                  <div className="tinyLabel">Note</div>
+                  <input
+                    className="field"
+                    placeholder="Note (optional)"
+                    value={note}
+                    onChange={(e) => setNote(e.target.value)}
+                  />
+                </div>
 
-                <button className="btn" type="button" onClick={applyModal}>
-                  Complete transfer
+                <button className="solidBtn" type="button" onClick={applyModal}>
+                  Complete Transfer
                 </button>
               </div>
             ) : null}
 
             {mode === "set" ? (
-              <div className="grid" style={{ gap: 12 }}>
-                <input
-                  className="input"
-                  placeholder="New exact balance"
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                />
+              <div className="stack">
+                <div>
+                  <div className="tinyLabel">New Exact Balance</div>
+                  <input
+                    className="field"
+                    placeholder="New exact balance"
+                    value={amount}
+                    onChange={(e) => setAmount(e.target.value)}
+                  />
+                </div>
 
-                <input
-                  className="input"
-                  placeholder="Note (optional)"
-                  value={note}
-                  onChange={(e) => setNote(e.target.value)}
-                />
+                <div>
+                  <div className="tinyLabel">Note</div>
+                  <input
+                    className="field"
+                    placeholder="Note (optional)"
+                    value={note}
+                    onChange={(e) => setNote(e.target.value)}
+                  />
+                </div>
 
-                <button className="btn" type="button" onClick={applyModal}>
-                  Set balance
+                <button className="solidBtn" type="button" onClick={applyModal}>
+                  Set Balance
                 </button>
               </div>
             ) : null}

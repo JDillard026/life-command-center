@@ -2,9 +2,7 @@
 
 import * as React from "react";
 import { supabase } from "@/lib/supabaseClient";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import GlassPane from "../components/GlassPane";
 import {
   CalendarDays,
   ChevronDown,
@@ -13,16 +11,20 @@ import {
   Plus,
   Search,
   X,
+  AlertTriangle,
+  Copy,
+  Trash2,
+  Pencil,
 } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
 const TONE = {
-  green: "#6ef1ab",
-  red: "#ff7f99",
-  amber: "#ffc56c",
-  blue: "#8fd0ff",
-  slate: "#94a3b8",
+  green: "#9ef0c0",
+  red: "#ffb2c2",
+  amber: "#ffd089",
+  blue: "#9fd7ff",
+  white: "#f7fbff",
 };
 
 function uid() {
@@ -30,6 +32,16 @@ function uid() {
     globalThis.crypto?.randomUUID?.() ??
     `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
   );
+}
+
+function money(n) {
+  const num = Number(n);
+  if (!Number.isFinite(num)) return "—";
+  return num.toLocaleString(undefined, {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
+  });
 }
 
 function pad2(n) {
@@ -77,9 +89,17 @@ function startOfWeekISO(iso, weekStartsOn = 0) {
   return toISODate(d);
 }
 
+function endOfGridISO(monthStartISO) {
+  const gridStart = startOfWeekISO(monthStartISO, 0);
+  return addDaysISO(gridStart, 41);
+}
+
 function monthLabel(monthStartISO) {
   const d = parseISO(monthStartISO) ?? new Date();
-  return d.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+  return d.toLocaleDateString(undefined, {
+    month: "long",
+    year: "numeric",
+  });
 }
 
 function fmtLongDate(iso) {
@@ -107,37 +127,6 @@ function weekdayShort(i) {
   return base.toLocaleDateString(undefined, { weekday: "short" });
 }
 
-function inSameMonth(dayISO, monthStartISO) {
-  const d = parseISO(dayISO);
-  const m = parseISO(monthStartISO);
-  if (!d || !m) return false;
-  return (
-    d.getFullYear() === m.getFullYear() && d.getMonth() === m.getMonth()
-  );
-}
-
-function fmtMoney(n) {
-  const num = Number(n);
-  if (!Number.isFinite(num)) return "$0.00";
-  return num.toLocaleString(undefined, {
-    style: "currency",
-    currency: "USD",
-  });
-}
-
-function parseMoneyInput(v) {
-  const cleaned = String(v ?? "").replace(/[^0-9.-]/g, "");
-  const num = Number(cleaned);
-  return Number.isFinite(num) ? num : NaN;
-}
-
-function timeSortValue(hhmm) {
-  if (!hhmm) return -1;
-  const [h, m] = String(hhmm).split(":").map(Number);
-  if (!Number.isFinite(h) || !Number.isFinite(m)) return -1;
-  return h * 60 + m;
-}
-
 function fmtTime(hhmm) {
   if (!hhmm) return "All day";
   const [h, m] = String(hhmm).split(":").map(Number);
@@ -150,69 +139,58 @@ function fmtTime(hhmm) {
   });
 }
 
+function timeSortValue(hhmm) {
+  if (!hhmm) return -1;
+  const [h, m] = String(hhmm).split(":").map(Number);
+  if (!Number.isFinite(h) || !Number.isFinite(m)) return -1;
+  return h * 60 + m;
+}
+
 function isTodayISO(iso) {
   return iso === todayISO();
 }
 
-function sourceLabel(ev) {
-  if (ev.source === "spending") return "Synced from Spending";
-  if (ev.source === "planned_expense") return "Synced planned item";
-  if (ev.source === "income") return "Synced income";
-  return "Manual event";
+function inSameMonth(dayISO, monthStartISO) {
+  const d = parseISO(dayISO);
+  const m = parseISO(monthStartISO);
+  if (!d || !m) return false;
+  return d.getFullYear() === m.getFullYear() && d.getMonth() === m.getMonth();
 }
 
-function toneForEvent(ev) {
-  const source = String(ev?.source || "");
-  const flow = String(ev?.flow || "none").toLowerCase();
-  const category = String(ev?.category || "").toLowerCase();
-  const title = String(ev?.title || "").toLowerCase();
+function parseMoneyInput(v) {
+  const cleaned = String(v ?? "").replace(/[^0-9.-]/g, "");
+  const num = Number(cleaned);
+  return Number.isFinite(num) ? num : NaN;
+}
 
-  if (
-    flow === "income" ||
-    category === "payday" ||
-    source === "income" ||
-    title.includes("payday") ||
-    title.includes("income")
-  ) {
-    return {
-      line: TONE.green,
-      border: "rgba(110,241,171,.22)",
-      badgeClass: "border-emerald-400/20 bg-emerald-400/10 text-emerald-200",
-      cardGlow: "0 0 0 1px rgba(110,241,171,.08), 0 0 20px rgba(110,241,171,.08)",
-      label: "Income",
-      tone: "good",
-    };
-  }
-
-  if (source === "planned_expense") {
-    return {
-      line: TONE.amber,
-      border: "rgba(255,197,108,.22)",
-      badgeClass: "border-amber-400/20 bg-amber-400/10 text-amber-200",
-      cardGlow: "0 0 0 1px rgba(255,197,108,.08), 0 0 20px rgba(255,197,108,.08)",
-      label: "Planned",
-      tone: "warn",
-    };
-  }
-
-  if (flow === "expense" || source === "spending") {
-    return {
-      line: TONE.red,
-      border: "rgba(255,127,153,.22)",
-      badgeClass: "border-red-400/20 bg-red-400/10 text-red-200",
-      cardGlow: "0 0 0 1px rgba(255,127,153,.08), 0 0 20px rgba(255,127,153,.08)",
-      label: "Expense",
-      tone: "bad",
-    };
-  }
-
+function mapProfileRow(row) {
   return {
-    line: TONE.blue,
-    border: "rgba(143,208,255,.22)",
-    badgeClass: "border-sky-400/20 bg-sky-400/10 text-sky-200",
-    cardGlow: "0 0 0 1px rgba(143,208,255,.08), 0 0 20px rgba(143,208,255,.08)",
-    label: "General",
-    tone: "blue",
+    id: row.id,
+    name: row.name || "Default",
+    is_default: Boolean(row.is_default),
+    color: row.color || "#94a3b8",
+  };
+}
+
+function mapEventRow(row) {
+  return {
+    id: row.id,
+    profile_id: row.profile_id || "",
+    title: row.title || "",
+    event_date: row.event_date,
+    event_time: row.event_time || "",
+    end_time: row.end_time || "",
+    category: row.category || "General",
+    flow: row.flow || "none",
+    amount: Number(row.amount || 0),
+    note: row.note || "",
+    status: row.status || "scheduled",
+    color: row.color || "#94a3b8",
+    source: row.source || "manual",
+    source_id: row.source_id || "",
+    source_table: row.source_table || "",
+    auto_created: Boolean(row.auto_created),
+    transaction_type: row.transaction_type || null,
   };
 }
 
@@ -261,47 +239,161 @@ function expenseTemplate(dateISO, profileId = "") {
   };
 }
 
-function mapProfileRow(row) {
+function toneMeta(tone = "neutral") {
+  if (tone === "green") {
+    return {
+      text: "#9ef0c0",
+      border: "rgba(158,240,192,0.18)",
+      glow: "rgba(158,240,192,0.12)",
+      dot: "#8ef4bb",
+      pillBg: "rgba(8,18,12,0.36)",
+    };
+  }
+
+  if (tone === "amber") {
+    return {
+      text: "#ffd089",
+      border: "rgba(255,208,137,0.18)",
+      glow: "rgba(255,208,137,0.12)",
+      dot: "#ffd089",
+      pillBg: "rgba(18,14,8,0.36)",
+    };
+  }
+
+  if (tone === "red") {
+    return {
+      text: "#ffb2c2",
+      border: "rgba(255,178,194,0.18)",
+      glow: "rgba(255,178,194,0.12)",
+      dot: "#ff96ae",
+      pillBg: "rgba(18,8,11,0.36)",
+    };
+  }
+
+  if (tone === "blue") {
+    return {
+      text: "#9fd7ff",
+      border: "rgba(159,215,255,0.18)",
+      glow: "rgba(159,215,255,0.12)",
+      dot: "#9fd7ff",
+      pillBg: "rgba(8,14,20,0.36)",
+    };
+  }
+
   return {
-    id: row.id,
-    name: row.name || "Default",
-    is_default: Boolean(row.is_default),
-    color: row.color || "#94a3b8",
+    text: "#f7fbff",
+    border: "rgba(214,226,255,0.14)",
+    glow: "rgba(214,226,255,0.10)",
+    dot: "#f7fbff",
+    pillBg: "rgba(10,14,21,0.36)",
   };
 }
 
-function mapEventRow(row) {
+function toneForEvent(ev) {
+  const source = String(ev?.source || "");
+  const flow = String(ev?.flow || "none").toLowerCase();
+  const category = String(ev?.category || "").toLowerCase();
+  const title = String(ev?.title || "").toLowerCase();
+
+  if (
+    flow === "income" ||
+    category === "payday" ||
+    source === "income" ||
+    title.includes("payday") ||
+    title.includes("income")
+  ) {
+    return {
+      tone: "green",
+      label: "Income",
+      line: TONE.green,
+    };
+  }
+
+  if (source === "planned_expense") {
+    return {
+      tone: "amber",
+      label: "Planned",
+      line: TONE.amber,
+    };
+  }
+
+  if (flow === "expense" || source === "spending") {
+    return {
+      tone: "red",
+      label: "Expense",
+      line: TONE.red,
+    };
+  }
+
   return {
-    id: row.id,
-    profile_id: row.profile_id || "",
-    title: row.title || "",
-    event_date: row.event_date,
-    event_time: row.event_time || "",
-    end_time: row.end_time || "",
-    category: row.category || "General",
-    flow: row.flow || "none",
-    amount: Number(row.amount || 0),
-    note: row.note || "",
-    status: row.status || "scheduled",
-    color: row.color || "#94a3b8",
-    source: row.source || "manual",
-    source_id: row.source_id || "",
-    source_table: row.source_table || "",
-    auto_created: Boolean(row.auto_created),
-    transaction_type: row.transaction_type || null,
+    tone: "blue",
+    label: "General",
+    line: TONE.blue,
   };
 }
 
-function ShellCard({ children, className = "", style = {} }) {
+function sourceLabel(ev) {
+  if (ev.source === "spending") return "Synced from Spending";
+  if (ev.source === "planned_expense") return "Synced planned item";
+  if (ev.source === "income") return "Synced income";
+  return "Manual event";
+}
+
+function eyebrowStyle() {
+  return {
+    fontSize: 10,
+    textTransform: "uppercase",
+    letterSpacing: ".22em",
+    fontWeight: 900,
+    color: "rgba(255,255,255,0.40)",
+  };
+}
+
+function mutedStyle() {
+  return {
+    fontSize: 12,
+    color: "rgba(255,255,255,0.60)",
+    lineHeight: 1.45,
+  };
+}
+
+function StatusDot({ tone = "neutral", size = 8 }) {
+  const meta = toneMeta(tone);
+
+  return (
+    <span
+      style={{
+        width: size,
+        height: size,
+        borderRadius: 999,
+        background: meta.dot,
+        boxShadow: `0 0 14px ${meta.glow}`,
+        flexShrink: 0,
+      }}
+    />
+  );
+}
+
+function MiniPill({ children, tone = "neutral" }) {
+  const meta = toneMeta(tone);
+
   return (
     <div
-      className={`rounded-[28px] border border-white/10 backdrop-blur-[12px] ${className}`}
       style={{
+        minHeight: 34,
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 8,
+        padding: "0 12px",
+        borderRadius: 999,
+        border: `1px solid ${meta.border}`,
         background:
-          "linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.012)), rgba(6,10,16,.12)",
-        boxShadow:
-          "inset 0 1px 0 rgba(255,255,255,.10), 0 22px 50px rgba(0,0,0,.16), 0 0 18px rgba(255,255,255,.04)",
-        ...style,
+          "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.012))",
+        boxShadow: `inset 0 1px 0 rgba(255,255,255,0.05), 0 0 14px ${meta.glow}`,
+        color: tone === "neutral" ? "rgba(255,255,255,0.86)" : meta.text,
+        fontSize: 11,
+        fontWeight: 800,
+        whiteSpace: "nowrap",
       }}
     >
       {children}
@@ -309,20 +401,154 @@ function ShellCard({ children, className = "", style = {} }) {
   );
 }
 
-function GlassSelect({ value, onChange, children, className = "", ...rest }) {
+function GhostButton({ children, onClick, icon, active = false, style }) {
   return (
-    <div className="relative">
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        minHeight: 40,
+        padding: "10px 14px",
+        borderRadius: 15,
+        border: active
+          ? "1px solid rgba(214,226,255,0.16)"
+          : "1px solid rgba(214,226,255,0.10)",
+        background: active
+          ? "linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.018))"
+          : "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.012))",
+        color: "#fff",
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 8,
+        fontSize: 13,
+        fontWeight: 900,
+        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
+        cursor: "pointer",
+        ...style,
+      }}
+    >
+      {icon || null}
+      {children}
+    </button>
+  );
+}
+
+function SolidButton({ children, onClick, icon, style, type = "button" }) {
+  return (
+    <button
+      type={type}
+      onClick={onClick}
+      style={{
+        minHeight: 40,
+        padding: "10px 14px",
+        borderRadius: 15,
+        border: "1px solid rgba(255,255,255,0.12)",
+        background: "#f7fbff",
+        color: "#09111f",
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 8,
+        fontSize: 13,
+        fontWeight: 900,
+        cursor: "pointer",
+        ...style,
+      }}
+    >
+      {icon || null}
+      {children}
+    </button>
+  );
+}
+
+function FieldLabel({ children }) {
+  return (
+    <label
+      style={{
+        display: "block",
+        marginBottom: 8,
+        fontSize: 12,
+        color: "rgba(255,255,255,0.72)",
+        fontWeight: 700,
+      }}
+    >
+      {children}
+    </label>
+  );
+}
+
+function FieldInput(props) {
+  return (
+    <input
+      {...props}
+      style={{
+        width: "100%",
+        minHeight: 44,
+        borderRadius: 16,
+        border: "1px solid rgba(214,226,255,0.10)",
+        background: "rgba(255,255,255,0.04)",
+        color: "#fff",
+        padding: "0 14px",
+        outline: "none",
+        ...props.style,
+      }}
+    />
+  );
+}
+
+function FieldTextarea(props) {
+  return (
+    <textarea
+      {...props}
+      style={{
+        width: "100%",
+        minHeight: 120,
+        borderRadius: 16,
+        border: "1px solid rgba(214,226,255,0.10)",
+        background: "rgba(255,255,255,0.04)",
+        color: "#fff",
+        padding: "12px 14px",
+        outline: "none",
+        resize: "vertical",
+        ...props.style,
+      }}
+    />
+  );
+}
+
+function FieldSelect({ children, value, onChange, style }) {
+  return (
+    <div style={{ position: "relative" }}>
       <select
         value={value}
         onChange={onChange}
-        className={`h-11 w-full appearance-none rounded-2xl border border-white/10 bg-white/[0.04] px-3 pr-10 text-sm text-white outline-none transition focus:border-white/20 focus:ring-2 focus:ring-white/10 ${className}`}
-        {...rest}
+        style={{
+          width: "100%",
+          minHeight: 44,
+          borderRadius: 16,
+          border: "1px solid rgba(214,226,255,0.10)",
+          background: "rgba(255,255,255,0.04)",
+          color: "#fff",
+          padding: "0 40px 0 14px",
+          appearance: "none",
+          outline: "none",
+          ...style,
+        }}
       >
         {children}
       </select>
+
       <ChevronDown
         size={16}
-        className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-white/55"
+        style={{
+          position: "absolute",
+          right: 12,
+          top: "50%",
+          transform: "translateY(-50%)",
+          color: "rgba(255,255,255,0.54)",
+          pointerEvents: "none",
+        }}
       />
     </div>
   );
@@ -330,139 +556,679 @@ function GlassSelect({ value, onChange, children, className = "", ...rest }) {
 
 function SearchBox({ value, onChange }) {
   return (
-    <div className="relative">
+    <div style={{ position: "relative" }}>
       <Search
         size={16}
-        className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-white/45"
+        style={{
+          position: "absolute",
+          left: 12,
+          top: "50%",
+          transform: "translateY(-50%)",
+          color: "rgba(255,255,255,0.45)",
+          pointerEvents: "none",
+        }}
       />
-      <Input
+      <FieldInput
         value={value}
         onChange={onChange}
         placeholder="Search events..."
-        className="h-11 rounded-2xl border-white/10 bg-white/[0.04] pl-10 text-white placeholder:text-white/40"
+        style={{ paddingLeft: 38 }}
       />
     </div>
   );
 }
 
-function StatCard({ title, value, sub, tone = "neutral" }) {
-  const map = {
-    good: {
-      border: "rgba(110,241,171,.18)",
-      glow: "rgba(110,241,171,.12)",
-      dot: TONE.green,
-    },
-    bad: {
-      border: "rgba(255,127,153,.18)",
-      glow: "rgba(255,127,153,.12)",
-      dot: TONE.red,
-    },
-    warn: {
-      border: "rgba(255,197,108,.18)",
-      glow: "rgba(255,197,108,.12)",
-      dot: TONE.amber,
-    },
-    neutral: {
-      border: "rgba(255,255,255,.10)",
-      glow: "rgba(255,255,255,.05)",
-      dot: "#fff",
-    },
-  };
+function HeaderBar({
+  monthLabelText,
+  profileName,
+  focusTitle,
+  focusTone,
+  onManage,
+  onToday,
+  onAdd,
+}) {
+  return (
+    <GlassPane size="hero">
+      <div
+        style={{
+          minHeight: 96,
+          display: "grid",
+          gridTemplateColumns: "minmax(0, 1fr) auto",
+          gap: 14,
+          alignItems: "center",
+        }}
+      >
+        <div style={{ minWidth: 0 }}>
+          <div style={eyebrowStyle()}>Live calendar board</div>
 
-  const t = map[tone] || map.neutral;
+          <div
+            style={{
+              marginTop: 8,
+              fontSize: "clamp(28px, 4vw, 40px)",
+              lineHeight: 0.96,
+              fontWeight: 950,
+              letterSpacing: "-0.05em",
+              color: "#fff",
+            }}
+          >
+            Calendar Command
+          </div>
+
+          <div
+            style={{
+              marginTop: 10,
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              minWidth: 0,
+            }}
+          >
+            <StatusDot tone={focusTone} />
+            <div
+              style={{
+                ...mutedStyle(),
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+              }}
+            >
+              {focusTitle}
+            </div>
+          </div>
+        </div>
+
+        <div
+          style={{
+            display: "flex",
+            gap: 10,
+            flexWrap: "wrap",
+            justifyContent: "flex-end",
+          }}
+        >
+          <MiniPill>{monthLabelText}</MiniPill>
+          <MiniPill>{profileName || "Calendar profile"}</MiniPill>
+          <GhostButton onClick={onManage}>Manage</GhostButton>
+          <GhostButton onClick={onToday}>Today</GhostButton>
+          <SolidButton onClick={onAdd} icon={<Plus size={15} />}>
+            Add Event
+          </SolidButton>
+        </div>
+      </div>
+    </GlassPane>
+  );
+}
+
+function MetricCard({ label, value, detail, tone = "neutral" }) {
+  const meta = toneMeta(tone);
 
   return (
+    <GlassPane tone={tone} size="card" style={{ height: "100%" }}>
+      <div
+        style={{
+          minHeight: 128,
+          height: "100%",
+          display: "grid",
+          gridTemplateRows: "auto auto 1fr",
+          gap: 8,
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            gap: 10,
+            alignItems: "center",
+          }}
+        >
+          <div style={eyebrowStyle()}>{label}</div>
+          <StatusDot tone={tone} size={9} />
+        </div>
+
+        <div
+          style={{
+            fontSize: "clamp(30px, 4vw, 42px)",
+            lineHeight: 0.96,
+            fontWeight: 950,
+            letterSpacing: "-0.055em",
+            color: tone === "neutral" ? "#fff" : meta.text,
+          }}
+        >
+          {value}
+        </div>
+
+        <div
+          style={{
+            display: "flex",
+            alignItems: "flex-end",
+            color: "rgba(255,255,255,0.62)",
+            fontSize: 12,
+            lineHeight: 1.4,
+          }}
+        >
+          {detail}
+        </div>
+      </div>
+    </GlassPane>
+  );
+}
+
+function PaneHeader({ title, subcopy, right }) {
+  return (
     <div
-      className="rounded-[24px] border p-5"
       style={{
-        borderColor: t.border,
-        background:
-          "linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,.010)), rgba(7,10,16,.10)",
-        boxShadow: `inset 0 1px 0 rgba(255,255,255,.04), 0 0 28px ${t.glow}`,
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "flex-start",
+        gap: 12,
+        flexWrap: "wrap",
+        marginBottom: 14,
       }}
     >
-      <div className="mb-3 flex items-center justify-between gap-2">
-        <div className="text-[11px] uppercase tracking-[0.18em] text-white/40">
+      <div style={{ minWidth: 0 }}>
+        <div
+          style={{
+            fontSize: 20,
+            lineHeight: 1,
+            fontWeight: 900,
+            letterSpacing: "-0.03em",
+            color: "#fff",
+          }}
+        >
           {title}
         </div>
-        <div
-          className="h-2 w-2 rounded-full"
-          style={{
-            background: t.dot,
-            boxShadow: `0 0 14px ${t.dot}`,
-          }}
-        />
+
+        {subcopy ? (
+          <div style={{ ...mutedStyle(), marginTop: 6 }}>{subcopy}</div>
+        ) : null}
       </div>
 
-      <div className="text-[28px] font-black leading-none text-white md:text-[34px]">
-        {value}
-      </div>
-
-      <div className="mt-2 text-sm text-white/56">{sub}</div>
+      {right || null}
     </div>
   );
 }
 
-function DotBadge({ children, tone = "neutral" }) {
-  const map = {
-    good: "border-emerald-400/20 bg-emerald-400/10 text-emerald-200",
-    bad: "border-red-400/20 bg-red-400/10 text-red-200",
-    warn: "border-amber-400/20 bg-amber-400/10 text-amber-200",
-    neutral: "border-white/10 bg-white/[0.04] text-white/80",
-    blue: "border-sky-400/20 bg-sky-400/10 text-sky-200",
-  };
-
-  return (
-    <span
-      className={`inline-flex rounded-full border px-3 py-1 text-xs font-black ${map[tone] || map.neutral}`}
-    >
-      {children}
-    </span>
-  );
-}
-
-function RowMenu({ children }) {
-  return (
-    <details className="relative">
-      <summary className="flex h-9 w-9 cursor-pointer list-none items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-lg text-white/80 transition hover:bg-white/[0.07]">
-        …
-      </summary>
-
-      <div className="absolute right-0 z-20 mt-2 w-52 rounded-2xl border border-white/10 bg-[rgba(10,16,28,.96)] p-2 shadow-[0_20px_50px_rgba(0,0,0,.45)] backdrop-blur-xl">
-        {children}
-      </div>
-    </details>
-  );
-}
-
-function MenuButton({ children, onClick, tone = "default" }) {
-  const toneClass =
-    tone === "danger"
-      ? "text-red-300 hover:bg-red-400/10"
-      : tone === "success"
-        ? "text-emerald-300 hover:bg-emerald-400/10"
-        : "text-white/82 hover:bg-white/8";
-
+function FilterChip({ children, active = false, onClick }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`w-full rounded-xl px-3 py-2 text-left text-sm font-semibold transition ${toneClass}`}
+      style={{
+        minHeight: 34,
+        padding: "7px 12px",
+        borderRadius: 13,
+        border: active
+          ? "1px solid rgba(214,226,255,0.14)"
+          : "1px solid rgba(255,255,255,0.06)",
+        background: active
+          ? "linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.014))"
+          : "rgba(255,255,255,0.01)",
+        color: active ? "#fff" : "rgba(255,255,255,0.66)",
+        fontWeight: 800,
+        fontSize: 12,
+        boxShadow: active ? "inset 0 1px 0 rgba(255,255,255,0.05)" : "none",
+        cursor: "pointer",
+      }}
     >
       {children}
     </button>
   );
 }
 
-function Modal({
-  open,
-  title,
-  onClose,
-  children,
-  width = "min(860px, 100%)",
-}) {
+function DotBadge({ children, tone = "neutral" }) {
+  const meta = toneMeta(tone);
+
+  return (
+    <span
+      style={{
+        minHeight: 23,
+        display: "inline-flex",
+        alignItems: "center",
+        padding: "0 8px",
+        borderRadius: 999,
+        border: `1px solid ${meta.border}`,
+        background: meta.pillBg,
+        color: tone === "neutral" ? "rgba(255,255,255,0.84)" : meta.text,
+        fontSize: 10,
+        fontWeight: 900,
+        letterSpacing: ".12em",
+        textTransform: "uppercase",
+        whiteSpace: "nowrap",
+      }}
+    >
+      {children}
+    </span>
+  );
+}
+
+function EventPreview({ ev }) {
+  const t = toneForEvent(ev);
+
+  return (
+    <div
+      style={{
+        display: "flex",
+        minWidth: 0,
+        alignItems: "center",
+        gap: 8,
+      }}
+    >
+      <div
+        style={{
+          width: 8,
+          height: 8,
+          borderRadius: 999,
+          background: t.line,
+          boxShadow: `0 0 10px ${t.line}`,
+          flexShrink: 0,
+        }}
+      />
+
+      <div
+        style={{
+          fontSize: 12,
+          fontWeight: 700,
+          color: "rgba(255,255,255,0.66)",
+          whiteSpace: "nowrap",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+        }}
+      >
+        {ev.event_time ? `${fmtTime(ev.event_time)} · ` : ""}
+        {ev.title}
+      </div>
+    </div>
+  );
+}
+
+function DayCell({ dayISO, monthStart, events, selected, onOpen }) {
+  const sameMonth = inSameMonth(dayISO, monthStart);
+  const today = isTodayISO(dayISO);
+
+  const incomeTotal = events
+    .filter((ev) => String(ev.flow) === "income")
+    .reduce((sum, ev) => sum + Number(ev.amount || 0), 0);
+
+  const expenseTotal = events
+    .filter((ev) => String(ev.flow) === "expense" && ev.source !== "planned_expense")
+    .reduce((sum, ev) => sum + Number(ev.amount || 0), 0);
+
+  const plannedTotal = events
+    .filter((ev) => ev.source === "planned_expense")
+    .reduce((sum, ev) => sum + Number(ev.amount || 0), 0);
+
+  return (
+    <button
+      type="button"
+      onClick={() => onOpen(dayISO)}
+      style={{
+        minHeight: 158,
+        padding: 16,
+        borderRadius: 24,
+        textAlign: "left",
+        border: selected
+          ? "1px solid rgba(255,255,255,0.16)"
+          : today
+          ? "1px solid rgba(158,240,192,0.24)"
+          : "1px solid rgba(255,255,255,0.09)",
+        background: selected
+          ? "linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.016)), rgba(7,10,16,0.12)"
+          : "linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.010)), rgba(7,10,16,0.10)",
+        boxShadow: selected
+          ? "inset 0 1px 0 rgba(255,255,255,0.10), 0 18px 36px rgba(0,0,0,0.14), 0 0 18px rgba(255,255,255,0.04)"
+          : today
+          ? "inset 0 1px 0 rgba(255,255,255,0.08), 0 18px 36px rgba(0,0,0,0.14), 0 0 18px rgba(158,240,192,0.05)"
+          : "inset 0 1px 0 rgba(255,255,255,0.06), 0 18px 36px rgba(0,0,0,0.12)",
+        opacity: sameMonth ? 1 : 0.38,
+        backdropFilter: "blur(10px)",
+        WebkitBackdropFilter: "blur(10px)",
+        cursor: "pointer",
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          alignItems: "flex-start",
+          justifyContent: "space-between",
+          gap: 10,
+        }}
+      >
+        <div>
+          <div
+            style={{
+              fontSize: 30,
+              fontWeight: 950,
+              lineHeight: 1,
+              color: "#fff",
+            }}
+          >
+            {parseISO(dayISO)?.getDate()}
+          </div>
+
+          <div
+            style={{
+              marginTop: 4,
+              fontSize: 11,
+              color: "rgba(255,255,255,0.35)",
+            }}
+          >
+            {dayISO}
+          </div>
+        </div>
+
+        {events.length > 0 ? (
+          <div
+            style={{
+              minWidth: 28,
+              height: 28,
+              borderRadius: 999,
+              display: "grid",
+              placeItems: "center",
+              padding: "0 8px",
+              border: "1px solid rgba(255,255,255,0.10)",
+              background: "rgba(255,255,255,0.06)",
+              fontSize: 11,
+              fontWeight: 900,
+              color: "#fff",
+            }}
+          >
+            {events.length}
+          </div>
+        ) : null}
+      </div>
+
+      <div
+        style={{
+          marginTop: 12,
+          display: "flex",
+          flexWrap: "wrap",
+          gap: 6,
+        }}
+      >
+        {incomeTotal > 0 ? <DotBadge tone="green">+ {money(incomeTotal)}</DotBadge> : null}
+        {expenseTotal > 0 ? <DotBadge tone="red">- {money(expenseTotal)}</DotBadge> : null}
+        {plannedTotal > 0 ? <DotBadge tone="amber">{money(plannedTotal)}</DotBadge> : null}
+      </div>
+
+      {events.length > 0 ? (
+        <div
+          style={{
+            marginTop: 12,
+            display: "grid",
+            gap: 6,
+          }}
+        >
+          {events.slice(0, 2).map((ev) => (
+            <EventPreview key={ev.id} ev={ev} />
+          ))}
+
+          {events.length > 2 ? (
+            <div
+              style={{
+                fontSize: 11,
+                fontWeight: 800,
+                color: "rgba(255,255,255,0.36)",
+              }}
+            >
+              +{events.length - 2} more
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+    </button>
+  );
+}
+
+function ActionMenu({ children }) {
+  const [open, setOpen] = React.useState(false);
+
   React.useEffect(() => {
-    if (!open) return;
+    function close() {
+      setOpen(false);
+    }
+
+    if (!open) return undefined;
+    window.addEventListener("click", close);
+    return () => window.removeEventListener("click", close);
+  }, [open]);
+
+  return (
+    <div style={{ position: "relative" }} onClick={(e) => e.stopPropagation()}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        style={{
+          width: 36,
+          height: 36,
+          borderRadius: 12,
+          border: "1px solid rgba(214,226,255,0.10)",
+          background: "rgba(255,255,255,0.04)",
+          color: "rgba(255,255,255,0.84)",
+          display: "grid",
+          placeItems: "center",
+          cursor: "pointer",
+        }}
+      >
+        …
+      </button>
+
+      {open ? (
+        <div
+          style={{
+            position: "absolute",
+            right: 0,
+            top: 42,
+            zIndex: 10,
+            width: 210,
+            borderRadius: 18,
+            border: "1px solid rgba(214,226,255,0.10)",
+            background: "rgba(10,16,28,0.96)",
+            padding: 8,
+            boxShadow: "0 20px 50px rgba(0,0,0,0.45)",
+            backdropFilter: "blur(18px)",
+          }}
+        >
+          {children}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function MenuButton({ children, onClick, tone = "default", icon }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        width: "100%",
+        minHeight: 38,
+        borderRadius: 12,
+        border: "none",
+        background: "transparent",
+        color:
+          tone === "danger"
+            ? "#ffb2c2"
+            : tone === "success"
+            ? "#9ef0c0"
+            : "rgba(255,255,255,0.86)",
+        display: "flex",
+        alignItems: "center",
+        gap: 8,
+        padding: "0 10px",
+        fontSize: 13,
+        fontWeight: 800,
+        cursor: "pointer",
+        textAlign: "left",
+      }}
+    >
+      {icon || null}
+      {children}
+    </button>
+  );
+}
+
+function TimelineItem({ ev, onEdit, onDelete, onDuplicate }) {
+  const t = toneForEvent(ev);
+  const meta = toneMeta(t.tone);
+
+  return (
+    <div style={{ position: "relative", paddingLeft: 42 }}>
+      <div
+        style={{
+          position: "absolute",
+          left: 13,
+          top: 0,
+          bottom: -24,
+          width: 1,
+          background: "rgba(255,255,255,0.10)",
+        }}
+      />
+
+      <div
+        style={{
+          position: "absolute",
+          left: 0,
+          top: 16,
+          width: 28,
+          height: 28,
+          borderRadius: 999,
+          display: "grid",
+          placeItems: "center",
+          border: `1px solid ${meta.border}`,
+          background: "rgba(10,16,28,0.86)",
+        }}
+      >
+        <div
+          style={{
+            width: 12,
+            height: 12,
+            borderRadius: 999,
+            background: t.line,
+            boxShadow: `0 0 15px ${t.line}88`,
+          }}
+        />
+      </div>
+
+      <div
+        style={{
+          borderRadius: 22,
+          border: `1px solid ${meta.border}`,
+          background:
+            "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.012)), rgba(7,10,16,0.10)",
+          boxShadow: `0 0 0 1px rgba(255,255,255,0.02), 0 0 20px ${meta.glow}`,
+          padding: 16,
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            alignItems: "flex-start",
+            justifyContent: "space-between",
+            gap: 12,
+          }}
+        >
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                alignItems: "center",
+                gap: 8,
+              }}
+            >
+              <div
+                style={{
+                  fontSize: 18,
+                  fontWeight: 900,
+                  color: "#fff",
+                  minWidth: 0,
+                }}
+              >
+                {ev.title}
+              </div>
+
+              <DotBadge tone={t.tone}>{t.label}</DotBadge>
+              <DotBadge tone={ev.auto_created ? "neutral" : "blue"}>
+                {ev.auto_created ? "Synced" : "Manual"}
+              </DotBadge>
+            </div>
+
+            <div
+              style={{
+                marginTop: 10,
+                display: "flex",
+                flexWrap: "wrap",
+                gap: 6,
+              }}
+            >
+              <DotBadge tone="neutral">{fmtTime(ev.event_time)}</DotBadge>
+              {ev.end_time ? (
+                <DotBadge tone="neutral">Ends {fmtTime(ev.end_time)}</DotBadge>
+              ) : null}
+              {ev.amount ? <DotBadge tone={t.tone}>{money(ev.amount)}</DotBadge> : null}
+              {ev.category ? <DotBadge tone="neutral">{ev.category}</DotBadge> : null}
+              <DotBadge tone="neutral">{sourceLabel(ev)}</DotBadge>
+            </div>
+
+            {ev.note ? (
+              <div
+                style={{
+                  marginTop: 12,
+                  fontSize: 13,
+                  lineHeight: 1.6,
+                  color: "rgba(255,255,255,0.66)",
+                }}
+              >
+                {ev.note}
+              </div>
+            ) : null}
+          </div>
+
+          <ActionMenu>
+            {ev.auto_created ? (
+              <>
+                <MenuButton
+                  onClick={() => onDuplicate(ev)}
+                  tone="success"
+                  icon={<Copy size={15} />}
+                >
+                  Copy as manual event
+                </MenuButton>
+                <div
+                  style={{
+                    padding: "8px 10px",
+                    fontSize: 11,
+                    lineHeight: 1.5,
+                    color: "rgba(255,255,255,0.45)",
+                  }}
+                >
+                  Edit or delete this from the source module so sync stays clean.
+                </div>
+              </>
+            ) : (
+              <>
+                <MenuButton onClick={() => onEdit(ev)} icon={<Pencil size={15} />}>
+                  Edit
+                </MenuButton>
+                <MenuButton
+                  onClick={() => onDelete(ev)}
+                  tone="danger"
+                  icon={<Trash2 size={15} />}
+                >
+                  Delete
+                </MenuButton>
+              </>
+            )}
+          </ActionMenu>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ModalShell({ open, title, onClose, children, width = "min(860px, 100%)" }) {
+  React.useEffect(() => {
+    if (!open) return undefined;
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => {
@@ -477,33 +1243,69 @@ function Modal({
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose?.();
       }}
-      className="fixed inset-0 z-[70] flex items-center justify-center bg-black/65 p-5 backdrop-blur-[10px]"
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 80,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        background: "rgba(0,0,0,0.68)",
+        backdropFilter: "blur(10px)",
+        padding: 20,
+      }}
     >
       <div style={{ width }}>
-        <ShellCard className="max-h-[92vh] overflow-auto p-5">
-          <div className="mb-4 flex items-center justify-between gap-3">
-            <div className="text-xl font-black text-white">{title}</div>
-
-            <Button
-              type="button"
-              onClick={onClose}
-              variant="outline"
-              className="rounded-2xl border-white/10 bg-white/[0.03] text-white hover:bg-white/[0.06]"
+        <GlassPane size="hero">
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 12,
+              marginBottom: 18,
+            }}
+          >
+            <div
+              style={{
+                fontSize: 22,
+                fontWeight: 950,
+                color: "#fff",
+                letterSpacing: "-0.03em",
+              }}
             >
+              {title}
+            </div>
+
+            <GhostButton onClick={onClose} icon={<X size={15} />}>
               Close
-            </Button>
+            </GhostButton>
           </div>
 
           {children}
-        </ShellCard>
+        </GlassPane>
       </div>
     </div>
   );
 }
 
-function Drawer({ open, onClose, children }) {
+function DayDrawer({
+  open,
+  onClose,
+  selectedDate,
+  events,
+  dayIn,
+  dayOut,
+  dayPlanned,
+  onAdd,
+  onPayday,
+  onExpense,
+  onEdit,
+  onDelete,
+  onDuplicate,
+}) {
   React.useEffect(() => {
-    if (!open) return;
+    if (!open) return undefined;
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => {
@@ -511,118 +1313,182 @@ function Drawer({ open, onClose, children }) {
     };
   }, [open]);
 
+  const allDay = events.filter((ev) => !ev.event_time);
+  const timed = events.filter((ev) => !!ev.event_time);
+
   return (
     <div
-      className={`fixed inset-0 z-[65] transition ${
-        open ? "pointer-events-auto" : "pointer-events-none"
-      }`}
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 75,
+        pointerEvents: open ? "auto" : "none",
+      }}
     >
       <div
         onClick={onClose}
-        className={`absolute inset-0 bg-black/55 backdrop-blur-[8px] transition ${
-          open ? "opacity-100" : "opacity-0"
-        }`}
+        style={{
+          position: "absolute",
+          inset: 0,
+          background: "rgba(0,0,0,0.55)",
+          backdropFilter: "blur(8px)",
+          opacity: open ? 1 : 0,
+          transition: "opacity 220ms ease",
+        }}
       />
 
       <div
-        className={`absolute right-0 top-0 h-full w-full max-w-[760px] transform p-3 transition duration-300 ${
-          open ? "translate-x-0" : "translate-x-full"
-        }`}
-      >
-        <ShellCard className="h-full overflow-hidden p-0">{children}</ShellCard>
-      </div>
-    </div>
-  );
-}
-
-function TimelineItem({ ev, onEdit, onDelete, onDuplicate }) {
-  const tone = toneForEvent(ev);
-
-  return (
-    <div className="relative pl-11">
-      <div className="absolute bottom-[-24px] left-[13px] top-0 w-px bg-white/10" />
-
-      <div
-        className="absolute left-0 top-4 flex h-7 w-7 items-center justify-center rounded-full border bg-[rgba(10,16,28,.86)]"
-        style={{ borderColor: tone.border }}
-      >
-        <div
-          className="h-3 w-3 rounded-full"
-          style={{
-            background: tone.line,
-            boxShadow: `0 0 15px ${tone.line}66`,
-          }}
-        />
-      </div>
-
-      <div
-        className="rounded-[22px] border p-4"
         style={{
-          borderColor: tone.border,
-          boxShadow: tone.cardGlow,
-          background:
-            "linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.012)), rgba(7,10,16,.10)",
+          position: "absolute",
+          top: 0,
+          right: 0,
+          height: "100%",
+          width: "min(760px, 100%)",
+          padding: 12,
+          transform: open ? "translateX(0)" : "translateX(100%)",
+          transition: "transform 260ms ease",
         }}
       >
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="truncate text-lg font-black text-white">
-                {ev.title}
-              </div>
-              <span
-                className={`inline-flex rounded-full border px-3 py-1 text-xs font-black ${tone.badgeClass}`}
+        <GlassPane size="hero" style={{ height: "100%", overflow: "hidden" }}>
+          <div
+            style={{
+              height: "100%",
+              display: "flex",
+              flexDirection: "column",
+            }}
+          >
+            <div
+              style={{
+                borderBottom: "1px solid rgba(255,255,255,0.10)",
+                paddingBottom: 18,
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "flex-start",
+                  justifyContent: "space-between",
+                  gap: 12,
+                }}
               >
-                {tone.label}
-              </span>
-              {ev.auto_created ? (
-                <DotBadge tone="neutral">Synced</DotBadge>
+                <div>
+                  <div style={eyebrowStyle()}>Selected day</div>
+                  <div
+                    style={{
+                      marginTop: 6,
+                      fontSize: 28,
+                      fontWeight: 950,
+                      color: "#fff",
+                      letterSpacing: "-0.04em",
+                    }}
+                  >
+                    {fmtLongDate(selectedDate)}
+                  </div>
+
+                  <div
+                    style={{
+                      marginTop: 12,
+                      display: "flex",
+                      flexWrap: "wrap",
+                      gap: 6,
+                    }}
+                  >
+                    <DotBadge tone="green">In {money(dayIn)}</DotBadge>
+                    <DotBadge tone="red">Out {money(dayOut)}</DotBadge>
+                    <DotBadge tone="amber">Planned {money(dayPlanned)}</DotBadge>
+                    <DotBadge tone="neutral">{events.length} events</DotBadge>
+                  </div>
+                </div>
+
+                <GhostButton onClick={onClose} icon={<X size={15} />}>
+                  Close
+                </GhostButton>
+              </div>
+
+              <div
+                style={{
+                  marginTop: 14,
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: 8,
+                }}
+              >
+                <SolidButton onClick={() => onAdd(selectedDate)} icon={<Plus size={15} />}>
+                  Add Event
+                </SolidButton>
+                <GhostButton onClick={() => onPayday(selectedDate)}>+ Payday</GhostButton>
+                <GhostButton onClick={() => onExpense(selectedDate)}>+ Expense</GhostButton>
+              </div>
+            </div>
+
+            <div
+              style={{
+                flex: 1,
+                overflowY: "auto",
+                paddingTop: 18,
+              }}
+            >
+              {events.length === 0 ? (
+                <GlassPane size="card">
+                  <div
+                    style={{
+                      fontSize: 15,
+                      fontWeight: 900,
+                      color: "#fff",
+                    }}
+                  >
+                    No events for this day
+                  </div>
+                  <div
+                    style={{
+                      marginTop: 6,
+                      fontSize: 13,
+                      color: "rgba(255,255,255,0.62)",
+                    }}
+                  >
+                    Add something manually or let the synced items land here.
+                  </div>
+                </GlassPane>
               ) : (
-                <DotBadge tone="blue">Manual</DotBadge>
+                <div style={{ display: "grid", gap: 24 }}>
+                  {allDay.length > 0 ? (
+                    <div>
+                      <div style={{ ...eyebrowStyle(), marginBottom: 12 }}>All day</div>
+                      <div style={{ display: "grid", gap: 16 }}>
+                        {allDay.map((ev) => (
+                          <TimelineItem
+                            key={ev.id}
+                            ev={ev}
+                            onEdit={onEdit}
+                            onDelete={onDelete}
+                            onDuplicate={onDuplicate}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {timed.length > 0 ? (
+                    <div>
+                      <div style={{ ...eyebrowStyle(), marginBottom: 12 }}>Timed</div>
+                      <div style={{ display: "grid", gap: 16 }}>
+                        {timed.map((ev) => (
+                          <TimelineItem
+                            key={ev.id}
+                            ev={ev}
+                            onEdit={onEdit}
+                            onDelete={onDelete}
+                            onDuplicate={onDuplicate}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
               )}
             </div>
-
-            <div className="mt-2 flex flex-wrap gap-2">
-              <DotBadge tone="neutral">{fmtTime(ev.event_time)}</DotBadge>
-              {ev.end_time ? (
-                <DotBadge tone="neutral">Ends {fmtTime(ev.end_time)}</DotBadge>
-              ) : null}
-              {ev.amount ? (
-                <DotBadge tone={tone.tone}>{fmtMoney(ev.amount)}</DotBadge>
-              ) : null}
-              {ev.category ? (
-                <DotBadge tone="neutral">{ev.category}</DotBadge>
-              ) : null}
-              <DotBadge tone="neutral">{sourceLabel(ev)}</DotBadge>
-            </div>
-
-            {ev.note ? (
-              <div className="mt-3 text-sm leading-6 text-white/66">
-                {ev.note}
-              </div>
-            ) : null}
           </div>
-
-          <RowMenu>
-            {ev.auto_created ? (
-              <>
-                <MenuButton onClick={() => onDuplicate(ev)} tone="success">
-                  Copy as manual event
-                </MenuButton>
-                <div className="px-3 py-2 text-xs leading-5 text-white/45">
-                  Edit or delete this from Spending/Income so sync stays clean.
-                </div>
-              </>
-            ) : (
-              <>
-                <MenuButton onClick={() => onEdit(ev)}>Edit</MenuButton>
-                <MenuButton onClick={() => onDelete(ev)} tone="danger">
-                  Delete
-                </MenuButton>
-              </>
-            )}
-          </RowMenu>
-        </div>
+        </GlassPane>
       </div>
     </div>
   );
@@ -649,7 +1515,51 @@ export default function CalendarPage() {
   const [editorOpen, setEditorOpen] = React.useState(false);
 
   const [newProfileName, setNewProfileName] = React.useState("");
+  const [newProfileColor, setNewProfileColor] = React.useState("#8b5cf6");
   const [draft, setDraft] = React.useState(emptyEvent(todayISO(), ""));
+
+  React.useEffect(() => {
+    if (!status) return undefined;
+    const id = window.setTimeout(() => setStatus(""), 3200);
+    return () => window.clearTimeout(id);
+  }, [status]);
+
+  const refreshEvents = React.useCallback(async () => {
+    if (!user || !profileId) return;
+
+    try {
+      setPageError("");
+      const gridStart = startOfWeekISO(monthStart, 0);
+      const gridEnd = endOfGridISO(monthStart);
+
+      const { data, error } = await supabase
+        .from("calendar_events")
+        .select("*")
+        .eq("user_id", user.id)
+        .eq("profile_id", profileId)
+        .gte("event_date", gridStart)
+        .lte("event_date", gridEnd)
+        .order("event_date", { ascending: true })
+        .order("event_time", { ascending: true });
+
+      if (error) throw error;
+      setEvents((data || []).map(mapEventRow));
+    } catch (err) {
+      setPageError(err?.message || "Failed to load events.");
+    }
+  }, [user, profileId, monthStart]);
+
+  const refreshProfiles = React.useCallback(async (userId) => {
+    const { data, error } = await supabase
+      .from("calendar_profiles")
+      .select("*")
+      .eq("user_id", userId)
+      .order("is_default", { ascending: false })
+      .order("created_at", { ascending: true });
+
+    if (error) throw error;
+    return (data || []).map(mapProfileRow);
+  }, []);
 
   React.useEffect(() => {
     let alive = true;
@@ -674,16 +1584,7 @@ export default function CalendarPage() {
           return;
         }
 
-        const { data: profileRows, error: profileErr } = await supabase
-          .from("calendar_profiles")
-          .select("*")
-          .eq("user_id", currentUser.id)
-          .order("is_default", { ascending: false })
-          .order("created_at", { ascending: true });
-
-        if (profileErr) throw profileErr;
-
-        let loadedProfiles = (profileRows || []).map(mapProfileRow);
+        let loadedProfiles = await refreshProfiles(currentUser.id);
 
         if (loadedProfiles.length === 0) {
           const fallback = {
@@ -708,9 +1609,7 @@ export default function CalendarPage() {
 
         setProfiles(loadedProfiles);
         const chosen =
-          loadedProfiles.find((p) => p.is_default)?.id ||
-          loadedProfiles[0]?.id ||
-          "";
+          loadedProfiles.find((p) => p.is_default)?.id || loadedProfiles[0]?.id || "";
 
         setProfileId(chosen);
         setDraft((prev) => ({ ...prev, profile_id: chosen }));
@@ -723,46 +1622,20 @@ export default function CalendarPage() {
     }
 
     boot();
+
     return () => {
       alive = false;
     };
-  }, []);
+  }, [refreshProfiles]);
 
   React.useEffect(() => {
-    if (!user || !profileId) return;
+    refreshEvents();
+  }, [refreshEvents]);
 
-    let alive = true;
-
-    async function loadEvents() {
-      try {
-        const gridStart = startOfWeekISO(monthStart, 0);
-        const gridEnd = addDaysISO(gridStart, 41);
-
-        const { data, error } = await supabase
-          .from("calendar_events")
-          .select("*")
-          .eq("user_id", user.id)
-          .eq("profile_id", profileId)
-          .gte("event_date", gridStart)
-          .lte("event_date", gridEnd)
-          .order("event_date", { ascending: true })
-          .order("event_time", { ascending: true });
-
-        if (error) throw error;
-        if (!alive) return;
-
-        setEvents((data || []).map(mapEventRow));
-      } catch (err) {
-        if (!alive) return;
-        setPageError(err?.message || "Failed to load events.");
-      }
-    }
-
-    loadEvents();
-    return () => {
-      alive = false;
-    };
-  }, [user, profileId, monthStart]);
+  const activeProfile = React.useMemo(
+    () => profiles.find((p) => p.id === profileId) || profiles[0] || null,
+    [profiles, profileId]
+  );
 
   const monthGridDays = React.useMemo(() => {
     const firstCell = startOfWeekISO(monthStart, 0);
@@ -816,7 +1689,7 @@ export default function CalendarPage() {
     });
   }, [events, search, filter]);
 
-  const eventsByDate = React.useMemo(() => {
+  const filteredEventsByDate = React.useMemo(() => {
     const map = new Map();
 
     for (const ev of filteredEvents) {
@@ -842,58 +1715,44 @@ export default function CalendarPage() {
   }, [filteredEvents]);
 
   const selectedDayEvents = React.useMemo(() => {
-    return [...(eventsByDate.get(selectedDate) || [])].sort((a, b) => {
+    return [...(filteredEventsByDate.get(selectedDate) || [])].sort((a, b) => {
       const aTime = timeSortValue(a.event_time);
       const bTime = timeSortValue(b.event_time);
       if (aTime !== bTime) return aTime - bTime;
       return String(a.title).localeCompare(String(b.title));
     });
-  }, [eventsByDate, selectedDate]);
+  }, [filteredEventsByDate, selectedDate]);
 
-  const selectedAllDay = React.useMemo(
-    () => selectedDayEvents.filter((ev) => !ev.event_time),
-    [selectedDayEvents]
-  );
-
-  const selectedTimed = React.useMemo(
-    () => selectedDayEvents.filter((ev) => !!ev.event_time),
-    [selectedDayEvents]
-  );
-
-  const monthEvents = React.useMemo(
+  const visibleMonthEvents = React.useMemo(
     () => filteredEvents.filter((ev) => inSameMonth(ev.event_date, monthStart)),
     [filteredEvents, monthStart]
   );
 
-  const monthIn = React.useMemo(
+  const monthIncome = React.useMemo(
     () =>
-      monthEvents
+      visibleMonthEvents
         .filter((ev) => String(ev.flow) === "income")
         .reduce((sum, ev) => sum + Number(ev.amount || 0), 0),
-    [monthEvents]
+    [visibleMonthEvents]
   );
 
-  const monthOut = React.useMemo(
+  const monthExpense = React.useMemo(
     () =>
-      monthEvents
-        .filter(
-          (ev) =>
-            String(ev.flow) === "expense" &&
-            ev.source !== "planned_expense"
-        )
+      visibleMonthEvents
+        .filter((ev) => String(ev.flow) === "expense" && ev.source !== "planned_expense")
         .reduce((sum, ev) => sum + Number(ev.amount || 0), 0),
-    [monthEvents]
+    [visibleMonthEvents]
   );
 
   const monthPlanned = React.useMemo(
     () =>
-      monthEvents
+      visibleMonthEvents
         .filter((ev) => ev.source === "planned_expense")
         .reduce((sum, ev) => sum + Number(ev.amount || 0), 0),
-    [monthEvents]
+    [visibleMonthEvents]
   );
 
-  const dayIn = React.useMemo(
+  const selectedDayIn = React.useMemo(
     () =>
       selectedDayEvents
         .filter((ev) => String(ev.flow) === "income")
@@ -901,19 +1760,15 @@ export default function CalendarPage() {
     [selectedDayEvents]
   );
 
-  const dayOut = React.useMemo(
+  const selectedDayOut = React.useMemo(
     () =>
       selectedDayEvents
-        .filter(
-          (ev) =>
-            String(ev.flow) === "expense" &&
-            ev.source !== "planned_expense"
-        )
+        .filter((ev) => String(ev.flow) === "expense" && ev.source !== "planned_expense")
         .reduce((sum, ev) => sum + Number(ev.amount || 0), 0),
     [selectedDayEvents]
   );
 
-  const dayPlanned = React.useMemo(
+  const selectedDayPlanned = React.useMemo(
     () =>
       selectedDayEvents
         .filter((ev) => ev.source === "planned_expense")
@@ -921,240 +1776,246 @@ export default function CalendarPage() {
     [selectedDayEvents]
   );
 
-  function openDay(dayISO) {
-    setSelectedDate(dayISO);
-    setDrawerOpen(true);
-  }
+  const monthManualCount = React.useMemo(
+    () => visibleMonthEvents.filter((ev) => ev.source === "manual").length,
+    [visibleMonthEvents]
+  );
 
-  function openCreate(dateISO) {
-    setDraft(emptyEvent(dateISO || selectedDate, profileId));
-    setEditorOpen(true);
-  }
+  const nextFocus = React.useMemo(() => {
+    const nowDate = todayISO();
+    const nowMinutes = (() => {
+      const d = new Date();
+      return d.getHours() * 60 + d.getMinutes();
+    })();
 
-  function openPayday(dateISO) {
-    setDraft(paydayTemplate(dateISO || selectedDate, profileId));
-    setEditorOpen(true);
-  }
+    const sorted = [...filteredEvents].sort((a, b) => {
+      if (a.event_date !== b.event_date) {
+        return String(a.event_date).localeCompare(String(b.event_date));
+      }
 
-  function openExpense(dateISO) {
-    setDraft(expenseTemplate(dateISO || selectedDate, profileId));
-    setEditorOpen(true);
-  }
-
-  function openEdit(ev) {
-    if (ev.auto_created) {
-      setPageError(
-        "That item is synced from Spending/Income. Edit it from the source page so the sync stays clean."
-      );
-      return;
-    }
-
-    setDraft({
-      id: ev.id,
-      profile_id: ev.profile_id || profileId,
-      title: ev.title || "",
-      event_date: ev.event_date || selectedDate,
-      event_time: ev.event_time || "",
-      end_time: ev.end_time || "",
-      category: ev.category || "General",
-      flow: ev.flow || "none",
-      amount: String(ev.amount ?? ""),
-      note: ev.note || "",
-      status: ev.status || "scheduled",
-      color: ev.color || "#94a3b8",
-      source: ev.source || "manual",
-      source_id: ev.source_id || "",
-      source_table: ev.source_table || "",
-      auto_created: Boolean(ev.auto_created),
-      transaction_type: ev.transaction_type || null,
+      const aTime = timeSortValue(a.event_time);
+      const bTime = timeSortValue(b.event_time);
+      if (aTime !== bTime) return aTime - bTime;
+      return String(a.title).localeCompare(String(b.title));
     });
 
+    return (
+      sorted.find((ev) => {
+        if (ev.event_date > nowDate) return true;
+        if (ev.event_date < nowDate) return false;
+        if (!ev.event_time) return true;
+        return timeSortValue(ev.event_time) >= nowMinutes;
+      }) || null
+    );
+  }, [filteredEvents]);
+
+  const focusTitle = nextFocus
+    ? `${fmtShortDate(nextFocus.event_date)}${
+        nextFocus.event_time ? ` · ${fmtTime(nextFocus.event_time)}` : ""
+      } · ${nextFocus.title}`
+    : "Nothing upcoming inside this visible calendar range";
+
+  const focusTone = nextFocus ? toneForEvent(nextFocus).tone : "neutral";
+
+  const upcomingEvents = React.useMemo(() => {
+    const nowDate = todayISO();
+    const nowMinutes = (() => {
+      const d = new Date();
+      return d.getHours() * 60 + d.getMinutes();
+    })();
+
+    return [...filteredEvents]
+      .filter((ev) => {
+        if (ev.event_date > nowDate) return true;
+        if (ev.event_date < nowDate) return false;
+        if (!ev.event_time) return true;
+        return timeSortValue(ev.event_time) >= nowMinutes;
+      })
+      .sort((a, b) => {
+        if (a.event_date !== b.event_date) {
+          return String(a.event_date).localeCompare(String(b.event_date));
+        }
+        const aTime = timeSortValue(a.event_time);
+        const bTime = timeSortValue(b.event_time);
+        if (aTime !== bTime) return aTime - bTime;
+        return String(a.title).localeCompare(String(b.title));
+      })
+      .slice(0, 7);
+  }, [filteredEvents]);
+
+  const openEditorForNew = React.useCallback(
+    (dateISO = selectedDate) => {
+      setDraft(emptyEvent(dateISO, profileId));
+      setEditorOpen(true);
+    },
+    [profileId, selectedDate]
+  );
+
+  const openEditorForPayday = React.useCallback(
+    (dateISO = selectedDate) => {
+      setDraft(paydayTemplate(dateISO, profileId));
+      setEditorOpen(true);
+    },
+    [profileId, selectedDate]
+  );
+
+  const openEditorForExpense = React.useCallback(
+    (dateISO = selectedDate) => {
+      setDraft(expenseTemplate(dateISO, profileId));
+      setEditorOpen(true);
+    },
+    [profileId, selectedDate]
+  );
+
+  const openEditorForEdit = React.useCallback((ev) => {
+    setDraft({
+      ...ev,
+      amount: ev.amount ? String(ev.amount) : "",
+    });
     setEditorOpen(true);
-  }
+  }, []);
 
-  function patchDraft(key, value) {
-    setDraft((prev) => ({ ...prev, [key]: value }));
-  }
+  const openDuplicate = React.useCallback(
+    (ev) => {
+      setDraft({
+        ...ev,
+        id: "",
+        profile_id: profileId || ev.profile_id || "",
+        amount: ev.amount ? String(ev.amount) : "",
+        source: "manual",
+        source_id: "",
+        source_table: "",
+        auto_created: false,
+      });
+      setEditorOpen(true);
+    },
+    [profileId]
+  );
 
-  async function saveEvent(e) {
+  async function handleSaveEvent(e) {
     e?.preventDefault?.();
-    if (!user || !profileId) return;
 
-    const title = String(draft.title || "").trim();
-    if (!title) {
-      setPageError("Title is required.");
+    if (!user) return;
+    if (!draft.profile_id) {
+      setPageError("Pick a calendar profile first.");
       return;
     }
 
-    const amountValue = parseMoneyInput(draft.amount);
+    if (!draft.title.trim()) {
+      setPageError("Event title is required.");
+      return;
+    }
 
-    const payload = {
-      user_id: user.id,
-      profile_id: draft.profile_id || profileId,
-      title,
-      event_date: draft.event_date,
-      event_time: draft.event_time || null,
-      end_time: draft.end_time || null,
-      category: draft.category || "General",
-      flow: draft.flow || "none",
-      amount: Number.isFinite(amountValue) ? amountValue : 0,
-      note: draft.note || "",
-      status: draft.status || "scheduled",
-      color: draft.color || "#94a3b8",
-      source: "manual",
-      source_id: null,
-      source_table: null,
-      auto_created: false,
-      transaction_type:
-        draft.flow === "income"
-          ? "income"
-          : draft.flow === "expense"
-            ? "expense"
-            : null,
-      updated_at: new Date().toISOString(),
-    };
+    if (!draft.event_date) {
+      setPageError("Event date is required.");
+      return;
+    }
+
+    if (draft.end_time && draft.event_time && draft.end_time < draft.event_time) {
+      setPageError("End time cannot be earlier than start time.");
+      return;
+    }
 
     try {
+      setPageError("");
+      const parsedAmount = parseMoneyInput(draft.amount);
+      const payload = {
+        user_id: user.id,
+        profile_id: draft.profile_id,
+        title: draft.title.trim(),
+        event_date: draft.event_date,
+        event_time: draft.event_time || null,
+        end_time: draft.end_time || null,
+        category: draft.category || "General",
+        flow: draft.flow || "none",
+        amount: Number.isFinite(parsedAmount) ? parsedAmount : 0,
+        note: draft.note?.trim() || "",
+        status: draft.status || "scheduled",
+        color: draft.color || "#94a3b8",
+        source: "manual",
+        source_id: "",
+        source_table: "",
+        auto_created: false,
+        transaction_type:
+          draft.flow === "income"
+            ? "income"
+            : draft.flow === "expense"
+            ? "expense"
+            : null,
+      };
+
       if (draft.id) {
-        const { data, error } = await supabase
+        const { error } = await supabase
           .from("calendar_events")
           .update(payload)
           .eq("id", draft.id)
-          .eq("user_id", user.id)
-          .eq("auto_created", false)
-          .select()
-          .single();
+          .eq("user_id", user.id);
 
         if (error) throw error;
-
-        const saved = mapEventRow(data);
-        setEvents((prev) => prev.map((ev) => (ev.id === saved.id ? saved : ev)));
+        setStatus("Event updated.");
       } else {
-        const { data, error } = await supabase
-          .from("calendar_events")
-          .insert([
-            {
-              ...payload,
-              id: uid(),
-              created_at: new Date().toISOString(),
-            },
-          ])
-          .select()
-          .single();
+        const insertPayload = {
+          id: uid(),
+          ...payload,
+        };
 
+        const { error } = await supabase.from("calendar_events").insert([insertPayload]);
         if (error) throw error;
-
-        const saved = mapEventRow(data);
-        setEvents((prev) => [...prev, saved]);
+        setStatus("Event created.");
       }
 
-      setSelectedDate(draft.event_date);
       setEditorOpen(false);
+      await refreshEvents();
+      setSelectedDate(draft.event_date);
       setDrawerOpen(true);
-      setStatus("Event saved.");
-      setPageError("");
     } catch (err) {
       setPageError(err?.message || "Failed to save event.");
     }
   }
 
-  async function deleteEvent(ev) {
+  async function handleDeleteEvent(ev) {
     if (!user || !ev?.id) return;
-
     if (ev.auto_created) {
-      setPageError(
-        "That item is synced from Spending/Income. Delete it from the source page so the calendar stays correct."
-      );
+      setPageError("Synced events should be changed from their source module.");
       return;
     }
 
-    if (!globalThis.confirm?.("Delete this event?")) return;
+    const ok = window.confirm(`Delete "${ev.title}"?`);
+    if (!ok) return;
 
     try {
-      const old = events;
-      setEvents((prev) => prev.filter((x) => x.id !== ev.id));
-
+      setPageError("");
       const { error } = await supabase
         .from("calendar_events")
         .delete()
         .eq("id", ev.id)
-        .eq("user_id", user.id)
-        .eq("auto_created", false);
+        .eq("user_id", user.id);
 
-      if (error) {
-        setEvents(old);
-        throw error;
-      }
-
+      if (error) throw error;
       setStatus("Event deleted.");
-      setPageError("");
+      await refreshEvents();
     } catch (err) {
       setPageError(err?.message || "Failed to delete event.");
     }
   }
 
-  async function duplicateToManual(ev) {
-    if (!user || !profileId) return;
-
-    try {
-      const payload = {
-        user_id: user.id,
-        profile_id: profileId,
-        title: ev.title || "Copied event",
-        event_date: ev.event_date,
-        event_time: ev.event_time || null,
-        end_time: ev.end_time || null,
-        category: ev.category || "General",
-        flow: ev.flow || "none",
-        amount: Number(ev.amount || 0),
-        note: ev.note || "",
-        status: ev.status || "scheduled",
-        color: ev.color || "#94a3b8",
-        source: "manual",
-        source_id: null,
-        source_table: null,
-        auto_created: false,
-        transaction_type: ev.transaction_type || null,
-        updated_at: new Date().toISOString(),
-      };
-
-      const { data, error } = await supabase
-        .from("calendar_events")
-        .insert([
-          {
-            ...payload,
-            id: uid(),
-            created_at: new Date().toISOString(),
-          },
-        ])
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      const saved = mapEventRow(data);
-      setEvents((prev) => [...prev, saved]);
-      setStatus("Copied as manual event.");
-      setPageError("");
-    } catch (err) {
-      setPageError(err?.message || "Failed to duplicate event.");
-    }
-  }
-
-  async function createProfile(e) {
-    e?.preventDefault?.();
+  async function handleCreateProfile() {
     if (!user) return;
-
-    const name = String(newProfileName || "").trim();
-    if (!name) return;
+    const name = newProfileName.trim();
+    if (!name) {
+      setPageError("Profile name is required.");
+      return;
+    }
 
     try {
+      setPageError("");
+      const isFirst = profiles.length === 0;
       const payload = {
         id: uid(),
         user_id: user.id,
         name,
-        is_default: profiles.length === 0,
-        color: "#94a3b8",
+        color: newProfileColor || "#8b5cf6",
+        is_default: isFirst,
       };
 
       const { data, error } = await supabase
@@ -1165,715 +2026,910 @@ export default function CalendarPage() {
 
       if (error) throw error;
 
-      const saved = mapProfileRow(data);
-      setProfiles((prev) => [...prev, saved]);
-      setProfileId(saved.id);
+      const mapped = mapProfileRow(data);
+      const nextProfiles = [...profiles, mapped];
+      setProfiles(nextProfiles);
       setNewProfileName("");
+      setNewProfileColor("#8b5cf6");
+
+      if (isFirst || !profileId) {
+        setProfileId(mapped.id);
+        setDraft((prev) => ({ ...prev, profile_id: mapped.id }));
+      }
+
       setStatus("Profile created.");
-      setPageError("");
     } catch (err) {
       setPageError(err?.message || "Failed to create profile.");
     }
   }
 
-  async function setDefaultProfile(id) {
+  async function handleSetDefaultProfile(id) {
     if (!user) return;
 
     try {
-      const current = profiles;
-      setProfiles((prev) =>
-        prev.map((p) => ({ ...p, is_default: p.id === id }))
-      );
-
-      const oldDefault = profiles.find((p) => p.is_default);
-      if (oldDefault && oldDefault.id !== id) {
-        await supabase
-          .from("calendar_profiles")
-          .update({
-            is_default: false,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", oldDefault.id)
-          .eq("user_id", user.id);
-      }
-
-      const { error } = await supabase
+      setPageError("");
+      const { error: clearErr } = await supabase
         .from("calendar_profiles")
-        .update({
-          is_default: true,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", id)
+        .update({ is_default: false })
         .eq("user_id", user.id);
 
-      if (error) {
-        setProfiles(current);
-        throw error;
-      }
+      if (clearErr) throw clearErr;
 
+      const { error: setErr } = await supabase
+        .from("calendar_profiles")
+        .update({ is_default: true })
+        .eq("user_id", user.id)
+        .eq("id", id);
+
+      if (setErr) throw setErr;
+
+      const loaded = await refreshProfiles(user.id);
+      setProfiles(loaded);
+      setProfileId(id);
+      setDraft((prev) => ({ ...prev, profile_id: id }));
       setStatus("Default profile updated.");
-      setPageError("");
     } catch (err) {
       setPageError(err?.message || "Failed to update default profile.");
     }
   }
 
+  async function handleDeleteProfile(id) {
+    if (!user) return;
+    if (profiles.length <= 1) {
+      setPageError("Keep at least one calendar profile.");
+      return;
+    }
+
+    const target = profiles.find((p) => p.id === id);
+    const ok = window.confirm(`Delete profile "${target?.name || "this profile"}"?`);
+    if (!ok) return;
+
+    try {
+      setPageError("");
+
+      const { error: eventsErr } = await supabase
+        .from("calendar_events")
+        .delete()
+        .eq("user_id", user.id)
+        .eq("profile_id", id);
+
+      if (eventsErr) throw eventsErr;
+
+      const { error: profileErr } = await supabase
+        .from("calendar_profiles")
+        .delete()
+        .eq("user_id", user.id)
+        .eq("id", id);
+
+      if (profileErr) throw profileErr;
+
+      let loaded = await refreshProfiles(user.id);
+
+      if (!loaded.some((p) => p.is_default) && loaded[0]) {
+        const replacement = loaded[0];
+        await supabase
+          .from("calendar_profiles")
+          .update({ is_default: true })
+          .eq("user_id", user.id)
+          .eq("id", replacement.id);
+
+        loaded = await refreshProfiles(user.id);
+      }
+
+      setProfiles(loaded);
+      const nextId =
+        loaded.find((p) => p.is_default)?.id || loaded[0]?.id || "";
+      setProfileId(nextId);
+      setDraft((prev) => ({ ...prev, profile_id: nextId }));
+      setStatus("Profile deleted.");
+    } catch (err) {
+      setPageError(err?.message || "Failed to delete profile.");
+    }
+  }
+
+  function goToday() {
+    const t = todayISO();
+    setMonthStart(startOfMonthISO(t));
+    setSelectedDate(t);
+    setDrawerOpen(false);
+  }
+
+  function shiftMonth(delta) {
+    const nextMonth = addMonthsISO(monthStart, delta);
+    setMonthStart(nextMonth);
+    if (!inSameMonth(selectedDate, nextMonth)) {
+      setSelectedDate(nextMonth);
+    }
+  }
+
+  function openDay(dayISO) {
+    setSelectedDate(dayISO);
+    setDrawerOpen(true);
+  }
+
   if (loading) {
     return (
-      <div className="mx-auto max-w-[1720px] px-4 py-4">
-        <ShellCard className="p-5 text-white/70">
-          Loading calendar...
-        </ShellCard>
+      <div style={{ padding: 20 }}>
+        <GlassPane size="hero">
+          <div style={{ color: "#fff", fontWeight: 900, fontSize: 20 }}>
+            Loading calendar…
+          </div>
+        </GlassPane>
       </div>
     );
   }
 
   if (!user) {
     return (
-      <div className="mx-auto max-w-[1720px] px-4 py-4">
-        <ShellCard className="p-6">
-          <div className="text-lg font-black text-white">Please log in</div>
-          <div className="mt-2 text-sm text-white/60">
-            Calendar is Supabase-backed, so you need to be signed in.
+      <div style={{ padding: 20 }}>
+        <GlassPane size="hero">
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              color: "#fff",
+              fontWeight: 900,
+              fontSize: 20,
+            }}
+          >
+            <AlertTriangle size={18} />
+            Sign in to use your calendar
           </div>
-        </ShellCard>
+        </GlassPane>
       </div>
     );
   }
 
   return (
     <>
-      <Drawer open={drawerOpen} onClose={() => setDrawerOpen(false)}>
-        <div className="flex h-full flex-col">
-          <div className="border-b border-white/10 px-5 py-5">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <div className="text-[11px] font-black uppercase tracking-[0.18em] text-white/40">
-                  Selected day
-                </div>
-                <div className="mt-1 text-2xl font-black text-white">
-                  {fmtLongDate(selectedDate)}
-                </div>
-
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <DotBadge tone="good">In {fmtMoney(dayIn)}</DotBadge>
-                  <DotBadge tone="bad">Out {fmtMoney(dayOut)}</DotBadge>
-                  <DotBadge tone="warn">Planned {fmtMoney(dayPlanned)}</DotBadge>
-                  <DotBadge tone="neutral">
-                    {selectedDayEvents.length} events
-                  </DotBadge>
-                </div>
-              </div>
-
-              <Button
-                type="button"
-                onClick={() => setDrawerOpen(false)}
-                variant="outline"
-                className="rounded-2xl border-white/10 bg-white/[0.03] text-white hover:bg-white/[0.06]"
-              >
-                <X size={16} className="mr-2" />
-                Close
-              </Button>
-            </div>
-
-            <div className="mt-4 flex flex-wrap gap-2">
-              <Button
-                type="button"
-                onClick={() => openCreate(selectedDate)}
-                className="rounded-2xl bg-white px-5 text-[#09111f] hover:bg-white/90"
-              >
-                <Plus size={16} className="mr-2" />
-                Add Event
-              </Button>
-
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => openPayday(selectedDate)}
-                className="rounded-2xl border-white/10 bg-white/[0.03] text-white hover:bg-white/[0.06]"
-              >
-                + Payday
-              </Button>
-
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => openExpense(selectedDate)}
-                className="rounded-2xl border-white/10 bg-white/[0.03] text-white hover:bg-white/[0.06]"
-              >
-                + Expense
-              </Button>
-            </div>
-          </div>
-
-          <div className="flex-1 overflow-y-auto px-5 py-5">
-            {selectedDayEvents.length === 0 ? (
-              <ShellCard className="rounded-[18px] p-4">
-                <div className="text-sm text-white/60">
-                  No events for this day.
-                </div>
-              </ShellCard>
-            ) : (
-              <div className="space-y-6">
-                {selectedAllDay.length > 0 ? (
-                  <div>
-                    <div className="mb-3 text-[11px] font-black uppercase tracking-[0.18em] text-white/40">
-                      All day
-                    </div>
-                    <div className="space-y-4">
-                      {selectedAllDay.map((ev) => (
-                        <TimelineItem
-                          key={ev.id}
-                          ev={ev}
-                          onEdit={openEdit}
-                          onDelete={deleteEvent}
-                          onDuplicate={duplicateToManual}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                ) : null}
-
-                {selectedTimed.length > 0 ? (
-                  <div>
-                    <div className="mb-3 text-[11px] font-black uppercase tracking-[0.18em] text-white/40">
-                      Timed
-                    </div>
-                    <div className="space-y-4">
-                      {selectedTimed.map((ev) => (
-                        <TimelineItem
-                          key={ev.id}
-                          ev={ev}
-                          onEdit={openEdit}
-                          onDelete={deleteEvent}
-                          onDuplicate={duplicateToManual}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                ) : null}
-              </div>
-            )}
-          </div>
-        </div>
-      </Drawer>
-
-      <Modal
-        open={manageOpen}
-        title="Manage calendars"
-        onClose={() => setManageOpen(false)}
+      <div
+        style={{
+          maxWidth: 1560,
+          margin: "0 auto",
+          padding: "18px clamp(14px, 2vw, 24px) 34px",
+          display: "grid",
+          gap: 18,
+        }}
       >
-        <div className="grid gap-5">
-          <form onSubmit={createProfile} className="flex flex-wrap gap-3">
-            <Input
-              value={newProfileName}
-              onChange={(e) => setNewProfileName(e.target.value)}
-              placeholder="New calendar name"
-              className="h-11 min-w-[220px] flex-1 rounded-2xl border-white/10 bg-white/[0.04] text-white"
-            />
-            <Button
-              type="submit"
-              className="rounded-2xl bg-white px-5 text-[#09111f] hover:bg-white/90"
-            >
-              Create
-            </Button>
-          </form>
+        <HeaderBar
+          monthLabelText={monthLabel(monthStart)}
+          profileName={activeProfile?.name || "Default"}
+          focusTitle={focusTitle}
+          focusTone={focusTone}
+          onManage={() => setManageOpen(true)}
+          onToday={goToday}
+          onAdd={() => openEditorForNew(selectedDate)}
+        />
 
-          <div className="grid gap-3">
-            {profiles.map((p) => (
-              <ShellCard
-                key={p.id}
-                className="rounded-[18px] p-4"
-                style={{
-                  background:
-                    "linear-gradient(180deg, rgba(255,255,255,.045), rgba(255,255,255,.012)), rgba(7,10,16,.10)",
+        {pageError ? (
+          <GlassPane tone="red" size="card">
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
+                color: "#ffb2c2",
+                fontWeight: 900,
+              }}
+            >
+              <AlertTriangle size={16} />
+              {pageError}
+            </div>
+          </GlassPane>
+        ) : null}
+
+        {status ? (
+          <GlassPane tone="green" size="card">
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
+                color: "#9ef0c0",
+                fontWeight: 900,
+              }}
+            >
+              <StatusDot tone="green" size={9} />
+              {status}
+            </div>
+          </GlassPane>
+        ) : null}
+
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+            gap: 16,
+          }}
+        >
+          <MetricCard
+            label="Month inflow"
+            value={money(monthIncome)}
+            detail="Visible income events in the current month view."
+            tone="green"
+          />
+          <MetricCard
+            label="Month outflow"
+            value={money(monthExpense)}
+            detail="Actual expense hits in the current month view."
+            tone="red"
+          />
+          <MetricCard
+            label="Planned spending"
+            value={money(monthPlanned)}
+            detail="Planned expense items currently landing in this month."
+            tone="amber"
+          />
+          <MetricCard
+            label="Visible events"
+            value={String(visibleMonthEvents.length)}
+            detail={`${monthManualCount} manual entries across this month view.`}
+            tone="blue"
+          />
+        </div>
+
+        <GlassPane size="card">
+          <PaneHeader
+            title="Controls"
+            subcopy="Move the month, switch profiles, then filter what actually matters."
+          />
+
+          <div
+            style={{
+              display: "flex",
+              gap: 12,
+              flexWrap: "wrap",
+              alignItems: "center",
+            }}
+          >
+            <GhostButton onClick={() => shiftMonth(-1)} icon={<ChevronLeft size={15} />}>
+              Prev
+            </GhostButton>
+
+            <MiniPill>{monthLabel(monthStart)}</MiniPill>
+
+            <GhostButton onClick={() => shiftMonth(1)} icon={<ChevronRight size={15} />}>
+              Next
+            </GhostButton>
+
+            <div style={{ width: 220, minWidth: 180 }}>
+              <FieldSelect
+                value={profileId}
+                onChange={(e) => {
+                  setProfileId(e.target.value);
+                  setDraft((prev) => ({ ...prev, profile_id: e.target.value }));
                 }}
               >
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <div className="font-black text-white">{p.name}</div>
-                    <div className="mt-1 text-sm text-white/50">
-                      {p.is_default ? "Default calendar" : "Secondary calendar"}
-                    </div>
-                  </div>
+                {profiles.map((profile) => (
+                  <option key={profile.id} value={profile.id}>
+                    {profile.name}
+                  </option>
+                ))}
+              </FieldSelect>
+            </div>
 
-                  {!p.is_default ? (
-                    <Button
-                      type="button"
-                      onClick={() => setDefaultProfile(p.id)}
-                      variant="outline"
-                      className="rounded-2xl border-white/10 bg-white/[0.03] text-white hover:bg-white/[0.06]"
-                    >
-                      Set default
-                    </Button>
-                  ) : (
-                    <DotBadge tone="good">Default</DotBadge>
-                  )}
-                </div>
-              </ShellCard>
+            <div style={{ flex: "1 1 260px", minWidth: 240 }}>
+              <SearchBox value={search} onChange={(e) => setSearch(e.target.value)} />
+            </div>
+          </div>
+
+          <div
+            style={{
+              marginTop: 14,
+              display: "flex",
+              gap: 8,
+              flexWrap: "wrap",
+            }}
+          >
+            {["All", "Paydays", "Expenses", "Planned", "Manual"].map((chip) => (
+              <FilterChip
+                key={chip}
+                active={filter === chip}
+                onClick={() => setFilter(chip)}
+              >
+                {chip}
+              </FilterChip>
             ))}
           </div>
-        </div>
-      </Modal>
+        </GlassPane>
 
-      <Modal
-        open={editorOpen}
-        title={draft.id ? "Edit event" : "Add event"}
-        onClose={() => setEditorOpen(false)}
-      >
-        <form onSubmit={saveEvent} className="grid gap-4">
-          <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              onClick={() =>
-                setDraft(paydayTemplate(draft.event_date || selectedDate, profileId))
-              }
-              variant="outline"
-              className="rounded-2xl border-white/10 bg-white/[0.03] text-white hover:bg-white/[0.06]"
-            >
-              Payday template
-            </Button>
+        <div
+          style={{
+            display: "flex",
+            gap: 18,
+            flexWrap: "wrap",
+            alignItems: "stretch",
+          }}
+        >
+          <div style={{ flex: "1 1 860px", minWidth: 0 }}>
+            <GlassPane size="hero">
+              <PaneHeader
+                title="Month grid"
+                subcopy="Tap a day to open the full subwindow timeline."
+                right={
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <DotBadge tone="green">Income</DotBadge>
+                    <DotBadge tone="red">Expense</DotBadge>
+                    <DotBadge tone="amber">Planned</DotBadge>
+                  </div>
+                }
+              />
 
-            <Button
-              type="button"
-              onClick={() =>
-                setDraft(expenseTemplate(draft.event_date || selectedDate, profileId))
-              }
-              variant="outline"
-              className="rounded-2xl border-white/10 bg-white/[0.03] text-white hover:bg-white/[0.06]"
-            >
-              Expense template
-            </Button>
+              <div style={{ overflowX: "auto", paddingBottom: 4 }}>
+                <div style={{ minWidth: 920 }}>
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "repeat(7, minmax(0, 1fr))",
+                      gap: 10,
+                      marginBottom: 10,
+                    }}
+                  >
+                    {Array.from({ length: 7 }, (_, i) => (
+                      <div
+                        key={i}
+                        style={{
+                          padding: "0 4px 0 6px",
+                          fontSize: 11,
+                          fontWeight: 900,
+                          textTransform: "uppercase",
+                          letterSpacing: ".16em",
+                          color: "rgba(255,255,255,0.36)",
+                        }}
+                      >
+                        {weekdayShort(i)}
+                      </div>
+                    ))}
+                  </div>
 
-            <Button
-              type="button"
-              onClick={() =>
-                setDraft(emptyEvent(draft.event_date || selectedDate, profileId))
-              }
-              variant="outline"
-              className="rounded-2xl border-white/10 bg-white/[0.03] text-white hover:bg-white/[0.06]"
-            >
-              Blank
-            </Button>
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "repeat(7, minmax(0, 1fr))",
+                      gap: 12,
+                    }}
+                  >
+                    {monthGridDays.map((dayISO) => (
+                      <DayCell
+                        key={dayISO}
+                        dayISO={dayISO}
+                        monthStart={monthStart}
+                        events={filteredEventsByDate.get(dayISO) || []}
+                        selected={selectedDate === dayISO}
+                        onOpen={openDay}
+                      />
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </GlassPane>
           </div>
 
-          <div className="grid gap-3 md:grid-cols-2">
-            <div>
-              <Label className="mb-2 block text-white/72">Title</Label>
-              <Input
+          <div
+            style={{
+              flex: "1 1 360px",
+              minWidth: 320,
+              display: "grid",
+              gap: 18,
+              alignContent: "start",
+            }}
+          >
+            <GlassPane size="card">
+              <PaneHeader
+                title="Selected day"
+                subcopy={fmtLongDate(selectedDate)}
+                right={<DotBadge tone="neutral">{selectedDayEvents.length} events</DotBadge>}
+              />
+
+              <div
+                style={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: 6,
+                  marginBottom: 14,
+                }}
+              >
+                <DotBadge tone="green">In {money(selectedDayIn)}</DotBadge>
+                <DotBadge tone="red">Out {money(selectedDayOut)}</DotBadge>
+                <DotBadge tone="amber">Planned {money(selectedDayPlanned)}</DotBadge>
+              </div>
+
+              <div style={{ display: "grid", gap: 10 }}>
+                {selectedDayEvents.length === 0 ? (
+                  <div
+                    style={{
+                      padding: 16,
+                      borderRadius: 18,
+                      border: "1px solid rgba(255,255,255,0.08)",
+                      background: "rgba(255,255,255,0.02)",
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 8,
+                        color: "#fff",
+                        fontWeight: 900,
+                      }}
+                    >
+                      <CalendarDays size={15} />
+                      Clean day
+                    </div>
+                    <div style={{ ...mutedStyle(), marginTop: 6 }}>
+                      Nothing is hitting this date right now.
+                    </div>
+                  </div>
+                ) : (
+                  selectedDayEvents.slice(0, 5).map((ev) => (
+                    <div
+                      key={ev.id}
+                      style={{
+                        padding: 14,
+                        borderRadius: 18,
+                        border: "1px solid rgba(255,255,255,0.08)",
+                        background:
+                          "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.012))",
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          gap: 10,
+                        }}
+                      >
+                        <div
+                          style={{
+                            color: "#fff",
+                            fontWeight: 900,
+                            fontSize: 14,
+                            minWidth: 0,
+                          }}
+                        >
+                          {ev.title}
+                        </div>
+                        <DotBadge tone={toneForEvent(ev).tone}>
+                          {fmtTime(ev.event_time)}
+                        </DotBadge>
+                      </div>
+
+                      <div
+                        style={{
+                          marginTop: 8,
+                          display: "flex",
+                          flexWrap: "wrap",
+                          gap: 6,
+                        }}
+                      >
+                        {ev.amount ? (
+                          <DotBadge tone={toneForEvent(ev).tone}>{money(ev.amount)}</DotBadge>
+                        ) : null}
+                        {ev.category ? <DotBadge tone="neutral">{ev.category}</DotBadge> : null}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              <div
+                style={{
+                  marginTop: 14,
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: 8,
+                }}
+              >
+                <SolidButton onClick={() => openEditorForNew(selectedDate)} icon={<Plus size={15} />}>
+                  Add
+                </SolidButton>
+                <GhostButton onClick={() => setDrawerOpen(true)}>Open day</GhostButton>
+                <GhostButton onClick={() => openEditorForPayday(selectedDate)}>Quick payday</GhostButton>
+              </div>
+            </GlassPane>
+
+            <GlassPane size="card">
+              <PaneHeader
+                title="Upcoming queue"
+                subcopy="Next visible events from this loaded date window."
+              />
+
+              <div style={{ display: "grid", gap: 12 }}>
+                {upcomingEvents.length === 0 ? (
+                  <div style={mutedStyle()}>No upcoming items match the current filter.</div>
+                ) : (
+                  upcomingEvents.map((ev) => (
+                    <button
+                      key={ev.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedDate(ev.event_date);
+                        setDrawerOpen(true);
+                      }}
+                      style={{
+                        textAlign: "left",
+                        padding: 14,
+                        borderRadius: 18,
+                        border: "1px solid rgba(255,255,255,0.08)",
+                        background:
+                          "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.012))",
+                        cursor: "pointer",
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          gap: 10,
+                          alignItems: "center",
+                        }}
+                      >
+                        <div style={{ minWidth: 0 }}>
+                          <div
+                            style={{
+                              color: "#fff",
+                              fontWeight: 900,
+                              fontSize: 14,
+                              minWidth: 0,
+                            }}
+                          >
+                            {ev.title}
+                          </div>
+                          <div style={{ ...mutedStyle(), marginTop: 4 }}>
+                            {fmtShortDate(ev.event_date)}
+                            {ev.event_time ? ` · ${fmtTime(ev.event_time)}` : " · All day"}
+                          </div>
+                        </div>
+
+                        <StatusDot tone={toneForEvent(ev).tone} size={10} />
+                      </div>
+
+                      <div
+                        style={{
+                          marginTop: 8,
+                          display: "flex",
+                          gap: 6,
+                          flexWrap: "wrap",
+                        }}
+                      >
+                        <DotBadge tone={toneForEvent(ev).tone}>{toneForEvent(ev).label}</DotBadge>
+                        {ev.amount ? (
+                          <DotBadge tone={toneForEvent(ev).tone}>{money(ev.amount)}</DotBadge>
+                        ) : null}
+                        {ev.category ? <DotBadge tone="neutral">{ev.category}</DotBadge> : null}
+                      </div>
+                    </button>
+                  ))
+                )}
+              </div>
+            </GlassPane>
+          </div>
+        </div>
+      </div>
+
+      <DayDrawer
+        open={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        selectedDate={selectedDate}
+        events={selectedDayEvents}
+        dayIn={selectedDayIn}
+        dayOut={selectedDayOut}
+        dayPlanned={selectedDayPlanned}
+        onAdd={openEditorForNew}
+        onPayday={openEditorForPayday}
+        onExpense={openEditorForExpense}
+        onEdit={openEditorForEdit}
+        onDelete={handleDeleteEvent}
+        onDuplicate={openDuplicate}
+      />
+
+      <ModalShell
+        open={manageOpen}
+        onClose={() => setManageOpen(false)}
+        title="Manage calendar profiles"
+        width="min(920px, 100%)"
+      >
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "minmax(0, 1.2fr) minmax(280px, 0.8fr)",
+            gap: 18,
+          }}
+        >
+          <div>
+            <div style={{ ...eyebrowStyle(), marginBottom: 12 }}>Profiles</div>
+
+            <div style={{ display: "grid", gap: 12 }}>
+              {profiles.map((profile) => {
+                const active = profile.id === profileId;
+                return (
+                  <div
+                    key={profile.id}
+                    style={{
+                      padding: 16,
+                      borderRadius: 20,
+                      border: active
+                        ? "1px solid rgba(214,226,255,0.16)"
+                        : "1px solid rgba(255,255,255,0.08)",
+                      background:
+                        "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.012))",
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        gap: 12,
+                        alignItems: "center",
+                      }}
+                    >
+                      <div style={{ minWidth: 0 }}>
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 10,
+                            flexWrap: "wrap",
+                          }}
+                        >
+                          <span
+                            style={{
+                              width: 12,
+                              height: 12,
+                              borderRadius: 999,
+                              background: profile.color,
+                              boxShadow: `0 0 14px ${profile.color}88`,
+                              flexShrink: 0,
+                            }}
+                          />
+                          <div
+                            style={{
+                              fontSize: 16,
+                              fontWeight: 900,
+                              color: "#fff",
+                            }}
+                          >
+                            {profile.name}
+                          </div>
+                          {profile.is_default ? (
+                            <DotBadge tone="green">Default</DotBadge>
+                          ) : null}
+                          {active ? <DotBadge tone="blue">Active</DotBadge> : null}
+                        </div>
+                      </div>
+
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                        {!profile.is_default ? (
+                          <GhostButton onClick={() => handleSetDefaultProfile(profile.id)}>
+                            Make default
+                          </GhostButton>
+                        ) : null}
+                        {!active ? (
+                          <GhostButton onClick={() => setProfileId(profile.id)}>Use</GhostButton>
+                        ) : null}
+                        {profiles.length > 1 ? (
+                          <GhostButton
+                            onClick={() => handleDeleteProfile(profile.id)}
+                            style={{ color: "#ffb2c2", borderColor: "rgba(255,178,194,0.18)" }}
+                          >
+                            Delete
+                          </GhostButton>
+                        ) : null}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <GlassPane size="card">
+            <div style={{ ...eyebrowStyle(), marginBottom: 12 }}>Create profile</div>
+
+            <div style={{ display: "grid", gap: 14 }}>
+              <div>
+                <FieldLabel>Name</FieldLabel>
+                <FieldInput
+                  value={newProfileName}
+                  onChange={(e) => setNewProfileName(e.target.value)}
+                  placeholder="Family budget, Work, Personal..."
+                />
+              </div>
+
+              <div>
+                <FieldLabel>Accent color</FieldLabel>
+                <FieldInput
+                  type="color"
+                  value={newProfileColor}
+                  onChange={(e) => setNewProfileColor(e.target.value)}
+                  style={{
+                    padding: 6,
+                    minHeight: 52,
+                    background: "rgba(255,255,255,0.03)",
+                  }}
+                />
+              </div>
+
+              <SolidButton onClick={handleCreateProfile} icon={<Plus size={15} />}>
+                Add profile
+              </SolidButton>
+
+              <div style={mutedStyle()}>
+                Profiles let you split calendars without dumping everything into one messy view.
+              </div>
+            </div>
+          </GlassPane>
+        </div>
+      </ModalShell>
+
+      <ModalShell
+        open={editorOpen}
+        onClose={() => setEditorOpen(false)}
+        title={draft.id ? "Edit event" : "Create event"}
+        width="min(980px, 100%)"
+      >
+        <form onSubmit={handleSaveEvent}>
+          {draft.auto_created ? (
+            <GlassPane tone="amber" size="card" style={{ marginBottom: 16 }}>
+              <div style={{ color: "#ffd089", fontWeight: 800 }}>
+                This was originally a synced event. Saving here will convert it into a manual event.
+              </div>
+            </GlassPane>
+          ) : null}
+
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+              gap: 14,
+            }}
+          >
+            <div style={{ gridColumn: "1 / -1" }}>
+              <FieldLabel>Title</FieldLabel>
+              <FieldInput
                 value={draft.title}
-                onChange={(e) => patchDraft("title", e.target.value)}
-                placeholder="Payday"
-                className="h-11 rounded-2xl border-white/10 bg-white/[0.04] text-white"
+                onChange={(e) => setDraft((prev) => ({ ...prev, title: e.target.value }))}
+                placeholder="Event title"
               />
             </div>
 
             <div>
-              <Label className="mb-2 block text-white/72">Date</Label>
-              <Input
+              <FieldLabel>Date</FieldLabel>
+              <FieldInput
                 type="date"
                 value={draft.event_date}
-                onChange={(e) => patchDraft("event_date", e.target.value)}
-                className="h-11 rounded-2xl border-white/10 bg-white/[0.04] text-white"
+                onChange={(e) => setDraft((prev) => ({ ...prev, event_date: e.target.value }))}
               />
             </div>
 
             <div>
-              <Label className="mb-2 block text-white/72">Start time</Label>
-              <Input
+              <FieldLabel>Profile</FieldLabel>
+              <FieldSelect
+                value={draft.profile_id}
+                onChange={(e) => setDraft((prev) => ({ ...prev, profile_id: e.target.value }))}
+              >
+                {profiles.map((profile) => (
+                  <option key={profile.id} value={profile.id}>
+                    {profile.name}
+                  </option>
+                ))}
+              </FieldSelect>
+            </div>
+
+            <div>
+              <FieldLabel>Start time</FieldLabel>
+              <FieldInput
                 type="time"
                 value={draft.event_time}
-                onChange={(e) => patchDraft("event_time", e.target.value)}
-                className="h-11 rounded-2xl border-white/10 bg-white/[0.04] text-white"
+                onChange={(e) => setDraft((prev) => ({ ...prev, event_time: e.target.value }))}
               />
             </div>
 
             <div>
-              <Label className="mb-2 block text-white/72">End time</Label>
-              <Input
+              <FieldLabel>End time</FieldLabel>
+              <FieldInput
                 type="time"
                 value={draft.end_time}
-                onChange={(e) => patchDraft("end_time", e.target.value)}
-                className="h-11 rounded-2xl border-white/10 bg-white/[0.04] text-white"
+                onChange={(e) => setDraft((prev) => ({ ...prev, end_time: e.target.value }))}
               />
             </div>
 
             <div>
-              <Label className="mb-2 block text-white/72">Category</Label>
-              <GlassSelect
+              <FieldLabel>Category</FieldLabel>
+              <FieldSelect
                 value={draft.category}
-                onChange={(e) => patchDraft("category", e.target.value)}
+                onChange={(e) => setDraft((prev) => ({ ...prev, category: e.target.value }))}
               >
-                <option value="Payday">Payday</option>
-                <option value="Expense">Expense</option>
-                <option value="Bill">Bill</option>
-                <option value="General">General</option>
-                <option value="Reminder">Reminder</option>
-              </GlassSelect>
+                {["General", "Payday", "Expense", "Bill", "Reminder", "Personal"].map((v) => (
+                  <option key={v} value={v}>
+                    {v}
+                  </option>
+                ))}
+              </FieldSelect>
             </div>
 
             <div>
-              <Label className="mb-2 block text-white/72">Flow</Label>
-              <GlassSelect
+              <FieldLabel>Flow</FieldLabel>
+              <FieldSelect
                 value={draft.flow}
-                onChange={(e) => patchDraft("flow", e.target.value)}
+                onChange={(e) => setDraft((prev) => ({ ...prev, flow: e.target.value }))}
               >
                 <option value="none">None</option>
                 <option value="income">Income</option>
                 <option value="expense">Expense</option>
-              </GlassSelect>
+              </FieldSelect>
             </div>
 
             <div>
-              <Label className="mb-2 block text-white/72">Amount</Label>
-              <Input
+              <FieldLabel>Amount</FieldLabel>
+              <FieldInput
                 value={draft.amount}
-                onChange={(e) => patchDraft("amount", e.target.value)}
-                placeholder="0.00"
-                className="h-11 rounded-2xl border-white/10 bg-white/[0.04] text-white"
+                onChange={(e) => setDraft((prev) => ({ ...prev, amount: e.target.value }))}
+                placeholder="$0"
+                inputMode="decimal"
               />
             </div>
 
             <div>
-              <Label className="mb-2 block text-white/72">Status</Label>
-              <GlassSelect
+              <FieldLabel>Status</FieldLabel>
+              <FieldSelect
                 value={draft.status}
-                onChange={(e) => patchDraft("status", e.target.value)}
+                onChange={(e) => setDraft((prev) => ({ ...prev, status: e.target.value }))}
               >
                 <option value="scheduled">Scheduled</option>
                 <option value="done">Done</option>
-                <option value="canceled">Canceled</option>
-              </GlassSelect>
-            </div>
-          </div>
-
-          <div>
-            <Label className="mb-2 block text-white/72">Note</Label>
-            <textarea
-              value={draft.note}
-              onChange={(e) => patchDraft("note", e.target.value)}
-              placeholder="Optional notes..."
-              className="min-h-[120px] w-full rounded-2xl border border-white/10 bg-white/[0.04] p-3 text-white outline-none transition focus:border-white/20 focus:ring-2 focus:ring-white/10"
-            />
-          </div>
-
-          <div className="flex flex-wrap gap-2 pt-1">
-            <Button
-              type="submit"
-              className="rounded-2xl bg-white px-5 text-[#09111f] hover:bg-white/90"
-            >
-              Save event
-            </Button>
-
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setEditorOpen(false)}
-              className="rounded-2xl border-white/10 bg-white/[0.03] text-white hover:bg-white/[0.06]"
-            >
-              Cancel
-            </Button>
-          </div>
-        </form>
-      </Modal>
-
-      <div className="mx-auto max-w-[1720px] space-y-4 px-4 py-4">
-        <ShellCard className="overflow-hidden px-6 py-5">
-          <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-            <div className="min-w-0">
-              <div className="mb-1 text-[10px] font-black uppercase tracking-[0.28em] text-white/45">
-                Life Command Center
-              </div>
-
-              <h1 className="m-0 text-3xl font-black tracking-tight text-white md:text-[3.3rem] md:leading-none">
-                Calendar Command
-              </h1>
-
-              <div className="mt-2 text-sm text-white/60 md:text-[15px]">
-                Month view, clean timeline, real click-through day control.
-              </div>
+                <option value="skipped">Skipped</option>
+              </FieldSelect>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2">
-              <GlassSelect
-                value={profileId}
-                onChange={(e) => setProfileId(e.target.value)}
-                className="w-[210px] font-bold"
-              >
-                {profiles.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </GlassSelect>
-
-              <Button
-                type="button"
-                onClick={() => setManageOpen(true)}
-                variant="outline"
-                className="rounded-2xl border-white/10 bg-white/[0.03] text-white hover:bg-white/[0.06]"
-              >
-                Manage
-              </Button>
-
-              <Button
-                type="button"
-                onClick={() => {
-                  const t = todayISO();
-                  setMonthStart(startOfMonthISO(t));
-                  setSelectedDate(t);
-                  setDrawerOpen(true);
+            <div>
+              <FieldLabel>Color</FieldLabel>
+              <FieldInput
+                type="color"
+                value={draft.color}
+                onChange={(e) => setDraft((prev) => ({ ...prev, color: e.target.value }))}
+                style={{
+                  padding: 6,
+                  minHeight: 52,
+                  background: "rgba(255,255,255,0.03)",
                 }}
-                variant="outline"
-                className="rounded-2xl border-white/10 bg-white/[0.03] text-white hover:bg-white/[0.06]"
-              >
-                Today
-              </Button>
-
-              <Button
-                type="button"
-                onClick={() => openCreate(selectedDate)}
-                className="rounded-2xl bg-white px-5 text-[#09111f] hover:bg-white/90"
-              >
-                <Plus size={16} className="mr-2" />
-                Add Event
-              </Button>
-            </div>
-          </div>
-        </ShellCard>
-
-        {pageError ? (
-          <ShellCard className="border-red-400/20 p-4">
-            <div className="font-black text-white">Calendar issue</div>
-            <div className="mt-1 text-sm text-white/60">{pageError}</div>
-          </ShellCard>
-        ) : null}
-
-        <div className="grid gap-4 xl:grid-cols-4">
-          <StatCard
-            title="Month In"
-            value={fmtMoney(monthIn)}
-            sub="income on calendar"
-            tone="good"
-          />
-          <StatCard
-            title="Month Out"
-            value={fmtMoney(monthOut)}
-            sub="expense on calendar"
-            tone="bad"
-          />
-          <StatCard
-            title="Planned"
-            value={fmtMoney(monthPlanned)}
-            sub="planned items still coming"
-            tone="warn"
-          />
-          <StatCard
-            title="Net"
-            value={fmtMoney(monthIn - monthOut - monthPlanned)}
-            sub={status || "calendar total"}
-            tone="neutral"
-          />
-        </div>
-
-        <ShellCard className="p-5">
-          <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex items-center gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setMonthStart((m) => addMonthsISO(m, -1))}
-                className="rounded-2xl border-white/10 bg-white/[0.03] text-white hover:bg-white/[0.06]"
-              >
-                <ChevronLeft size={16} />
-              </Button>
-
-              <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-2 text-lg font-black text-white">
-                {monthLabel(monthStart)}
-              </div>
-
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setMonthStart((m) => addMonthsISO(m, 1))}
-                className="rounded-2xl border-white/10 bg-white/[0.03] text-white hover:bg-white/[0.06]"
-              >
-                <ChevronRight size={16} />
-              </Button>
+              />
             </div>
 
-            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-[180px_240px]">
-              <GlassSelect
-                value={filter}
-                onChange={(e) => setFilter(e.target.value)}
-              >
-                <option value="All">All</option>
-                <option value="Paydays">Paydays</option>
-                <option value="Expenses">Expenses</option>
-                <option value="Planned">Planned</option>
-                <option value="Manual">Manual</option>
-              </GlassSelect>
-
-              <SearchBox
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
+            <div style={{ gridColumn: "1 / -1" }}>
+              <FieldLabel>Notes</FieldLabel>
+              <FieldTextarea
+                value={draft.note}
+                onChange={(e) => setDraft((prev) => ({ ...prev, note: e.target.value }))}
+                placeholder="Context, reminder, details..."
               />
             </div>
           </div>
 
-          <div className="overflow-x-auto pb-1">
-            <div className="min-w-[980px]">
-              <div className="mb-3 grid grid-cols-7 gap-3">
-                {Array.from({ length: 7 }, (_, i) => (
-                  <div
-                    key={i}
-                    className="py-2 text-center text-xs font-black uppercase tracking-[0.15em] text-white/44"
-                  >
-                    {weekdayShort(i)}
-                  </div>
-                ))}
-              </div>
-
-              <div className="grid grid-cols-7 gap-3">
-                {monthGridDays.map((dayISO) => {
-                  const dayEvents = eventsByDate.get(dayISO) || [];
-                  const selected = dayISO === selectedDate;
-                  const today = isTodayISO(dayISO);
-                  const sameMonth = inSameMonth(dayISO, monthStart);
-
-                  const inTotal = dayEvents
-                    .filter((ev) => String(ev.flow) === "income")
-                    .reduce((sum, ev) => sum + Number(ev.amount || 0), 0);
-
-                  const expenseTotal = dayEvents
-                    .filter(
-                      (ev) =>
-                        String(ev.flow) === "expense" &&
-                        ev.source !== "planned_expense"
-                    )
-                    .reduce((sum, ev) => sum + Number(ev.amount || 0), 0);
-
-                  const plannedTotal = dayEvents
-                    .filter((ev) => ev.source === "planned_expense")
-                    .reduce((sum, ev) => sum + Number(ev.amount || 0), 0);
-
-                  return (
-                    <button
-                      key={dayISO}
-                      type="button"
-                      onClick={() => openDay(dayISO)}
-                      className="min-h-[156px] rounded-[24px] p-4 text-left transition"
-                      style={{
-                        border: selected
-                          ? "1px solid rgba(255,255,255,.16)"
-                          : today
-                            ? "1px solid rgba(110,241,171,.24)"
-                            : "1px solid rgba(255,255,255,.09)",
-                        background: selected
-                          ? "linear-gradient(180deg, rgba(255,255,255,.08), rgba(255,255,255,.016)), rgba(7,10,16,.12)"
-                          : "linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,.010)), rgba(7,10,16,.10)",
-                        boxShadow: selected
-                          ? "inset 0 1px 0 rgba(255,255,255,.10), 0 0 0 1px rgba(255,255,255,.02), 0 18px 36px rgba(0,0,0,.14), 0 0 18px rgba(255,255,255,.04)"
-                          : today
-                            ? "inset 0 1px 0 rgba(255,255,255,.08), 0 18px 36px rgba(0,0,0,.14), 0 0 18px rgba(110,241,171,.05)"
-                            : "inset 0 1px 0 rgba(255,255,255,.06), 0 18px 36px rgba(0,0,0,.12)",
-                        opacity: sameMonth ? 1 : 0.38,
-                        backdropFilter: "blur(10px)",
-                        WebkitBackdropFilter: "blur(10px)",
-                      }}
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <div>
-                          <div className="text-[30px] font-black leading-none text-white">
-                            {parseISO(dayISO)?.getDate()}
-                          </div>
-                          <div className="mt-1 text-[11px] text-white/35">
-                            {dayISO}
-                          </div>
-                        </div>
-
-                        {dayEvents.length > 0 ? (
-                          <div className="grid h-7 min-w-7 place-items-center rounded-full border border-white/10 bg-white/[0.06] px-2 text-[11px] font-black text-white">
-                            {dayEvents.length}
-                          </div>
-                        ) : null}
-                      </div>
-
-                      <div className="mt-3 flex flex-wrap gap-1.5">
-                        {inTotal > 0 ? (
-                          <DotBadge tone="good">+ {fmtMoney(inTotal)}</DotBadge>
-                        ) : null}
-                        {expenseTotal > 0 ? (
-                          <DotBadge tone="bad">- {fmtMoney(expenseTotal)}</DotBadge>
-                        ) : null}
-                        {plannedTotal > 0 ? (
-                          <DotBadge tone="warn">{fmtMoney(plannedTotal)}</DotBadge>
-                        ) : null}
-                      </div>
-
-                      {dayEvents.length > 0 ? (
-                        <div className="mt-3 space-y-1.5">
-                          {dayEvents.slice(0, 2).map((ev) => (
-                            <div
-                              key={ev.id}
-                              className="flex min-w-0 items-center gap-2"
-                            >
-                              <div
-                                className="h-2 w-2 shrink-0 rounded-full"
-                                style={{
-                                  background: toneForEvent(ev).line,
-                                  boxShadow: `0 0 10px ${toneForEvent(ev).line}`,
-                                }}
-                              />
-                              <div className="truncate text-[12px] font-semibold text-white/62">
-                                {ev.event_time ? `${fmtTime(ev.event_time)} · ` : ""}
-                                {ev.title}
-                              </div>
-                            </div>
-                          ))}
-
-                          {dayEvents.length > 2 ? (
-                            <div className="text-[11px] font-bold text-white/36">
-                              +{dayEvents.length - 2} more
-                            </div>
-                          ) : null}
-                        </div>
-                      ) : null}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-        </ShellCard>
-
-        <ShellCard className="p-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <div className="text-[11px] font-black uppercase tracking-[0.18em] text-white/40">
-                Selected day
-              </div>
-              <div className="mt-1 text-xl font-black text-white">
-                {fmtLongDate(selectedDate)}
-              </div>
-              <div className="mt-1 text-sm text-white/48">
-                {selectedDayEvents.length > 0
-                  ? `${selectedDayEvents.length} event(s) on deck`
-                  : `Nothing scheduled for ${fmtShortDate(selectedDate)}`}
-              </div>
+          <div
+            style={{
+              marginTop: 18,
+              display: "flex",
+              gap: 10,
+              flexWrap: "wrap",
+              justifyContent: "space-between",
+            }}
+          >
+            <div style={mutedStyle()}>
+              Manual saves write into <span style={{ color: "#fff" }}>calendar_events</span>.
             </div>
 
-            <Button
-              type="button"
-              onClick={() => openDay(selectedDate)}
-              className="rounded-2xl bg-white px-5 text-[#09111f] hover:bg-white/90"
-            >
-              <CalendarDays size={16} className="mr-2" />
-              Open Day Window
-            </Button>
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+              <GhostButton onClick={() => setEditorOpen(false)}>Cancel</GhostButton>
+              <SolidButton type="submit" icon={<Plus size={15} />}>
+                {draft.id ? "Save Changes" : "Create Event"}
+              </SolidButton>
+            </div>
           </div>
-        </ShellCard>
-      </div>
+        </form>
+      </ModalShell>
     </>
   );
 }

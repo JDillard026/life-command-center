@@ -1,9 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
+
+const DISPLAY_FONT = 'Georgia, "Times New Roman", serif';
 
 function money(n) {
   const num = Number(n);
@@ -11,13 +13,16 @@ function money(n) {
   return num.toLocaleString(undefined, {
     style: "currency",
     currency: "USD",
+    maximumFractionDigits: 2,
   });
 }
 
-function fmtNumber(n) {
+function fmtNumber(n, digits = 4) {
   const num = Number(n);
   if (!Number.isFinite(num)) return "—";
-  return num.toLocaleString(undefined, { maximumFractionDigits: 4 });
+  return num.toLocaleString(undefined, {
+    maximumFractionDigits: digits,
+  });
 }
 
 function pct(n) {
@@ -26,11 +31,11 @@ function pct(n) {
   return `${num >= 0 ? "+" : ""}${num.toFixed(2)}%`;
 }
 
-function fmtDate(value) {
+function shortDate(value) {
   if (!value) return "—";
   const d = new Date(value);
   if (!Number.isFinite(d.getTime())) return String(value);
-  return d.toLocaleDateString();
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 }
 
 function toneByValue(value) {
@@ -39,75 +44,105 @@ function toneByValue(value) {
   return n > 0 ? "good" : "bad";
 }
 
-function tintVars(tone = "neutral") {
+function toneVars(tone = "neutral") {
   if (tone === "good") {
     return {
-      border: "rgba(16,185,129,.24)",
-      glow: "rgba(16,185,129,.16)",
-      top: "rgba(16,185,129,.10)",
-      text: "#86efac",
+      border: "rgba(92, 247, 184, 0.18)",
+      glow: "rgba(92, 247, 184, 0.12)",
+      accent: "#95f7ca",
+      top: "rgba(92, 247, 184, 0.10)",
     };
   }
-
   if (tone === "bad") {
     return {
-      border: "rgba(244,63,94,.24)",
-      glow: "rgba(244,63,94,.16)",
-      top: "rgba(244,63,94,.10)",
-      text: "#fda4af",
+      border: "rgba(255, 126, 169, 0.18)",
+      glow: "rgba(255, 126, 169, 0.12)",
+      accent: "#ffb3cb",
+      top: "rgba(255, 126, 169, 0.10)",
     };
   }
-
   return {
-    border: "rgba(59,130,246,.18)",
-    glow: "rgba(59,130,246,.12)",
-    top: "rgba(59,130,246,.07)",
-    text: "rgba(255,255,255,.92)",
+    border: "rgba(225, 235, 255, 0.14)",
+    glow: "rgba(133, 173, 255, 0.10)",
+    accent: "rgba(255,255,255,.92)",
+    top: "rgba(109, 146, 255, 0.10)",
   };
 }
 
-function shellPanel(tone = "neutral", strong = false) {
-  const t = tintVars(tone);
-
+function pageShell() {
   return {
-    borderRadius: 26,
-    border: `1px solid ${t.border}`,
+    minHeight: "100vh",
+    maxWidth: 1480,
+    margin: "0 auto",
+    padding: "24px 20px 56px",
+    color: "rgba(255,255,255,.96)",
     background: `
-      radial-gradient(circle at top left, ${t.top} 0%, rgba(255,255,255,0) 26%),
-      linear-gradient(180deg, rgba(5,10,22,.94) 0%, rgba(3,8,20,.98) 100%)
+      radial-gradient(circle at 12% 8%, rgba(85,135,255,.08) 0%, rgba(0,0,0,0) 24%),
+      radial-gradient(circle at 78% 6%, rgba(255,255,255,.04) 0%, rgba(0,0,0,0) 18%),
+      radial-gradient(circle at 50% 36%, rgba(99, 135, 255, .04) 0%, rgba(0,0,0,0) 28%)
     `,
-    boxShadow: strong
-      ? `0 0 0 1px rgba(255,255,255,.02) inset, 0 18px 55px rgba(0,0,0,.42), 0 0 34px ${t.glow}`
-      : `0 0 0 1px rgba(255,255,255,.02) inset, 0 16px 42px rgba(0,0,0,.34), 0 0 20px ${t.glow}`,
-    backdropFilter: "blur(10px)",
   };
 }
 
-function softPanel(tone = "neutral") {
-  const t = tintVars(tone);
+function glass(tone = "neutral", radius = 28) {
+  const t = toneVars(tone);
 
   return {
-    borderRadius: 22,
+    position: "relative",
+    overflow: "hidden",
+    borderRadius: radius,
     border: `1px solid ${t.border}`,
     background: `
-      radial-gradient(circle at top left, ${t.top} 0%, rgba(255,255,255,0) 24%),
-      linear-gradient(180deg, rgba(7,12,26,.90) 0%, rgba(4,9,22,.96) 100%)
-    `,
-    boxShadow: `0 14px 32px rgba(0,0,0,.28), 0 0 18px ${t.glow}`,
-  };
-}
-
-function microPanel(tone = "neutral") {
-  const t = tintVars(tone);
-
-  return {
-    borderRadius: 18,
-    border: `1px solid ${t.border}`,
-    background: `
+      linear-gradient(180deg, rgba(255,255,255,.10) 0%, rgba(255,255,255,.045) 10%, rgba(255,255,255,.01) 20%, rgba(255,255,255,0) 34%),
       radial-gradient(circle at top left, ${t.top} 0%, rgba(255,255,255,0) 28%),
-      linear-gradient(180deg, rgba(10,15,30,.86) 0%, rgba(5,9,20,.94) 100%)
+      linear-gradient(180deg, rgba(9,14,28,.28) 0%, rgba(7,11,22,.16) 100%)
     `,
-    boxShadow: `0 10px 24px rgba(0,0,0,.24), 0 0 14px ${t.glow}`,
+    boxShadow: `
+      0 0 0 1px rgba(255,255,255,.02) inset,
+      0 14px 38px rgba(0,0,0,.14),
+      0 0 20px ${t.glow}
+    `,
+    backdropFilter: "blur(26px)",
+    WebkitBackdropFilter: "blur(26px)",
+  };
+}
+
+function heroRail() {
+  return {
+    ...glass("neutral", 34),
+    padding: "26px 24px 24px",
+  };
+}
+
+function overlineStyle(color = "rgba(255,255,255,.56)") {
+  return {
+    fontSize: 11,
+    letterSpacing: "0.28em",
+    textTransform: "uppercase",
+    fontWeight: 800,
+    color,
+  };
+}
+
+function actionBtn(primary = false) {
+  return {
+    height: 42,
+    padding: "0 14px",
+    borderRadius: 999,
+    border: primary
+      ? "1px solid rgba(255,255,255,.28)"
+      : "1px solid rgba(255,255,255,.10)",
+    background: primary
+      ? "linear-gradient(180deg, rgba(255,255,255,.95) 0%, rgba(233,239,248,.88) 100%)"
+      : "linear-gradient(180deg, rgba(255,255,255,.08) 0%, rgba(255,255,255,.03) 100%)",
+    color: primary ? "#0b1220" : "rgba(255,255,255,.94)",
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    textDecoration: "none",
+    fontWeight: 800,
+    fontSize: 14,
+    cursor: "pointer",
   };
 }
 
@@ -235,34 +270,32 @@ export default function InvestmentAssetPage() {
         if (txnType === "BUY") {
           totalBoughtShares += qty;
           totalBuyCost += qty * price;
-
           sharesAfter = shares + qty;
           basisAfter = remainingBasis + qty * price;
         } else if (txnType === "SELL") {
           const sellQty = Math.min(qty, shares);
+          basisRemoved = sellQty * avgCostBefore;
+          realizedOnTxn = sellQty * price - basisRemoved;
 
-          totalSoldShares += qty;
-          totalSellProceeds += qty * price;
+          totalSoldShares += sellQty;
+          totalSellProceeds += sellQty * price;
+          costRemovedBySells += basisRemoved;
+          realizedPnl += realizedOnTxn;
 
-          if (sellQty > 0) {
-            basisRemoved = sellQty * avgCostBefore;
-            realizedOnTxn = sellQty * price - basisRemoved;
+          sharesAfter = shares - sellQty;
+          basisAfter = remainingBasis - basisRemoved;
 
-            costRemovedBySells += basisRemoved;
-            realizedPnl += realizedOnTxn;
-
-            sharesAfter = shares - sellQty;
-            basisAfter = remainingBasis - basisRemoved;
-
-            if (sharesAfter <= 0 || basisAfter < 0.000001) {
-              sharesAfter = 0;
-              basisAfter = 0;
-            }
+          if (sharesAfter <= 0 || basisAfter < 0.000001) {
+            sharesAfter = 0;
+            basisAfter = 0;
           }
         }
       }
 
-      const row = {
+      shares = sharesAfter;
+      remainingBasis = basisAfter;
+
+      return {
         ...t,
         qty,
         price,
@@ -270,256 +303,152 @@ export default function InvestmentAssetPage() {
         avgCostBefore,
         basisRemoved,
         realizedOnTxn,
-        sharesBefore: shares,
         sharesAfter,
-        basisBefore: remainingBasis,
         basisAfter,
       };
-
-      shares = sharesAfter;
-      remainingBasis = basisAfter;
-
-      return row;
     });
 
-    const hasLivePrice = Number.isFinite(Number(livePrice)) && Number(livePrice) > 0;
-    const live = hasLivePrice ? Number(livePrice) : null;
-    const currentValue = hasLivePrice ? shares * live : null;
-    const unrealizedPnl = hasLivePrice ? currentValue - remainingBasis : null;
+    const avgRemainingCost = shares > 0 ? remainingBasis / shares : null;
+    const currentValue =
+      Number.isFinite(Number(livePrice)) && shares > 0 ? Number(livePrice) * shares : null;
+    const unrealizedPnl =
+      currentValue != null ? Number(currentValue) - Number(remainingBasis) : null;
     const unrealizedPct =
-      hasLivePrice && remainingBasis > 0
-        ? ((currentValue - remainingBasis) / remainingBasis) * 100
+      currentValue != null && remainingBasis > 0
+        ? ((Number(currentValue) - Number(remainingBasis)) / Number(remainingBasis)) * 100
         : null;
-    const avgRemainingCost = shares > 0 ? remainingBasis / shares : 0;
-
-    const purchasePrice =
+    const avgPurchasePrice =
       totalBoughtShares > 0 ? totalBuyCost / totalBoughtShares : null;
-
-    const priceChange =
-      hasLivePrice && Number.isFinite(Number(purchasePrice))
-        ? live - Number(purchasePrice)
-        : null;
-
-    const priceChangePct =
-      hasLivePrice &&
-      Number.isFinite(Number(purchasePrice)) &&
-      Number(purchasePrice) > 0
-        ? ((live - Number(purchasePrice)) / Number(purchasePrice)) * 100
-        : null;
 
     return {
       rows,
+      remainingShares: shares,
+      remainingBasis,
       totalBoughtShares,
       totalSoldShares,
-      remainingShares: shares,
       totalBuyCost,
       totalSellProceeds,
       costRemovedBySells,
-      remainingBasis,
       realizedPnl,
       avgRemainingCost,
-      hasLivePrice,
-      livePrice: live,
       currentValue,
       unrealizedPnl,
       unrealizedPct,
-      purchasePrice,
-      priceChange,
-      priceChangePct,
+      avgPurchasePrice,
     };
   }, [txns, livePrice]);
 
-  const assetTone = breakdown.hasLivePrice
-    ? toneByValue(breakdown.unrealizedPnl)
-    : "neutral";
+  const assetTone = toneByValue(breakdown.unrealizedPnl);
 
-  const priceTone = toneByValue(breakdown.priceChange);
-  const realizedTone = toneByValue(breakdown.realizedPnl);
-
-  if (loading) {
+  if (!loading && !asset) {
     return (
-      <main
-        style={{
-          background:
-            "radial-gradient(circle at top left, rgba(37,99,235,.10) 0%, rgba(0,0,0,0) 22%), radial-gradient(circle at top right, rgba(168,85,247,.06) 0%, rgba(0,0,0,0) 22%), linear-gradient(180deg, #030712 0%, #050a16 100%)",
-          padding: "34px 28px 46px",
-          maxWidth: "1320px",
-          margin: "0 auto",
-          color: "rgba(255,255,255,.96)",
-          minHeight: "100vh",
-        }}
-      >
-        <div style={{ ...shellPanel("neutral", false), padding: 18 }}>
-          Loading asset...
-        </div>
-      </main>
-    );
-  }
-
-  if (error) {
-    return (
-      <main
-        style={{
-          background:
-            "radial-gradient(circle at top left, rgba(37,99,235,.10) 0%, rgba(0,0,0,0) 22%), radial-gradient(circle at top right, rgba(168,85,247,.06) 0%, rgba(0,0,0,0) 22%), linear-gradient(180deg, #030712 0%, #050a16 100%)",
-          padding: "34px 28px 46px",
-          maxWidth: "1320px",
-          margin: "0 auto",
-          color: "rgba(255,255,255,.96)",
-          minHeight: "100vh",
-        }}
-      >
-        <div style={{ ...softPanel("bad"), padding: 18 }}>
-          <div style={{ fontWeight: 900 }}>Fix this</div>
-          <div style={{ marginTop: 8, color: "rgba(255,255,255,.68)" }}>{error}</div>
-        </div>
-      </main>
-    );
-  }
-
-  if (!asset) {
-    return (
-      <main
-        style={{
-          background:
-            "radial-gradient(circle at top left, rgba(37,99,235,.10) 0%, rgba(0,0,0,0) 22%), radial-gradient(circle at top right, rgba(168,85,247,.06) 0%, rgba(0,0,0,0) 22%), linear-gradient(180deg, #030712 0%, #050a16 100%)",
-          padding: "34px 28px 46px",
-          maxWidth: "1320px",
-          margin: "0 auto",
-          color: "rgba(255,255,255,.96)",
-          minHeight: "100vh",
-        }}
-      >
-        <div style={{ ...shellPanel("neutral", false), padding: 18 }}>
-          Asset not found.
-        </div>
+      <main style={pageShell()}>
+        <div style={{ ...glass("neutral", 24), padding: 18 }}>Asset not found.</div>
       </main>
     );
   }
 
   return (
-    <main
-      style={{
-        background:
-          "radial-gradient(circle at top left, rgba(37,99,235,.10) 0%, rgba(0,0,0,0) 22%), radial-gradient(circle at top right, rgba(168,85,247,.06) 0%, rgba(0,0,0,0) 22%), linear-gradient(180deg, #030712 0%, #050a16 100%)",
-        padding: "34px 28px 46px",
-        maxWidth: "1320px",
-        margin: "0 auto",
-        color: "rgba(255,255,255,.96)",
-        minHeight: "100vh",
-      }}
-    >
-      <div
-        style={{
-          ...shellPanel("neutral", true),
-          padding: 22,
-          marginBottom: 18,
-          display: "grid",
-          gridTemplateColumns: "1fr auto",
-          gap: 16,
-          alignItems: "end",
-        }}
-      >
-        <div>
-          <div
-            style={{
-              fontSize: 12,
-              fontWeight: 900,
-              textTransform: "uppercase",
-              letterSpacing: "0.22em",
-              marginBottom: 8,
-              color: "rgba(134,239,172,.82)",
-            }}
-          >
-            Asset Detail
+    <main style={pageShell()}>
+      {error ? (
+        <div style={{ ...glass("bad", 22), padding: 14, marginBottom: 14 }}>
+          <div style={{ fontWeight: 800, color: "#ffcade" }}>{error}</div>
+        </div>
+      ) : null}
+
+      <section style={heroRail()}>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr auto",
+            gap: 18,
+            alignItems: "end",
+          }}
+        >
+          <div>
+            <div style={overlineStyle("rgba(190,255,223,.84)")}>Asset Detail</div>
+
+            <h1
+              style={{
+                margin: "10px 0 0",
+                fontFamily: DISPLAY_FONT,
+                fontSize: "clamp(2.6rem, 5vw, 4.8rem)",
+                lineHeight: 0.95,
+                letterSpacing: "-0.05em",
+                fontWeight: 700,
+                color: "rgba(255,255,255,.98)",
+              }}
+            >
+              {asset?.symbol || "Unknown"} Breakdown
+            </h1>
+
+            <div
+              style={{
+                marginTop: 14,
+                maxWidth: 820,
+                fontSize: 15,
+                lineHeight: 1.7,
+                color: "rgba(255,255,255,.76)",
+              }}
+            >
+              This page shows the actual math behind the position so you can see why the asset is up
+              or down.
+            </div>
           </div>
 
-          <h1
-            style={{
-              margin: 0,
-              fontSize: "clamp(2rem, 4vw, 3rem)",
-              lineHeight: 1.04,
-              fontWeight: 950,
-              letterSpacing: "-0.03em",
-            }}
-          >
-            {asset.symbol || "Unknown"} Breakdown
-          </h1>
-
-          <div
-            style={{
-              marginTop: 10,
-              fontSize: 15,
-              maxWidth: 800,
-              color: "rgba(255,255,255,.68)",
-            }}
-          >
-            This page shows the actual math behind the position so you can see why the asset is up or down.
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "flex-end" }}>
+            <Link href="/investments" style={actionBtn(false)}>
+              Back to Investments
+            </Link>
+            <Link href={`/market/${encodeURIComponent(asset?.symbol || "")}`} style={actionBtn(true)}>
+              Open Market
+            </Link>
           </div>
         </div>
+      </section>
 
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "flex-end" }}>
-          <Link href="/investments" className="btnGhost">
-            Back to Investments
-          </Link>
-          <Link href={`/market/${encodeURIComponent(asset.symbol || "")}`} className="btn">
-            Open Market
-          </Link>
-        </div>
-      </div>
-
-      <div
+      <section
         style={{
-          ...shellPanel(assetTone, true),
-          padding: 20,
-          marginBottom: 18,
+          ...glass(assetTone, 32),
+          padding: 18,
+          marginTop: 14,
         }}
       >
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "1.15fr .85fr",
+            gridTemplateColumns: "minmax(0,1.1fr) minmax(320px,.9fr)",
             gap: 18,
             alignItems: "center",
           }}
         >
           <div>
+            <div style={overlineStyle("rgba(255,255,255,.46)")}>Position Pulse</div>
+
             <div
               style={{
-                fontSize: 12,
-                fontWeight: 900,
-                textTransform: "uppercase",
-                letterSpacing: "0.16em",
-                color: "rgba(255,255,255,.54)",
+                marginTop: 12,
+                fontFamily: DISPLAY_FONT,
+                fontSize: "clamp(2rem, 4vw, 3.4rem)",
+                lineHeight: 0.96,
+                fontWeight: 700,
+                letterSpacing: "-0.05em",
+                color: assetTone === "bad" ? "#ffbdd0" : "rgba(255,255,255,.98)",
               }}
             >
-              Position Pulse
-            </div>
-
-            <div style={{ marginTop: 10, fontSize: "clamp(2rem, 4vw, 3.1rem)", fontWeight: 950 }}>
-              {breakdown.hasLivePrice ? money(breakdown.currentValue) : "Waiting on live data"}
+              {money(breakdown.currentValue || 0)}
             </div>
 
             <div
               style={{
-                marginTop: 10,
+                marginTop: 12,
                 fontSize: 16,
-                fontWeight: 850,
-                color:
-                  assetTone === "good"
-                    ? "#86efac"
-                    : assetTone === "bad"
-                      ? "#fda4af"
-                      : "rgba(255,255,255,.82)",
+                fontWeight: 800,
+                color: assetTone === "good" ? "#9df4cb" : assetTone === "bad" ? "#ffbdd0" : "rgba(255,255,255,.82)",
               }}
             >
-              {breakdown.hasLivePrice
-                ? `${money(breakdown.unrealizedPnl)} unrealized • ${
-                    breakdown.unrealizedPct != null ? pct(breakdown.unrealizedPct) : "—"
-                  }`
-                : loadingPrice
-                  ? "Checking live market price..."
-                  : "Live price unavailable."}
+              {money(breakdown.unrealizedPnl || 0)} unrealized{" "}
+              {breakdown.unrealizedPct != null ? `• ${pct(breakdown.unrealizedPct)}` : "• —"}
             </div>
           </div>
 
@@ -530,546 +459,252 @@ export default function InvestmentAssetPage() {
               gap: 12,
             }}
           >
-            <PulseMiniCard
-              label="Remaining Shares"
-              value={fmtNumber(breakdown.remainingShares)}
-              sub="Current position size"
-              tone="neutral"
-            />
-            <PulseMiniCard
-              label="Transactions"
-              value={String(txns.length)}
-              sub="Recorded asset trades"
-              tone="neutral"
-            />
-            <PulseMiniCard
-              label="Live Price"
-              value={breakdown.hasLivePrice ? money(breakdown.livePrice) : "Pending"}
-              sub="Current market quote"
-              tone={assetTone}
+            <MetricMini title="Remaining Shares" value={fmtNumber(breakdown.remainingShares)} />
+            <MetricMini title="Transactions" value={String(txns.length)} />
+            <MetricMini
+              title="Live Price"
+              value={
+                loadingPrice
+                  ? "Loading"
+                  : Number.isFinite(Number(livePrice))
+                    ? money(livePrice)
+                    : "Pending"
+              }
             />
           </div>
         </div>
-      </div>
+      </section>
 
-      <div
+      <section
         style={{
           display: "grid",
-          gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
-          gap: 16,
-          marginBottom: 18,
+          gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+          gap: 14,
+          marginTop: 14,
         }}
       >
-        <MetricCard
-          title="Total Bought Shares"
-          value={fmtNumber(breakdown.totalBoughtShares)}
-          sub={`Buy cost: ${money(breakdown.totalBuyCost)}`}
-          tone="neutral"
-          strong
-        />
+        <MetricCard title="Total Bought Shares" value={fmtNumber(breakdown.totalBoughtShares)} sub={`Buy cost: ${money(breakdown.totalBuyCost)}`} />
+        <MetricCard title="Total Sold Shares" value={fmtNumber(breakdown.totalSoldShares)} sub={`Sell proceeds: ${money(breakdown.totalSellProceeds)}`} />
+        <MetricCard title="Remaining Basis" value={money(breakdown.remainingBasis)} sub="Basis still attached to remaining shares." />
+        <MetricCard title="Avg Remaining Cost" value={breakdown.avgRemainingCost != null ? money(breakdown.avgRemainingCost) : "—"} sub="Average cost per remaining share." />
+        <MetricCard title="Cost Removed by Sells" value={money(breakdown.costRemovedBySells)} sub="Basis taken off through sell transactions." />
+        <MetricCard title="Realized P/L" value={money(breakdown.realizedPnl)} sub="Closed gain/loss from sells." tone={toneByValue(breakdown.realizedPnl)} />
+        <MetricCard title="Current Value" value={money(breakdown.currentValue || 0)} sub="Remaining shares × live price." tone={assetTone} />
+        <MetricCard title="Unrealized P/L" value={money(breakdown.unrealizedPnl || 0)} sub={breakdown.unrealizedPct != null ? pct(breakdown.unrealizedPct) : "Waiting on basis math"} tone={assetTone} />
+      </section>
 
-        <MetricCard
-          title="Total Sold Shares"
-          value={fmtNumber(breakdown.totalSoldShares)}
-          sub={`Sell proceeds: ${money(breakdown.totalSellProceeds)}`}
-          tone="neutral"
-          strong
-        />
-
-        <MetricCard
-          title="Remaining Basis"
-          value={money(breakdown.remainingBasis)}
-          sub="Basis still attached to remaining shares."
-          tone="neutral"
-          strong
-        />
-
-        <MetricCard
-          title="Avg Remaining Cost"
-          value={breakdown.remainingShares > 0 ? money(breakdown.avgRemainingCost) : "—"}
-          sub="Average cost per remaining share."
-          tone="neutral"
-          strong
-        />
-      </div>
-
-      <div
+      <section
         style={{
           display: "grid",
-          gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
-          gap: 16,
-          marginBottom: 18,
+          gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))",
+          gap: 14,
+          marginTop: 14,
         }}
       >
-        <MetricCard
-          title="Cost Removed By Sells"
-          value={money(breakdown.costRemovedBySells)}
-          sub="Basis taken off through sell transactions."
-          tone="neutral"
-          strong
-        />
-
-        <MetricCard
-          title="Realized P/L"
-          value={money(breakdown.realizedPnl)}
-          sub="Closed gain/loss from sells."
-          tone={realizedTone}
-          valueTone={realizedTone}
-          strong
-        />
-
-        <MetricCard
-          title="Current Value"
-          value={breakdown.hasLivePrice ? money(breakdown.currentValue) : "Pending"}
-          sub="Remaining shares × live price."
-          tone="neutral"
-          strong
-        />
-
-        <MetricCard
-          title="Unrealized P/L"
-          value={breakdown.hasLivePrice ? money(breakdown.unrealizedPnl) : "Pending"}
-          sub={
-            breakdown.hasLivePrice
-              ? breakdown.unrealizedPct != null
-                ? pct(breakdown.unrealizedPct)
-                : "Waiting on basis math"
-              : "Shows once live price is available."
-          }
-          tone={assetTone}
-          valueTone={assetTone}
-          strong
-        />
-      </div>
-
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-          gap: 16,
-          marginBottom: 18,
-        }}
-      >
-        <MetricCard
-          title="Purchase Price"
-          value={
-            Number.isFinite(Number(breakdown.purchasePrice))
-              ? money(breakdown.purchasePrice)
-              : "—"
-          }
-          sub="Average price paid across recorded buys."
-          tone="neutral"
-          strong
-        />
-
-        <MetricCard
-          title="Current Price"
-          value={breakdown.hasLivePrice ? money(breakdown.livePrice) : "Pending"}
-          sub="Latest market quote for this symbol."
-          tone="neutral"
-          strong
-        />
-
-        <MetricCard
-          title="Price Change"
-          value={
-            Number.isFinite(Number(breakdown.priceChange))
-              ? money(breakdown.priceChange)
-              : "—"
-          }
-          sub={
-            Number.isFinite(Number(breakdown.priceChangePct))
-              ? pct(breakdown.priceChangePct)
-              : "Price comparison unavailable."
-          }
-          tone={priceTone}
-          valueTone={priceTone}
-          strong
-        />
-      </div>
-
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "1fr 1fr",
-          gap: 18,
-          marginBottom: 18,
-        }}
-      >
-        <div style={{ ...shellPanel("neutral", false), padding: 18 }}>
-          <div style={{ fontWeight: 950, fontSize: 22 }}>Position Summary</div>
+        <div style={{ ...glass("neutral", 30), padding: 18 }}>
+          <div
+            style={{
+              fontFamily: DISPLAY_FONT,
+              fontSize: 22,
+              fontWeight: 700,
+              color: "rgba(255,255,255,.96)",
+            }}
+          >
+            Position Summary
+          </div>
           <div style={{ marginTop: 6, fontSize: 14, color: "rgba(255,255,255,.66)" }}>
             Straight math. No guessing.
           </div>
 
-          <div style={{ display: "grid", gap: 12, marginTop: 16 }}>
-            <MiniPoint
-              title="Bought"
-              sub={`${fmtNumber(breakdown.totalBoughtShares)} shares for ${money(
-                breakdown.totalBuyCost
-              )}`}
-              tone="good"
-            />
-            <MiniPoint
-              title="Sold"
-              sub={`${fmtNumber(breakdown.totalSoldShares)} shares for ${money(
-                breakdown.totalSellProceeds
-              )}`}
-              tone="bad"
-            />
-            <MiniPoint
-              title="Remaining"
-              sub={`${fmtNumber(breakdown.remainingShares)} shares with ${money(
-                breakdown.remainingBasis
-              )} basis`}
-              tone="neutral"
-            />
-            <MiniPoint
-              title="Price Comparison"
-              sub={`Paid ${
-                Number.isFinite(Number(breakdown.purchasePrice))
-                  ? money(breakdown.purchasePrice)
-                  : "—"
-              } vs now ${
-                breakdown.hasLivePrice ? money(breakdown.livePrice) : "Pending"
-              }`}
-              tone="neutral"
-            />
-            <MiniPoint
-              title="Realized vs Unrealized"
-              sub={`Realized ${money(breakdown.realizedPnl)} • Unrealized ${
-                breakdown.hasLivePrice ? money(breakdown.unrealizedPnl) : "Pending"
-              }`}
-              tone={assetTone}
-            />
+          <div style={{ display: "grid", gap: 10, marginTop: 16 }}>
+            <SummaryBlock tone="good" label="Bought" value={`${fmtNumber(breakdown.totalBoughtShares)} shares for ${money(breakdown.totalBuyCost)}`} />
+            <SummaryBlock tone="bad" label="Sold" value={`${fmtNumber(breakdown.totalSoldShares)} shares for ${money(breakdown.totalSellProceeds)}`} />
+            <SummaryBlock label="Still Attached" value={`${fmtNumber(breakdown.remainingShares)} shares carrying ${money(breakdown.remainingBasis)} of basis`} />
+            <SummaryBlock label="Current Mark" value={Number.isFinite(Number(livePrice)) ? `${money(livePrice)} live price` : "Live price pending"} />
           </div>
         </div>
 
-        <div style={{ ...shellPanel("neutral", false), padding: 18 }}>
-          <div style={{ fontWeight: 950, fontSize: 22 }}>Read This Correctly</div>
-
+        <div style={{ ...glass("neutral", 30), padding: 18 }}>
           <div
             style={{
-              marginTop: 8,
-              lineHeight: 1.5,
-              color: "rgba(255,255,255,.68)",
+              fontFamily: DISPLAY_FONT,
+              fontSize: 22,
+              fontWeight: 700,
+              color: "rgba(255,255,255,.96)",
             }}
           >
-            Remaining basis is what is still attached to the shares you have left.
-            Realized P/L is what you already locked in on sells.
-            Unrealized P/L is what the remaining position is worth versus its remaining basis.
+            Read This Correctly
           </div>
-
           <div
             style={{
-              display: "grid",
-              gap: 10,
-              marginTop: 16,
+              marginTop: 12,
+              fontSize: 15,
+              lineHeight: 1.7,
+              color: "rgba(255,255,255,.76)",
             }}
           >
-            <MiniPoint
-              title="Accounting method"
-              sub="Average-cost sell handling."
-              tone="neutral"
-            />
+            Remaining basis is what is still attached to the shares you have left. Realized P/L is
+            what you already locked in on sells. Unrealized P/L is what the remaining position is
+            worth versus its remaining basis.
+          </div>
 
-            <MiniPoint
-              title="Live pricing"
-              sub={
-                loadingPrice
-                  ? "Refreshing current quote."
-                  : "Uses your live price route when available."
-              }
-              tone="neutral"
-            />
-
-            <MiniPoint
-              title="Why this matters"
-              sub="This page exposes incorrect trade entries immediately instead of hiding them in portfolio totals."
-              tone="neutral"
-            />
+          <div style={{ ...glass("neutral", 22), padding: 14, marginTop: 16 }}>
+            <div style={overlineStyle("rgba(255,255,255,.46)")}>Accounting Method</div>
+            <div style={{ marginTop: 10, fontSize: 14, color: "rgba(255,255,255,.82)" }}>
+              Average-cost sell handling.
+            </div>
           </div>
         </div>
-      </div>
+      </section>
 
-      <div style={{ ...shellPanel("neutral", false), padding: 18, marginBottom: 18 }}>
-        <div style={{ fontWeight: 950, fontSize: 22 }}>Transaction Timeline</div>
-        <div style={{ marginTop: 6, fontSize: 14, color: "rgba(255,255,255,.66)" }}>
-          Read the position from top to bottom. This is the story of the asset.
-        </div>
-
-        <div style={{ display: "grid", gap: 12, marginTop: 16 }}>
-          {breakdown.rows.length ? (
-            breakdown.rows.map((t) => {
-              const tone =
-                t.txnType === "BUY" ? "good" : t.txnType === "SELL" ? "bad" : "neutral";
-
-              return (
-                <div
-                  key={`timeline-${t.id}`}
-                  style={{
-                    ...softPanel(tone),
-                    padding: 16,
-                  }}
-                >
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      gap: 12,
-                      alignItems: "center",
-                      flexWrap: "wrap",
-                    }}
-                  >
-                    <div style={{ fontWeight: 950, fontSize: 17 }}>
-                      {t.txnType} {fmtNumber(t.qty)} shares @ {money(t.price)}
-                    </div>
-                    <div style={{ fontSize: 13, color: "rgba(255,255,255,.56)" }}>
-                      {fmtDate(t.txn_date)}
-                    </div>
-                  </div>
-
-                  <div
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
-                      gap: 10,
-                      marginTop: 12,
-                    }}
-                  >
-                    <TimelineStat label="Shares Before" value={fmtNumber(t.sharesBefore)} />
-                    <TimelineStat label="Shares After" value={fmtNumber(t.sharesAfter)} />
-                    <TimelineStat label="Basis Before" value={money(t.basisBefore)} />
-                    <TimelineStat label="Basis After" value={money(t.basisAfter)} />
-                  </div>
-
-                  {t.txnType === "SELL" ? (
-                    <div
-                      style={{
-                        display: "grid",
-                        gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-                        gap: 10,
-                        marginTop: 12,
-                      }}
-                    >
-                      <TimelineStat label="Basis Removed" value={money(t.basisRemoved)} />
-                      <TimelineStat label="Avg Cost Before" value={money(t.avgCostBefore)} />
-                      <TimelineStat
-                        label="Realized On Trade"
-                        value={money(t.realizedOnTxn)}
-                        tone={toneByValue(t.realizedOnTxn)}
-                      />
-                    </div>
-                  ) : null}
-                </div>
-              );
-            })
-          ) : (
-            <EmptyState
-              title="No transactions yet"
-              sub="This asset needs recorded buys or sells before the breakdown can show real math."
-            />
-          )}
-        </div>
-      </div>
-
-      <div
+      <section
         style={{
-          ...shellPanel("neutral", false),
-          padding: 0,
-          overflow: "hidden",
+          ...glass("neutral", 32),
+          padding: 18,
+          marginTop: 14,
         }}
       >
         <div
           style={{
-            display: "grid",
-            gridTemplateColumns: "120px 120px 120px 150px 150px 150px 150px 150px",
-            gap: 12,
-            padding: "16px 18px",
-            borderBottom: "1px solid rgba(255,255,255,.08)",
-            fontWeight: 900,
-            color: "rgba(255,255,255,.68)",
-            background: "rgba(255,255,255,.02)",
+            fontFamily: DISPLAY_FONT,
+            fontSize: 22,
+            fontWeight: 700,
+            color: "rgba(255,255,255,.96)",
           }}
         >
-          <div>Type</div>
-          <div>Qty</div>
-          <div>Price</div>
-          <div>Date</div>
-          <div>Basis Removed</div>
-          <div>Realized P/L</div>
-          <div>Shares After</div>
-          <div>Basis After</div>
+          Transaction Ledger
+        </div>
+        <div style={{ marginTop: 6, fontSize: 14, color: "rgba(255,255,255,.66)" }}>
+          This is the row-by-row position math.
         </div>
 
-        {breakdown.rows.length ? (
-          breakdown.rows.map((t) => {
-            const tone =
-              t.txnType === "BUY" ? "good" : t.txnType === "SELL" ? "bad" : "neutral";
-            const tint = tintVars(tone);
+        <div style={{ display: "grid", gap: 10, marginTop: 16 }}>
+          {breakdown.rows.length ? (
+            breakdown.rows.map((row) => {
+              const tone = row.txnType === "SELL" ? "bad" : "good";
 
-            return (
-              <div
-                key={t.id}
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "120px 120px 120px 150px 150px 150px 150px 150px",
-                  gap: 12,
-                  padding: "16px 18px",
-                  borderBottom: "1px solid rgba(255,255,255,.06)",
-                  alignItems: "center",
-                  background: `
-                    linear-gradient(90deg, ${tint.top}, rgba(255,255,255,0) 28%),
-                    rgba(255,255,255,.01)
-                  `,
-                }}
-              >
+              return (
                 <div
+                  key={row.id}
                   style={{
-                    fontWeight: 850,
-                    color:
-                      tone === "good"
-                        ? "#86efac"
-                        : tone === "bad"
-                          ? "#fda4af"
-                          : "inherit",
+                    ...glass(tone, 22),
+                    padding: 14,
                   }}
                 >
-                  {t.txnType}
-                </div>
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "auto minmax(0,1fr) auto",
+                      gap: 12,
+                      alignItems: "center",
+                    }}
+                  >
+                    <div
+                      style={{
+                        height: 28,
+                        padding: "0 10px",
+                        borderRadius: 999,
+                        border: `1px solid ${toneVars(tone).border}`,
+                        background: "rgba(255,255,255,.04)",
+                        color: tone === "bad" ? "#ffbdd0" : "#9df4cb",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        fontSize: 11,
+                        fontWeight: 800,
+                      }}
+                    >
+                      {row.txnType}
+                    </div>
 
-                <div>{fmtNumber(t.qty)}</div>
-                <div>{money(t.price)}</div>
-                <div>{t.txn_date || "—"}</div>
-                <div>{t.txnType === "SELL" ? money(t.basisRemoved) : "—"}</div>
-                <div
-                  style={{
-                    color:
-                      t.txnType === "SELL"
-                        ? toneByValue(t.realizedOnTxn) === "good"
-                          ? "#86efac"
-                          : toneByValue(t.realizedOnTxn) === "bad"
-                            ? "#fda4af"
-                            : "inherit"
-                        : "inherit",
-                    fontWeight: t.txnType === "SELL" ? 850 : 400,
-                  }}
-                >
-                  {t.txnType === "SELL" ? money(t.realizedOnTxn) : "—"}
+                    <div>
+                      <div style={{ fontWeight: 800, fontSize: 15, color: "rgba(255,255,255,.94)" }}>
+                        {fmtNumber(row.qty)} shares @ {money(row.price)}
+                      </div>
+                      <div
+                        style={{
+                          marginTop: 6,
+                          fontSize: 12,
+                          lineHeight: 1.6,
+                          color: "rgba(255,255,255,.62)",
+                        }}
+                      >
+                        Avg cost before: {money(row.avgCostBefore)} • Basis removed: {money(row.basisRemoved)} • Realized on txn: {money(row.realizedOnTxn)} • Shares after: {fmtNumber(row.sharesAfter)} • Basis after: {money(row.basisAfter)}
+                      </div>
+                    </div>
+
+                    <div style={{ fontSize: 12, color: "rgba(255,255,255,.58)", fontWeight: 700 }}>
+                      {shortDate(row.txn_date)}
+                    </div>
+                  </div>
                 </div>
-                <div>{fmtNumber(t.sharesAfter)}</div>
-                <div>{money(t.basisAfter)}</div>
-              </div>
-            );
-          })
-        ) : (
-          <div style={{ padding: 18 }}>
-            <EmptyState
-              title="No transactions yet"
-              sub="This asset needs recorded buys or sells before the breakdown can show real math."
-            />
-          </div>
-        )}
-      </div>
+              );
+            })
+          ) : (
+            <EmptyState title="No transactions yet" sub="Once you record buys or sells, the full ledger math will show here." />
+          )}
+        </div>
+      </section>
+
+      {loading ? (
+        <div style={{ marginTop: 14 }}>
+          <EmptyState title="Loading asset..." sub="Pulling symbol data and transaction history." />
+        </div>
+      ) : null}
     </main>
   );
 }
 
-function MetricCard({
-  title,
-  value,
-  sub,
-  valueTone = "default",
-  tone = "neutral",
-  strong = false,
-}) {
-  const toneColor =
-    valueTone === "good"
-      ? "#86efac"
-      : valueTone === "bad"
-        ? "#fda4af"
-        : "inherit";
-
+function MetricMini({ title, value }) {
   return (
-    <div
-      style={{
-        ...softPanel(tone),
-        padding: 18,
-        ...(strong
-          ? { boxShadow: `${softPanel(tone).boxShadow}, 0 0 0 1px rgba(255,255,255,.02) inset` }
-          : {}),
-      }}
-    >
+    <div style={{ ...glass("neutral", 22), padding: 14 }}>
+      <div style={overlineStyle("rgba(255,255,255,.42)")}>{title}</div>
       <div
         style={{
-          fontSize: 12,
-          textTransform: "uppercase",
-          letterSpacing: "0.12em",
-          color: "rgba(255,255,255,.54)",
+          marginTop: 10,
+          fontFamily: DISPLAY_FONT,
+          fontSize: 18,
+          fontWeight: 700,
         }}
       >
-        {title}
-      </div>
-      <div style={{ marginTop: 10, fontSize: 20, fontWeight: 950, color: toneColor }}>
         {value}
       </div>
-      <div style={{ marginTop: 10, fontSize: 13, lineHeight: 1.45, color: "rgba(255,255,255,.64)" }}>
+    </div>
+  );
+}
+
+function MetricCard({ title, value, sub, tone = "neutral" }) {
+  return (
+    <div style={{ ...glass(tone, 26), padding: 18 }}>
+      <div style={overlineStyle("rgba(255,255,255,.44)")}>{title}</div>
+      <div
+        style={{
+          marginTop: 12,
+          fontFamily: DISPLAY_FONT,
+          fontSize: 24,
+          fontWeight: 700,
+          letterSpacing: "-0.03em",
+          color:
+            tone === "good"
+              ? "#9df4cb"
+              : tone === "bad"
+                ? "#ffbdd0"
+                : "rgba(255,255,255,.98)",
+        }}
+      >
+        {value}
+      </div>
+      <div style={{ marginTop: 14, fontSize: 14, lineHeight: 1.55, color: "rgba(255,255,255,.66)" }}>
         {sub}
       </div>
     </div>
   );
 }
 
-function PulseMiniCard({ label, value, sub, tone = "neutral" }) {
+function SummaryBlock({ label, value, tone = "neutral" }) {
   return (
-    <div
-      style={{
-        ...microPanel(tone),
-        padding: 14,
-      }}
-    >
-      <div
-        style={{
-          fontSize: 11,
-          textTransform: "uppercase",
-          letterSpacing: "0.12em",
-          color: "rgba(255,255,255,.54)",
-        }}
-      >
-        {label}
-      </div>
-      <div style={{ marginTop: 8, fontWeight: 950, fontSize: 22 }}>{value}</div>
-      <div style={{ marginTop: 6, fontSize: 12, color: "rgba(255,255,255,.62)" }}>{sub}</div>
-    </div>
-  );
-}
-
-function TimelineStat({ label, value, tone = "neutral" }) {
-  const color =
-    tone === "good"
-      ? "#86efac"
-      : tone === "bad"
-        ? "#fda4af"
-        : "rgba(255,255,255,.92)";
-
-  return (
-    <div
-      style={{
-        ...microPanel("neutral"),
-        padding: 12,
-      }}
-    >
-      <div
-        style={{
-          fontSize: 11,
-          textTransform: "uppercase",
-          letterSpacing: "0.08em",
-          color: "rgba(255,255,255,.54)",
-        }}
-      >
-        {label}
-      </div>
-      <div style={{ marginTop: 6, fontWeight: 900, color }}>
+    <div style={{ ...glass(tone, 22), padding: 14 }}>
+      <div style={{ fontWeight: 900, fontSize: 16, color: "rgba(255,255,255,.95)" }}>{label}</div>
+      <div style={{ marginTop: 8, fontSize: 14, lineHeight: 1.6, color: "rgba(255,255,255,.70)" }}>
         {value}
       </div>
     </div>
@@ -1078,35 +713,9 @@ function TimelineStat({ label, value, tone = "neutral" }) {
 
 function EmptyState({ title, sub }) {
   return (
-    <div
-      style={{
-        borderRadius: 20,
-        border: "1px dashed rgba(255,255,255,.14)",
-        padding: "26px 18px",
-        background:
-          "linear-gradient(180deg, rgba(8,13,26,.84) 0%, rgba(4,8,18,.94) 100%)",
-        textAlign: "center",
-        boxShadow: "0 14px 32px rgba(0,0,0,.24)",
-      }}
-    >
-      <div style={{ fontWeight: 900, fontSize: 16 }}>{title}</div>
-      <div style={{ marginTop: 8, fontSize: 14, lineHeight: 1.45, color: "rgba(255,255,255,.62)" }}>
-        {sub}
-      </div>
-    </div>
-  );
-}
-
-function MiniPoint({ title, sub, tone = "neutral" }) {
-  return (
-    <div
-      style={{
-        ...microPanel(tone),
-        padding: 14,
-      }}
-    >
-      <div style={{ fontWeight: 850 }}>{title}</div>
-      <div style={{ marginTop: 6, fontSize: 13, lineHeight: 1.45, color: "rgba(255,255,255,.64)" }}>
+    <div style={{ ...glass("neutral", 22), padding: 18 }}>
+      <div style={{ fontWeight: 800, fontSize: 16, color: "rgba(255,255,255,.94)" }}>{title}</div>
+      <div style={{ marginTop: 8, fontSize: 14, lineHeight: 1.6, color: "rgba(255,255,255,.62)" }}>
         {sub}
       </div>
     </div>

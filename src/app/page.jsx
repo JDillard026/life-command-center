@@ -2,13 +2,9 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import {
-  AlertTriangle,
-  ArrowRight,
-  ChevronRight,
-  X,
-} from "lucide-react";
+import { AlertTriangle, ChevronRight, X } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
+import GlassPane from "./components/GlassPane";
 
 export const dynamic = "force-dynamic";
 
@@ -76,11 +72,7 @@ function fmtShort(iso) {
 function daysUntil(iso) {
   if (!iso) return null;
   const now = new Date();
-  const today = new Date(
-    now.getFullYear(),
-    now.getMonth(),
-    now.getDate()
-  ).getTime();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
   const due = new Date(`${iso}T00:00:00`).getTime();
   if (!Number.isFinite(due)) return null;
   return Math.round((due - today) / 86400000);
@@ -162,468 +154,6 @@ function mapIncomeDepositRowToClient(row) {
   };
 }
 
-function toneConfig(tone = "ice") {
-  if (tone === "green") {
-    return {
-      border: "rgba(110, 241, 171, 0.18)",
-      text: "#8bf3c2",
-      accent: "#6ef1ab",
-      glow: "rgba(110, 241, 171, 0.10)",
-      tint: "rgba(4, 12, 8, 0.10)",
-      iconBack:
-        "linear-gradient(180deg, rgba(8,14,10,0.46), rgba(4,8,6,0.22))",
-      softBg: "rgba(110, 241, 171, 0.08)",
-    };
-  }
-
-  if (tone === "amber") {
-    return {
-      border: "rgba(255, 197, 108, 0.18)",
-      text: "#ffd79a",
-      accent: "#ffc56c",
-      glow: "rgba(255, 197, 108, 0.10)",
-      tint: "rgba(14, 10, 4, 0.10)",
-      iconBack:
-        "linear-gradient(180deg, rgba(15,11,7,0.46), rgba(8,6,4,0.22))",
-      softBg: "rgba(255, 197, 108, 0.08)",
-    };
-  }
-
-  if (tone === "red") {
-    return {
-      border: "rgba(255, 127, 153, 0.18)",
-      text: "#ffbfd0",
-      accent: "#ff7f99",
-      glow: "rgba(255, 127, 153, 0.10)",
-      tint: "rgba(14, 4, 8, 0.11)",
-      iconBack:
-        "linear-gradient(180deg, rgba(14,8,10,0.46), rgba(8,4,6,0.22))",
-      softBg: "rgba(255, 127, 153, 0.08)",
-    };
-  }
-
-  return {
-    border: "rgba(255, 255, 255, 0.12)",
-    text: "#f7f9fc",
-    accent: "#f7fbff",
-    glow: "rgba(255, 255, 255, 0.08)",
-    tint: "rgba(5, 8, 12, 0.10)",
-    iconBack:
-      "linear-gradient(180deg, rgba(10,12,16,0.42), rgba(5,7,10,0.18))",
-    softBg: "rgba(255,255,255,0.05)",
-  };
-}
-
-function glassStyle(tone = "ice", padding = 18, radius = 28) {
-  const t = toneConfig(tone);
-
-  return {
-    position: "relative",
-    overflow: "hidden",
-    padding,
-    borderRadius: radius,
-    border: `1px solid ${t.border}`,
-    background: `
-      linear-gradient(
-        180deg,
-        rgba(255,255,255,0.065) 0%,
-        rgba(255,255,255,0.022) 10%,
-        rgba(255,255,255,0.008) 20%,
-        rgba(255,255,255,0) 34%
-      ),
-      ${t.tint}
-    `,
-    backdropFilter: "blur(10px) saturate(110%)",
-    WebkitBackdropFilter: "blur(10px) saturate(110%)",
-    boxShadow: `
-      inset 0 1px 0 rgba(255,255,255,0.12),
-      inset 0 -1px 0 rgba(255,255,255,0.02),
-      0 0 0 1px rgba(255,255,255,0.018),
-      0 20px 46px rgba(0,0,0,0.18),
-      0 0 18px ${t.glow}
-    `,
-  };
-}
-
-function Pane({
-  children,
-  tone = "ice",
-  padding = 18,
-  radius = 28,
-  style = {},
-  overlayOpacity = 1,
-}) {
-  const t = toneConfig(tone);
-
-  return (
-    <section style={{ ...glassStyle(tone, padding, radius), ...style }}>
-      <div
-        style={{
-          position: "absolute",
-          inset: 0,
-          pointerEvents: "none",
-          opacity: overlayOpacity,
-          background: `
-            linear-gradient(
-              135deg,
-              rgba(255,255,255,0.11) 0%,
-              rgba(255,255,255,0.026) 12%,
-              rgba(255,255,255,0.006) 21%,
-              rgba(255,255,255,0) 34%
-            ),
-            radial-gradient(
-              circle at 86% 12%,
-              rgba(255,255,255,0.035),
-              transparent 22%
-            ),
-            radial-gradient(
-              circle at 100% 100%,
-              ${t.glow},
-              transparent 42%
-            )
-          `,
-          mixBlendMode: "screen",
-        }}
-      />
-      <div
-        style={{
-          position: "absolute",
-          inset: 1,
-          borderRadius: Math.max(radius - 1, 0),
-          pointerEvents: "none",
-          boxShadow: `
-            inset 0 1px 0 rgba(255,255,255,0.06),
-            inset 1px 0 0 rgba(255,255,255,0.01),
-            inset -1px 0 0 rgba(255,255,255,0.01)
-          `,
-        }}
-      />
-      <div style={{ position: "relative", zIndex: 1 }}>{children}</div>
-    </section>
-  );
-}
-
-function HeaderPill({ children }) {
-  return (
-    <div
-      style={{
-        padding: "11px 15px",
-        borderRadius: 16,
-        border: "1px solid rgba(255,255,255,0.08)",
-        background:
-          "linear-gradient(180deg, rgba(255,255,255,0.036), rgba(255,255,255,0.01))",
-        color: "rgba(255,255,255,0.88)",
-        fontSize: 12,
-        fontWeight: 800,
-        whiteSpace: "nowrap",
-        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05)",
-        backdropFilter: "blur(10px)",
-        WebkitBackdropFilter: "blur(10px)",
-      }}
-    >
-      {children}
-    </div>
-  );
-}
-
-function HeaderBar({ monthLabel, primaryName }) {
-  return (
-    <Pane
-      padding={18}
-      radius={28}
-      overlayOpacity={0.72}
-      style={{
-        background: `
-          linear-gradient(
-            180deg,
-            rgba(255,255,255,0.05) 0%,
-            rgba(255,255,255,0.012) 10%,
-            rgba(255,255,255,0) 24%
-          ),
-          rgba(5,8,12,0.08)
-        `,
-      }}
-    >
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "minmax(0, 1fr) auto",
-          gap: 14,
-          alignItems: "center",
-        }}
-      >
-        <div>
-          <div
-            style={{
-              fontSize: "clamp(28px, 3vw, 42px)",
-              lineHeight: 0.95,
-              fontWeight: 950,
-              letterSpacing: "-0.05em",
-              color: "#fff",
-            }}
-          >
-            Financial Command
-          </div>
-
-          <div
-            style={{
-              marginTop: 8,
-              fontSize: 12,
-              color: "rgba(255,255,255,0.48)",
-              letterSpacing: ".16em",
-              textTransform: "uppercase",
-              fontWeight: 800,
-            }}
-          >
-            cash • pressure • movement
-          </div>
-        </div>
-
-        <div
-          style={{
-            display: "flex",
-            gap: 10,
-            flexWrap: "wrap",
-            justifyContent: "flex-end",
-          }}
-        >
-          <HeaderPill>{monthLabel}</HeaderPill>
-          <HeaderPill>{primaryName || "Primary account"}</HeaderPill>
-        </div>
-      </div>
-    </Pane>
-  );
-}
-
-function StatCard({
-  label,
-  value,
-  detail,
-  tone = "ice",
-  badge = "",
-  onClick,
-  footerText = "",
-}) {
-  const t = toneConfig(tone);
-  const clickable = typeof onClick === "function";
-
-  return (
-    <div
-      role={clickable ? "button" : undefined}
-      tabIndex={clickable ? 0 : undefined}
-      onClick={clickable ? onClick : undefined}
-      onKeyDown={
-        clickable
-          ? (e) => {
-              if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
-                onClick();
-              }
-            }
-          : undefined
-      }
-      style={{
-        cursor: clickable ? "pointer" : "default",
-        height: "100%",
-      }}
-    >
-      <Pane
-        tone={tone}
-        padding={18}
-        radius={24}
-        overlayOpacity={0.64}
-        style={{ height: "100%" }}
-      >
-        <div
-          style={{
-            minHeight: 154,
-            height: "100%",
-            display: "grid",
-            gridTemplateRows: "auto auto 1fr auto",
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              gap: 10,
-              alignItems: "start",
-            }}
-          >
-            <div
-              style={{
-                fontSize: 11,
-                textTransform: "uppercase",
-                letterSpacing: ".18em",
-                fontWeight: 900,
-                color: "rgba(255,255,255,0.40)",
-              }}
-            >
-              {label}
-            </div>
-
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              {badge ? (
-                <div
-                  style={{
-                    padding: "4px 8px",
-                    borderRadius: 999,
-                    fontSize: 10,
-                    fontWeight: 900,
-                    letterSpacing: ".12em",
-                    textTransform: "uppercase",
-                    color: t.text,
-                    border: `1px solid ${t.border}`,
-                    background: "rgba(255,255,255,0.03)",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  {badge}
-                </div>
-              ) : null}
-
-              <div
-                style={{
-                  width: 9,
-                  height: 9,
-                  borderRadius: 999,
-                  background: t.accent,
-                  boxShadow: `0 0 14px ${t.accent}`,
-                  flexShrink: 0,
-                  marginTop: 2,
-                }}
-              />
-            </div>
-          </div>
-
-          <div
-            style={{
-              marginTop: 16,
-              fontSize: "clamp(24px, 3vw, 40px)",
-              lineHeight: 0.96,
-              fontWeight: 950,
-              letterSpacing: "-0.05em",
-              color: t.text,
-            }}
-          >
-            {value}
-          </div>
-
-          <div
-            style={{
-              marginTop: 10,
-              fontSize: 12,
-              color: "rgba(255,255,255,0.64)",
-              lineHeight: 1.45,
-            }}
-          >
-            {detail}
-          </div>
-
-          <div
-            style={{
-              marginTop: 14,
-              minHeight: 18,
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              color: footerText ? "rgba(255,255,255,0.82)" : "transparent",
-              fontSize: 12,
-              fontWeight: 900,
-              letterSpacing: ".04em",
-              textTransform: "uppercase",
-            }}
-          >
-            {footerText ? (
-              <>
-                <span>{footerText}</span>
-                {clickable ? <ChevronRight size={14} /> : null}
-              </>
-            ) : (
-              <>
-                <span>reserved</span>
-                <ChevronRight size={14} />
-              </>
-            )}
-          </div>
-        </div>
-      </Pane>
-    </div>
-  );
-}
-
-function SectionHeader({ title, subcopy, action }) {
-  return (
-    <div
-      style={{
-        display: "flex",
-        justifyContent: "space-between",
-        gap: 12,
-        alignItems: "flex-end",
-        flexWrap: "wrap",
-        marginBottom: 14,
-      }}
-    >
-      <div>
-        <div
-          style={{
-            fontSize: 18,
-            lineHeight: 1.02,
-            fontWeight: 900,
-            letterSpacing: "-0.03em",
-            color: "#fff",
-          }}
-        >
-          {title}
-        </div>
-
-        {subcopy ? (
-          <div
-            style={{
-              marginTop: 6,
-              fontSize: 12,
-              color: "rgba(255,255,255,0.54)",
-              lineHeight: 1.45,
-            }}
-          >
-            {subcopy}
-          </div>
-        ) : null}
-      </div>
-
-      {action || null}
-    </div>
-  );
-}
-
-function RangeChip({ children, active = false }) {
-  return (
-    <button
-      type="button"
-      style={{
-        minHeight: 34,
-        padding: "8px 12px",
-        borderRadius: 14,
-        border: active
-          ? "1px solid rgba(255,255,255,0.14)"
-          : "1px solid rgba(255,255,255,0.06)",
-        background: active
-          ? "linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012))"
-          : "rgba(255,255,255,0.01)",
-        color: active ? "#fff" : "rgba(255,255,255,0.66)",
-        fontWeight: 800,
-        fontSize: 12,
-        boxShadow: active ? "inset 0 1px 0 rgba(255,255,255,0.04)" : "none",
-        cursor: "default",
-        backdropFilter: "blur(10px)",
-        WebkitBackdropFilter: "blur(10px)",
-      }}
-    >
-      {children}
-    </button>
-  );
-}
-
 function samplePoints(points, maxPoints = 6) {
   if (points.length <= maxPoints) return points;
   if (maxPoints < 3) return [points[0], points[points.length - 1]];
@@ -633,10 +163,7 @@ function samplePoints(points, maxPoints = 6) {
   const step = (points.length - 2) / middleCount;
 
   for (let i = 1; i <= middleCount; i += 1) {
-    const index = Math.min(
-      points.length - 2,
-      Math.max(1, Math.round(i * step))
-    );
+    const index = Math.min(points.length - 2, Math.max(1, Math.round(i * step)));
     sampled.push(points[index]);
   }
 
@@ -702,375 +229,359 @@ function buildCashMovementPoints(monthStart, today, spendingTx, incomeDeposits) 
   return samplePoints(rawPoints, 6);
 }
 
-function CashMovementChart({ points, chartValue, chartTone = "ice" }) {
-  const width = 980;
-  const height = 304;
-  const padLeft = 22;
-  const padRight = 70;
-  const padTop = 18;
-  const padBottom = 34;
+function toneMeta(tone = "neutral") {
+  if (tone === "green") {
+    return {
+      text: "#9ef0c0",
+      border: "rgba(158,240,192,0.18)",
+      glow: "rgba(158,240,192,0.12)",
+      dot: "#8ef4bb",
+      pillBg: "rgba(8,18,12,0.36)",
+    };
+  }
 
-  const values = points.length ? points.map((p) => safeNum(p.value, 0)) : [0];
-  const minVal = Math.min(0, ...values);
-  const maxVal = Math.max(0, ...values);
-  const range = Math.max(maxVal - minVal, 1);
+  if (tone === "amber") {
+    return {
+      text: "#ffd089",
+      border: "rgba(255,208,137,0.18)",
+      glow: "rgba(255,208,137,0.12)",
+      dot: "#ffd089",
+      pillBg: "rgba(18,14,8,0.36)",
+    };
+  }
 
-  const innerW = width - padLeft - padRight;
-  const innerH = height - padTop - padBottom;
-  const step = points.length > 1 ? innerW / (points.length - 1) : innerW;
+  if (tone === "red") {
+    return {
+      text: "#ffb2c2",
+      border: "rgba(255,178,194,0.18)",
+      glow: "rgba(255,178,194,0.12)",
+      dot: "#ff96ae",
+      pillBg: "rgba(18,8,11,0.36)",
+    };
+  }
 
-  const coords = points.map((point, index) => {
-    const x = padLeft + index * step;
-    const y =
-      height - padBottom - ((safeNum(point.value, 0) - minVal) / range) * innerH;
-    return { ...point, x, y };
-  });
+  return {
+    text: "#f7fbff",
+    border: "rgba(214,226,255,0.14)",
+    glow: "rgba(214,226,255,0.10)",
+    dot: "#f7fbff",
+    pillBg: "rgba(10,14,21,0.36)",
+  };
+}
 
-  const linePath = coords
-    .map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`)
-    .join(" ");
+function eyebrowStyle() {
+  return {
+    fontSize: 10,
+    textTransform: "uppercase",
+    letterSpacing: ".22em",
+    fontWeight: 900,
+    color: "rgba(255,255,255,0.40)",
+  };
+}
 
-  const areaPath = [
-    `M ${coords[0]?.x || padLeft} ${height - padBottom}`,
-    ...coords.map((p) => `L ${p.x} ${p.y}`),
-    `L ${coords[coords.length - 1]?.x || width - padRight} ${height - padBottom}`,
-    "Z",
-  ].join(" ");
+function mutedStyle() {
+  return {
+    fontSize: 12,
+    color: "rgba(255,255,255,0.60)",
+    lineHeight: 1.45,
+  };
+}
 
-  const zeroY = height - padBottom - ((0 - minVal) / range) * innerH;
-
-  const tone =
-    chartTone === "red"
-      ? {
-          bubbleBorder: "rgba(255,127,153,0.20)",
-          bubbleText: "#ffb7c5",
-          bubbleGlow: "rgba(255,127,153,0.10)",
-        }
-      : chartTone === "green"
-      ? {
-          bubbleBorder: "rgba(110,241,171,0.20)",
-          bubbleText: "#83f0bc",
-          bubbleGlow: "rgba(110,241,171,0.10)",
-        }
-      : {
-          bubbleBorder: "rgba(255,255,255,0.12)",
-          bubbleText: "#ffffff",
-          bubbleGlow: "rgba(255,255,255,0.07)",
-        };
+function StatusDot({ tone = "neutral", size = 8 }) {
+  const meta = toneMeta(tone);
 
   return (
-    <Pane
-      padding={18}
-      radius={30}
-      overlayOpacity={0.44}
+    <span
       style={{
-        background: `
-          linear-gradient(
-            180deg,
-            rgba(255,255,255,0.035) 0%,
-            rgba(255,255,255,0.010) 10%,
-            rgba(255,255,255,0) 22%
-          ),
-          rgba(5,8,12,0.08)
-        `,
+        width: size,
+        height: size,
+        borderRadius: 999,
+        background: meta.dot,
+        boxShadow: `0 0 14px ${meta.glow}`,
+        flexShrink: 0,
       }}
-    >
-      <SectionHeader
-        title="Cash Movement"
-        subcopy="Month-to-date movement from actual logged income and spending."
-        action={
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <RangeChip>1W</RangeChip>
-            <RangeChip active>1M</RangeChip>
-            <RangeChip>YTD</RangeChip>
-            <RangeChip>All</RangeChip>
-          </div>
-        }
-      />
-
-      <div
-        style={{
-          position: "relative",
-          minHeight: "clamp(200px, 44vw, 280px)",
-        }}
-      >
-        <svg
-          viewBox={`0 0 ${width} ${height}`}
-          style={{ width: "100%", display: "block" }}
-          aria-hidden="true"
-        >
-          <defs>
-            <linearGradient id="lccCashArea" x1="0" x2="0" y1="0" y2="1">
-              <stop offset="0%" stopColor="rgba(255,255,255,0.09)" />
-              <stop offset="55%" stopColor="rgba(255,255,255,0.02)" />
-              <stop offset="100%" stopColor="rgba(255,255,255,0)" />
-            </linearGradient>
-
-            <linearGradient id="lccCashLine" x1="0" x2="1" y1="0" y2="0">
-              <stop offset="0%" stopColor="rgba(255,255,255,0.98)" />
-              <stop offset="100%" stopColor="rgba(244,247,255,0.90)" />
-            </linearGradient>
-          </defs>
-
-          {[0, 0.25, 0.5, 0.75, 1].map((ratio) => {
-            const y = padTop + innerH * ratio;
-            return (
-              <line
-                key={ratio}
-                x1={padLeft}
-                x2={width - padRight}
-                y1={y}
-                y2={y}
-                stroke="rgba(255,255,255,0.022)"
-                strokeWidth="1"
-                strokeDasharray="5 10"
-              />
-            );
-          })}
-
-          <line
-            x1={padLeft}
-            x2={width - padRight}
-            y1={zeroY}
-            y2={zeroY}
-            stroke="rgba(255,255,255,0.06)"
-            strokeWidth="1"
-          />
-
-          {coords.map((p) => (
-            <line
-              key={`${p.iso}-grid`}
-              x1={p.x}
-              x2={p.x}
-              y1={padTop}
-              y2={height - padBottom}
-              stroke="rgba(255,255,255,0.012)"
-              strokeWidth="1"
-            />
-          ))}
-
-          <path d={areaPath} fill="url(#lccCashArea)" />
-
-          <path
-            d={linePath}
-            fill="none"
-            stroke="url(#lccCashLine)"
-            strokeWidth="4"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            style={{
-              filter: "drop-shadow(0 0 6px rgba(255,255,255,0.12))",
-            }}
-          />
-
-          {coords.map((p) => (
-            <g key={`${p.iso}-dot`}>
-              <circle
-                cx={p.x}
-                cy={p.y}
-                r="7"
-                fill="rgba(5,7,10,0.84)"
-                stroke="rgba(255,255,255,0.92)"
-                strokeWidth="2.4"
-              />
-              <circle cx={p.x} cy={p.y} r="2.3" fill="rgba(255,255,255,0.98)" />
-            </g>
-          ))}
-
-          {coords.map((p) => (
-            <text
-              key={`${p.iso}-label`}
-              x={p.x}
-              y={height - 10}
-              fill="rgba(255,255,255,0.42)"
-              fontSize="11"
-              fontWeight="700"
-              textAnchor="middle"
-            >
-              {p.label}
-            </text>
-          ))}
-        </svg>
-
-        <div
-          style={{
-            position: "absolute",
-            top: 18,
-            right: 20,
-            padding: "10px 16px",
-            borderRadius: 18,
-            border: `1px solid ${tone.bubbleBorder}`,
-            background:
-              "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.010))",
-            boxShadow: `
-              inset 0 1px 0 rgba(255,255,255,0.05),
-              0 12px 22px rgba(0,0,0,0.16),
-              0 0 16px ${tone.bubbleGlow}
-            `,
-            color: tone.bubbleText,
-            fontSize: 18,
-            fontWeight: 950,
-            letterSpacing: "-0.03em",
-            backdropFilter: "blur(10px)",
-            WebkitBackdropFilter: "blur(10px)",
-          }}
-        >
-          {chartValue}
-        </div>
-      </div>
-    </Pane>
+    />
   );
 }
 
-function AccountRow({ name, sub, balance, tone = "ice" }) {
-  const t = toneConfig(tone);
+function MiniPill({ children, tone = "neutral" }) {
+  const meta = toneMeta(tone);
 
   return (
     <div
       style={{
-        ...glassStyle(tone, 14, 20),
-        display: "grid",
-        gridTemplateColumns: "54px minmax(0, 1fr) auto",
-        gap: 12,
+        minHeight: 34,
+        display: "inline-flex",
         alignItems: "center",
+        gap: 8,
+        padding: "0 12px",
+        borderRadius: 999,
+        border: `1px solid ${meta.border}`,
+        background:
+          "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.012))",
+        boxShadow: `inset 0 1px 0 rgba(255,255,255,0.05), 0 0 14px ${meta.glow}`,
+        color: tone === "neutral" ? "rgba(255,255,255,0.86)" : meta.text,
+        fontSize: 11,
+        fontWeight: 800,
+        whiteSpace: "nowrap",
       }}
     >
-      <div
-        style={{
-          width: 54,
-          height: 54,
-          borderRadius: 16,
-          display: "grid",
-          placeItems: "center",
-          background: t.iconBack,
-          border: `1px solid ${t.border}`,
-          boxShadow: `0 0 12px ${t.glow}, inset 0 1px 0 rgba(255,255,255,0.04)`,
-          color: t.text,
-          fontWeight: 900,
-        }}
-      >
-        {String(name || "A").charAt(0).toUpperCase()}
-      </div>
-
-      <div style={{ minWidth: 0 }}>
-        <div
-          style={{
-            fontSize: 15,
-            fontWeight: 900,
-            color: "#fff",
-            whiteSpace: "nowrap",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-          }}
-        >
-          {name}
-        </div>
-        <div
-          style={{
-            marginTop: 4,
-            fontSize: 12,
-            color: "rgba(255,255,255,0.52)",
-            textTransform: "capitalize",
-          }}
-        >
-          {sub}
-        </div>
-      </div>
-
-      <div
-        style={{
-          fontSize: 16,
-          fontWeight: 950,
-          color: t.text,
-          paddingLeft: 8,
-          whiteSpace: "nowrap",
-        }}
-      >
-        {balance}
-      </div>
+      {children}
     </div>
   );
 }
 
-function ActivityRow({ title, detail, amount, tone = "ice" }) {
-  const t = toneConfig(tone);
+function HeaderBar({ monthLabel, primaryName, focusTitle, focusTone }) {
+  return (
+    <GlassPane size="hero">
+      <div
+        style={{
+          minHeight: 86,
+          display: "grid",
+          gridTemplateColumns: "minmax(0, 1fr) auto",
+          gap: 14,
+          alignItems: "center",
+        }}
+      >
+        <div style={{ minWidth: 0 }}>
+          <div style={eyebrowStyle()}>Live finance board</div>
+
+          <div
+            style={{
+              marginTop: 8,
+              fontSize: "clamp(28px, 4vw, 40px)",
+              lineHeight: 0.96,
+              fontWeight: 950,
+              letterSpacing: "-0.05em",
+              color: "#fff",
+            }}
+          >
+            Financial Command
+          </div>
+
+          <div
+            style={{
+              marginTop: 10,
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              minWidth: 0,
+            }}
+          >
+            <StatusDot tone={focusTone} />
+            <div
+              style={{
+                ...mutedStyle(),
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+              }}
+            >
+              {focusTitle}
+            </div>
+          </div>
+        </div>
+
+        <div
+          style={{
+            display: "flex",
+            gap: 10,
+            flexWrap: "wrap",
+            justifyContent: "flex-end",
+          }}
+        >
+          <MiniPill>{monthLabel}</MiniPill>
+          <MiniPill>{primaryName || "Primary account"}</MiniPill>
+        </div>
+      </div>
+    </GlassPane>
+  );
+}
+
+function MetricCard({
+  label,
+  value,
+  detail,
+  tone = "neutral",
+  badge = "",
+  onClick,
+}) {
+  const meta = toneMeta(tone);
+  const clickable = typeof onClick === "function";
 
   return (
     <div
+      role={clickable ? "button" : undefined}
+      tabIndex={clickable ? 0 : undefined}
+      onClick={clickable ? onClick : undefined}
+      onKeyDown={
+        clickable
+          ? (e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onClick();
+              }
+            }
+          : undefined
+      }
       style={{
-        ...glassStyle(tone, 14, 20),
-        display: "grid",
-        gridTemplateColumns: "50px minmax(0, 1fr) auto",
-        gap: 12,
-        alignItems: "center",
+        cursor: clickable ? "pointer" : "default",
+        height: "100%",
       }}
     >
-      <div
-        style={{
-          width: 50,
-          height: 50,
-          borderRadius: 16,
-          display: "grid",
-          placeItems: "center",
-          background: t.iconBack,
-          border: `1px solid ${t.border}`,
-          boxShadow: `0 0 12px ${t.glow}, inset 0 1px 0 rgba(255,255,255,0.04)`,
-        }}
-      >
+      <GlassPane tone={tone} size="card" style={{ height: "100%" }}>
         <div
           style={{
-            width: 9,
-            height: 9,
-            borderRadius: 999,
-            background: t.accent,
-            boxShadow: `0 0 12px ${t.accent}`,
+            minHeight: 132,
+            height: "100%",
+            display: "grid",
+            gridTemplateRows: "auto auto 1fr",
+            gap: 8,
           }}
-        />
-      </div>
+        >
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              gap: 10,
+            }}
+          >
+            <div style={eyebrowStyle()}>{label}</div>
 
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              {badge ? (
+                <div
+                  style={{
+                    minHeight: 23,
+                    display: "inline-flex",
+                    alignItems: "center",
+                    padding: "0 8px",
+                    borderRadius: 999,
+                    fontSize: 10,
+                    fontWeight: 900,
+                    letterSpacing: ".12em",
+                    textTransform: "uppercase",
+                    border: `1px solid ${meta.border}`,
+                    color: meta.text,
+                    background: meta.pillBg,
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {badge}
+                </div>
+              ) : null}
+
+              <StatusDot tone={tone} size={9} />
+            </div>
+          </div>
+
+          <div
+            style={{
+              fontSize: "clamp(30px, 4vw, 44px)",
+              lineHeight: 0.96,
+              fontWeight: 950,
+              letterSpacing: "-0.055em",
+              color: tone === "neutral" ? "#fff" : meta.text,
+            }}
+          >
+            {value}
+          </div>
+
+          <div
+            style={{
+              display: "flex",
+              alignItems: "flex-end",
+              justifyContent: "space-between",
+              gap: 10,
+              fontSize: 12,
+              lineHeight: 1.4,
+              color: "rgba(255,255,255,0.62)",
+            }}
+          >
+            <div>{detail}</div>
+
+            {clickable ? (
+              <div
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 4,
+                  color: "rgba(255,255,255,0.88)",
+                  fontWeight: 900,
+                  whiteSpace: "nowrap",
+                }}
+              >
+                View <ChevronRight size={14} />
+              </div>
+            ) : null}
+          </div>
+        </div>
+      </GlassPane>
+    </div>
+  );
+}
+
+function PaneHeader({ title, subcopy, right }) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "flex-start",
+        gap: 12,
+        flexWrap: "wrap",
+        marginBottom: 14,
+      }}
+    >
       <div style={{ minWidth: 0 }}>
         <div
           style={{
-            fontSize: 15,
+            fontSize: 20,
+            lineHeight: 1,
             fontWeight: 900,
+            letterSpacing: "-0.03em",
             color: "#fff",
-            whiteSpace: "nowrap",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
           }}
         >
           {title}
         </div>
-        <div
-          style={{
-            marginTop: 5,
-            fontSize: 12,
-            color: "rgba(255,255,255,0.52)",
-            whiteSpace: "nowrap",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-          }}
-        >
-          {detail}
-        </div>
+
+        {subcopy ? <div style={{ ...mutedStyle(), marginTop: 6 }}>{subcopy}</div> : null}
       </div>
 
-      <div
-        style={{
-          fontSize: 15,
-          fontWeight: 950,
-          color: t.text,
-          paddingLeft: 8,
-          whiteSpace: "nowrap",
-        }}
-      >
-        {amount}
-      </div>
+      {right || null}
     </div>
   );
 }
 
-function LinkButton({ href, children, full = false }) {
+function RangeChip({ children, active = false }) {
+  return (
+    <button
+      type="button"
+      style={{
+        minHeight: 34,
+        padding: "7px 12px",
+        borderRadius: 13,
+        border: active
+          ? "1px solid rgba(214,226,255,0.14)"
+          : "1px solid rgba(255,255,255,0.06)",
+        background: active
+          ? "linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.014))"
+          : "rgba(255,255,255,0.01)",
+        color: active ? "#fff" : "rgba(255,255,255,0.66)",
+        fontWeight: 800,
+        fontSize: 12,
+        boxShadow: active ? "inset 0 1px 0 rgba(255,255,255,0.05)" : "none",
+        cursor: "default",
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
+function SoftLink({ href, children, full = false }) {
   return (
     <Link
       href={href}
@@ -1078,21 +589,20 @@ function LinkButton({ href, children, full = false }) {
         display: "inline-flex",
         alignItems: "center",
         justifyContent: "center",
+        gap: 8,
         width: full ? "100%" : undefined,
         minHeight: 42,
         padding: "10px 14px",
-        borderRadius: 16,
-        border: "1px solid rgba(255,255,255,0.08)",
+        borderRadius: 15,
+        border: "1px solid rgba(214,226,255,0.10)",
         background:
-          "linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.008))",
+          "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.012))",
         color: "#f7fbff",
         textDecoration: "none",
         fontWeight: 900,
         fontSize: 13,
         boxShadow:
-          "inset 0 1px 0 rgba(255,255,255,0.04), 0 10px 20px rgba(0,0,0,0.14)",
-        backdropFilter: "blur(10px)",
-        WebkitBackdropFilter: "blur(10px)",
+          "inset 0 1px 0 rgba(255,255,255,0.05), 0 12px 22px rgba(0,0,0,0.14)",
       }}
     >
       {children}
@@ -1100,75 +610,31 @@ function LinkButton({ href, children, full = false }) {
   );
 }
 
-function ActionButton({ href, onClick, children }) {
-  const commonStyle = {
-    display: "inline-flex",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    minHeight: 46,
-    padding: "12px 16px",
-    borderRadius: 16,
-    border: "1px solid rgba(255,255,255,0.10)",
-    background:
-      "linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012))",
-    color: "#fff",
-    textDecoration: "none",
-    fontWeight: 900,
-    fontSize: 13,
-    boxShadow:
-      "inset 0 1px 0 rgba(255,255,255,0.05), 0 12px 22px rgba(0,0,0,0.18)",
-    backdropFilter: "blur(10px)",
-    WebkitBackdropFilter: "blur(10px)",
-  };
-
-  if (href) {
-    return <Link href={href} style={commonStyle}>{children}</Link>;
-  }
-
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      style={{ ...commonStyle, cursor: "pointer" }}
-    >
-      {children}
-    </button>
-  );
-}
-
 function AlertSeverityBadge({ severity }) {
-  const style =
+  const tone =
     severity === "critical"
-      ? {
-          border: "rgba(255,127,153,0.18)",
-          text: "#ffb7c5",
-          bg: "rgba(255,127,153,0.08)",
-        }
+      ? "red"
       : severity === "warning"
-      ? {
-          border: "rgba(255,197,108,0.18)",
-          text: "#ffd491",
-          bg: "rgba(255,197,108,0.08)",
-        }
-      : {
-          border: "rgba(110,241,171,0.18)",
-          text: "#83f0bc",
-          bg: "rgba(110,241,171,0.08)",
-        };
+      ? "amber"
+      : "green";
+
+  const meta = toneMeta(tone);
 
   return (
     <div
       style={{
-        padding: "4px 8px",
+        minHeight: 24,
+        display: "inline-flex",
+        alignItems: "center",
+        padding: "0 8px",
         borderRadius: 999,
         fontSize: 10,
         fontWeight: 900,
         letterSpacing: ".12em",
         textTransform: "uppercase",
-        border: `1px solid ${style.border}`,
-        color: style.text,
-        background: style.bg,
+        border: `1px solid ${meta.border}`,
+        color: meta.text,
+        background: meta.pillBg,
         whiteSpace: "nowrap",
       }}
     >
@@ -1186,7 +652,7 @@ function AlertRow({ item }) {
       : "green";
 
   return (
-    <Pane tone={tone} padding={14} radius={20} overlayOpacity={0.5}>
+    <GlassPane tone={tone} size="compact">
       <div style={{ display: "grid", gap: 12 }}>
         <div
           style={{
@@ -1197,16 +663,18 @@ function AlertRow({ item }) {
             flexWrap: "wrap",
           }}
         >
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ display: "flex", alignItems: "start", gap: 12 }}>
             <div
               style={{
-                width: 40,
-                height: 40,
+                width: 42,
+                height: 42,
                 borderRadius: 14,
                 display: "grid",
                 placeItems: "center",
                 border: "1px solid rgba(255,255,255,0.08)",
                 background: "rgba(255,255,255,0.03)",
+                color: "#fff",
+                flexShrink: 0,
               }}
             >
               <AlertTriangle size={18} />
@@ -1222,11 +690,12 @@ function AlertRow({ item }) {
               >
                 {item.title}
               </div>
+
               <div
                 style={{
                   marginTop: 4,
                   fontSize: 12,
-                  color: "rgba(255,255,255,0.6)",
+                  color: "rgba(255,255,255,0.62)",
                   lineHeight: 1.45,
                 }}
               >
@@ -1248,26 +717,26 @@ function AlertRow({ item }) {
                 style={{
                   fontSize: 14,
                   fontWeight: 900,
-                  color: "rgba(255,255,255,0.9)",
+                  color: "rgba(255,255,255,0.90)",
                 }}
               >
                 {item.amount}
               </div>
             ) : null}
+
             <AlertSeverityBadge severity={item.severity} />
           </div>
         </div>
 
         {item.href ? (
           <div>
-            <LinkButton href={item.href}>
-              {item.hrefLabel || "Open"}{" "}
-              <ChevronRight size={14} style={{ marginLeft: 6 }} />
-            </LinkButton>
+            <SoftLink href={item.href}>
+              {item.hrefLabel || "Open"} <ChevronRight size={14} />
+            </SoftLink>
           </div>
         ) : null}
       </div>
-    </Pane>
+    </GlassPane>
   );
 }
 
@@ -1314,9 +783,9 @@ function AlertPanel({
         position: "fixed",
         inset: 0,
         zIndex: 120,
-        background: "rgba(0,0,0,0.66)",
-        backdropFilter: "blur(10px)",
-        WebkitBackdropFilter: "blur(10px)",
+        background: "rgba(0,0,0,0.70)",
+        backdropFilter: "blur(12px)",
+        WebkitBackdropFilter: "blur(12px)",
         display: "flex",
         alignItems: "flex-end",
         justifyContent: "center",
@@ -1327,13 +796,13 @@ function AlertPanel({
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
-          width: "min(100%, 680px)",
+          width: "min(100%, 720px)",
           maxHeight: "88vh",
           overflowY: "auto",
-          borderRadius: 28,
+          borderRadius: 30,
         }}
       >
-        <Pane tone={summaryTone} padding={18} radius={28} overlayOpacity={0.58}>
+        <GlassPane tone={summaryTone} size="hero">
           <div
             style={{
               display: "flex",
@@ -1343,25 +812,15 @@ function AlertPanel({
             }}
           >
             <div>
-              <div
-                style={{
-                  fontSize: 12,
-                  textTransform: "uppercase",
-                  letterSpacing: ".18em",
-                  fontWeight: 900,
-                  color: "rgba(255,255,255,0.42)",
-                }}
-              >
-                Alert Center
-              </div>
+              <div style={eyebrowStyle()}>Alert center</div>
 
               <div
                 style={{
                   marginTop: 10,
-                  fontSize: "clamp(24px, 5vw, 34px)",
-                  lineHeight: 0.98,
+                  fontSize: "clamp(24px, 5vw, 38px)",
+                  lineHeight: 0.95,
                   fontWeight: 950,
-                  letterSpacing: "-0.05em",
+                  letterSpacing: "-0.06em",
                   color: "#fff",
                 }}
               >
@@ -1372,11 +831,11 @@ function AlertPanel({
                 style={{
                   marginTop: 8,
                   fontSize: 13,
-                  color: "rgba(255,255,255,0.64)",
-                  lineHeight: 1.5,
+                  color: "rgba(255,255,255,0.66)",
+                  lineHeight: 1.55,
                 }}
               >
-                This is where the dashboard tells you exactly what needs attention.
+                Exact pressure points showing on the board right now.
               </div>
             </div>
 
@@ -1409,18 +868,8 @@ function AlertPanel({
               gap: 10,
             }}
           >
-            <Pane tone="ice" padding={12} radius={18} overlayOpacity={0.45}>
-              <div
-                style={{
-                  fontSize: 11,
-                  letterSpacing: ".14em",
-                  textTransform: "uppercase",
-                  color: "rgba(255,255,255,0.42)",
-                  fontWeight: 900,
-                }}
-              >
-                Account Balances
-              </div>
+            <GlassPane size="compact">
+              <div style={eyebrowStyle()}>Account Balances</div>
               <div
                 style={{
                   marginTop: 8,
@@ -1431,25 +880,13 @@ function AlertPanel({
               >
                 {money(cashPosition)}
               </div>
-            </Pane>
+            </GlassPane>
 
-            <Pane
-              tone={cashMovement < 0 ? "red" : cashMovement > 0 ? "green" : "ice"}
-              padding={12}
-              radius={18}
-              overlayOpacity={0.45}
+            <GlassPane
+              tone={cashMovement < 0 ? "red" : cashMovement > 0 ? "green" : "neutral"}
+              size="compact"
             >
-              <div
-                style={{
-                  fontSize: 11,
-                  letterSpacing: ".14em",
-                  textTransform: "uppercase",
-                  color: "rgba(255,255,255,0.42)",
-                  fontWeight: 900,
-                }}
-              >
-                Cash Movement
-              </div>
+              <div style={eyebrowStyle()}>Cash Movement</div>
               <div
                 style={{
                   marginTop: 8,
@@ -1460,25 +897,10 @@ function AlertPanel({
               >
                 {signedMoney(cashMovement)}
               </div>
-            </Pane>
+            </GlassPane>
 
-            <Pane
-              tone={dueSoonTotal > 0 ? "amber" : "green"}
-              padding={12}
-              radius={18}
-              overlayOpacity={0.45}
-            >
-              <div
-                style={{
-                  fontSize: 11,
-                  letterSpacing: ".14em",
-                  textTransform: "uppercase",
-                  color: "rgba(255,255,255,0.42)",
-                  fontWeight: 900,
-                }}
-              >
-                Due Soon
-              </div>
+            <GlassPane tone={dueSoonTotal > 0 ? "amber" : "green"} size="compact">
+              <div style={eyebrowStyle()}>Due Soon</div>
               <div
                 style={{
                   marginTop: 8,
@@ -1489,12 +911,12 @@ function AlertPanel({
               >
                 {money(dueSoonTotal)}
               </div>
-            </Pane>
+            </GlassPane>
           </div>
 
           <div style={{ marginTop: 18, display: "grid", gap: 10 }}>
             {alertItems.length === 0 ? (
-              <Pane tone="green" padding={16} radius={20} overlayOpacity={0.46}>
+              <GlassPane tone="green" size="card">
                 <div style={{ fontSize: 16, fontWeight: 900, color: "#fff" }}>
                   No active problems
                 </div>
@@ -1508,52 +930,291 @@ function AlertPanel({
                 >
                   Right now the dashboard does not see any critical or warning issues.
                 </div>
-              </Pane>
+              </GlassPane>
             ) : (
               alertItems.map((item) => <AlertRow key={item.id} item={item} />)
             )}
           </div>
-        </Pane>
+        </GlassPane>
       </div>
     </div>
   );
 }
 
-function ActionMiniStat({ label, value, tone = "ice" }) {
-  const t = toneConfig(tone);
+function CashMovementChart({ points, chartValue, chartTone = "neutral", subcopy }) {
+  const width = 980;
+  const height = 330;
+  const padLeft = 18;
+  const padRight = 18;
+  const padTop = 30;
+  const padBottom = 42;
+
+  const values = points.length ? points.map((p) => safeNum(p.value, 0)) : [0];
+  const minVal = Math.min(0, ...values);
+  const maxVal = Math.max(0, ...values);
+  const range = Math.max(maxVal - minVal, 1);
+
+  const innerW = width - padLeft - padRight;
+  const innerH = height - padTop - padBottom;
+  const step = points.length > 1 ? innerW / (points.length - 1) : innerW;
+
+  const coords = points.map((point, index) => {
+    const x = padLeft + index * step;
+    const y =
+      height - padBottom - ((safeNum(point.value, 0) - minVal) / range) * innerH;
+    return { ...point, x, y };
+  });
+
+  const linePath = coords
+    .map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`)
+    .join(" ");
+
+  const areaPath = [
+    `M ${coords[0]?.x || padLeft} ${height - padBottom}`,
+    ...coords.map((p) => `L ${p.x} ${p.y}`),
+    `L ${coords[coords.length - 1]?.x || width - padRight} ${height - padBottom}`,
+    "Z",
+  ].join(" ");
+
+  const lastPoint = coords[coords.length - 1];
+
+  const bubbleTone =
+    chartTone === "red"
+      ? {
+          border: "rgba(255,178,194,0.22)",
+          text: "#ffb2c2",
+          glow: "rgba(255,178,194,0.12)",
+        }
+      : chartTone === "green"
+      ? {
+          border: "rgba(158,240,192,0.22)",
+          text: "#9ef0c0",
+          glow: "rgba(158,240,192,0.12)",
+        }
+      : {
+          border: "rgba(214,226,255,0.16)",
+          text: "#ffffff",
+          glow: "rgba(214,226,255,0.08)",
+        };
+
+  return (
+    <GlassPane size="hero">
+      <PaneHeader
+        title="Cash Movement"
+        subcopy={subcopy}
+        right={
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <RangeChip>1W</RangeChip>
+            <RangeChip active>1M</RangeChip>
+            <RangeChip>YTD</RangeChip>
+            <RangeChip>All</RangeChip>
+          </div>
+        }
+      />
+
+      <div
+        style={{
+          position: "relative",
+          minHeight: "clamp(250px, 42vw, 370px)",
+        }}
+      >
+        <svg
+          viewBox={`0 0 ${width} ${height}`}
+          style={{ width: "100%", display: "block" }}
+          aria-hidden="true"
+        >
+          <defs>
+            <linearGradient id="dashboard-chart-area" x1="0" x2="0" y1="0" y2="1">
+              <stop offset="0%" stopColor="rgba(255,255,255,0.12)" />
+              <stop offset="55%" stopColor="rgba(255,255,255,0.028)" />
+              <stop offset="100%" stopColor="rgba(255,255,255,0)" />
+            </linearGradient>
+
+            <linearGradient id="dashboard-chart-line" x1="0" x2="1" y1="0" y2="0">
+              <stop offset="0%" stopColor="rgba(255,255,255,0.94)" />
+              <stop offset="100%" stopColor="rgba(240,246,255,0.98)" />
+            </linearGradient>
+
+            <filter id="dashboard-chart-glow">
+              <feGaussianBlur stdDeviation="5" result="blur" />
+              <feMerge>
+                <feMergeNode in="blur" />
+                <feMergeNode in="SourceGraphic" />
+              </feMerge>
+            </filter>
+          </defs>
+
+          {[0.22, 0.5, 0.78].map((ratio) => {
+            const y = padTop + innerH * ratio;
+            return (
+              <line
+                key={ratio}
+                x1={padLeft}
+                x2={width - padRight}
+                y1={y}
+                y2={y}
+                stroke="rgba(255,255,255,0.022)"
+                strokeWidth="1"
+                strokeDasharray="4 10"
+              />
+            );
+          })}
+
+          {coords.map((p) => (
+            <line
+              key={`${p.iso}-grid`}
+              x1={p.x}
+              x2={p.x}
+              y1={padTop}
+              y2={height - padBottom}
+              stroke="rgba(255,255,255,0.012)"
+              strokeWidth="1"
+            />
+          ))}
+
+          <path d={areaPath} fill="url(#dashboard-chart-area)" />
+
+          <path
+            d={linePath}
+            fill="none"
+            stroke="url(#dashboard-chart-line)"
+            strokeWidth="4"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            filter="url(#dashboard-chart-glow)"
+          />
+
+          {coords.map((p) => (
+            <g key={`${p.iso}-dot`}>
+              <circle
+                cx={p.x}
+                cy={p.y}
+                r="6.7"
+                fill="rgba(5,7,10,0.88)"
+                stroke="rgba(255,255,255,0.92)"
+                strokeWidth="2.4"
+              />
+              <circle cx={p.x} cy={p.y} r="2.2" fill="rgba(255,255,255,0.98)" />
+            </g>
+          ))}
+
+          {coords.map((p) => (
+            <text
+              key={`${p.iso}-label`}
+              x={p.x}
+              y={height - 12}
+              fill="rgba(255,255,255,0.42)"
+              fontSize="11"
+              fontWeight="700"
+              textAnchor="middle"
+            >
+              {p.label}
+            </text>
+          ))}
+        </svg>
+
+        {lastPoint ? (
+          <div
+            style={{
+              position: "absolute",
+              top: Math.max(18, Math.min(220, ((lastPoint.y / height) * 100) - 3)) + "%",
+              right: 20,
+              transform: "translateY(-50%)",
+              padding: "10px 16px",
+              borderRadius: 18,
+              border: `1px solid ${bubbleTone.border}`,
+              background:
+                "linear-gradient(180deg, rgba(10,14,22,0.82), rgba(10,14,22,0.74))",
+              boxShadow: `
+                inset 0 1px 0 rgba(255,255,255,0.05),
+                0 12px 22px rgba(0,0,0,0.16),
+                0 0 16px ${bubbleTone.glow}
+              `,
+              color: bubbleTone.text,
+              fontSize: 18,
+              fontWeight: 950,
+              letterSpacing: "-0.03em",
+            }}
+          >
+            {chartValue}
+          </div>
+        ) : null}
+      </div>
+    </GlassPane>
+  );
+}
+
+function ListRow({ title, subtitle, value, tone = "neutral", initials }) {
+  const meta = toneMeta(tone);
 
   return (
     <div
       style={{
-        minWidth: 0,
+        minHeight: 72,
+        display: "grid",
+        gridTemplateColumns: "50px minmax(0, 1fr) auto",
+        gap: 12,
+        alignItems: "center",
         padding: "12px 14px",
-        borderRadius: 18,
-        border: `1px solid ${t.border}`,
+        borderRadius: 20,
+        border: `1px solid ${meta.border}`,
         background:
-          "linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.008))",
-        boxShadow: `inset 0 1px 0 rgba(255,255,255,0.04), 0 0 16px ${t.glow}`,
+          "linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.010))",
+        boxShadow: `inset 0 1px 0 rgba(255,255,255,0.04), 0 0 16px ${meta.glow}`,
       }}
     >
       <div
         style={{
-          fontSize: 10,
-          letterSpacing: ".14em",
-          textTransform: "uppercase",
+          width: 50,
+          height: 50,
+          borderRadius: 16,
+          display: "grid",
+          placeItems: "center",
+          border: `1px solid ${meta.border}`,
+          background:
+            "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.012))",
+          color: tone === "neutral" ? "#fff" : meta.text,
           fontWeight: 900,
-          color: "rgba(255,255,255,0.40)",
+          flexShrink: 0,
         }}
       >
-        {label}
+        {initials}
       </div>
+
+      <div style={{ minWidth: 0 }}>
+        <div
+          style={{
+            fontSize: 15,
+            fontWeight: 900,
+            color: "#fff",
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+          }}
+        >
+          {title}
+        </div>
+
+        <div
+          style={{
+            marginTop: 4,
+            fontSize: 12,
+            color: "rgba(255,255,255,0.56)",
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+          }}
+        >
+          {subtitle}
+        </div>
+      </div>
+
       <div
         style={{
-          marginTop: 8,
-          fontSize: 17,
+          fontSize: 15,
           fontWeight: 950,
-          color: t.text,
+          color: tone === "neutral" ? "#fff" : meta.text,
           whiteSpace: "nowrap",
-          overflow: "hidden",
-          textOverflow: "ellipsis",
         }}
       >
         {value}
@@ -1562,165 +1223,21 @@ function ActionMiniStat({ label, value, tone = "ice" }) {
   );
 }
 
-function ActionStrip({
-  action,
-  cashPosition,
-  cashMovement,
-  dueSoonTotal,
-  alertCount,
-  onOpenAlerts,
-}) {
-  const tone = action?.tone || "ice";
-  const t = toneConfig(tone);
-
+function EmptyState({ title, detail, tone = "amber" }) {
   return (
-    <Pane
-      tone={tone}
-      padding={18}
-      radius={28}
-      overlayOpacity={0.62}
-      style={{
-        background: `
-          linear-gradient(
-            180deg,
-            rgba(255,255,255,0.05) 0%,
-            rgba(255,255,255,0.014) 12%,
-            rgba(255,255,255,0) 28%
-          ),
-          ${t.tint}
-        `,
-      }}
-    >
-      <div style={{ display: "grid", gap: 16 }}>
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "minmax(0, 1fr) auto",
-            gap: 14,
-            alignItems: "center",
-          }}
-        >
-          <div style={{ minWidth: 0 }}>
-            <div
-              style={{
-                fontSize: 11,
-                textTransform: "uppercase",
-                letterSpacing: ".18em",
-                fontWeight: 900,
-                color: "rgba(255,255,255,0.44)",
-              }}
-            >
-              Next move
-            </div>
-
-            <div
-              style={{
-                marginTop: 10,
-                display: "flex",
-                alignItems: "center",
-                gap: 10,
-                flexWrap: "wrap",
-              }}
-            >
-              {action.badge ? (
-                <div
-                  style={{
-                    padding: "5px 9px",
-                    borderRadius: 999,
-                    fontSize: 10,
-                    fontWeight: 900,
-                    letterSpacing: ".12em",
-                    textTransform: "uppercase",
-                    color: t.text,
-                    border: `1px solid ${t.border}`,
-                    background: "rgba(255,255,255,0.035)",
-                  }}
-                >
-                  {action.badge}
-                </div>
-              ) : null}
-
-              <div
-                style={{
-                  width: 9,
-                  height: 9,
-                  borderRadius: 999,
-                  background: t.accent,
-                  boxShadow: `0 0 14px ${t.accent}`,
-                  flexShrink: 0,
-                }}
-              />
-            </div>
-
-            <div
-              style={{
-                marginTop: 12,
-                fontSize: "clamp(22px, 4vw, 34px)",
-                lineHeight: 1,
-                fontWeight: 950,
-                letterSpacing: "-0.05em",
-                color: "#fff",
-              }}
-            >
-              {action.title}
-            </div>
-
-            <div
-              style={{
-                marginTop: 10,
-                maxWidth: 760,
-                fontSize: 13,
-                lineHeight: 1.55,
-                color: "rgba(255,255,255,0.68)",
-              }}
-            >
-              {action.detail}
-            </div>
-          </div>
-
-          <div style={{ alignSelf: "start" }}>
-            {action.actionType === "alerts" ? (
-              <ActionButton onClick={onOpenAlerts}>
-                {action.buttonLabel} <ArrowRight size={14} />
-              </ActionButton>
-            ) : (
-              <ActionButton href={action.href}>
-                {action.buttonLabel} <ArrowRight size={14} />
-              </ActionButton>
-            )}
-          </div>
-        </div>
-
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
-            gap: 10,
-          }}
-        >
-          <ActionMiniStat
-            label="Cash Position"
-            value={money(cashPosition)}
-            tone="ice"
-          />
-          <ActionMiniStat
-            label="Cash Movement"
-            value={signedMoney(cashMovement)}
-            tone={cashMovement < 0 ? "red" : cashMovement > 0 ? "green" : "ice"}
-          />
-          <ActionMiniStat
-            label="Due Soon"
-            value={money(dueSoonTotal)}
-            tone={dueSoonTotal > 0 ? "amber" : "green"}
-          />
-          <ActionMiniStat
-            label="Alert Load"
-            value={alertCount > 0 ? `${alertCount} active` : "clear"}
-            tone={alertCount > 0 ? tone : "green"}
-          />
-        </div>
+    <GlassPane tone={tone} size="card">
+      <div style={{ fontWeight: 900, fontSize: 15, color: "#fff" }}>{title}</div>
+      <div
+        style={{
+          marginTop: 6,
+          fontSize: 13,
+          color: "rgba(255,255,255,0.72)",
+          lineHeight: 1.5,
+        }}
+      >
+        {detail}
       </div>
-    </Pane>
+    </GlassPane>
   );
 }
 
@@ -1742,9 +1259,7 @@ export default function DashboardPage() {
     async function bootstrap() {
       try {
         if (!supabase) {
-          throw new Error(
-            "Supabase is not configured. Check your environment variables."
-          );
+          throw new Error("Supabase is not configured. Check your environment variables.");
         }
 
         const {
@@ -1900,13 +1415,6 @@ export default function DashboardPage() {
 
     const activeBills = bills.filter((b) => b.active !== false);
 
-    const billsMonthlyPressure = activeBills.reduce((sum, b) => {
-      if (b.type === "controllable") {
-        return sum + safeNum(b.minPay, 0) + safeNum(b.extraPay, 0);
-      }
-      return sum + safeNum(b.amount, 0) * freqToMonthlyMult(b.frequency);
-    }, 0);
-
     const dueSoon = activeBills
       .filter((b) => b.dueDate)
       .map((b) => ({
@@ -1926,9 +1434,7 @@ export default function DashboardPage() {
         return ad - bd;
       });
 
-    const lateBills = dueSoon.filter(
-      (b) => Number.isFinite(b.dueIn) && b.dueIn < 0
-    );
+    const lateBills = dueSoon.filter((b) => Number.isFinite(b.dueIn) && b.dueIn < 0);
 
     const dueNextFour = dueSoon
       .filter((b) => Number.isFinite(b.dueIn) && b.dueIn <= 14)
@@ -1942,8 +1448,6 @@ export default function DashboardPage() {
       (s, b) => s + safeNum(b.displayAmount, 0),
       0
     );
-
-    const lateCount = lateBills.length;
 
     const alertItems = [];
 
@@ -1985,15 +1489,15 @@ export default function DashboardPage() {
       });
     }
 
-    if (lateCount > 0) {
+    if (lateBills.length > 0) {
       const lateBillLead = lateBills[0];
       alertItems.push({
         id: "late-bills",
         severity: "critical",
         title: `${lateBillLead?.name || "A bill"} is late`,
         detail:
-          lateCount > 1
-            ? `${lateCount} late bills need attention right now.`
+          lateBills.length > 1
+            ? `${lateBills.length} late bills need attention right now.`
             : "This bill is already past due and needs attention now.",
         amount: money(
           lateBills.reduce((s, b) => s + safeNum(b.displayAmount, 0), 0)
@@ -2047,19 +1551,6 @@ export default function DashboardPage() {
       });
     }
 
-    if (!alertItems.length) {
-      alertItems.push({
-        id: "all-clear",
-        severity: "clear",
-        title: "No active pressure points",
-        detail:
-          "Nothing critical or warning-level is hitting the dashboard right now.",
-        amount: "",
-        href: "",
-        hrefLabel: "",
-      });
-    }
-
     const topAccounts = [...accounts]
       .sort(
         (a, b) => safeNum(Math.abs(b.balance), 0) - safeNum(Math.abs(a.balance), 0)
@@ -2074,6 +1565,7 @@ export default function DashboardPage() {
         detail: `Deposit • ${fmtShort(row.date)}`,
         amount: `+${money(row.amount)}`,
         tone: "green",
+        initials: "IN",
       })),
       ...spendingTx.map((row) => {
         const type = String(row.type || "").toLowerCase();
@@ -2085,6 +1577,7 @@ export default function DashboardPage() {
           detail: `${isIncome ? "Income" : "Expense"} • ${fmtShort(row.date)}`,
           amount: `${isIncome ? "+" : "-"}${money(row.amount)}`,
           tone: isIncome ? "green" : "red",
+          initials: isIncome ? "IN" : "TX",
         };
       }),
     ]
@@ -2103,6 +1596,7 @@ export default function DashboardPage() {
               : `Due ${fmtShort(bill.dueDate)}`,
           amount: money(bill.displayAmount),
           tone: bill.dueIn < 0 ? "red" : "amber",
+          initials: "BL",
         });
       });
     }
@@ -2129,86 +1623,39 @@ export default function DashboardPage() {
       alertValue = "Watch";
     }
 
-    let nextAction = {
+    let focus = {
       tone: "green",
-      badge: "stable",
-      title: "You are clear right now",
-      detail:
-        "Nothing urgent is hitting the board. Keep feeding real data into the system and use the dashboard to stay ahead.",
-      buttonLabel: "Open accounts",
-      href: "/accounts",
-      actionType: "link",
+      title: "Board is clear. Keep feeding real data into the system.",
     };
 
     if (!accounts.length) {
-      nextAction = {
+      focus = {
         tone: "red",
-        badge: "blocked",
-        title: "Load accounts first",
-        detail:
-          "The dashboard cannot tell the truth until real account balances exist. Start there before trusting anything else on this page.",
-        buttonLabel: "Open accounts",
-        href: "/accounts",
-        actionType: "link",
+        title: "Load accounts first so the dashboard has something real to read.",
       };
     } else if (lateBills.length > 0) {
       const lead = lateBills[0];
-      nextAction = {
+      focus = {
         tone: "red",
-        badge: "urgent",
-        title: `${lead.name} is late`,
-        detail: `${
-          lead.dueIn ? Math.abs(lead.dueIn) : 0
-        } day(s) past due • ${money(lead.displayAmount)}. Handle the overdue bill before doing anything cosmetic.`,
-        buttonLabel: "View issues",
-        actionType: "alerts",
+        title: `${lead.name} is late and needs attention now.`,
       };
     } else if (dueThisWeek.length > 0) {
       const lead = dueThisWeek[0];
-      nextAction = {
+      focus = {
         tone: "amber",
-        badge: "upcoming",
-        title: `${lead.name} due ${fmtShort(lead.dueDate)}`,
-        detail:
-          dueThisWeek.length > 1
-            ? `${dueThisWeek.length} bills are due in the next 7 days. Stay ahead before they hit your balances at once.`
-            : `This is the next bill on deck. Knock it out before it turns into pressure.`,
-        buttonLabel: "Open bills",
-        href: "/bills",
-        actionType: "link",
+        title: `${lead.name} is due ${fmtShort(lead.dueDate)}.`,
       };
     } else if (cashMovement < 0) {
-      nextAction = {
+      focus = {
         tone: "red",
-        badge: "cash movement",
-        title: "Spending is outrunning income",
-        detail:
-          "Your actual logged movement is negative this month. Tighten spending before that turns into a real balance problem.",
-        buttonLabel: "Review spending",
-        href: "/spending",
-        actionType: "link",
-      };
-    } else if (incomeDeposits.length > 0) {
-      const latestDeposit = [...incomeDeposits].sort((a, b) =>
-        String(b.date).localeCompare(String(a.date))
-      )[0];
-
-      nextAction = {
-        tone: "green",
-        badge: "latest deposit",
-        title: `${money(latestDeposit.amount)} landed`,
-        detail: `${latestDeposit.source || "Deposit"} posted ${fmtShort(
-          latestDeposit.date
-        )}. Route it with intention before it gets absorbed by random spending.`,
-        buttonLabel: "Open income",
-        href: "/income",
-        actionType: "link",
+        title: "Spending is outrunning income this month.",
       };
     }
 
     return {
       monthLabel: fmtMonthLabel(thisMonth),
       primaryName: primary?.name || "",
+      focus,
       netWorth,
       accountBalancesExInvestments,
       alertValue,
@@ -2218,11 +1665,7 @@ export default function DashboardPage() {
       recentActivity,
       chartPoints,
       chartValue: signedMoney(cashMovement),
-      chartTone: cashMovement < 0 ? "red" : cashMovement > 0 ? "green" : "ice",
-      totalLoggedIncome,
-      spendingActual,
-      billsMonthlyPressure,
-      liquidTotal,
+      chartTone: cashMovement < 0 ? "red" : cashMovement > 0 ? "green" : "neutral",
       dueSoonTotal,
       cashMovement,
       alertItems,
@@ -2230,18 +1673,17 @@ export default function DashboardPage() {
         (s, a) => s + safeNum(a.balance, 0),
         0
       ),
-      nextAction,
     };
   }, [accounts, primaryId, bills, spendingTx, incomeDeposits]);
 
   if (loading) {
     return (
       <main className="container">
-        <Pane>
+        <GlassPane size="card">
           <div style={{ fontWeight: 900, fontSize: 18, color: "#fff" }}>
             Loading dashboard...
           </div>
-        </Pane>
+        </GlassPane>
       </main>
     );
   }
@@ -2249,7 +1691,7 @@ export default function DashboardPage() {
   if (!user) {
     return (
       <main className="container">
-        <Pane>
+        <GlassPane size="card">
           <div style={{ fontWeight: 900, fontSize: 18, color: "#fff" }}>
             Please log in
           </div>
@@ -2262,7 +1704,7 @@ export default function DashboardPage() {
           >
             This dashboard needs an authenticated user.
           </div>
-        </Pane>
+        </GlassPane>
       </main>
     );
   }
@@ -2274,7 +1716,7 @@ export default function DashboardPage() {
         onClose={() => setAlertsOpen(false)}
         statusLabel={computed.alertValue}
         statusTone={computed.alertTone}
-        alertItems={computed.alertItems}
+        alertItems={computed.alertCount > 0 ? computed.alertItems : []}
         cashPosition={computed.accountBalancesExInvestments}
         cashMovement={computed.cashMovement}
         dueSoonTotal={computed.dueSoonTotal}
@@ -2291,14 +1733,14 @@ export default function DashboardPage() {
           style={{
             position: "relative",
             zIndex: 1,
-            width: "min(100%, 1180px)",
+            width: "min(100%, 1040px)",
             margin: "0 auto",
             display: "grid",
-            gap: 14,
+            gap: 16,
           }}
         >
           {pageError ? (
-            <Pane tone="red" padding={14} radius={22}>
+            <GlassPane tone="red" size="card">
               <div style={{ fontWeight: 900, fontSize: 16, color: "#fff" }}>
                 Dashboard error
               </div>
@@ -2311,39 +1753,40 @@ export default function DashboardPage() {
               >
                 {pageError}
               </div>
-            </Pane>
+            </GlassPane>
           ) : null}
 
           <HeaderBar
             monthLabel={computed.monthLabel}
             primaryName={computed.primaryName}
+            focusTitle={computed.focus.title}
+            focusTone={computed.focus.tone}
           />
 
           <section
             style={{
               display: "grid",
-              gridTemplateColumns:
-                "repeat(auto-fit, minmax(min(100%, 220px), 1fr))",
-              gap: 12,
+              gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 230px), 1fr))",
+              gap: 14,
               alignItems: "stretch",
             }}
           >
-            <StatCard
+            <MetricCard
               label="Net Worth"
               value={money(computed.netWorth)}
               detail="Assets minus credit debt"
-              tone="ice"
+              tone="neutral"
             />
 
-            <StatCard
+            <MetricCard
               label="Account Balances"
               value={money(computed.accountBalancesExInvestments)}
-              detail="Non-investment balances across your accounts"
-              tone="ice"
+              detail="Non-investment balances"
+              tone="neutral"
               badge={computed.investmentTotal > 0 ? "investments excluded" : ""}
             />
 
-            <StatCard
+            <MetricCard
               label="Alerts"
               value={computed.alertValue}
               detail={
@@ -2351,87 +1794,53 @@ export default function DashboardPage() {
                   ? `${computed.alertCount} active signal(s)`
                   : "No immediate alarms"
               }
-              badge={computed.alertCount > 0 ? `${computed.alertCount} active` : ""}
               tone={computed.alertTone}
+              badge={computed.alertCount > 0 ? `${computed.alertCount} active` : ""}
               onClick={() => setAlertsOpen(true)}
-              footerText="View issues"
             />
           </section>
-
-          <ActionStrip
-            action={computed.nextAction}
-            cashPosition={computed.accountBalancesExInvestments}
-            cashMovement={computed.cashMovement}
-            dueSoonTotal={computed.dueSoonTotal}
-            alertCount={computed.alertCount}
-            onOpenAlerts={() => setAlertsOpen(true)}
-          />
 
           <CashMovementChart
             points={computed.chartPoints}
             chartValue={computed.chartValue}
             chartTone={computed.chartTone}
+            subcopy="Month-to-date movement from actual logged income and spending."
           />
 
           <section
             style={{
               display: "grid",
-              gridTemplateColumns:
-                "repeat(auto-fit, minmax(min(100%, 320px), 1fr))",
-              gap: 14,
-              alignItems: "start",
+              gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 320px), 1fr))",
+              gap: 16,
+              alignItems: "stretch",
             }}
           >
-            <Pane
-              padding={18}
-              radius={28}
-              overlayOpacity={0.56}
-              style={{
-                background: `
-                  linear-gradient(
-                    180deg,
-                    rgba(255,255,255,0.03) 0%,
-                    rgba(255,255,255,0.008) 10%,
-                    rgba(255,255,255,0) 22%
-                  ),
-                  rgba(5,8,12,0.08)
-                `,
-              }}
-            >
-              <SectionHeader
+            <GlassPane size="hero" style={{ height: "100%" }}>
+              <PaneHeader
                 title="Top Accounts"
                 subcopy="Largest balances sitting on the board right now."
               />
 
               <div style={{ display: "grid", gap: 10 }}>
                 {computed.topAccounts.length === 0 ? (
-                  <Pane tone="amber" padding={14} radius={18}>
-                    <div style={{ fontWeight: 900, fontSize: 15, color: "#fff" }}>
-                      No accounts yet
-                    </div>
-                    <div
-                      style={{
-                        marginTop: 6,
-                        fontSize: 13,
-                        color: "rgba(255,255,255,0.72)",
-                      }}
-                    >
-                      Add accounts so this panel actually has something real to show.
-                    </div>
-                  </Pane>
+                  <EmptyState
+                    title="No accounts yet"
+                    detail="Add accounts so this panel actually has something real to show."
+                  />
                 ) : (
                   computed.topAccounts.map((account) => (
-                    <AccountRow
+                    <ListRow
                       key={account.id}
-                      name={account.name}
-                      sub={String(account.type || "other")}
-                      balance={money(account.balance)}
+                      title={account.name}
+                      subtitle={String(account.type || "other")}
+                      value={money(account.balance)}
+                      initials={String(account.name || "A").charAt(0).toUpperCase()}
                       tone={
                         String(account.type || "").toLowerCase() === "credit"
                           ? "red"
                           : String(account.type || "").toLowerCase() === "investment"
                           ? "green"
-                          : "ice"
+                          : "neutral"
                       }
                     />
                   ))
@@ -2439,56 +1848,32 @@ export default function DashboardPage() {
               </div>
 
               <div style={{ marginTop: 14 }}>
-                <LinkButton href="/accounts" full>
+                <SoftLink href="/accounts" full>
                   Open accounts
-                </LinkButton>
+                </SoftLink>
               </div>
-            </Pane>
+            </GlassPane>
 
-            <Pane
-              padding={18}
-              radius={28}
-              overlayOpacity={0.56}
-              style={{
-                background: `
-                  linear-gradient(
-                    180deg,
-                    rgba(255,255,255,0.03) 0%,
-                    rgba(255,255,255,0.008) 10%,
-                    rgba(255,255,255,0) 22%
-                  ),
-                  rgba(5,8,12,0.08)
-                `,
-              }}
-            >
-              <SectionHeader
-                title="Recent Transactions"
-                subcopy="Latest movement across income, spending, and upcoming due items."
+            <GlassPane size="hero" style={{ height: "100%" }}>
+              <PaneHeader
+                title="Recent Movement"
+                subcopy="Latest activity across income, spending, and due items."
               />
 
               <div style={{ display: "grid", gap: 10 }}>
                 {computed.recentActivity.length === 0 ? (
-                  <Pane tone="amber" padding={14} radius={18}>
-                    <div style={{ fontWeight: 900, fontSize: 15, color: "#fff" }}>
-                      No recent activity
-                    </div>
-                    <div
-                      style={{
-                        marginTop: 6,
-                        fontSize: 13,
-                        color: "rgba(255,255,255,0.72)",
-                      }}
-                    >
-                      Log income or spending and this panel will start to look alive.
-                    </div>
-                  </Pane>
+                  <EmptyState
+                    title="No recent activity"
+                    detail="Log income or spending and this panel will start to look alive."
+                  />
                 ) : (
                   computed.recentActivity.map((item) => (
-                    <ActivityRow
+                    <ListRow
                       key={item.id}
                       title={item.title}
-                      detail={item.detail}
-                      amount={item.amount}
+                      subtitle={item.detail}
+                      value={item.amount}
+                      initials={item.initials}
                       tone={item.tone}
                     />
                   ))
@@ -2503,12 +1888,12 @@ export default function DashboardPage() {
                   gap: 10,
                 }}
               >
-                <LinkButton href="/bills">Bills</LinkButton>
-                <LinkButton href="/income">Income</LinkButton>
-                <LinkButton href="/spending">Spending</LinkButton>
-                <LinkButton href="/investments">Investments</LinkButton>
+                <SoftLink href="/bills">Bills</SoftLink>
+                <SoftLink href="/income">Income</SoftLink>
+                <SoftLink href="/spending">Spending</SoftLink>
+                <SoftLink href="/investments">Investments</SoftLink>
               </div>
-            </Pane>
+            </GlassPane>
           </section>
         </div>
       </main>

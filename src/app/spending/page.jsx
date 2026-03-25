@@ -1,27 +1,9 @@
 "use client";
 
 import * as React from "react";
-import { createPortal } from "react-dom";
-import * as Select from "@radix-ui/react-select";
-import { ChevronDown, Check } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Badge } from "@/components/ui/badge";
-import { Label } from "@/components/ui/label";
 
 export const dynamic = "force-dynamic";
-
-/* =========================================================
-   LIFE COMMAND CENTER — SPENDING COMMAND
-   Full rewrite
-   - custom selects (no ugly white browser dropdowns)
-   - global floating action menus
-   - planned delete/convert fixed
-   - optional time support
-   - calendar sync
-   ========================================================= */
 
 const DEFAULT_CATEGORIES = [
   { id: "groceries", name: "Groceries", group: "Food", color: "#22c55e", isBudgeted: true },
@@ -79,34 +61,42 @@ const TONE = {
   red: "#ff6b7f",
   green: "#4ade80",
   amber: "#f59e0b",
+  blue: "#60a5fa",
 };
 
 function uid() {
   return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 }
+
 function pad2(n) {
   return String(n).padStart(2, "0");
 }
+
 function todayISO() {
   const d = new Date();
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 }
+
 function toDate(iso) {
   return new Date(`${iso}T00:00:00`);
 }
+
 function money(n) {
   const x = Number(n);
   if (!Number.isFinite(x)) return "$0.00";
   return x.toLocaleString(undefined, { style: "currency", currency: "USD" });
 }
+
 function parseMoneyInput(v) {
   const cleaned = String(v ?? "").replace(/[^0-9.-]/g, "");
   const num = Number(cleaned);
   return Number.isFinite(num) ? num : NaN;
 }
+
 function clamp(n, min, max) {
   return Math.max(min, Math.min(max, n));
 }
+
 function normalizeTime(v) {
   const raw = String(v || "").trim();
   if (!raw) return "";
@@ -118,6 +108,7 @@ function normalizeTime(v) {
   if (hh < 0 || hh > 23 || mm < 0 || mm > 59) return "";
   return `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}`;
 }
+
 function fmtTime(v) {
   const t = normalizeTime(v);
   if (!t) return "All day";
@@ -126,6 +117,7 @@ function fmtTime(v) {
   d.setHours(h, m, 0, 0);
   return d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
 }
+
 function normalizeCategory(raw) {
   const x = raw || {};
   return {
@@ -136,21 +128,13 @@ function normalizeCategory(raw) {
     isBudgeted: x.isBudgeted !== false,
   };
 }
+
 function shortDate(iso) {
   const d = toDate(iso);
   if (!Number.isFinite(d.getTime())) return iso;
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
-function longDate(iso) {
-  const d = toDate(iso);
-  if (!Number.isFinite(d.getTime())) return iso;
-  return d.toLocaleDateString(undefined, {
-    weekday: "long",
-    month: "long",
-    day: "numeric",
-    year: "numeric",
-  });
-}
+
 function startOfWeek(d) {
   const x = new Date(d.getFullYear(), d.getMonth(), d.getDate());
   const day = x.getDay();
@@ -159,6 +143,7 @@ function startOfWeek(d) {
   x.setHours(0, 0, 0, 0);
   return x;
 }
+
 function endOfWeek(d) {
   const s = startOfWeek(d);
   const e = new Date(s);
@@ -166,34 +151,46 @@ function endOfWeek(d) {
   e.setHours(23, 59, 59, 999);
   return e;
 }
+
 function startOfMonth(d) {
   return new Date(d.getFullYear(), d.getMonth(), 1, 0, 0, 0, 0);
 }
+
 function endOfMonth(d) {
   return new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59, 999);
 }
+
 function startOfYear(d) {
   return new Date(d.getFullYear(), 0, 1, 0, 0, 0, 0);
 }
+
 function endOfYear(d) {
   return new Date(d.getFullYear(), 11, 31, 23, 59, 59, 999);
 }
+
 function periodBounds(mode) {
   const now = new Date();
-  if (mode === "week") return { start: startOfWeek(now), end: endOfWeek(now), budgetMode: "weekly", label: "This Week" };
-  if (mode === "year") return { start: startOfYear(now), end: endOfYear(now), budgetMode: "yearly", label: "This Year" };
+  if (mode === "week") {
+    return { start: startOfWeek(now), end: endOfWeek(now), budgetMode: "weekly", label: "This Week" };
+  }
+  if (mode === "year") {
+    return { start: startOfYear(now), end: endOfYear(now), budgetMode: "yearly", label: "This Year" };
+  }
   return { start: startOfMonth(now), end: endOfMonth(now), budgetMode: "monthly", label: "This Month" };
 }
+
 function inRange(iso, start, end) {
   const d = toDate(iso);
   return d >= start && d <= end;
 }
+
 function percentChange(current, previous) {
   const a = Number(current) || 0;
   const b = Number(previous) || 0;
   if (b === 0) return a > 0 ? 100 : 0;
   return ((a - b) / b) * 100;
 }
+
 function budgetStatus(spent, budget) {
   if (!budget || budget <= 0) return "No budget";
   const pct = spent / budget;
@@ -201,6 +198,7 @@ function budgetStatus(spent, budget) {
   if (pct >= 0.85) return "Near";
   return "OK";
 }
+
 function groupTransactionsForTrend(transactions, start, period) {
   const pad = (n) => String(n).padStart(2, "0");
 
@@ -212,12 +210,14 @@ function groupTransactionsForTrend(transactions, start, period) {
         return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
       });
     }
+
     if (period === "year") {
       return Array.from({ length: 12 }).map((_, i) => {
         const d = new Date(start.getFullYear(), i, 1);
         return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-01`;
       });
     }
+
     const days = new Date(start.getFullYear(), start.getMonth() + 1, 0).getDate();
     return Array.from({ length: days }).map((_, i) => {
       const d = new Date(start.getFullYear(), start.getMonth(), i + 1);
@@ -237,6 +237,7 @@ function groupTransactionsForTrend(transactions, start, period) {
 
   for (const tx of transactions) {
     if (tx.type !== "expense") continue;
+
     if (period === "year") {
       const d = toDate(tx.date);
       const key = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-01`;
@@ -252,6 +253,7 @@ function groupTransactionsForTrend(transactions, start, period) {
     value: Number(totals.get(key) || 0),
   }));
 }
+
 function getPreviousRange(period, currentRange) {
   const start = new Date(currentRange.start);
   const end = new Date(currentRange.end);
@@ -274,9 +276,11 @@ function getPreviousRange(period, currentRange) {
   const prevEnd = new Date(start.getFullYear(), start.getMonth(), 0, 23, 59, 59, 999);
   return { start: prevStart, end: prevEnd };
 }
+
 function sumExpenses(rows) {
   return rows.reduce((sum, t) => sum + (t.type === "expense" ? Number(t.amount) || 0 : 0), 0);
 }
+
 function trendMeta(current, previous) {
   const diff = percentChange(current, previous);
   const positive = diff >= 0;
@@ -287,7 +291,6 @@ function trendMeta(current, previous) {
   };
 }
 
-/* ------------------------- mappers ------------------------- */
 function mapCategoryRowToClient(row) {
   return normalizeCategory({
     id: row.id,
@@ -297,6 +300,7 @@ function mapCategoryRowToClient(row) {
     isBudgeted: row.is_budgeted,
   });
 }
+
 function mapCategoryClientToRow(cat, userId) {
   return {
     id: cat.id,
@@ -308,6 +312,7 @@ function mapCategoryClientToRow(cat, userId) {
     updated_at: new Date().toISOString(),
   };
 }
+
 function mapTransactionRowToClient(row) {
   return {
     id: row.id,
@@ -323,6 +328,7 @@ function mapTransactionRowToClient(row) {
     createdAt: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
   };
 }
+
 function mapTransactionClientToRow(tx, userId) {
   return {
     id: tx.id,
@@ -340,6 +346,7 @@ function mapTransactionClientToRow(tx, userId) {
     updated_at: new Date().toISOString(),
   };
 }
+
 function mapPlannedRowToClient(row) {
   return {
     id: row.id,
@@ -352,6 +359,7 @@ function mapPlannedRowToClient(row) {
     createdAt: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
   };
 }
+
 function mapPlannedClientToRow(p, userId) {
   return {
     id: p.id,
@@ -367,7 +375,6 @@ function mapPlannedClientToRow(p, userId) {
   };
 }
 
-/* ------------------------- calendar sync ------------------------- */
 async function getDefaultCalendarProfileId(userId) {
   const { data, error } = await supabase
     .from("calendar_profiles")
@@ -439,6 +446,7 @@ async function upsertCalendarEventForTransaction(tx, userId, category) {
       .from("calendar_events")
       .update(payload)
       .eq("id", existing.id);
+
     if (updateError) throw updateError;
     return;
   }
@@ -491,6 +499,7 @@ async function upsertCalendarEventForPlanned(planned, userId, category) {
       .from("calendar_events")
       .update(payload)
       .eq("id", existing.id);
+
     if (updateError) throw updateError;
     return;
   }
@@ -513,113 +522,9 @@ async function deleteCalendarEventBySource(userId, source, sourceId) {
   if (error) throw error;
 }
 
-/* ------------------------- UI helpers ------------------------- */
-function LccSelect({
-  value,
-  onValueChange,
-  placeholder = "Select",
-  items = [],
-  className = "",
-}) {
-  return (
-    <Select.Root value={value} onValueChange={onValueChange}>
-      <Select.Trigger
-        className={`flex h-11 w-full items-center justify-between rounded-2xl border border-white/10 bg-white/[0.04] px-3 text-left text-sm text-white outline-none transition hover:bg-white/[0.06] focus:ring-2 focus:ring-white/10 ${className}`}
-      >
-        <Select.Value placeholder={placeholder} />
-        <Select.Icon>
-          <ChevronDown className="h-4 w-4 text-white/70" />
-        </Select.Icon>
-      </Select.Trigger>
-
-      <Select.Portal>
-        <Select.Content
-          position="popper"
-          sideOffset={8}
-          className="z-[99999] max-h-80 w-[var(--radix-select-trigger-width)] overflow-hidden rounded-2xl border border-white/10 bg-[#0c1322] shadow-[0_24px_60px_rgba(0,0,0,.65)]"
-        >
-          <Select.Viewport className="p-2">
-            {items.map((item) => (
-              <Select.Item
-                key={item.value}
-                value={item.value}
-                className="relative flex cursor-pointer select-none items-center rounded-xl py-2.5 pl-9 pr-3 text-sm text-white/90 outline-none transition hover:bg-white/10 data-[highlighted]:bg-white/10"
-              >
-                <span className="absolute left-3 inline-flex w-4 items-center justify-center">
-                  <Select.ItemIndicator>
-                    <Check className="h-4 w-4 text-white" />
-                  </Select.ItemIndicator>
-                </span>
-                <Select.ItemText>{item.label}</Select.ItemText>
-              </Select.Item>
-            ))}
-          </Select.Viewport>
-        </Select.Content>
-      </Select.Portal>
-    </Select.Root>
-  );
-}
-
-function ShellCard({ children, className = "" }) {
-  return (
-    <div
-      className={
-        "rounded-[28px] border border-white/10 bg-[linear-gradient(180deg,rgba(10,16,28,.95),rgba(7,11,21,.92))] shadow-[0_24px_60px_rgba(0,0,0,.42)] backdrop-blur-xl " +
-        className
-      }
-    >
-      {children}
-    </div>
-  );
-}
-
-function MetricCard({ title, value, sub, tone = "neutral", accentValue = "" }) {
-  const map = {
-    red: { border: "rgba(255,107,127,.18)", glow: "rgba(255,107,127,.18)", accent: TONE.red },
-    green: { border: "rgba(74,222,128,.18)", glow: "rgba(74,222,128,.18)", accent: TONE.green },
-    amber: { border: "rgba(245,158,11,.18)", glow: "rgba(245,158,11,.18)", accent: TONE.amber },
-    neutral: { border: "rgba(255,255,255,.10)", glow: "rgba(255,255,255,.04)", accent: "#fff" },
-  };
-  const t = map[tone] || map.neutral;
-
-  return (
-    <div
-      className="rounded-[24px] border p-5"
-      style={{
-        borderColor: t.border,
-        background: "linear-gradient(180deg, rgba(255,255,255,.045), rgba(255,255,255,.02))",
-        boxShadow: `inset 0 1px 0 rgba(255,255,255,.03), 0 0 28px ${t.glow}`,
-      }}
-    >
-      <div className="mb-2 text-[11px] uppercase tracking-[0.18em] text-white/38">{title}</div>
-      <div className="text-[28px] font-black leading-none text-white md:text-[34px]">{value}</div>
-      <div className="mt-2 flex items-center gap-2 text-sm">
-        {accentValue ? <span className="font-black" style={{ color: t.accent }}>{accentValue}</span> : null}
-        <span className="text-white/52">{sub}</span>
-      </div>
-    </div>
-  );
-}
-
-function ProgressBar({ value = 0, color = TONE.green }) {
-  const pct = clamp(Number(value) || 0, 0, 100);
-  return (
-    <div className="h-2.5 overflow-hidden rounded-full bg-white/10">
-      <div
-        className="h-full rounded-full transition-all duration-500"
-        style={{
-          width: `${pct}%`,
-          background: `linear-gradient(90deg, ${color} 0%, rgba(255,255,255,.95) 220%)`,
-          boxShadow: `0 0 18px ${color}55, 0 0 28px ${color}22`,
-        }}
-      />
-    </div>
-  );
-}
-
 function TrendChart({ data }) {
   const width = 1000;
-  const height = 260;
+  const height = 280;
   const padX = 28;
   const padY = 20;
   const chartW = width - padX * 2;
@@ -636,150 +541,120 @@ function TrendChart({ data }) {
   const areaPath = `${linePath} L ${padX + chartW} ${height - padY} L ${padX} ${height - padY} Z`;
 
   return (
-    <div className="overflow-hidden rounded-[24px] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,.03),rgba(255,255,255,.015))] p-3">
-      <div className="relative h-[240px] w-full">
-        <svg viewBox={`0 0 ${width} ${height}`} className="h-full w-full">
-          <defs>
-            <linearGradient id="spendingTrendFill" x1="0" x2="0" y1="0" y2="1">
-              <stop offset="0%" stopColor={TONE.red} stopOpacity="0.35" />
-              <stop offset="100%" stopColor={TONE.red} stopOpacity="0.02" />
-            </linearGradient>
-            <filter id="spendingTrendGlow">
-              <feGaussianBlur stdDeviation="5" result="blur" />
-              <feMerge>
-                <feMergeNode in="blur" />
-                <feMergeNode in="SourceGraphic" />
-              </feMerge>
-            </filter>
-          </defs>
+    <div className="spTrendWrap">
+      <svg viewBox={`0 0 ${width} ${height}`} className="spTrendSvg">
+        <defs>
+          <linearGradient id="spendingTrendFill" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0%" stopColor={TONE.red} stopOpacity="0.24" />
+            <stop offset="100%" stopColor={TONE.red} stopOpacity="0.01" />
+          </linearGradient>
+          <filter id="spendingTrendGlow">
+            <feGaussianBlur stdDeviation="4" result="blur" />
+            <feMerge>
+              <feMergeNode in="blur" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
+        </defs>
 
-          {Array.from({ length: 5 }).map((_, i) => {
-            const y = padY + (i / 4) * chartH;
-            return (
-              <line
-                key={i}
-                x1={padX}
-                x2={padX + chartW}
-                y1={y}
-                y2={y}
-                stroke="rgba(255,255,255,0.08)"
-                strokeDasharray="5 6"
-              />
-            );
-          })}
+        {Array.from({ length: 5 }).map((_, i) => {
+          const y = padY + (i / 4) * chartH;
+          return (
+            <line
+              key={i}
+              x1={padX}
+              x2={padX + chartW}
+              y1={y}
+              y2={y}
+              stroke="rgba(255,255,255,0.08)"
+              strokeDasharray="5 6"
+            />
+          );
+        })}
 
-          {points.map((p) => (
-            <text
-              key={`label-${p.key}`}
-              x={p.x}
-              y={height - 4}
-              textAnchor="middle"
-              fontSize="12"
-              fill="rgba(255,255,255,0.38)"
-            >
-              {p.label}
-            </text>
-          ))}
+        {points.map((p) => (
+          <text
+            key={`label-${p.key}`}
+            x={p.x}
+            y={height - 4}
+            textAnchor="middle"
+            fontSize="12"
+            fill="rgba(255,255,255,0.42)"
+          >
+            {p.label}
+          </text>
+        ))}
 
-          <path d={areaPath} fill="url(#spendingTrendFill)" />
-          <path
-            d={linePath}
-            fill="none"
-            stroke={TONE.red}
-            strokeWidth="4"
-            filter="url(#spendingTrendGlow)"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
+        <path d={areaPath} fill="url(#spendingTrendFill)" />
+        <path
+          d={linePath}
+          fill="none"
+          stroke={TONE.red}
+          strokeWidth="4"
+          filter="url(#spendingTrendGlow)"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
 
-          {points.map((p) => (
-            <g key={p.key}>
-              <circle cx={p.x} cy={p.y} r="4" fill={TONE.red} />
-              <circle cx={p.x} cy={p.y} r="9" fill={TONE.red} fillOpacity="0.12" />
-            </g>
-          ))}
-        </svg>
-      </div>
+        {points.map((p) => (
+          <g key={p.key}>
+            <circle cx={p.x} cy={p.y} r="4" fill={TONE.red} />
+            <circle cx={p.x} cy={p.y} r="10" fill={TONE.red} fillOpacity="0.08" />
+          </g>
+        ))}
+      </svg>
     </div>
   );
 }
 
-function ActionButton({ onClick }) {
+function ProgressBar({ value = 0, color = TONE.green }) {
+  const pct = clamp(Number(value) || 0, 0, 100);
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="flex h-12 w-12 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-lg text-white/80 transition hover:bg-white/[0.07]"
-    >
-      …
-    </button>
+    <div className="spProgress">
+      <div
+        className="spProgressFill"
+        style={{
+          width: `${pct}%`,
+          background: `linear-gradient(90deg, ${color} 0%, rgba(255,255,255,.92) 220%)`,
+          boxShadow: `0 0 18px ${color}44, 0 0 26px ${color}18`,
+        }}
+      />
+    </div>
   );
 }
 
-function FloatingMenu({ menu, onClose }) {
-  const [mounted, setMounted] = React.useState(false);
-
-  React.useEffect(() => setMounted(true), []);
-
-  React.useEffect(() => {
-    if (!menu) return;
-
-    function handlePointer(e) {
-      const target = e.target;
-      if (target instanceof HTMLElement && target.closest("[data-floating-menu]")) return;
-      onClose();
-    }
-
-    function handleEsc(e) {
-      if (e.key === "Escape") onClose();
-    }
-
-    window.addEventListener("mousedown", handlePointer);
-    window.addEventListener("keydown", handleEsc);
-    window.addEventListener("resize", onClose);
-    window.addEventListener("scroll", onClose, true);
-
-    return () => {
-      window.removeEventListener("mousedown", handlePointer);
-      window.removeEventListener("keydown", handleEsc);
-      window.removeEventListener("resize", onClose);
-      window.removeEventListener("scroll", onClose, true);
+function statusTone(status) {
+  if (status === "Over") {
+    return {
+      color: "#ffd6df",
+      background: "rgba(255,107,127,.12)",
+      border: "1px solid rgba(255,107,127,.22)",
     };
-  }, [menu, onClose]);
+  }
 
-  if (!mounted || !menu) return null;
+  if (status === "Near") {
+    return {
+      color: "#ffe8b4",
+      background: "rgba(245,158,11,.12)",
+      border: "1px solid rgba(245,158,11,.24)",
+    };
+  }
 
-  return createPortal(
-    <div
-      data-floating-menu="true"
-      className="fixed z-[9999] w-56 rounded-2xl border border-white/10 bg-[#0c1322] p-2 shadow-[0_24px_60px_rgba(0,0,0,.6)]"
-      style={{ top: menu.top, left: menu.left }}
-    >
-      {menu.items.map((item, i) => (
-        <button
-          key={`${item.label}-${i}`}
-          type="button"
-          onClick={() => {
-            onClose();
-            item.onClick?.();
-          }}
-          className={`w-full rounded-xl px-3 py-2 text-left text-sm font-semibold transition ${
-            item.tone === "danger"
-              ? "text-red-300 hover:bg-red-400/10"
-              : item.tone === "success"
-              ? "text-emerald-300 hover:bg-emerald-400/10"
-              : "text-white/82 hover:bg-white/8"
-          }`}
-        >
-          {item.label}
-        </button>
-      ))}
-    </div>,
-    document.body
-  );
+  if (status === "OK") {
+    return {
+      color: "#cbffe1",
+      background: "rgba(74,222,128,.12)",
+      border: "1px solid rgba(74,222,128,.24)",
+    };
+  }
+
+  return {
+    color: "#d8e1ff",
+    background: "rgba(148,163,184,.12)",
+    border: "1px solid rgba(148,163,184,.22)",
+  };
 }
 
-/* ------------------------- main ------------------------- */
 export default function SpendingPage() {
   const [user, setUser] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
@@ -790,7 +665,7 @@ export default function SpendingPage() {
   const [period, setPeriod] = React.useState("month");
   const [search, setSearch] = React.useState("");
   const [categoryFilter, setCategoryFilter] = React.useState("all");
-  const [typeFilter, setTypeFilter] = React.useState("expense");
+  const [typeFilter, setTypeFilter] = React.useState("all");
 
   const [categories, setCategories] = React.useState(DEFAULT_CATEGORIES);
   const [budgets, setBudgets] = React.useState(DEFAULT_BUDGETS);
@@ -811,8 +686,6 @@ export default function SpendingPage() {
   const [newCategoryName, setNewCategoryName] = React.useState("");
   const [newCategoryGroup, setNewCategoryGroup] = React.useState("Other");
 
-  const [menu, setMenu] = React.useState(null);
-
   const range = React.useMemo(() => periodBounds(period), [period]);
 
   const categoriesById = React.useMemo(() => {
@@ -831,6 +704,8 @@ export default function SpendingPage() {
 
     async function loadAll() {
       try {
+        setPageError("");
+
         const {
           data: { user: currentUser },
           error: userErr,
@@ -879,6 +754,7 @@ export default function SpendingPage() {
           (catRes.data || []).length > 0 ? (catRes.data || []).map(mapCategoryRowToClient) : DEFAULT_CATEGORIES;
 
         const nextBudgets = { weekly: {}, monthly: {}, yearly: {} };
+
         if ((budgetRes.data || []).length > 0) {
           for (const row of budgetRes.data || []) {
             if (!nextBudgets[row.period_mode]) continue;
@@ -891,6 +767,7 @@ export default function SpendingPage() {
         }
 
         if (!mounted) return;
+
         setCategories(loadedCategories);
         setBudgets(nextBudgets);
         setTransactions((txRes.data || []).map(mapTransactionRowToClient));
@@ -904,10 +781,17 @@ export default function SpendingPage() {
     }
 
     loadAll();
+
     return () => {
       mounted = false;
     };
   }, []);
+
+  React.useEffect(() => {
+    if (!categories.length) return;
+    if (categories.some((c) => c.id === qaCategoryId)) return;
+    setQaCategoryId(categories[0].id);
+  }, [categories, qaCategoryId]);
 
   const filteredTransactions = React.useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -919,11 +803,14 @@ export default function SpendingPage() {
       .filter((t) => {
         if (!q) return true;
         const cat = categoriesById.get(t.categoryId)?.name ?? "";
-        return `${t.merchant} ${t.note} ${t.date} ${t.time} ${cat} ${t.amount}`.toLowerCase().includes(q);
+        return `${t.merchant} ${t.note} ${t.date} ${t.time} ${cat} ${t.amount} ${t.paymentMethod} ${t.account}`
+          .toLowerCase()
+          .includes(q);
       })
       .sort((a, b) => {
         if (b.date !== a.date) return String(b.date).localeCompare(String(a.date));
-        return String(b.time || "").localeCompare(String(a.time || ""));
+        if ((b.time || "") !== (a.time || "")) return String(b.time || "").localeCompare(String(a.time || ""));
+        return Number(b.createdAt || 0) - Number(a.createdAt || 0);
       });
   }, [transactions, range.start, range.end, typeFilter, categoryFilter, search, categoriesById]);
 
@@ -940,11 +827,13 @@ export default function SpendingPage() {
       })
       .sort((a, b) => {
         if (a.date !== b.date) return String(a.date).localeCompare(String(b.date));
-        return String(a.time || "").localeCompare(String(b.time || ""));
+        if ((a.time || "") !== (b.time || "")) return String(a.time || "").localeCompare(String(b.time || ""));
+        return Number(a.createdAt || 0) - Number(b.createdAt || 0);
       });
   }, [plannedItems, range.start, range.end, categoryFilter, search, categoriesById]);
 
   const previousRange = React.useMemo(() => getPreviousRange(period, range), [period, range]);
+
   const previousTransactions = React.useMemo(
     () => transactions.filter((t) => inRange(t.date, previousRange.start, previousRange.end)),
     [transactions, previousRange]
@@ -975,23 +864,33 @@ export default function SpendingPage() {
 
   const previousExpense = React.useMemo(() => sumExpenses(previousTransactions), [previousTransactions]);
   const expenseTrend = React.useMemo(() => trendMeta(totals.expense, previousExpense), [totals.expense, previousExpense]);
-  const trendData = React.useMemo(() => groupTransactionsForTrend(filteredTransactions, range.start, period), [filteredTransactions, range.start, period]);
+  const trendData = React.useMemo(
+    () => groupTransactionsForTrend(filteredTransactions, range.start, period),
+    [filteredTransactions, range.start, period]
+  );
 
   const totalsByCategory = React.useMemo(() => {
     const map = new Map();
+
     for (const t of filteredTransactions) {
       if (t.type !== "expense") continue;
       map.set(t.categoryId, (map.get(t.categoryId) || 0) + (Number(t.amount) || 0));
     }
 
     return Array.from(map.entries())
-      .map(([categoryId, total]) => ({ categoryId, total, category: categoriesById.get(categoryId) }))
+      .map(([categoryId, total]) => ({
+        categoryId,
+        total,
+        category: categoriesById.get(categoryId),
+      }))
       .sort((a, b) => b.total - a.total);
   }, [filteredTransactions, categoriesById]);
 
   const plannedByCategory = React.useMemo(() => {
     const map = new Map();
-    for (const p of filteredPlanned) map.set(p.categoryId, (map.get(p.categoryId) || 0) + (Number(p.amount) || 0));
+    for (const p of filteredPlanned) {
+      map.set(p.categoryId, (map.get(p.categoryId) || 0) + (Number(p.amount) || 0));
+    }
     return map;
   }, [filteredPlanned]);
 
@@ -1021,7 +920,11 @@ export default function SpendingPage() {
       .sort((a, b) => b.forecast - a.forecast || a.name.localeCompare(b.name));
   }, [categories, budgets, totalsByCategory, plannedByCategory, range.budgetMode]);
 
-  const totalBudget = React.useMemo(() => budgetRows.reduce((sum, row) => sum + (Number(row.budget) || 0), 0), [budgetRows]);
+  const totalBudget = React.useMemo(
+    () => budgetRows.reduce((sum, row) => sum + (Number(row.budget) || 0), 0),
+    [budgetRows]
+  );
+
   const remaining = totalBudget - totals.expense;
   const priorityCategory = totalsByCategory[0];
 
@@ -1032,7 +935,7 @@ export default function SpendingPage() {
     return (priorityCategory.total / budget) * 100;
   }, [priorityCategory, budgets, range.budgetMode]);
 
-  const recentActivity = React.useMemo(() => filteredTransactions.slice(0, 8), [filteredTransactions]);
+  const recentActivity = React.useMemo(() => filteredTransactions.slice(0, 7), [filteredTransactions]);
 
   const upcomingItems = React.useMemo(() => {
     const now = new Date();
@@ -1040,9 +943,10 @@ export default function SpendingPage() {
       .filter((p) => toDate(p.date) >= new Date(now.getFullYear(), now.getMonth(), now.getDate()))
       .sort((a, b) => {
         if (a.date !== b.date) return String(a.date).localeCompare(String(b.date));
-        return String(a.time || "").localeCompare(String(b.time || ""));
+        if ((a.time || "") !== (b.time || "")) return String(a.time || "").localeCompare(String(b.time || ""));
+        return Number(a.createdAt || 0) - Number(b.createdAt || 0);
       })
-      .slice(0, 8);
+      .slice(0, 7);
   }, [plannedItems]);
 
   function clearQuickAdd() {
@@ -1054,27 +958,8 @@ export default function SpendingPage() {
     setQaPayment("Card");
     setQaAccount("Checking");
     setQaType("expense");
-    setQaCategoryId("groceries");
+    setQaCategoryId(categories[0]?.id || "groceries");
     setMode("now");
-  }
-
-  function openMenuFromButton(e, items) {
-    const rect = e.currentTarget.getBoundingClientRect();
-    const menuWidth = 224;
-    const menuHeightGuess = Math.max(52, items.length * 44 + 16);
-    const gap = 10;
-
-    let left = rect.right - menuWidth;
-    left = Math.max(12, Math.min(left, window.innerWidth - menuWidth - 12));
-
-    const roomBelow = window.innerHeight - rect.bottom;
-    const roomAbove = rect.top;
-    const openUp = roomBelow < menuHeightGuess && roomAbove > roomBelow;
-
-    let top = openUp ? rect.top - menuHeightGuess - gap : rect.bottom + gap;
-    top = Math.max(12, Math.min(top, window.innerHeight - menuHeightGuess - 12));
-
-    setMenu({ top, left, items });
   }
 
   async function addNow() {
@@ -1082,9 +967,20 @@ export default function SpendingPage() {
     if (!user) return;
 
     const amt = parseMoneyInput(qaAmount);
-    if (!Number.isFinite(amt) || amt <= 0) return alert("Enter a valid amount.");
-    if (!qaDate) return alert("Date required.");
-    if (qaType === "expense" && !qaCategoryId) return alert("Pick a category.");
+    if (!Number.isFinite(amt) || amt <= 0) {
+      alert("Enter a valid amount.");
+      return;
+    }
+
+    if (!qaDate) {
+      alert("Date required.");
+      return;
+    }
+
+    if (qaType === "expense" && !qaCategoryId) {
+      alert("Pick a category.");
+      return;
+    }
 
     setSaving(true);
 
@@ -1093,7 +989,7 @@ export default function SpendingPage() {
         id: uid(),
         type: qaType,
         amount: Math.round(amt * 100) / 100,
-        categoryId: qaType === "expense" ? qaCategoryId : qaCategoryId || "",
+        categoryId: qaType === "expense" ? qaCategoryId : "",
         date: qaDate,
         time: normalizeTime(qaTime),
         merchant: qaMerchant.trim(),
@@ -1108,6 +1004,7 @@ export default function SpendingPage() {
         .insert([mapTransactionClientToRow(tx, user.id)])
         .select()
         .single();
+
       if (error) throw error;
 
       const saved = mapTransactionRowToClient(data);
@@ -1128,9 +1025,20 @@ export default function SpendingPage() {
     if (!user) return;
 
     const amt = parseMoneyInput(qaAmount);
-    if (!Number.isFinite(amt) || amt <= 0) return alert("Enter a valid amount.");
-    if (!qaDate) return alert("Planned date required.");
-    if (!qaCategoryId) return alert("Pick a category.");
+    if (!Number.isFinite(amt) || amt <= 0) {
+      alert("Enter a valid amount.");
+      return;
+    }
+
+    if (!qaDate) {
+      alert("Planned date required.");
+      return;
+    }
+
+    if (!qaCategoryId) {
+      alert("Pick a category.");
+      return;
+    }
 
     setSaving(true);
 
@@ -1151,6 +1059,7 @@ export default function SpendingPage() {
         .insert([mapPlannedClientToRow(planned, user.id)])
         .select()
         .single();
+
       if (error) throw error;
 
       const saved = mapPlannedRowToClient(data);
@@ -1179,6 +1088,7 @@ export default function SpendingPage() {
         .delete()
         .eq("id", id)
         .eq("user_id", user.id);
+
       if (error) throw error;
 
       await deleteCalendarEventBySource(user.id, "spending", id);
@@ -1193,13 +1103,18 @@ export default function SpendingPage() {
     if (!user) return;
 
     try {
-      const clone = { ...tx, id: uid(), createdAt: Date.now() };
+      const clone = {
+        ...tx,
+        id: uid(),
+        createdAt: Date.now(),
+      };
 
       const { data, error } = await supabase
         .from("spending_transactions")
         .insert([mapTransactionClientToRow(clone, user.id)])
         .select()
         .single();
+
       if (error) throw error;
 
       const saved = mapTransactionRowToClient(data);
@@ -1225,6 +1140,7 @@ export default function SpendingPage() {
         .delete()
         .eq("id", id)
         .eq("user_id", user.id);
+
       if (error) throw error;
 
       await deleteCalendarEventBySource(user.id, "planned_expense", id);
@@ -1258,6 +1174,7 @@ export default function SpendingPage() {
         .insert([mapTransactionClientToRow(tx, user.id)])
         .select()
         .single();
+
       if (txErr) throw txErr;
 
       const { error: plannedErr } = await supabase
@@ -1265,6 +1182,7 @@ export default function SpendingPage() {
         .delete()
         .eq("id", planned.id)
         .eq("user_id", user.id);
+
       if (plannedErr) throw plannedErr;
 
       const savedTx = mapTransactionRowToClient(insertedTx);
@@ -1285,25 +1203,41 @@ export default function SpendingPage() {
 
     const name = newCategoryName.trim();
     const group = newCategoryGroup.trim() || "Other";
-    if (!name) return alert("Category name required.");
+
+    if (!name) {
+      alert("Category name required.");
+      return;
+    }
 
     const id =
       name.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 30) || uid();
 
-    if (categoriesById.get(id)) return alert("Category already exists.");
+    if (categoriesById.get(id)) {
+      alert("Category already exists.");
+      return;
+    }
 
     try {
-      const cat = normalizeCategory({ id, name, group, color: "#94a3b8", isBudgeted: true });
+      const cat = normalizeCategory({
+        id,
+        name,
+        group,
+        color: "#94a3b8",
+        isBudgeted: true,
+      });
 
       const { data, error } = await supabase
         .from("spending_categories")
         .insert([mapCategoryClientToRow(cat, user.id)])
         .select()
         .single();
+
       if (error) throw error;
 
       setCategories((prev) =>
-        [...prev, mapCategoryRowToClient(data)].sort((a, b) => a.group.localeCompare(b.group) || a.name.localeCompare(b.name))
+        [...prev, mapCategoryRowToClient(data)].sort(
+          (a, b) => a.group.localeCompare(b.group) || a.name.localeCompare(b.name)
+        )
       );
       setNewCategoryName("");
       setNewCategoryGroup("Other");
@@ -1325,6 +1259,7 @@ export default function SpendingPage() {
         .delete()
         .eq("id", id)
         .eq("user_id", user.id);
+
       if (error) throw error;
     } catch (err) {
       setCategories(previous);
@@ -1365,607 +1300,1461 @@ export default function SpendingPage() {
     if (error) setPageError(error.message || "Failed to save budget.");
   }
 
+  const currentMonth = new Date().toLocaleString(undefined, {
+    month: "long",
+    year: "numeric",
+  });
+
+  const styles = (
+    <style jsx global>{`
+      .spendingPage {
+        --text: #f7f8ff;
+        --muted: rgba(225, 232, 255, 0.72);
+        --muted2: rgba(225, 232, 255, 0.46);
+        --line: rgba(255, 255, 255, 0.1);
+        --glass: linear-gradient(180deg, rgba(6, 12, 24, 0.44), rgba(4, 8, 16, 0.2));
+        --glassSoft: linear-gradient(180deg, rgba(255,255,255,0.026), rgba(255,255,255,0.006));
+        --shadow: 0 20px 60px rgba(0,0,0,0.22), inset 0 1px 0 rgba(255,255,255,0.045);
+        color: var(--text);
+        color-scheme: dark;
+      }
+
+      .spendingPage *,
+      .spendingPage *::before,
+      .spendingPage *::after {
+        box-sizing: border-box;
+      }
+
+      .spendingPage .spShell {
+        width: 100%;
+        max-width: none;
+        margin: 0;
+        padding: 22px 12px 58px 4px;
+      }
+
+      .spendingPage .spCard,
+      .spendingPage .spHero,
+      .spendingPage .spMetric,
+      .spendingPage .spMiniCard,
+      .spendingPage .spGlassLine {
+        position: relative;
+        overflow: hidden;
+        border-radius: 30px;
+        border: 1px solid rgba(255,255,255,0.078);
+        background: var(--glass);
+        box-shadow: var(--shadow);
+        backdrop-filter: blur(15px) saturate(126%);
+        -webkit-backdrop-filter: blur(15px) saturate(126%);
+      }
+
+      .spendingPage .spCard::before,
+      .spendingPage .spHero::before,
+      .spendingPage .spMetric::before,
+      .spendingPage .spMiniCard::before,
+      .spendingPage .spGlassLine::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        background:
+          radial-gradient(circle at top left, rgba(80,120,255,0.08), transparent 28%),
+          radial-gradient(circle at top right, rgba(255,255,255,0.022), transparent 18%),
+          radial-gradient(circle at bottom center, rgba(255,107,127,0.035), transparent 28%);
+      }
+
+      .spendingPage .spHero {
+        padding: 28px;
+        margin-bottom: 22px;
+      }
+
+      .spendingPage .spHeroTop {
+        position: relative;
+        z-index: 1;
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 20px;
+        flex-wrap: wrap;
+      }
+
+      .spendingPage .spHeroTop > *,
+      .spendingPage .spCardHead > *,
+      .spendingPage .spListHead > * {
+        min-width: 0;
+      }
+
+      .spendingPage .spEyebrow {
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.2em;
+        color: var(--muted2);
+        margin-bottom: 12px;
+      }
+
+      .spendingPage .spTitle {
+        margin: 0;
+        font-size: clamp(34px, 4vw, 64px);
+        line-height: 0.95;
+        font-weight: 950;
+        letter-spacing: -0.045em;
+      }
+
+      .spendingPage .spSub {
+        margin-top: 12px;
+        max-width: 960px;
+        color: var(--muted);
+        line-height: 1.6;
+        font-size: 15px;
+      }
+
+      .spendingPage .spChipRow,
+      .spendingPage .spActionRow {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+
+      .spendingPage .spChip {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 40px;
+        padding: 10px 15px;
+        border-radius: 999px;
+        border: 1px solid rgba(255,255,255,0.075);
+        background: rgba(255,255,255,0.038);
+        color: #f5f7ff;
+        font-size: 12px;
+        font-weight: 800;
+        letter-spacing: 0.04em;
+      }
+
+      .spendingPage .spHeroMeta {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        max-width: 100%;
+      }
+
+      .spendingPage .spSegment {
+        display: inline-flex;
+        gap: 6px;
+        padding: 4px;
+        border-radius: 999px;
+        border: 1px solid rgba(255,255,255,0.08);
+        background: rgba(255,255,255,0.04);
+      }
+
+      .spendingPage .spSegmentBtn,
+      .spendingPage .spTabBtn,
+      .spendingPage .spSolidBtn,
+      .spendingPage .spGhostBtn,
+      .spendingPage .spDangerBtn {
+        min-height: 44px;
+        padding: 0 16px;
+        border-radius: 14px;
+        font-size: 13px;
+        font-weight: 800;
+        letter-spacing: 0.02em;
+        cursor: pointer;
+        transition:
+          transform 0.18s ease,
+          border-color 0.18s ease,
+          background 0.18s ease,
+          box-shadow 0.18s ease,
+          opacity 0.18s ease;
+      }
+
+      .spendingPage .spSegmentBtn:hover,
+      .spendingPage .spTabBtn:hover,
+      .spendingPage .spSolidBtn:hover,
+      .spendingPage .spGhostBtn:hover,
+      .spendingPage .spDangerBtn:hover {
+        transform: translateY(-1px);
+      }
+
+      .spendingPage .spSegmentBtn,
+      .spendingPage .spTabBtn,
+      .spendingPage .spGhostBtn {
+        border: 1px solid rgba(255,255,255,0.09);
+        background: rgba(255,255,255,0.03);
+        color: #f5f7ff;
+      }
+
+      .spendingPage .spSegmentBtn.active,
+      .spendingPage .spTabBtn.active {
+        border-color: rgba(255,255,255,0.14);
+        background: linear-gradient(180deg, rgba(255,255,255,0.98), rgba(233,237,246,0.92));
+        color: #08111f;
+      }
+
+      .spendingPage .spSolidBtn {
+        border: 1px solid rgba(130,170,255,0.24);
+        background: linear-gradient(180deg, rgba(77,124,255,0.22), rgba(32,74,189,0.12));
+        color: #f7f9ff;
+      }
+
+      .spendingPage .spDangerBtn {
+        border: 1px solid rgba(244,114,182,0.22);
+        background: rgba(244,114,182,0.08);
+        color: #ffd5e5;
+      }
+
+      .spendingPage .spSegmentBtn:disabled,
+      .spendingPage .spTabBtn:disabled,
+      .spendingPage .spSolidBtn:disabled,
+      .spendingPage .spGhostBtn:disabled,
+      .spendingPage .spDangerBtn:disabled {
+        opacity: 0.55;
+        cursor: not-allowed;
+        transform: none;
+      }
+
+      .spendingPage .spMetricGrid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(235px, 1fr));
+        gap: 18px;
+        margin-bottom: 22px;
+      }
+
+      .spendingPage .spMetric {
+        padding: 22px;
+        min-height: 168px;
+      }
+
+      .spendingPage .spMetricLabel {
+        position: relative;
+        z-index: 1;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.18em;
+        color: var(--muted2);
+      }
+
+      .spendingPage .spMetricValue {
+        position: relative;
+        z-index: 1;
+        margin-top: 14px;
+        font-size: clamp(30px, 3.1vw, 48px);
+        line-height: 1;
+        font-weight: 950;
+        letter-spacing: -0.04em;
+      }
+
+      .spendingPage .spMetricSub {
+        position: relative;
+        z-index: 1;
+        margin-top: 14px;
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.5;
+      }
+
+      .spendingPage .spMetricAccent {
+        display: inline-block;
+        margin-right: 6px;
+        font-weight: 900;
+      }
+
+      .spendingPage .spOverviewGrid,
+      .spendingPage .spOverviewGridLower,
+      .spendingPage .spManageGrid {
+        display: grid;
+        gap: 20px;
+      }
+
+      .spendingPage .spOverviewGrid {
+        grid-template-columns: minmax(0, 1.68fr) minmax(520px, 1fr);
+        margin-bottom: 20px;
+      }
+
+      .spendingPage .spOverviewGridLower {
+        grid-template-columns: minmax(0, 1.42fr) minmax(470px, 1fr);
+      }
+
+      .spendingPage .spManageGrid {
+        grid-template-columns: minmax(0, 1.34fr) minmax(460px, 1fr);
+      }
+
+      .spendingPage .spCard {
+        padding: 24px;
+      }
+
+      .spendingPage .spCardHead {
+        position: relative;
+        z-index: 1;
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 14px;
+        flex-wrap: wrap;
+        margin-bottom: 16px;
+      }
+
+      .spendingPage .spSectionTitle {
+        margin: 0;
+        font-size: 34px;
+        line-height: 1;
+        font-weight: 900;
+        letter-spacing: -0.03em;
+      }
+
+      .spendingPage .spSectionMini {
+        margin: 0;
+        font-size: 20px;
+        line-height: 1.1;
+        font-weight: 900;
+      }
+
+      .spendingPage .spSectionText {
+        margin-top: 8px;
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.55;
+      }
+
+      .spendingPage .spTiny {
+        color: var(--muted2);
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        font-size: 10px;
+        font-weight: 700;
+        margin-bottom: 8px;
+      }
+
+      .spendingPage .spInnerCard {
+        position: relative;
+        z-index: 1;
+        border-radius: 22px;
+        padding: 16px;
+        border: 1px solid rgba(255,255,255,0.06);
+        background: linear-gradient(180deg, rgba(10,16,28,0.38), rgba(5,9,17,0.15));
+      }
+
+      .spendingPage .spInnerGrid2 {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 14px;
+      }
+
+      .spendingPage .spMiniStatGrid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 14px;
+        margin-top: 18px;
+      }
+
+      .spendingPage .spColumnStack,
+      .spendingPage .spStack,
+      .spendingPage .spList {
+        display: grid;
+        gap: 14px;
+      }
+
+      .spendingPage .spSplitList {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+      }
+
+      .spendingPage .spQuickGrid4 {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 14px;
+      }
+
+      .spendingPage .spQuickGrid2,
+      .spendingPage .spFilterGrid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 14px;
+      }
+
+      .spendingPage .spField,
+      .spendingPage .spSelect,
+      .spendingPage .spTextarea {
+        width: 100%;
+        min-height: 50px;
+        border-radius: 16px;
+        border: 1px solid rgba(177,196,255,0.14);
+        background: rgba(8, 13, 24, 0.52) !important;
+        color: #f4f7ff !important;
+        font-size: 14px;
+        font-weight: 600;
+        padding: 0 14px;
+        outline: none;
+        box-shadow: inset 0 1px 0 rgba(255,255,255,0.02), 0 0 0 rgba(0,0,0,0);
+        transition: border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+      }
+
+      .spendingPage .spTextarea {
+        min-height: 102px;
+        padding: 12px 14px;
+        resize: vertical;
+      }
+
+      .spendingPage .spField::placeholder,
+      .spendingPage .spTextarea::placeholder {
+        color: rgba(233,238,255,0.44) !important;
+      }
+
+      .spendingPage .spField:focus,
+      .spendingPage .spSelect:focus,
+      .spendingPage .spTextarea:focus {
+        border-color: rgba(121,163,255,0.36);
+        box-shadow: 0 0 0 4px rgba(59,130,246,0.08);
+      }
+
+      .spendingPage .spSelect {
+        cursor: pointer;
+      }
+
+      .spendingPage .spSelect option {
+        background: #08111f !important;
+        color: #f4f7ff !important;
+      }
+
+      .spendingPage input:-webkit-autofill,
+      .spendingPage input:-webkit-autofill:hover,
+      .spendingPage input:-webkit-autofill:focus,
+      .spendingPage textarea:-webkit-autofill,
+      .spendingPage select:-webkit-autofill {
+        -webkit-text-fill-color: #f4f7ff !important;
+        -webkit-box-shadow: 0 0 0px 1000px #0a1321 inset !important;
+        box-shadow: 0 0 0px 1000px #0a1321 inset !important;
+        transition: background-color 9999s ease-in-out 0s;
+      }
+
+      .spendingPage input[type="date"]::-webkit-calendar-picker-indicator,
+      .spendingPage input[type="time"]::-webkit-calendar-picker-indicator {
+        filter: invert(1) opacity(0.72);
+        cursor: pointer;
+      }
+
+      .spendingPage .spTrendWrap {
+        overflow: hidden;
+        border-radius: 24px;
+        border: 1px solid rgba(255,255,255,0.055);
+        background: linear-gradient(180deg, rgba(10,16,28,0.34), rgba(5,9,17,0.12));
+        padding: 12px;
+      }
+
+      .spendingPage .spTrendSvg {
+        display: block;
+        width: 100%;
+        height: 280px;
+      }
+
+      .spendingPage .spBudgetGrid {
+        display: grid;
+        gap: 14px;
+      }
+
+      .spendingPage .spBudgetItem {
+        border-radius: 22px;
+        border: 1px solid rgba(255,255,255,0.055);
+        background: linear-gradient(180deg, rgba(10,16,28,0.38), rgba(5,9,17,0.14));
+        padding: 16px;
+      }
+
+      .spendingPage .spBudgetHead {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 12px;
+        flex-wrap: wrap;
+        margin-bottom: 12px;
+      }
+
+      .spendingPage .spBudgetMeta {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 12px;
+        margin-top: 12px;
+      }
+
+      .spendingPage .spPillStatus {
+        display: inline-flex;
+        align-items: center;
+        min-height: 30px;
+        padding: 6px 10px;
+        border-radius: 999px;
+        font-size: 11px;
+        font-weight: 900;
+        letter-spacing: 0.04em;
+      }
+
+      .spendingPage .spProgress {
+        height: 10px;
+        overflow: hidden;
+        border-radius: 999px;
+        background: rgba(255,255,255,0.1);
+      }
+
+      .spendingPage .spProgressFill {
+        height: 100%;
+        border-radius: 999px;
+        transition: width 0.45s ease;
+      }
+
+      .spendingPage .spListItem {
+        position: relative;
+        overflow: hidden;
+        border-radius: 22px;
+        padding: 14px;
+        border: 1px solid rgba(255,255,255,0.055);
+        background: linear-gradient(180deg, rgba(8,13,24,0.34), rgba(4,8,16,0.12));
+      }
+
+      .spendingPage .spListHead {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+
+      .spendingPage .spListHead > :first-child {
+        flex: 1 1 240px;
+        min-width: 0;
+      }
+
+      .spendingPage .spListHead > :last-child {
+        flex: 0 0 auto;
+      }
+
+      .spendingPage .spListTitle {
+        font-size: 16px;
+        font-weight: 900;
+      }
+
+      .spendingPage .spMuted {
+        color: var(--muted);
+      }
+
+      .spendingPage .spMuted2 {
+        color: var(--muted2);
+      }
+
+      .spendingPage .spValueGood {
+        color: rgb(134 239 172);
+        font-weight: 900;
+      }
+
+      .spendingPage .spValueBad {
+        color: rgb(255 176 196);
+        font-weight: 900;
+      }
+
+      .spendingPage .spValueWarn {
+        color: rgb(253 224 71);
+        font-weight: 900;
+      }
+
+      .spendingPage .spBudgetInput {
+        max-width: 150px;
+      }
+
+      .spendingPage .spError {
+        padding: 14px 16px;
+        margin-bottom: 18px;
+        border-radius: 22px;
+        border: 1px solid rgba(244,114,182,0.26);
+        background: linear-gradient(180deg, rgba(96,17,44,0.28), rgba(36,8,18,0.2));
+      }
+
+      .spendingPage .spEmpty {
+        border: 1px dashed rgba(255,255,255,0.1);
+        border-radius: 18px;
+        padding: 16px;
+        color: var(--muted);
+        background: rgba(255,255,255,0.018);
+      }
+
+      .spendingPage .spTitle,
+      .spendingPage .spSectionTitle,
+      .spendingPage .spSectionMini,
+      .spendingPage .spListTitle,
+      .spendingPage .spMetricValue,
+      .spendingPage .spMetricSub,
+      .spendingPage .spSectionText {
+        overflow-wrap: anywhere;
+      }
+
+      @media (max-width: 1580px) {
+        .spendingPage .spOverviewGrid {
+          grid-template-columns: minmax(0, 1.45fr) minmax(470px, 1fr);
+        }
+
+        .spendingPage .spOverviewGridLower,
+        .spendingPage .spManageGrid {
+          grid-template-columns: minmax(0, 1.16fr) minmax(410px, 0.96fr);
+        }
+      }
+
+      @media (max-width: 1320px) {
+        .spendingPage .spMetricGrid {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .spendingPage .spOverviewGrid,
+        .spendingPage .spOverviewGridLower,
+        .spendingPage .spManageGrid {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      @media (max-width: 980px) {
+        .spendingPage .spMiniStatGrid,
+        .spendingPage .spSplitList,
+        .spendingPage .spQuickGrid4,
+        .spendingPage .spQuickGrid2,
+        .spendingPage .spInnerGrid2,
+        .spendingPage .spBudgetMeta,
+        .spendingPage .spFilterGrid {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      @media (max-width: 760px) {
+        .spendingPage .spShell {
+          padding: 16px 10px 34px;
+        }
+
+        .spendingPage .spHero,
+        .spendingPage .spCard,
+        .spendingPage .spMetric {
+          border-radius: 22px;
+          padding: 18px;
+        }
+
+        .spendingPage .spMetricGrid {
+          grid-template-columns: 1fr;
+        }
+
+        .spendingPage .spHeroMeta,
+        .spendingPage .spActionRow {
+          justify-content: flex-start;
+        }
+
+        .spendingPage .spSectionTitle {
+          font-size: 26px;
+        }
+
+        .spendingPage .spTitle {
+          font-size: 36px;
+        }
+
+        .spendingPage .spTrendSvg {
+          height: 230px;
+        }
+      }
+    `}</style>
+  );
+
+  const quickAddSave = async () => {
+    if (mode === "planned") {
+      await addPlanned();
+      return;
+    }
+    await addNow();
+  };
+
   if (loading) {
     return (
-      <div className="mx-auto max-w-[1720px] px-4 py-4">
-        <ShellCard className="p-5 text-white/70">Loading spending...</ShellCard>
-      </div>
+      <main className="spendingPage">
+        {styles}
+        <div className="spShell">
+          <section className="spHero">
+            <div className="spHeroTop">
+              <div>
+                <div className="spEyebrow">LIVE FINANCE BOARD</div>
+                <h1 className="spTitle">Spending Control</h1>
+                <div className="spSub">Loading spending...</div>
+              </div>
+            </div>
+          </section>
+        </div>
+      </main>
     );
   }
 
   if (!user) {
     return (
-      <div className="mx-auto max-w-[1720px] px-4 py-4">
-        <ShellCard className="p-6">
-          <div className="text-lg font-black text-white">Please log in</div>
-          <div className="mt-2 text-sm text-white/60">This page uses Supabase, so you need to be signed in.</div>
-        </ShellCard>
-      </div>
+      <main className="spendingPage">
+        {styles}
+        <div className="spShell">
+          <section className="spHero">
+            <div className="spHeroTop">
+              <div>
+                <div className="spEyebrow">LIVE FINANCE BOARD</div>
+                <h1 className="spTitle">Spending Control</h1>
+                <div className="spSub">This page needs an authenticated user.</div>
+              </div>
+            </div>
+          </section>
+        </div>
+      </main>
     );
   }
 
   return (
-    <div className="mx-auto max-w-[1720px] space-y-4 px-4 py-4">
-      <FloatingMenu menu={menu} onClose={() => setMenu(null)} />
+    <main className="spendingPage">
+      {styles}
 
-      <ShellCard className="px-6 py-5">
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-          <div className="min-w-0">
-            <div className="mb-1 text-[10px] font-black uppercase tracking-[0.28em] text-white/45">
-              Life Command Center
-            </div>
-            <h1 className="m-0 text-3xl font-black tracking-tight text-white md:text-[2.2rem]">
-              Spending Control
-            </h1>
-            <div className="mt-1 text-sm text-white/56">
-              Real spending, planned hits, budget pressure, and calendar sync in one command view.
-            </div>
-          </div>
+      <div className="spShell">
+        <header className="spHero">
+          <div className="spHeroTop">
+            <div>
+              <div className="spEyebrow">LIVE FINANCE BOARD</div>
+              <h1 className="spTitle">Spending Control</h1>
+              <div className="spSub">
+                Wider desktop spread, cleaner right side, and slightly more transparent cards so the background actually shows.
+              </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            {["week", "month", "year"].map((p) => {
-              const active = period === p;
-              return (
+              <div className="spChipRow" style={{ marginTop: 14 }}>
+                <span className="spChip">{range.label.toUpperCase()}</span>
+                <span className="spChip">{filteredTransactions.length} TRANSACTIONS</span>
+                <span className="spChip">{filteredPlanned.length} PLANNED</span>
+                <span className="spChip">{currentMonth}</span>
+              </div>
+            </div>
+
+            <div className="spHeroMeta">
+              <div className="spSegment">
+                {["week", "month", "year"].map((p) => (
+                  <button
+                    key={p}
+                    type="button"
+                    className={`spSegmentBtn ${period === p ? "active" : ""}`}
+                    onClick={() => setPeriod(p)}
+                  >
+                    {p[0].toUpperCase() + p.slice(1)}
+                  </button>
+                ))}
+              </div>
+
+              <div className="spSegment">
                 <button
-                  key={p}
-                  onClick={() => setPeriod(p)}
-                  className="min-h-10 rounded-full px-4 text-sm font-black transition"
-                  style={{
-                    border: active ? "1px solid rgba(255,255,255,0.16)" : "1px solid rgba(255,255,255,0.08)",
-                    background: active
-                      ? "linear-gradient(180deg, rgba(255,255,255,.96), rgba(235,235,235,.92))"
-                      : "linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.03))",
-                    color: active ? "#09111f" : "rgba(255,255,255,0.88)",
-                  }}
+                  type="button"
+                  className={`spTabBtn ${tab === "overview" ? "active" : ""}`}
+                  onClick={() => setTab("overview")}
                 >
-                  {p[0].toUpperCase() + p.slice(1)}
-                </button>
-              );
-            })}
-
-            <Tabs value={tab} onValueChange={setTab}>
-              <TabsList className="h-11 rounded-full border border-white/10 bg-black/40 p-1">
-                <TabsTrigger value="overview" className="rounded-full px-5 text-sm">
                   Overview
-                </TabsTrigger>
-                <TabsTrigger value="manage" className="rounded-full px-5 text-sm">
+                </button>
+                <button
+                  type="button"
+                  className={`spTabBtn ${tab === "manage" ? "active" : ""}`}
+                  onClick={() => setTab("manage")}
+                >
                   Manage
-                </TabsTrigger>
-              </TabsList>
-            </Tabs>
+                </button>
+              </div>
+            </div>
           </div>
-        </div>
-      </ShellCard>
+        </header>
 
-      {pageError ? (
-        <ShellCard className="border-red-400/20 p-4">
-          <div className="font-black text-white">Database issue</div>
-          <div className="mt-1 text-sm text-white/60">{pageError}</div>
-        </ShellCard>
-      ) : null}
+        {pageError ? (
+          <div className="spError">
+            <div style={{ fontWeight: 900, fontSize: 15 }}>Database issue</div>
+            <div className="spSectionText" style={{ marginTop: 6 }}>
+              {pageError}
+            </div>
+          </div>
+        ) : null}
 
-      <div className="grid gap-4 xl:grid-cols-4">
-        <MetricCard title="Spent" value={money(totals.expense)} sub={expenseTrend.text} accentValue={expenseTrend.value} tone="red" />
-        <MetricCard title="Planned" value={money(totals.plannedExpense)} sub="still coming" accentValue={upcomingItems.length ? `${upcomingItems.length} items` : ""} tone="amber" />
-        <MetricCard title="Remaining" value={money(Math.max(remaining, 0))} sub={remaining < 0 ? "budget exceeded" : `from ${money(totalBudget)} budget`} accentValue={remaining < 0 ? money(Math.abs(remaining)) : ""} tone="green" />
-        <MetricCard title="Net" value={money(totals.net)} sub="income - spend" accentValue={money(totals.forecastNet)} tone="neutral" />
-      </div>
+        <section className="spMetricGrid">
+          <article className="spMetric">
+            <div className="spMetricLabel">Spent</div>
+            <div className="spMetricValue">{money(totals.expense)}</div>
+            <div className="spMetricSub">
+              <span className="spMetricAccent" style={{ color: TONE.red }}>
+                {expenseTrend.value}
+              </span>
+              {expenseTrend.text}
+            </div>
+          </article>
 
-      <Tabs value={tab} onValueChange={setTab}>
-        <TabsList className="hidden" />
+          <article className="spMetric">
+            <div className="spMetricLabel">Planned</div>
+            <div className="spMetricValue">{money(totals.plannedExpense)}</div>
+            <div className="spMetricSub">
+              {upcomingItems.length > 0 ? `${upcomingItems.length} upcoming item(s)` : "Nothing planned yet"}
+            </div>
+          </article>
 
-        <TabsContent value="overview" className="space-y-4">
-          <div className="grid gap-4 xl:grid-cols-[minmax(0,1.25fr)_420px]">
-            <ShellCard className="p-5">
-              <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                <div>
-                  <div className="text-[11px] font-black uppercase tracking-[0.18em] text-white/40">{range.label}</div>
-                  <div className="mt-1 text-xl font-black text-white">Spending pressure</div>
-                </div>
-                <div className="text-sm text-white/50">
-                  Top category: <span className="font-bold text-white/85">{priorityCategory?.category?.name || "—"}</span>
-                </div>
-              </div>
+          <article className="spMetric">
+            <div className="spMetricLabel">Remaining</div>
+            <div className="spMetricValue">{money(Math.max(remaining, 0))}</div>
+            <div className="spMetricSub">
+              {remaining < 0 ? `Over by ${money(Math.abs(remaining))}` : `From ${money(totalBudget)} budget`}
+            </div>
+          </article>
 
-              <TrendChart data={trendData} />
+          <article className="spMetric">
+            <div className="spMetricLabel">Net</div>
+            <div className="spMetricValue">{money(totals.net)}</div>
+            <div className="spMetricSub">Forecast {money(totals.forecastNet)}</div>
+          </article>
+        </section>
 
-              <div className="mt-5 grid gap-4 md:grid-cols-2">
-                <div className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4">
-                  <div className="text-[11px] font-black uppercase tracking-[0.18em] text-white/40">Priority category</div>
-                  <div className="mt-2 text-2xl font-black text-white">{priorityCategory?.category?.name || "No expense data"}</div>
-                  <div className="mt-1 text-sm text-white/56">
-                    {priorityCategory ? money(priorityCategory.total) : "Start logging spending to build this."}
-                  </div>
-                  <div className="mt-4">
-                    <ProgressBar value={priorityPercent} color={priorityPercent >= 100 ? TONE.red : priorityPercent >= 85 ? TONE.amber : TONE.green} />
-                  </div>
-                  <div className="mt-2 text-xs text-white/46">
-                    {priorityPercent ? `${priorityPercent.toFixed(0)}% of category budget` : "No budget on this category yet"}
-                  </div>
-                </div>
-
-                <div className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4">
-                  <div className="text-[11px] font-black uppercase tracking-[0.18em] text-white/40">Forecast view</div>
-                  <div className="mt-2 text-2xl font-black text-white">{money(totals.forecastNet)}</div>
-                  <div className="mt-1 text-sm text-white/56">After planned items land</div>
-
-                  <div className="mt-4 space-y-2">
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-white/56">Live net</span>
-                      <span className="font-bold text-white">{money(totals.net)}</span>
-                    </div>
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-white/56">Planned hits</span>
-                      <span className="font-bold text-amber-300">{money(totals.plannedExpense)}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </ShellCard>
-
-            <div className="space-y-4">
-              <ShellCard className="p-5">
-                <div className="mb-4 flex items-center justify-between">
+        {tab === "overview" ? (
+          <>
+            <section className="spOverviewGrid">
+              <article className="spCard">
+                <div className="spCardHead">
                   <div>
-                    <div className="text-[11px] font-black uppercase tracking-[0.18em] text-white/40">Quick add</div>
-                    <div className="mt-1 text-xl font-black text-white">Log now or plan ahead</div>
+                    <h2 className="spSectionTitle">Spending Pressure</h2>
+                    <div className="spSectionText">
+                      Opened up so the chart has room and the page does not feel jammed.
+                    </div>
                   </div>
-                  <div className="inline-flex rounded-full border border-white/10 bg-white/[0.03] p-1">
+                  <span className="spChip">{priorityCategory?.category?.name || "NO LEADER"}</span>
+                </div>
+
+                <TrendChart data={trendData} />
+
+                <div className="spMiniStatGrid">
+                  <div className="spInnerCard">
+                    <div className="spTiny">Priority Category</div>
+                    <div style={{ fontSize: 28, fontWeight: 950, lineHeight: 1 }}>
+                      {priorityCategory?.category?.name || "No expense data"}
+                    </div>
+                    <div className="spSectionText" style={{ marginTop: 10 }}>
+                      {priorityCategory ? money(priorityCategory.total) : "Start logging spending."}
+                    </div>
+                  </div>
+
+                  <div className="spInnerCard">
+                    <div className="spTiny">Pressure vs Budget</div>
+                    <div style={{ fontSize: 28, fontWeight: 950, lineHeight: 1 }}>
+                      {priorityCategory ? `${clamp(priorityPercent, 0, 999).toFixed(0)}%` : "0%"}
+                    </div>
+                    <div className="spSectionText" style={{ marginTop: 10 }}>
+                      {priorityCategory?.category?.name
+                        ? `${priorityCategory.category.name} budget usage`
+                        : "No category leader yet"}
+                    </div>
+                  </div>
+
+                  <div className="spInnerCard">
+                    <div className="spTiny">Forecast View</div>
+                    <div style={{ fontSize: 28, fontWeight: 950, lineHeight: 1 }}>
+                      {money(totals.forecastNet)}
+                    </div>
+                    <div className="spSectionText" style={{ marginTop: 10 }}>
+                      After planned items land.
+                    </div>
+                  </div>
+                </div>
+              </article>
+
+              <article className="spCard">
+                <div className="spCardHead">
+                  <div>
+                    <h2 className="spSectionTitle">Quick Add</h2>
+                    <div className="spSectionText">Now the right side has real room and the fields are not choking each other.</div>
+                  </div>
+
+                  <div className="spSegment">
                     <button
                       type="button"
+                      className={`spSegmentBtn ${mode === "now" ? "active" : ""}`}
                       onClick={() => setMode("now")}
-                      className={`rounded-full px-4 py-2 text-sm font-black transition ${mode === "now" ? "bg-white text-[#08111f]" : "text-white/70"}`}
                     >
                       Now
                     </button>
                     <button
                       type="button"
-                      onClick={() => setMode("planned")}
-                      className={`rounded-full px-4 py-2 text-sm font-black transition ${mode === "planned" ? "bg-white text-[#08111f]" : "text-white/70"}`}
+                      className={`spSegmentBtn ${mode === "planned" ? "active" : ""}`}
+                      onClick={() => {
+                        setMode("planned");
+                        setQaType("expense");
+                      }}
                     >
                       Planned
                     </button>
                   </div>
                 </div>
 
-                <div className="grid gap-3">
-                  {mode === "now" ? (
-                    <div className="grid gap-3 sm:grid-cols-2">
+                <div className="spStack">
+                  <div className="spQuickGrid4">
+                    {mode === "now" ? (
                       <div>
-                        <Label className="mb-2 block text-white/72">Type</Label>
-                        <LccSelect
-                          value={qaType}
-                          onValueChange={setQaType}
-                          items={[
-                            { value: "expense", label: "Expense" },
-                            { value: "income", label: "Income" },
-                          ]}
-                        />
+                        <div className="spTiny">Type</div>
+                        <select className="spSelect" value={qaType} onChange={(e) => setQaType(e.target.value)}>
+                          <option value="expense">Expense</option>
+                          <option value="income">Income</option>
+                          <option value="transfer">Transfer</option>
+                        </select>
                       </div>
-
+                    ) : (
                       <div>
-                        <Label className="mb-2 block text-white/72">Amount</Label>
-                        <Input value={qaAmount} onChange={(e) => setQaAmount(e.target.value)} placeholder="0.00" className="h-11 rounded-2xl border-white/10 bg-white/[0.04] text-white" />
+                        <div className="spTiny">Type</div>
+                        <div className="spChip" style={{ width: "100%" }}>
+                          PLANNED EXPENSE
+                        </div>
                       </div>
+                    )}
 
-                      <div>
-                        <Label className="mb-2 block text-white/72">Date</Label>
-                        <Input type="date" value={qaDate} onChange={(e) => setQaDate(e.target.value)} className="h-11 rounded-2xl border-white/10 bg-white/[0.04] text-white" />
-                      </div>
-
-                      <div>
-                        <Label className="mb-2 block text-white/72">Time</Label>
-                        <Input type="time" value={qaTime} onChange={(e) => setQaTime(e.target.value)} className="h-11 rounded-2xl border-white/10 bg-white/[0.04] text-white" />
-                      </div>
-
-                      <div>
-                        <Label className="mb-2 block text-white/72">Category</Label>
-                        <LccSelect
-                          value={qaCategoryId}
-                          onValueChange={setQaCategoryId}
-                          items={categories.map((c) => ({
-                            value: c.id,
-                            label: `${c.group} • ${c.name}`,
-                          }))}
-                        />
-                      </div>
-
-                      <div>
-                        <Label className="mb-2 block text-white/72">Merchant</Label>
-                        <Input value={qaMerchant} onChange={(e) => setQaMerchant(e.target.value)} placeholder="Where did it go?" className="h-11 rounded-2xl border-white/10 bg-white/[0.04] text-white" />
-                      </div>
-
-                      <div>
-                        <Label className="mb-2 block text-white/72">Payment</Label>
-                        <LccSelect
-                          value={qaPayment}
-                          onValueChange={setQaPayment}
-                          items={[
-                            { value: "Card", label: "Card" },
-                            { value: "Cash", label: "Cash" },
-                            { value: "Bank", label: "Bank" },
-                            { value: "Transfer", label: "Transfer" },
-                          ]}
-                        />
-                      </div>
-
-                      <div>
-                        <Label className="mb-2 block text-white/72">Account</Label>
-                        <Input value={qaAccount} onChange={(e) => setQaAccount(e.target.value)} placeholder="Checking" className="h-11 rounded-2xl border-white/10 bg-white/[0.04] text-white" />
-                      </div>
-
-                      <div className="sm:col-span-2">
-                        <Label className="mb-2 block text-white/72">Note</Label>
-                        <Input value={qaNote} onChange={(e) => setQaNote(e.target.value)} placeholder="Optional note" className="h-11 rounded-2xl border-white/10 bg-white/[0.04] text-white" />
-                      </div>
+                    <div>
+                      <div className="spTiny">Amount</div>
+                      <input
+                        className="spField"
+                        inputMode="decimal"
+                        placeholder="0.00"
+                        value={qaAmount}
+                        onChange={(e) => setQaAmount(e.target.value)}
+                      />
                     </div>
-                  ) : (
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <div>
-                        <Label className="mb-2 block text-white/72">Amount</Label>
-                        <Input value={qaAmount} onChange={(e) => setQaAmount(e.target.value)} placeholder="0.00" className="h-11 rounded-2xl border-white/10 bg-white/[0.04] text-white" />
-                      </div>
 
-                      <div>
-                        <Label className="mb-2 block text-white/72">Planned date</Label>
-                        <Input type="date" value={qaDate} onChange={(e) => setQaDate(e.target.value)} className="h-11 rounded-2xl border-white/10 bg-white/[0.04] text-white" />
-                      </div>
-
-                      <div>
-                        <Label className="mb-2 block text-white/72">Planned time</Label>
-                        <Input type="time" value={qaTime} onChange={(e) => setQaTime(e.target.value)} className="h-11 rounded-2xl border-white/10 bg-white/[0.04] text-white" />
-                      </div>
-
-                      <div>
-                        <Label className="mb-2 block text-white/72">Category</Label>
-                        <LccSelect
-                          value={qaCategoryId}
-                          onValueChange={setQaCategoryId}
-                          items={categories.map((c) => ({
-                            value: c.id,
-                            label: `${c.group} • ${c.name}`,
-                          }))}
-                        />
-                      </div>
-
-                      <div className="sm:col-span-2">
-                        <Label className="mb-2 block text-white/72">Merchant</Label>
-                        <Input value={qaMerchant} onChange={(e) => setQaMerchant(e.target.value)} placeholder="What is this for?" className="h-11 rounded-2xl border-white/10 bg-white/[0.04] text-white" />
-                      </div>
-
-                      <div className="sm:col-span-2">
-                        <Label className="mb-2 block text-white/72">Note</Label>
-                        <Input value={qaNote} onChange={(e) => setQaNote(e.target.value)} placeholder="Optional note" className="h-11 rounded-2xl border-white/10 bg-white/[0.04] text-white" />
-                      </div>
+                    <div>
+                      <div className="spTiny">Date</div>
+                      <input
+                        className="spField"
+                        type="date"
+                        value={qaDate}
+                        onChange={(e) => setQaDate(e.target.value)}
+                      />
                     </div>
-                  )}
 
-                  <div className="flex flex-wrap items-center gap-2 pt-2">
-                    <Button
-                      type="button"
-                      onClick={mode === "now" ? addNow : addPlanned}
-                      disabled={saving}
-                      className="rounded-2xl bg-white px-5 text-[#09111f] hover:bg-white/90"
-                    >
-                      {saving ? "Saving..." : mode === "now" ? "Save transaction" : "Save planned item"}
-                    </Button>
+                    <div>
+                      <div className="spTiny">Time</div>
+                      <input
+                        className="spField"
+                        type="time"
+                        value={qaTime}
+                        onChange={(e) => setQaTime(e.target.value)}
+                      />
+                    </div>
+                  </div>
 
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={clearQuickAdd}
-                      className="rounded-2xl border-white/10 bg-white/[0.03] text-white hover:bg-white/[0.06]"
-                    >
-                      Clear
-                    </Button>
+                  <div className="spQuickGrid2">
+                    <div>
+                      <div className="spTiny">Category</div>
+                      <select
+                        className="spSelect"
+                        value={qaCategoryId}
+                        onChange={(e) => setQaCategoryId(e.target.value)}
+                      >
+                        {categories.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.group} • {c.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <div className="spTiny">Merchant / Source</div>
+                      <input
+                        className="spField"
+                        placeholder="Where did it go?"
+                        value={qaMerchant}
+                        onChange={(e) => setQaMerchant(e.target.value)}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="spQuickGrid2">
+                    <div>
+                      <div className="spTiny">Payment Method</div>
+                      <select className="spSelect" value={qaPayment} onChange={(e) => setQaPayment(e.target.value)}>
+                        <option>Card</option>
+                        <option>Cash</option>
+                        <option>ACH</option>
+                        <option>Transfer</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <div className="spTiny">Account</div>
+                      <input
+                        className="spField"
+                        value={qaAccount}
+                        onChange={(e) => setQaAccount(e.target.value)}
+                        placeholder="Checking"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="spTiny">Note</div>
+                    <textarea
+                      className="spTextarea"
+                      placeholder="Optional note"
+                      value={qaNote}
+                      onChange={(e) => setQaNote(e.target.value)}
+                    />
+                  </div>
+
+                  <div className="spActionRow">
+                    <button className="spSolidBtn" type="button" onClick={quickAddSave} disabled={saving}>
+                      {saving ? "Saving..." : mode === "planned" ? "Save Planned Item" : "Save Transaction"}
+                    </button>
+                    <button className="spGhostBtn" type="button" onClick={clearQuickAdd} disabled={saving}>
+                      Reset
+                    </button>
                   </div>
                 </div>
-              </ShellCard>
+              </article>
+            </section>
 
-              <ShellCard className="p-5">
-                <div className="mb-4">
-                  <div className="text-[11px] font-black uppercase tracking-[0.18em] text-white/40">Upcoming</div>
-                  <div className="mt-1 text-xl font-black text-white">Planned hits</div>
+            <section className="spOverviewGridLower">
+              <article className="spCard">
+                <div className="spCardHead">
+                  <div>
+                    <h2 className="spSectionTitle">Budget Clarity</h2>
+                    <div className="spSectionText">Clean pressure read so you can actually see what is good, tight, or cooked.</div>
+                  </div>
+                  <span className="spChip">{range.budgetMode.toUpperCase()}</span>
                 </div>
 
-                <div className="space-y-3">
-                  {upcomingItems.length === 0 ? (
-                    <div className="rounded-[18px] border border-white/10 bg-white/[0.03] p-4 text-sm text-white/56">
-                      No upcoming planned items.
-                    </div>
+                <div className="spBudgetGrid">
+                  {budgetRows.length === 0 ? (
+                    <div className="spEmpty">No budget or expense data yet.</div>
                   ) : (
-                    upcomingItems.map((p) => {
-                      const cat = categoriesById.get(p.categoryId);
+                    budgetRows.slice(0, 8).map((row) => {
+                      const tone = statusTone(row.forecastStatus);
+                      const progressColor =
+                        row.forecastStatus === "Over"
+                          ? TONE.red
+                          : row.forecastStatus === "Near"
+                            ? TONE.amber
+                            : TONE.green;
+
+                      const progressPct = row.budget > 0 ? (row.forecast / row.budget) * 100 : 0;
+
                       return (
-                        <div key={p.id} className="flex items-start justify-between gap-3 rounded-[18px] border border-white/10 bg-white/[0.03] p-4">
-                          <div className="min-w-0 flex-1">
-                            <div className="font-black text-white">{p.merchant || cat?.name || "Planned expense"}</div>
-                            <div className="mt-1 text-sm text-white/54">
-                              {shortDate(p.date)} • {fmtTime(p.time)} • {cat?.name || "Uncategorized"}
+                        <div key={row.id} className="spBudgetItem">
+                          <div className="spBudgetHead">
+                            <div>
+                              <div className="spListTitle">{row.name}</div>
+                              <div className="spSectionText">
+                                {row.group} • {money(row.spent)} spent • {money(row.planned)} planned
+                              </div>
                             </div>
-                            {p.note ? <div className="mt-2 text-sm text-white/64">{p.note}</div> : null}
+
+                            <span className="spPillStatus" style={tone}>
+                              {row.forecastStatus}
+                            </span>
                           </div>
 
-                          <div className="flex items-start gap-3">
-                            <div className="text-right">
-                              <div className="font-black text-amber-300">{money(p.amount)}</div>
-                            </div>
+                          <ProgressBar value={progressPct} color={progressColor} />
 
-                            <ActionButton
-                              onClick={(e) =>
-                                openMenuFromButton(e, [
-                                  { label: "Convert to real expense", tone: "success", onClick: () => convertPlanned(p) },
-                                  { label: "Delete planned item", tone: "danger", onClick: () => deletePlanned(p.id) },
-                                ])
-                              }
-                            />
+                          <div className="spBudgetMeta">
+                            <div>
+                              <div className="spTiny">Budget</div>
+                              <div style={{ fontWeight: 900 }}>{money(row.budget)}</div>
+                            </div>
+                            <div>
+                              <div className="spTiny">Forecast</div>
+                              <div style={{ fontWeight: 900 }}>{money(row.forecast)}</div>
+                            </div>
+                            <div>
+                              <div className="spTiny">Remaining</div>
+                              <div style={{ fontWeight: 900 }}>
+                                {money(Math.max((row.budget || 0) - row.forecast, 0))}
+                              </div>
+                            </div>
                           </div>
                         </div>
                       );
                     })
                   )}
                 </div>
-              </ShellCard>
-            </div>
-          </div>
+              </article>
 
-          <ShellCard className="p-5">
-            <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-              <div>
-                <div className="text-[11px] font-black uppercase tracking-[0.18em] text-white/40">Filters</div>
-                <div className="mt-1 text-xl font-black text-white">Live activity</div>
+              <div className="spColumnStack">
+                <article className="spCard">
+                  <div className="spCardHead">
+                    <div>
+                      <h2 className="spSectionMini">Recent Activity</h2>
+                      <div className="spSectionText">Latest movement in this period.</div>
+                    </div>
+                  </div>
+
+                  <div className="spList">
+                    {recentActivity.length === 0 ? (
+                      <div className="spEmpty">No transactions yet for this period.</div>
+                    ) : (
+                      recentActivity.map((tx) => {
+                        const cat = categoriesById.get(tx.categoryId);
+                        const valueClass =
+                          tx.type === "income"
+                            ? "spValueGood"
+                            : tx.type === "expense"
+                              ? "spValueBad"
+                              : "spValueWarn";
+
+                        return (
+                          <div key={tx.id} className="spListItem">
+                            <div className="spListHead">
+                              <div>
+                                <div className="spListTitle">
+                                  {tx.merchant || cat?.name || (tx.type === "income" ? "Income" : "Transaction")}
+                                </div>
+                                <div className="spSectionText">
+                                  {shortDate(tx.date)} • {fmtTime(tx.time)} •{" "}
+                                  {tx.type === "income" ? "Income" : cat?.name || "Uncategorized"}
+                                </div>
+                              </div>
+
+                              <div style={{ textAlign: "right" }}>
+                                <div className={valueClass}>
+                                  {tx.type === "income" ? "+" : tx.type === "expense" ? "-" : ""}
+                                  {money(tx.amount)}
+                                </div>
+                                <div className="spSectionText" style={{ marginTop: 6 }}>
+                                  {tx.account || tx.paymentMethod}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </article>
+
+                <article className="spCard">
+                  <div className="spCardHead">
+                    <div>
+                      <h2 className="spSectionMini">Upcoming Planned</h2>
+                      <div className="spSectionText">Scheduled spending waiting to hit.</div>
+                    </div>
+                  </div>
+
+                  <div className="spList">
+                    {upcomingItems.length === 0 ? (
+                      <div className="spEmpty">No upcoming planned items.</div>
+                    ) : (
+                      upcomingItems.map((item) => {
+                        const cat = categoriesById.get(item.categoryId);
+                        return (
+                          <div key={item.id} className="spListItem">
+                            <div className="spListHead">
+                              <div>
+                                <div className="spListTitle">{item.merchant || cat?.name || "Planned Expense"}</div>
+                                <div className="spSectionText">
+                                  {shortDate(item.date)} • {fmtTime(item.time)} • {cat?.name || "Uncategorized"}
+                                </div>
+                              </div>
+
+                              <div style={{ textAlign: "right" }}>
+                                <div className="spValueWarn">{money(item.amount)}</div>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </article>
+              </div>
+            </section>
+          </>
+        ) : (
+          <section className="spManageGrid">
+            <article className="spCard">
+              <div className="spCardHead">
+                <div>
+                  <h2 className="spSectionTitle">Search and Control</h2>
+                  <div className="spSectionText">Filter transactions and planned items without the page feeling cramped.</div>
+                </div>
               </div>
 
-              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-                <Input
+              <div className="spFilterGrid" style={{ marginBottom: 16 }}>
+                <input
+                  className="spField"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Search merchant, note, amount..."
-                  className="h-11 rounded-2xl border-white/10 bg-white/[0.04] text-white"
+                  placeholder="Search transactions or planned items."
                 />
 
-                <LccSelect
-                  value={typeFilter}
-                  onValueChange={setTypeFilter}
-                  items={[
-                    { value: "expense", label: "Expense" },
-                    { value: "income", label: "Income" },
-                    { value: "all", label: "All types" },
-                  ]}
-                />
+                <select className="spSelect" value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
+                  <option value="all">All types</option>
+                  <option value="expense">Expense</option>
+                  <option value="income">Income</option>
+                  <option value="transfer">Transfer</option>
+                </select>
 
-                <LccSelect
+                <select
+                  className="spSelect"
                   value={categoryFilter}
-                  onValueChange={setCategoryFilter}
-                  items={[
-                    { value: "all", label: "All categories" },
-                    ...categories.map((c) => ({
-                      value: c.id,
-                      label: c.name,
-                    })),
-                  ]}
-                />
+                  onChange={(e) => setCategoryFilter(e.target.value)}
+                >
+                  <option value="all">All categories</option>
+                  {categories.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.group} • {c.name}
+                    </option>
+                  ))}
+                </select>
 
-                <div className="flex items-center rounded-2xl border border-white/10 bg-white/[0.03] px-3 text-sm text-white/56">
-                  {range.label}
+                <div className="spChip" style={{ width: "100%" }}>
+                  {filteredTransactions.length} TX • {filteredPlanned.length} PLANNED
                 </div>
               </div>
-            </div>
 
-            <div className="space-y-3">
-              {recentActivity.length === 0 ? (
-                <div className="rounded-[18px] border border-white/10 bg-white/[0.03] p-4 text-sm text-white/56">
-                  No activity in this period yet.
-                </div>
-              ) : (
-                recentActivity.map((tx) => {
-                  const cat = categoriesById.get(tx.categoryId);
-                  const isIncome = tx.type === "income";
-
-                  return (
-                    <div key={tx.id} className="flex items-start justify-between gap-3 rounded-[20px] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,.035),rgba(255,255,255,.02))] p-4">
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <div className="truncate font-black text-white">{tx.merchant || cat?.name || "Untitled"}</div>
-                          <Badge className={isIncome ? "bg-emerald-500/15 text-emerald-300" : "bg-red-500/15 text-red-300"}>
-                            {isIncome ? "Income" : "Expense"}
-                          </Badge>
-                          {cat?.name ? <Badge variant="outline" className="border-white/10 text-white/60">{cat.name}</Badge> : null}
-                        </div>
-                        <div className="mt-1 text-sm text-white/52">
-                          {longDate(tx.date)} • {fmtTime(tx.time)}
-                          {tx.account ? ` • ${tx.account}` : ""}
-                          {tx.paymentMethod ? ` • ${tx.paymentMethod}` : ""}
-                        </div>
-                        {tx.note ? <div className="mt-2 text-sm text-white/68">{tx.note}</div> : null}
-                      </div>
-
-                      <div className="flex items-start gap-3">
-                        <div className="text-right">
-                          <div className={`text-lg font-black ${isIncome ? "text-emerald-300" : "text-red-300"}`}>
-                            {isIncome ? "+" : "-"}
-                            {money(tx.amount).replace("-", "")}
-                          </div>
-                        </div>
-
-                        <ActionButton
-                          onClick={(e) =>
-                            openMenuFromButton(e, [
-                              { label: "Duplicate", onClick: () => duplicateTransaction(tx) },
-                              { label: "Delete", tone: "danger", onClick: () => deleteTransaction(tx.id) },
-                            ])
-                          }
-                        />
-                      </div>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-          </ShellCard>
-
-          <ShellCard className="p-5">
-            <div className="mb-4">
-              <div className="text-[11px] font-black uppercase tracking-[0.18em] text-white/40">Budgets</div>
-              <div className="mt-1 text-xl font-black text-white">Category pressure</div>
-            </div>
-
-            <div className="space-y-4">
-              {budgetRows.map((row) => {
-                const pct = row.budget > 0 ? (row.forecast / row.budget) * 100 : 0;
-                const color = pct >= 100 ? TONE.red : pct >= 85 ? TONE.amber : TONE.green;
-
-                return (
-                  <div key={row.id} className="rounded-[20px] border border-white/10 bg-white/[0.03] p-4">
-                    <div className="mb-2 flex items-start justify-between gap-3">
-                      <div>
-                        <div className="font-black text-white">{row.name}</div>
-                        <div className="mt-1 text-sm text-white/52">
-                          Spent {money(row.spent)} • Planned {money(row.planned)}
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <div className="font-black text-white">{money(row.budget)}</div>
-                        <div className="mt-1 text-xs text-white/46">{row.forecastStatus}</div>
-                      </div>
-                    </div>
-
-                    <ProgressBar value={pct} color={color} />
-
-                    <div className="mt-3 flex items-center justify-between gap-3">
-                      <div className="text-xs text-white/46">
-                        Forecast {money(row.forecast)} • {pct ? `${pct.toFixed(0)}%` : "No budget"}
-                      </div>
-                      <Input
-                        defaultValue={row.budget ? String(row.budget) : ""}
-                        placeholder="Budget"
-                        onBlur={(e) => updateBudget(row.id, e.target.value)}
-                        className="h-10 w-[130px] rounded-2xl border-white/10 bg-white/[0.04] text-right text-white"
-                      />
+              <div className="spSplitList">
+                <div className="spInnerCard">
+                  <div className="spCardHead" style={{ marginBottom: 12 }}>
+                    <div>
+                      <h3 className="spSectionMini">Transactions</h3>
+                      <div className="spSectionText">Current range results.</div>
                     </div>
                   </div>
-                );
-              })}
-            </div>
-          </ShellCard>
-        </TabsContent>
 
-        <TabsContent value="manage" className="space-y-4">
-          <div className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(360px,.8fr)]">
-            <ShellCard className="p-5">
-              <div className="mb-4">
-                <div className="text-[11px] font-black uppercase tracking-[0.18em] text-white/40">Planned items</div>
-                <div className="mt-1 text-xl font-black text-white">What is still coming</div>
-              </div>
+                  <div className="spList">
+                    {filteredTransactions.length === 0 ? (
+                      <div className="spEmpty">No transactions match this filter.</div>
+                    ) : (
+                      filteredTransactions.map((tx) => {
+                        const cat = categoriesById.get(tx.categoryId);
+                        const valueClass =
+                          tx.type === "income"
+                            ? "spValueGood"
+                            : tx.type === "expense"
+                              ? "spValueBad"
+                              : "spValueWarn";
 
-              <div className="space-y-3">
-                {filteredPlanned.length === 0 ? (
-                  <div className="rounded-[18px] border border-white/10 bg-white/[0.03] p-4 text-sm text-white/56">
-                    No planned items in this view.
+                        return (
+                          <div key={tx.id} className="spListItem">
+                            <div className="spListHead">
+                              <div>
+                                <div className="spListTitle">
+                                  {tx.merchant || cat?.name || (tx.type === "income" ? "Income" : "Transaction")}
+                                </div>
+                                <div className="spSectionText">
+                                  {shortDate(tx.date)} • {fmtTime(tx.time)} •{" "}
+                                  {tx.type === "income" ? "Income" : cat?.name || "Uncategorized"}
+                                </div>
+                                {tx.note ? (
+                                  <div className="spSectionText" style={{ marginTop: 6 }}>
+                                    {tx.note}
+                                  </div>
+                                ) : null}
+                              </div>
+
+                              <div style={{ textAlign: "right" }}>
+                                <div className={valueClass}>
+                                  {tx.type === "income" ? "+" : tx.type === "expense" ? "-" : ""}
+                                  {money(tx.amount)}
+                                </div>
+                                <div className="spSectionText" style={{ marginTop: 6 }}>
+                                  {tx.account || tx.paymentMethod}
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="spActionRow" style={{ marginTop: 12 }}>
+                              <button className="spGhostBtn" type="button" onClick={() => duplicateTransaction(tx)}>
+                                Duplicate
+                              </button>
+                              <button className="spDangerBtn" type="button" onClick={() => deleteTransaction(tx.id)}>
+                                Delete
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
                   </div>
-                ) : (
-                  filteredPlanned.map((p) => {
-                    const cat = categoriesById.get(p.categoryId);
-                    return (
-                      <div key={p.id} className="flex items-start justify-between gap-3 rounded-[20px] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,.035),rgba(255,255,255,.02))] p-4">
-                        <div className="min-w-0 flex-1">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <div className="truncate font-black text-white">{p.merchant || cat?.name || "Planned expense"}</div>
-                            <Badge className="bg-amber-500/15 text-amber-300">Planned</Badge>
-                            {cat?.name ? <Badge variant="outline" className="border-white/10 text-white/60">{cat.name}</Badge> : null}
-                          </div>
-                          <div className="mt-1 text-sm text-white/52">{longDate(p.date)} • {fmtTime(p.time)}</div>
-                          {p.note ? <div className="mt-2 text-sm text-white/68">{p.note}</div> : null}
-                        </div>
-
-                        <div className="flex items-start gap-3">
-                          <div className="text-right">
-                            <div className="text-lg font-black text-amber-300">{money(p.amount)}</div>
-                          </div>
-
-                          <ActionButton
-                            onClick={(e) =>
-                              openMenuFromButton(e, [
-                                { label: "Convert to real expense", tone: "success", onClick: () => convertPlanned(p) },
-                                { label: "Delete planned item", tone: "danger", onClick: () => deletePlanned(p.id) },
-                              ])
-                            }
-                          />
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-            </ShellCard>
-
-            <div className="space-y-4">
-              <ShellCard className="p-5">
-                <div className="mb-4">
-                  <div className="text-[11px] font-black uppercase tracking-[0.18em] text-white/40">Categories</div>
-                  <div className="mt-1 text-xl font-black text-white">Add or trim categories</div>
                 </div>
 
-                <div className="grid gap-3">
+                <div className="spInnerCard">
+                  <div className="spCardHead" style={{ marginBottom: 12 }}>
+                    <div>
+                      <h3 className="spSectionMini">Planned Items</h3>
+                      <div className="spSectionText">Move them, convert them, or delete them.</div>
+                    </div>
+                  </div>
+
+                  <div className="spList">
+                    {filteredPlanned.length === 0 ? (
+                      <div className="spEmpty">No planned items match this filter.</div>
+                    ) : (
+                      filteredPlanned.map((item) => {
+                        const cat = categoriesById.get(item.categoryId);
+
+                        return (
+                          <div key={item.id} className="spListItem">
+                            <div className="spListHead">
+                              <div>
+                                <div className="spListTitle">{item.merchant || cat?.name || "Planned Expense"}</div>
+                                <div className="spSectionText">
+                                  {shortDate(item.date)} • {fmtTime(item.time)} • {cat?.name || "Uncategorized"}
+                                </div>
+                                {item.note ? (
+                                  <div className="spSectionText" style={{ marginTop: 6 }}>
+                                    {item.note}
+                                  </div>
+                                ) : null}
+                              </div>
+
+                              <div style={{ textAlign: "right" }}>
+                                <div className="spValueWarn">{money(item.amount)}</div>
+                              </div>
+                            </div>
+
+                            <div className="spActionRow" style={{ marginTop: 12 }}>
+                              <button className="spSolidBtn" type="button" onClick={() => convertPlanned(item)}>
+                                Convert to Real
+                              </button>
+                              <button className="spDangerBtn" type="button" onClick={() => deletePlanned(item.id)}>
+                                Delete
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              </div>
+            </article>
+
+            <div className="spColumnStack">
+              <article className="spCard">
+                <div className="spCardHead">
                   <div>
-                    <Label className="mb-2 block text-white/72">Category name</Label>
-                    <Input
-                      value={newCategoryName}
-                      onChange={(e) => setNewCategoryName(e.target.value)}
-                      placeholder="Example: Pet Care"
-                      className="h-11 rounded-2xl border-white/10 bg-white/[0.04] text-white"
-                    />
-                  </div>
-
-                  <div>
-                    <Label className="mb-2 block text-white/72">Group</Label>
-                    <LccSelect
-                      value={newCategoryGroup}
-                      onValueChange={setNewCategoryGroup}
-                      items={groups
-                        .filter((g) => g !== "All")
-                        .map((g) => ({ value: g, label: g }))}
-                    />
-                  </div>
-
-                  <div className="pt-1">
-                    <Button onClick={addCategory} className="rounded-2xl bg-white px-5 text-[#09111f] hover:bg-white/90">
-                      Add category
-                    </Button>
+                    <h2 className="spSectionMini">Category Control</h2>
+                    <div className="spSectionText">Add and clean up categories.</div>
                   </div>
                 </div>
-              </ShellCard>
 
-              <ShellCard className="p-5">
-                <div className="mb-4">
-                  <div className="text-[11px] font-black uppercase tracking-[0.18em] text-white/40">Existing categories</div>
-                  <div className="mt-1 text-xl font-black text-white">Current structure</div>
+                <div className="spQuickGrid2" style={{ marginBottom: 14 }}>
+                  <input
+                    className="spField"
+                    placeholder="New category name"
+                    value={newCategoryName}
+                    onChange={(e) => setNewCategoryName(e.target.value)}
+                  />
+
+                  <select
+                    className="spSelect"
+                    value={newCategoryGroup}
+                    onChange={(e) => setNewCategoryGroup(e.target.value)}
+                  >
+                    {groups
+                      .filter((g) => g !== "All")
+                      .map((g) => (
+                        <option key={g} value={g}>
+                          {g}
+                        </option>
+                      ))}
+                  </select>
                 </div>
 
-                <div className="space-y-3 max-h-[520px] overflow-y-auto pr-1">
-                  {categories
-                    .slice()
-                    .sort((a, b) => a.group.localeCompare(b.group) || a.name.localeCompare(b.name))
-                    .map((cat) => (
-                      <div key={cat.id} className="flex items-center justify-between gap-3 rounded-[18px] border border-white/10 bg-white/[0.03] p-3">
-                        <div className="min-w-0">
-                          <div className="font-black text-white">{cat.name}</div>
-                          <div className="mt-1 text-sm text-white/52">{cat.group}</div>
+                <div className="spActionRow" style={{ marginBottom: 16 }}>
+                  <button className="spSolidBtn" type="button" onClick={addCategory}>
+                    Add Category
+                  </button>
+                </div>
+
+                <div className="spList">
+                  {categories.map((cat) => (
+                    <div key={cat.id} className="spListItem">
+                      <div className="spListHead">
+                        <div>
+                          <div className="spListTitle">{cat.name}</div>
+                          <div className="spSectionText">{cat.group}</div>
                         </div>
 
-                        <ActionButton
-                          onClick={(e) =>
-                            openMenuFromButton(e, [{ label: "Delete", tone: "danger", onClick: () => deleteCategory(cat.id) }])
-                          }
-                        />
+                        <div className="spActionRow">
+                          <span
+                            className="spPillStatus"
+                            style={{
+                              color: "#f0f5ff",
+                              background: `${cat.color}22`,
+                              border: `1px solid ${cat.color}44`,
+                            }}
+                          >
+                            {cat.isBudgeted ? "BUDGETED" : "TRACKED"}
+                          </span>
+                          <button className="spDangerBtn" type="button" onClick={() => deleteCategory(cat.id)}>
+                            Delete
+                          </button>
+                        </div>
                       </div>
-                    ))}
+                    </div>
+                  ))}
                 </div>
-              </ShellCard>
+              </article>
+
+              <article className="spCard">
+                <div className="spCardHead">
+                  <div>
+                    <h2 className="spSectionMini">Budget Tune</h2>
+                    <div className="spSectionText">
+                      Edit {range.budgetMode} budgets without leaving the page.
+                    </div>
+                  </div>
+                  <span className="spChip">{range.budgetMode.toUpperCase()}</span>
+                </div>
+
+                <div className="spList">
+                  {budgetRows.length === 0 ? (
+                    <div className="spEmpty">No budget rows yet.</div>
+                  ) : (
+                    budgetRows.map((row) => {
+                      const tone = statusTone(row.forecastStatus);
+                      const progressColor =
+                        row.forecastStatus === "Over"
+                          ? TONE.red
+                          : row.forecastStatus === "Near"
+                            ? TONE.amber
+                            : TONE.green;
+
+                      const progressPct = row.budget > 0 ? (row.forecast / row.budget) * 100 : 0;
+
+                      return (
+                        <div key={row.id} className="spBudgetItem">
+                          <div className="spBudgetHead">
+                            <div>
+                              <div className="spListTitle">{row.name}</div>
+                              <div className="spSectionText">
+                                {money(row.spent)} spent • {money(row.planned)} planned
+                              </div>
+                            </div>
+
+                            <span className="spPillStatus" style={tone}>
+                              {row.forecastStatus}
+                            </span>
+                          </div>
+
+                          <ProgressBar value={progressPct} color={progressColor} />
+
+                          <div className="spQuickGrid2" style={{ marginTop: 12 }}>
+                            <div>
+                              <div className="spTiny">Budget</div>
+                              <input
+                                className="spField spBudgetInput"
+                                defaultValue={row.budget ? String(row.budget) : ""}
+                                placeholder="0.00"
+                                onBlur={(e) => updateBudget(row.id, e.target.value)}
+                              />
+                            </div>
+
+                            <div>
+                              <div className="spTiny">Forecast</div>
+                              <div className="spChip" style={{ width: "100%" }}>
+                                {money(row.forecast)}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </article>
             </div>
-          </div>
-        </TabsContent>
-      </Tabs>
-    </div>
+          </section>
+        )}
+      </div>
+    </main>
   );
 }

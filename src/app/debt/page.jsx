@@ -8,9 +8,6 @@ export const dynamic = "force-dynamic";
 const LS_DEBT = "lcc_debt_accounts_v3";
 const LS_DEBT_SETTINGS = "lcc_debt_settings_v3";
 
-/* =========================
-   utils
-========================= */
 function safeParse(str, fallback) {
   try {
     const v = JSON.parse(str || "");
@@ -104,14 +101,14 @@ function createDebt(type = "other") {
       type === "mortgage"
         ? "Mortgage"
         : type === "auto"
-        ? "Car Loan"
-        : type === "credit_card"
-        ? "Credit Card"
-        : type === "personal_loan"
-        ? "Personal Loan"
-        : type === "student_loan"
-        ? "Student Loan"
-        : "New Debt",
+          ? "Car Loan"
+          : type === "credit_card"
+            ? "Credit Card"
+            : type === "personal_loan"
+              ? "Personal Loan"
+              : type === "student_loan"
+                ? "Student Loan"
+                : "New Debt",
     type,
     lender: "",
     balance: 0,
@@ -141,9 +138,6 @@ const defaultSettings = {
   showInactive: false,
 };
 
-/* =========================
-   DB mappers
-========================= */
 function mapDebtRow(row) {
   return {
     id: row.id,
@@ -219,9 +213,6 @@ function mapSettingsToRow(settings, userId, existingId) {
   };
 }
 
-/* =========================
-   debt helpers
-========================= */
 function getDueStatus(dueDay) {
   const day = safeNum(dueDay, NaN);
   if (!Number.isFinite(day) || day < 1 || day > 31) {
@@ -352,9 +343,6 @@ function getDebtChip(debt, priority) {
   return { label: "On plan", tone: "neutral" };
 }
 
-/* =========================
-   page
-========================= */
 export default function DebtPage() {
   const [debts, setDebts] = useState([]);
   const [settings, setSettings] = useState(defaultSettings);
@@ -402,13 +390,8 @@ export default function DebtPage() {
       supabase.from("debt_settings").select("*").limit(1).maybeSingle(),
     ]);
 
-    if (debtRes.error) {
-      console.error("load debt error:", debtRes.error);
-    }
-
-    if (settingsRes.error) {
-      console.error("load debt settings error:", settingsRes.error);
-    }
+    if (debtRes.error) console.error("load debt error:", debtRes.error);
+    if (settingsRes.error) console.error("load debt settings error:", settingsRes.error);
 
     let mappedDebts = (debtRes.data || []).map(mapDebtRow);
     let mappedSettings = settingsRes.data ? mapSettingsRow(settingsRes.data) : defaultSettings;
@@ -489,9 +472,7 @@ export default function DebtPage() {
       onConflict: "id",
     });
 
-    if (error) {
-      console.error("save debt error:", error);
-    }
+    if (error) console.error("save debt error:", error);
 
     setSavingIds((prev) => ({ ...prev, [nextDebt.id]: false }));
   }
@@ -674,6 +655,14 @@ export default function DebtPage() {
     return { creditCards, installment, totalAccounts };
   }, [debts]);
 
+  const dueSoon = useMemo(() => {
+    return activeDebts
+      .map((d) => ({ ...d, due: getDueStatus(d.dueDay) }))
+      .filter((d) => d.due.sort <= 7)
+      .sort((a, b) => a.due.sort - b.due.sort)
+      .slice(0, 6);
+  }, [activeDebts]);
+
   const topCardBars = useMemo(() => {
     const monthlyAttack = totals.totalMinimum + totals.totalExtra + safeNum(settings.globalExtraPool);
     const attackPct =
@@ -695,758 +684,1235 @@ export default function DebtPage() {
     };
   }, [totals, settings.globalExtraPool, quickStats.totalAccounts]);
 
+  const styles = (
+    <style jsx global>{`
+      .debtPage {
+        --text: #f7f8ff;
+        --muted: rgba(225, 232, 255, 0.72);
+        --muted2: rgba(225, 232, 255, 0.46);
+        --glass: linear-gradient(180deg, rgba(6, 12, 24, 0.42), rgba(4, 8, 16, 0.18));
+        --shadow: 0 22px 60px rgba(0, 0, 0, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.045);
+        color: var(--text);
+        color-scheme: dark;
+      }
+
+      .debtPage *,
+      .debtPage *::before,
+      .debtPage *::after {
+        box-sizing: border-box;
+      }
+
+      .debtPage .deShell {
+        width: 100%;
+        max-width: none;
+        margin: 0;
+        padding: 22px 8px 56px 0;
+      }
+
+      .debtPage .deHero,
+      .debtPage .deCard,
+      .debtPage .deMetric {
+        position: relative;
+        overflow: hidden;
+        border-radius: 30px;
+        border: 1px solid rgba(255, 255, 255, 0.075);
+        background: var(--glass);
+        box-shadow: var(--shadow);
+        backdrop-filter: blur(15px) saturate(126%);
+        -webkit-backdrop-filter: blur(15px) saturate(126%);
+      }
+
+      .debtPage .deHero::before,
+      .debtPage .deCard::before,
+      .debtPage .deMetric::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        background:
+          radial-gradient(circle at top left, rgba(80, 120, 255, 0.08), transparent 28%),
+          radial-gradient(circle at top right, rgba(255, 255, 255, 0.022), transparent 18%),
+          radial-gradient(circle at bottom center, rgba(255, 107, 127, 0.03), transparent 28%);
+      }
+
+      .debtPage .deHero {
+        padding: 28px;
+        margin-bottom: 22px;
+      }
+
+      .debtPage .deHeroTop {
+        position: relative;
+        z-index: 1;
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 18px;
+        flex-wrap: wrap;
+      }
+
+      .debtPage .deEyebrow {
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.2em;
+        color: var(--muted2);
+        margin-bottom: 12px;
+      }
+
+      .debtPage .deTitle {
+        margin: 0;
+        font-size: clamp(34px, 4vw, 64px);
+        line-height: 0.95;
+        font-weight: 950;
+        letter-spacing: -0.045em;
+      }
+
+      .debtPage .deSub {
+        margin-top: 12px;
+        max-width: 940px;
+        color: var(--muted);
+        line-height: 1.6;
+        font-size: 15px;
+      }
+
+      .debtPage .deChipRow,
+      .debtPage .deActionRow {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+
+      .debtPage .deChip {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 40px;
+        padding: 10px 15px;
+        border-radius: 999px;
+        border: 1px solid rgba(255, 255, 255, 0.075);
+        background: rgba(255, 255, 255, 0.038);
+        color: #f5f7ff;
+        font-size: 12px;
+        font-weight: 800;
+        letter-spacing: 0.04em;
+      }
+
+      .debtPage .deSegment {
+        display: inline-flex;
+        gap: 6px;
+        padding: 4px;
+        border-radius: 999px;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        background: rgba(255, 255, 255, 0.04);
+      }
+
+      .debtPage .deSegmentBtn,
+      .debtPage .deGhostBtn,
+      .debtPage .deSolidBtn,
+      .debtPage .deDangerBtn,
+      .debtPage .deOpenBtn {
+        min-height: 44px;
+        padding: 0 16px;
+        border-radius: 14px;
+        font-size: 13px;
+        font-weight: 800;
+        letter-spacing: 0.02em;
+        cursor: pointer;
+        transition:
+          transform 0.18s ease,
+          border-color 0.18s ease,
+          background 0.18s ease,
+          box-shadow 0.18s ease,
+          opacity 0.18s ease;
+      }
+
+      .debtPage .deSegmentBtn:hover,
+      .debtPage .deGhostBtn:hover,
+      .debtPage .deSolidBtn:hover,
+      .debtPage .deDangerBtn:hover,
+      .debtPage .deOpenBtn:hover {
+        transform: translateY(-1px);
+      }
+
+      .debtPage .deSegmentBtn,
+      .debtPage .deGhostBtn,
+      .debtPage .deOpenBtn {
+        border: 1px solid rgba(255, 255, 255, 0.09);
+        background: rgba(255, 255, 255, 0.03);
+        color: #f5f7ff;
+      }
+
+      .debtPage .deSegmentBtn.active {
+        border-color: rgba(255, 255, 255, 0.14);
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(233, 237, 246, 0.92));
+        color: #08111f;
+      }
+
+      .debtPage .deSolidBtn {
+        border: 1px solid rgba(130, 170, 255, 0.24);
+        background: linear-gradient(180deg, rgba(77, 124, 255, 0.22), rgba(32, 74, 189, 0.12));
+        color: #f7f9ff;
+      }
+
+      .debtPage .deDangerBtn {
+        border: 1px solid rgba(244, 114, 182, 0.22);
+        background: rgba(244, 114, 182, 0.08);
+        color: #ffd5e5;
+      }
+
+      .debtPage .deMetricGrid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(230px, 1fr));
+        gap: 18px;
+        margin-bottom: 22px;
+      }
+
+      .debtPage .deMetric {
+        padding: 22px;
+        min-height: 166px;
+      }
+
+      .debtPage .deMetricLabel {
+        position: relative;
+        z-index: 1;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.18em;
+        color: var(--muted2);
+      }
+
+      .debtPage .deMetricValue {
+        position: relative;
+        z-index: 1;
+        margin-top: 14px;
+        font-size: clamp(30px, 3vw, 48px);
+        line-height: 1;
+        font-weight: 950;
+        letter-spacing: -0.04em;
+      }
+
+      .debtPage .deMetricSub {
+        position: relative;
+        z-index: 1;
+        margin-top: 14px;
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.5;
+      }
+
+      .debtPage .deCard {
+        padding: 24px;
+      }
+
+      .debtPage .deCardHead {
+        position: relative;
+        z-index: 1;
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 14px;
+        flex-wrap: wrap;
+        margin-bottom: 16px;
+      }
+
+      .debtPage .deSectionTitle {
+        margin: 0;
+        font-size: 34px;
+        line-height: 1;
+        font-weight: 900;
+        letter-spacing: -0.03em;
+      }
+
+      .debtPage .deSectionMini {
+        margin: 0;
+        font-size: 20px;
+        line-height: 1.1;
+        font-weight: 900;
+      }
+
+      .debtPage .deSectionText {
+        margin-top: 8px;
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.55;
+      }
+
+      .debtPage .deTiny {
+        color: var(--muted2);
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        font-size: 10px;
+        font-weight: 700;
+        margin-bottom: 8px;
+      }
+
+      .debtPage .deMainGrid {
+        display: grid;
+        grid-template-columns: minmax(0, 1.6fr) minmax(430px, 1fr);
+        gap: 20px;
+        align-items: start;
+      }
+
+      .debtPage .deLeftStack,
+      .debtPage .deRightStack,
+      .debtPage .deList,
+      .debtPage .deStack {
+        display: grid;
+        gap: 14px;
+      }
+
+      .debtPage .deControlGrid {
+        display: grid;
+        grid-template-columns: 1.1fr 1fr 1fr auto;
+        gap: 14px;
+        align-items: end;
+      }
+
+      .debtPage .deQuickAddGrid {
+        display: grid;
+        grid-template-columns: repeat(4, auto);
+        gap: 10px;
+        justify-content: end;
+      }
+
+      .debtPage .deField,
+      .debtPage .deSelect,
+      .debtPage .deTextarea {
+        width: 100%;
+        min-height: 50px;
+        border-radius: 16px;
+        border: 1px solid rgba(177, 196, 255, 0.14);
+        background: rgba(8, 13, 24, 0.52) !important;
+        color: #f4f7ff !important;
+        font-size: 14px;
+        font-weight: 600;
+        padding: 0 14px;
+        outline: none;
+        transition: border-color 0.18s ease, box-shadow 0.18s ease;
+      }
+
+      .debtPage .deTextarea {
+        min-height: 110px;
+        padding: 12px 14px;
+        resize: vertical;
+      }
+
+      .debtPage .deField::placeholder,
+      .debtPage .deTextarea::placeholder {
+        color: rgba(233, 238, 255, 0.44) !important;
+      }
+
+      .debtPage .deField:focus,
+      .debtPage .deSelect:focus,
+      .debtPage .deTextarea:focus {
+        border-color: rgba(121, 163, 255, 0.36);
+        box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.08);
+      }
+
+      .debtPage .deSelect option {
+        background: #08111f !important;
+        color: #f4f7ff !important;
+      }
+
+      .debtPage .deDebtCard {
+        position: relative;
+        overflow: hidden;
+        border-radius: 24px;
+        border: 1px solid rgba(255, 255, 255, 0.055);
+        background: linear-gradient(180deg, rgba(10, 16, 28, 0.38), rgba(5, 9, 17, 0.14));
+      }
+
+      .debtPage .deDebtTop {
+        padding: 18px;
+      }
+
+      .debtPage .deDebtTopGrid {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(430px, auto);
+        gap: 14px;
+        align-items: start;
+      }
+
+      .debtPage .deMiniMetricGrid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(92px, 1fr));
+        gap: 10px;
+        min-width: 430px;
+      }
+
+      .debtPage .deMiniMetric {
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 14px;
+        padding: 10px 12px;
+        background: rgba(255, 255, 255, 0.03);
+      }
+
+      .debtPage .deDebtExpanded {
+        padding: 0 18px 18px;
+        border-top: 1px solid rgba(255, 255, 255, 0.1);
+      }
+
+      .debtPage .deExpandedGrid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 16px;
+        margin-top: 16px;
+      }
+
+      .debtPage .deMortgageCard {
+        margin-top: 16px;
+        padding: 16px;
+        border-radius: 22px;
+        border: 1px solid rgba(34, 197, 94, 0.18);
+        background: linear-gradient(180deg, rgba(34, 197, 94, 0.1), rgba(255, 255, 255, 0.04));
+      }
+
+      .debtPage .deMortgageGrid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 16px;
+      }
+
+      .debtPage .dePill {
+        display: inline-flex;
+        align-items: center;
+        min-height: 30px;
+        padding: 6px 10px;
+        border-radius: 999px;
+        font-size: 11px;
+        font-weight: 900;
+        letter-spacing: 0.04em;
+      }
+
+      .debtPage .deSnapshotRow {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 14px;
+        padding: 12px 14px;
+        border-radius: 14px;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        background: rgba(255, 255, 255, 0.03);
+      }
+
+      .debtPage .deEmpty {
+        border-radius: 16px;
+        border: 1px dashed rgba(255, 255, 255, 0.18);
+        padding: 26px 18px;
+        text-align: center;
+        background: rgba(255, 255, 255, 0.02);
+      }
+
+      .debtPage .deEmptyTitle {
+        font-weight: 900;
+        font-size: 17px;
+      }
+
+      .debtPage .deEmptySub {
+        margin-top: 8px;
+        color: var(--muted);
+        font-size: 14px;
+        line-height: 1.5;
+      }
+
+      .debtPage .deProgress {
+        height: 10px;
+        width: 100%;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.06);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        overflow: hidden;
+      }
+
+      .debtPage .deProgressFill {
+        height: 100%;
+        border-radius: 999px;
+        transition: width 0.22s ease;
+        box-shadow: 0 0 16px rgba(255, 255, 255, 0.08);
+      }
+
+      .debtPage .deMuted {
+        color: var(--muted);
+      }
+
+      @media (max-width: 1380px) {
+        .debtPage .deMetricGrid {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .debtPage .deMainGrid {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      @media (max-width: 1180px) {
+        .debtPage .deControlGrid {
+          grid-template-columns: 1fr;
+        }
+
+        .debtPage .deQuickAddGrid {
+          justify-content: start;
+          grid-template-columns: repeat(2, auto);
+        }
+
+        .debtPage .deExpandedGrid,
+        .debtPage .deMortgageGrid {
+          grid-template-columns: 1fr 1fr;
+        }
+      }
+
+      @media (max-width: 980px) {
+        .debtPage .deDebtTopGrid {
+          grid-template-columns: 1fr;
+        }
+
+        .debtPage .deMiniMetricGrid {
+          min-width: 0;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .debtPage .deExpandedGrid,
+        .debtPage .deMortgageGrid {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      @media (max-width: 760px) {
+        .debtPage .deShell {
+          padding: 16px 6px 34px 0;
+        }
+
+        .debtPage .deHero,
+        .debtPage .deCard,
+        .debtPage .deMetric {
+          border-radius: 22px;
+          padding: 18px;
+        }
+
+        .debtPage .deMetricGrid {
+          grid-template-columns: 1fr;
+        }
+
+        .debtPage .deTitle {
+          font-size: 36px;
+        }
+
+        .debtPage .deSectionTitle {
+          font-size: 26px;
+        }
+
+        .debtPage .deQuickAddGrid,
+        .debtPage .deMiniMetricGrid {
+          grid-template-columns: 1fr 1fr;
+        }
+      }
+    `}</style>
+  );
+
   if (loading) {
     return (
-      <div className="container">
-        <div className="card" style={{ padding: 24 }}>
-          <div style={{ fontWeight: 900, fontSize: 20 }}>Loading debt page...</div>
-          <div className="muted" style={{ marginTop: 8 }}>Pulling your debt data from Supabase.</div>
+      <main className="debtPage">
+        {styles}
+        <div className="deShell">
+          <section className="deHero">
+            <div className="deHeroTop">
+              <div>
+                <div className="deEyebrow">DEBT CONTROL CENTER</div>
+                <h1 className="deTitle">Debt Control Center</h1>
+                <div className="deSub">Loading debt page…</div>
+              </div>
+            </div>
+          </section>
         </div>
-      </div>
+      </main>
     );
   }
 
   return (
-    <div className="container">
-      <section style={{ marginBottom: 22 }}>
-        <div
-          className="muted"
-          style={{ fontSize: 12, fontWeight: 900, letterSpacing: "0.18em", textTransform: "uppercase", marginBottom: 10 }}
-        >
-          Debt
-        </div>
+    <main className="debtPage">
+      {styles}
 
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1fr auto",
-            gap: 16,
-            alignItems: "end",
-          }}
-        >
-          <div>
-            <h1 style={{ fontSize: "clamp(2.3rem, 4vw, 3.35rem)", lineHeight: 1.02, margin: 0, fontWeight: 950 }}>
-              Debt Control Center
-            </h1>
-            <p className="muted" style={{ marginTop: 12, fontSize: 16, maxWidth: 880, lineHeight: 1.5 }}>
-              Premium debt tracking with payoff pressure, colored progress bars, due urgency, and smarter priority targeting.
-            </p>
-          </div>
+      <div className="deShell">
+        <header className="deHero">
+          <div className="deHeroTop">
+            <div>
+              <div className="deEyebrow">DEBT CONTROL CENTER</div>
+              <h1 className="deTitle">Debt Control Center</h1>
+              <div className="deSub">
+                Premium debt tracking with payoff pressure, urgency chips, utilization bars, and cleaner mortgage
+                breakdowns.
+              </div>
 
-          <div className="card" style={{ padding: 14, minWidth: 210 }}>
-            <div className="muted" style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: "0.14em" }}>
-              Focus target
+              <div className="deChipRow" style={{ marginTop: 14 }}>
+                <span className="deChip">{quickStats.totalAccounts} ACTIVE</span>
+                <span className="deChip">{quickStats.creditCards} CARDS</span>
+                <span className="deChip">{quickStats.installment} INSTALLMENT</span>
+                <span className="deChip">{dueSoon.length} DUE SOON</span>
+              </div>
             </div>
-            <div style={{ marginTop: 8, fontWeight: 900, fontSize: 20 }}>
-              {topTarget ? topTarget.name : "Add a debt"}
-            </div>
-            <div className="muted" style={{ marginTop: 4, fontSize: 12 }}>
-              {topTarget
-                ? settings.strategy === "avalanche"
-                  ? "Highest APR first"
-                  : "Smallest balance first"
-                : "Nothing ranked yet"}
+
+            <div className="deCard" style={{ padding: 14, minWidth: 230 }}>
+              <div className="deTiny">Focus target</div>
+              <div style={{ marginTop: 8, fontWeight: 900, fontSize: 20 }}>
+                {topTarget ? topTarget.name : "Add a debt"}
+              </div>
+              <div className="deSectionText" style={{ marginTop: 4 }}>
+                {topTarget
+                  ? settings.strategy === "avalanche"
+                    ? "Highest APR first"
+                    : "Smallest balance first"
+                  : "Nothing ranked yet"}
+              </div>
             </div>
           </div>
-        </div>
-      </section>
+        </header>
 
-      <section
-        className="grid"
-        style={{
-          gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
-          marginBottom: 18,
-        }}
-      >
-        <TopStatCard
-          label="Total debt balance"
-          value={fmtMoney(totals.totalBalance)}
-          sub={quickStats.totalAccounts ? `${quickStats.totalAccounts} active debt account${quickStats.totalAccounts === 1 ? "" : "s"}` : "No active debts yet"}
-          fill={topCardBars.debtCountPct}
-          tone="accent"
-        />
-        <TopStatCard
-          label="Monthly debt attack"
-          value={fmtMoney(totals.totalMinimum + totals.totalExtra + settings.globalExtraPool)}
-          sub="Minimums + extra payments"
-          fill={topCardBars.attackPct}
-          tone="good"
-        />
-        <TopStatCard
-          label="APR pressure"
-          value={fmtPct(totals.weightedApr)}
-          sub={settings.strategy === "avalanche" ? "Avalanche strategy active" : "Snowball strategy active"}
-          fill={topCardBars.aprPct}
-          tone={totals.weightedApr >= 18 ? "bad" : totals.weightedApr >= 10 ? "warn" : "good"}
-        />
-        <TopStatCard
-          label="Mortgage principal share"
-          value={fmtMoney(totals.mortgagePrincipal)}
-          sub={`Interest ${fmtMoney(totals.mortgageInterest)} • Escrow ${fmtMoney(totals.mortgageEscrow)}`}
-          fill={topCardBars.principalPct}
-          tone={topCardBars.principalPct < 25 ? "warn" : "good"}
-        />
-      </section>
+        <section className="deMetricGrid">
+          <TopMetricCard
+            label="Total debt balance"
+            value={fmtMoney(totals.totalBalance)}
+            sub={
+              quickStats.totalAccounts
+                ? `${quickStats.totalAccounts} active debt account${quickStats.totalAccounts === 1 ? "" : "s"}`
+                : "No active debts yet"
+            }
+            fill={topCardBars.debtCountPct}
+            tone="accent"
+          />
 
-      <section className="card" style={{ padding: 18, marginBottom: 18 }}>
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1.1fr 1fr 1fr auto",
-            gap: 14,
-            alignItems: "end",
-          }}
-        >
-          <div>
-            <div className="muted" style={{ fontSize: 12, marginBottom: 8 }}>
-              Payoff strategy
-            </div>
-            <select
-              className="input"
-              value={settings.strategy}
-              onChange={(e) => updateSettings({ strategy: e.target.value })}
-            >
-              <option value="avalanche">Avalanche (highest APR first)</option>
-              <option value="snowball">Snowball (smallest balance first)</option>
-            </select>
-          </div>
+          <TopMetricCard
+            label="Monthly debt attack"
+            value={fmtMoney(totals.totalMinimum + totals.totalExtra + settings.globalExtraPool)}
+            sub="Minimums + debt-specific extra + global pool"
+            fill={topCardBars.attackPct}
+            tone="good"
+          />
 
-          <div>
-            <div className="muted" style={{ fontSize: 12, marginBottom: 8 }}>
-              Global extra pool / month
-            </div>
-            <input
-              className="input"
-              value={String(settings.globalExtraPool || "")}
-              onChange={(e) =>
-                updateSettings({
-                  globalExtraPool: safeNum(parseMoneyInput(e.target.value), 0),
-                })
-              }
-              placeholder="e.g. 300"
-            />
-          </div>
+          <TopMetricCard
+            label="APR pressure"
+            value={fmtPct(totals.weightedApr)}
+            sub={settings.strategy === "avalanche" ? "Avalanche strategy active" : "Snowball strategy active"}
+            fill={topCardBars.aprPct}
+            tone={totals.weightedApr >= 18 ? "bad" : totals.weightedApr >= 10 ? "warn" : "good"}
+          />
 
-          <div className="card" style={{ padding: 14 }}>
-            <div className="muted" style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: "0.12em" }}>
-              Planned monthly attack
+          <TopMetricCard
+            label="Mortgage principal share"
+            value={fmtMoney(totals.mortgagePrincipal)}
+            sub={`Interest ${fmtMoney(totals.mortgageInterest)} • Escrow ${fmtMoney(totals.mortgageEscrow)}`}
+            fill={topCardBars.principalPct}
+            tone={topCardBars.principalPct < 25 ? "warn" : "good"}
+          />
+        </section>
+
+        <section className="deCard" style={{ marginBottom: 20 }}>
+          <div className="deControlGrid">
+            <div>
+              <div className="deTiny">Payoff strategy</div>
+              <select
+                className="deSelect"
+                value={settings.strategy}
+                onChange={(e) => updateSettings({ strategy: e.target.value })}
+              >
+                <option value="avalanche">Avalanche (highest APR first)</option>
+                <option value="snowball">Snowball (smallest balance first)</option>
+              </select>
             </div>
-            <div style={{ marginTop: 8, fontWeight: 950, fontSize: 28 }}>
-              {fmtMoney(totals.totalMinimum + totals.totalExtra + settings.globalExtraPool)}
+
+            <div>
+              <div className="deTiny">Global extra pool / month</div>
+              <input
+                className="deField"
+                value={String(settings.globalExtraPool || "")}
+                onChange={(e) =>
+                  updateSettings({
+                    globalExtraPool: safeNum(parseMoneyInput(e.target.value), 0),
+                  })
+                }
+                placeholder="e.g. 300"
+              />
             </div>
-            <div style={{ marginTop: 10 }}>
-              <ProgressBar fill={topCardBars.attackPct} tone="good" />
+
+            <div>
+              <div className="deTiny">Search debt</div>
+              <input
+                className="deField"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search debt..."
+              />
+            </div>
+
+            <div className="deActionRow">
+              <button
+                className="deGhostBtn"
+                type="button"
+                onClick={() => updateSettings({ showInactive: !settings.showInactive })}
+              >
+                {settings.showInactive ? "Hide inactive" : "Show inactive"}
+              </button>
             </div>
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, auto)", gap: 10 }}>
-            <button className="btnGhost" onClick={() => addDebt("mortgage")}>+ Mortgage</button>
-            <button className="btnGhost" onClick={() => addDebt("auto")}>+ Auto</button>
-            <button className="btnGhost" onClick={() => addDebt("credit_card")}>+ Card</button>
-            <button className="btnGhost" onClick={() => addDebt("other")}>+ Other</button>
-          </div>
-        </div>
-      </section>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1fr auto",
+              gap: 14,
+              alignItems: "center",
+              marginTop: 16,
+            }}
+          >
+            <div className="deCard" style={{ padding: 14 }}>
+              <div className="deTiny">Planned monthly attack</div>
+              <div style={{ marginTop: 8, fontWeight: 950, fontSize: 28 }}>
+                {fmtMoney(totals.totalMinimum + totals.totalExtra + settings.globalExtraPool)}
+              </div>
+              <div style={{ marginTop: 10 }}>
+                <ProgressBar fill={topCardBars.attackPct} tone="good" />
+              </div>
+            </div>
 
-      <section
-        style={{
-          display: "grid",
-          gridTemplateColumns: "1.55fr 1fr",
-          gap: 18,
-          alignItems: "start",
-        }}
-      >
-        <div style={{ display: "grid", gap: 18 }}>
-          <div className="card" style={{ padding: 18 }}>
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "1fr auto",
-                gap: 14,
-                alignItems: "center",
-                marginBottom: 14,
-              }}
-            >
-              <div>
-                <div style={{ fontWeight: 950, fontSize: 22 }}>Debt Accounts</div>
-                <div className="muted" style={{ marginTop: 4, fontSize: 14 }}>
-                  Payoff bars, urgency chips, and due status built in.
+            <div className="deQuickAddGrid">
+              <button className="deGhostBtn" type="button" onClick={() => addDebt("mortgage")}>
+                + Mortgage
+              </button>
+              <button className="deGhostBtn" type="button" onClick={() => addDebt("auto")}>
+                + Auto
+              </button>
+              <button className="deGhostBtn" type="button" onClick={() => addDebt("credit_card")}>
+                + Card
+              </button>
+              <button className="deGhostBtn" type="button" onClick={() => addDebt("other")}>
+                + Other
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <section className="deMainGrid">
+          <div className="deLeftStack">
+            <div className="deCard">
+              <div className="deCardHead">
+                <div>
+                  <h2 className="deSectionTitle">Debt Accounts</h2>
+                  <div className="deSectionText">
+                    Payoff bars, urgency chips, and due pressure built into every row.
+                  </div>
                 </div>
               </div>
 
-              <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "flex-end" }}>
-                <input
-                  className="input"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Search debt..."
-                  style={{ minWidth: 210 }}
+              {visibleDebts.length === 0 ? (
+                <EmptyState
+                  title="No debt accounts yet"
+                  sub="Start with a credit card, car loan, mortgage, or any other balance you want tracked."
                 />
-                <button
-                  className="btnGhost"
-                  onClick={() => updateSettings({ showInactive: !settings.showInactive })}
-                >
-                  {settings.showInactive ? "Hide inactive" : "Show inactive"}
-                </button>
-              </div>
-            </div>
+              ) : (
+                <div className="deList">
+                  {visibleDebts.map((debt) => {
+                    const isOpen = openId === debt.id;
+                    const monthlyShown = getMonthlyShown(debt);
+                    const payoff = payoffMonths(safeNum(debt.balance), safeNum(debt.apr), getAttackPayment(debt));
+                    const due = getDueStatus(debt.dueDay);
+                    const progressFill = getDebtProgressPercent(debt);
+                    const progressTone = getDebtBarTone(debt);
 
-            {visibleDebts.length === 0 ? (
-              <EmptyState
-                title="No debt accounts yet"
-                sub="Start with a credit card, car loan, mortgage, or any other balance you want tracked."
-              />
-            ) : (
-              <div style={{ display: "grid", gap: 14 }}>
-                {visibleDebts.map((debt) => {
-                  const isOpen = openId === debt.id;
-                  const monthlyShown = getMonthlyShown(debt);
-                  const payoff = payoffMonths(safeNum(debt.balance), safeNum(debt.apr), getAttackPayment(debt));
-                  const due = getDueStatus(debt.dueDay);
-                  const progressFill = getDebtProgressPercent(debt);
-                  const progressTone = getDebtBarTone(debt);
+                    const rankedMatch = rankedDebts.find((r) => r.id === debt.id);
+                    const priority = rankedMatch?.priority || null;
+                    const chip = getDebtChip(debt, priority);
+                    const promo = getPromoStatus(debt);
 
-                  const rankedMatch = rankedDebts.find((r) => r.id === debt.id);
-                  const priority = rankedMatch?.priority || null;
-                  const chip = getDebtChip(debt, priority);
-                  const promo = getPromoStatus(debt);
+                    return (
+                      <div key={debt.id} className="deDebtCard">
+                        <div className="deDebtTop">
+                          <div className="deDebtTopGrid">
+                            <div>
+                              <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+                                <div style={{ fontWeight: 950, fontSize: 18 }}>{debt.name || "Untitled debt"}</div>
 
-                  return (
-                    <div key={debt.id} className="card" style={{ overflow: "hidden" }}>
-                      <button
-                        onClick={() => setOpenId((prev) => (prev === debt.id ? null : debt.id))}
-                        style={{
-                          width: "100%",
-                          background: "transparent",
-                          border: "none",
-                          color: "inherit",
-                          textAlign: "left",
-                          padding: 18,
-                          cursor: "pointer",
-                        }}
-                      >
-                        <div
-                          style={{
-                            display: "grid",
-                            gridTemplateColumns: "1fr auto",
-                            gap: 14,
-                            alignItems: "start",
-                          }}
-                        >
-                          <div>
-                            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
-                              <div style={{ fontWeight: 950, fontSize: 18 }}>
-                                {debt.name || "Untitled debt"}
+                                <Tag text={debtTypeLabel(debt.type)} tone="neutral" />
+                                {!debt.isActive ? <Tag text="Inactive" tone="neutral" /> : null}
+                                {priority ? (
+                                  <Tag text={`Target #${priority}`} tone={priority === 1 ? "accent" : "neutral"} />
+                                ) : null}
+                                <Tag text={chip.label} tone={chip.tone} />
+                                {promo && promo.tone === "good" ? <Tag text={promo.label} tone="good" /> : null}
+                                {savingIds[debt.id] ? <Tag text="Saving..." tone="accent" /> : null}
                               </div>
 
-                              <Tag text={debtTypeLabel(debt.type)} tone="neutral" />
-                              {!debt.isActive ? <Tag text="Inactive" tone="neutral" /> : null}
-                              {priority ? <Tag text={`Target #${priority}`} tone={priority === 1 ? "accent" : "neutral"} /> : null}
-                              <Tag text={chip.label} tone={chip.tone} />
-                              {promo && promo.tone === "good" ? <Tag text={promo.label} tone="good" /> : null}
-                              {savingIds[debt.id] ? <Tag text="Saving..." tone="accent" /> : null}
+                              <div className="deSectionText" style={{ marginTop: 8 }}>
+                                {debt.lender || "No lender yet"} • {due.label}
+                              </div>
+
+                              <div style={{ marginTop: 12 }}>
+                                <ProgressBar fill={progressFill} tone={progressTone} />
+                              </div>
                             </div>
 
-                            <div className="muted" style={{ marginTop: 8, fontSize: 13 }}>
-                              {debt.lender || "No lender yet"} • {due.label}
-                            </div>
-
-                            <div style={{ marginTop: 12 }}>
-                              <ProgressBar fill={progressFill} tone={progressTone} />
+                            <div className="deMiniMetricGrid">
+                              <MiniMetric label="Balance" value={fmtMoney(debt.balance)} />
+                              <MiniMetric label="APR" value={fmtPct(debt.apr)} />
+                              <MiniMetric label="Monthly" value={fmtMoney(monthlyShown)} />
+                              <MiniMetric label="Payoff" value={payoff === Infinity ? "Never" : monthLabel(payoff)} />
                             </div>
                           </div>
 
-                          <div
-                            style={{
-                              display: "grid",
-                              gridTemplateColumns: "repeat(4, minmax(92px, 1fr))",
-                              gap: 10,
-                              minWidth: 430,
-                            }}
-                          >
-                            <MiniMetric label="Balance" value={fmtMoney(debt.balance)} />
-                            <MiniMetric label="APR" value={fmtPct(debt.apr)} />
-                            <MiniMetric label="Monthly" value={fmtMoney(monthlyShown)} />
-                            <MiniMetric label="Payoff" value={payoff === Infinity ? "Never" : monthLabel(payoff)} />
-                          </div>
-                        </div>
-                      </button>
-
-                      {isOpen ? (
-                        <div style={{ padding: "0 18px 18px", borderTop: "1px solid rgba(255,255,255,.10)" }}>
-                          <div
-                            style={{
-                              display: "grid",
-                              gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-                              gap: 16,
-                              marginTop: 16,
-                            }}
-                          >
-                            <Field label="Debt name">
-                              <input
-                                className="input"
-                                value={debt.name}
-                                onChange={(e) => updateDebt(debt.id, { name: e.target.value })}
-                                placeholder="Amex Gold, Mortgage, Car Loan..."
-                              />
-                            </Field>
-
-                            <Field label="Debt type">
-                              <select
-                                className="input"
-                                value={debt.type}
-                                onChange={(e) => updateDebt(debt.id, { type: e.target.value })}
-                              >
-                                <option value="mortgage">Mortgage</option>
-                                <option value="auto">Auto Loan</option>
-                                <option value="credit_card">Credit Card</option>
-                                <option value="personal_loan">Personal Loan</option>
-                                <option value="student_loan">Student Loan</option>
-                                <option value="other">Other Debt</option>
-                              </select>
-                            </Field>
-
-                            <Field label="Lender">
-                              <input
-                                className="input"
-                                value={debt.lender}
-                                onChange={(e) => updateDebt(debt.id, { lender: e.target.value })}
-                                placeholder="Bank / lender"
-                              />
-                            </Field>
-
-                            <Field label="Current balance">
-                              <input
-                                className="input"
-                                value={String(debt.balance || "")}
-                                onChange={(e) => updateDebt(debt.id, { balance: safeNum(parseMoneyInput(e.target.value), 0) })}
-                                placeholder="e.g. 8200"
-                              />
-                            </Field>
-
-                            <Field label="Original balance">
-                              <input
-                                className="input"
-                                value={String(debt.originalBalance || "")}
-                                onChange={(e) =>
-                                  updateDebt(debt.id, { originalBalance: safeNum(parseMoneyInput(e.target.value), 0) })
-                                }
-                                placeholder="Optional"
-                              />
-                            </Field>
-
-                            <Field label="Credit limit">
-                              <input
-                                className="input"
-                                value={String(debt.creditLimit || "")}
-                                onChange={(e) =>
-                                  updateDebt(debt.id, { creditLimit: safeNum(parseMoneyInput(e.target.value), 0) })
-                                }
-                                placeholder="Cards only"
-                              />
-                            </Field>
-
-                            <Field label="APR %">
-                              <input
-                                className="input"
-                                value={String(debt.apr || "")}
-                                onChange={(e) => updateDebt(debt.id, { apr: safeNum(e.target.value, 0) })}
-                                placeholder="e.g. 24.99"
-                              />
-                            </Field>
-
-                            <Field label="Due day">
-                              <input
-                                className="input"
-                                value={debt.dueDay}
-                                onChange={(e) => updateDebt(debt.id, { dueDay: e.target.value })}
-                                placeholder="1-31"
-                              />
-                            </Field>
-
-                            <Field label="Minimum payment">
-                              <input
-                                className="input"
-                                value={String(debt.minimumPayment || "")}
-                                onChange={(e) =>
-                                  updateDebt(debt.id, { minimumPayment: safeNum(parseMoneyInput(e.target.value), 0) })
-                                }
-                                placeholder="e.g. 145"
-                              />
-                            </Field>
-
-                            <Field label="Extra payment">
-                              <input
-                                className="input"
-                                value={String(debt.extraPayment || "")}
-                                onChange={(e) =>
-                                  updateDebt(debt.id, { extraPayment: safeNum(parseMoneyInput(e.target.value), 0) })
-                                }
-                                placeholder="e.g. 75"
-                              />
-                            </Field>
-
-                            <Field label="Monthly payment">
-                              <input
-                                className="input"
-                                value={String(debt.monthlyPayment || "")}
-                                onChange={(e) =>
-                                  updateDebt(debt.id, { monthlyPayment: safeNum(parseMoneyInput(e.target.value), 0) })
-                                }
-                                placeholder="For fixed/installment debt"
-                              />
-                            </Field>
-
-                            <Field label="Promo APR %">
-                              <input
-                                className="input"
-                                value={debt.promoApr}
-                                onChange={(e) => updateDebt(debt.id, { promoApr: e.target.value })}
-                                placeholder="Optional intro APR"
-                              />
-                            </Field>
-
-                            <Field label="Promo ends">
-                              <input
-                                className="input"
-                                type="date"
-                                value={debt.promoEnds || ""}
-                                onChange={(e) => updateDebt(debt.id, { promoEnds: e.target.value })}
-                              />
-                            </Field>
-                          </div>
-
-                          {debt.type === "mortgage" ? (
-                            <div
-                              className="card"
-                              style={{
-                                marginTop: 16,
-                                padding: 16,
-                                borderColor: "rgba(34,197,94,.18)",
-                                background: "linear-gradient(180deg, rgba(34,197,94,.10), rgba(255,255,255,.04))",
-                              }}
-                            >
-                              <div
-                                style={{
-                                  display: "grid",
-                                  gridTemplateColumns: "1fr auto",
-                                  gap: 12,
-                                  alignItems: "start",
-                                  marginBottom: 14,
-                                }}
-                              >
-                                <div>
-                                  <div style={{ fontWeight: 950, fontSize: 16 }}>Mortgage Payment Breakdown</div>
-                                  <div className="muted" style={{ marginTop: 4, fontSize: 13 }}>
-                                    Principal should be going up over time. Interest-heavy payments show weaker bars.
-                                  </div>
-                                </div>
-
-                                <div className="pill" style={{ fontSize: 12 }}>
-                                  Total {fmtMoney(getMortgageTotal(debt))}
-                                </div>
-                              </div>
-
-                              <div style={{ marginBottom: 14 }}>
-                                <ProgressBar
-                                  fill={getPrincipalShare(debt) ?? 0}
-                                  tone={(getPrincipalShare(debt) ?? 0) < 25 ? "warn" : "good"}
-                                />
-                              </div>
-
-                              <div
-                                style={{
-                                  display: "grid",
-                                  gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-                                  gap: 16,
-                                }}
-                              >
-                                <Field label="Principal portion">
-                                  <input
-                                    className="input"
-                                    value={String(debt.principalPortion || "")}
-                                    onChange={(e) =>
-                                      updateDebt(debt.id, {
-                                        principalPortion: safeNum(parseMoneyInput(e.target.value), 0),
-                                      })
-                                    }
-                                    placeholder="e.g. 612.34"
-                                  />
-                                </Field>
-
-                                <Field label="Interest portion">
-                                  <input
-                                    className="input"
-                                    value={String(debt.interestPortion || "")}
-                                    onChange={(e) =>
-                                      updateDebt(debt.id, {
-                                        interestPortion: safeNum(parseMoneyInput(e.target.value), 0),
-                                      })
-                                    }
-                                    placeholder="e.g. 1542.11"
-                                  />
-                                </Field>
-
-                                <Field label="Escrow / tax / insurance">
-                                  <input
-                                    className="input"
-                                    value={String(debt.escrowPortion || "")}
-                                    onChange={(e) =>
-                                      updateDebt(debt.id, {
-                                        escrowPortion: safeNum(parseMoneyInput(e.target.value), 0),
-                                      })
-                                    }
-                                    placeholder="e.g. 649.45"
-                                  />
-                                </Field>
-                              </div>
-                            </div>
-                          ) : null}
-
-                          <div style={{ marginTop: 16 }}>
-                            <Field label="Notes">
-                              <textarea
-                                className="input"
-                                value={debt.notes}
-                                onChange={(e) => updateDebt(debt.id, { notes: e.target.value })}
-                                placeholder="Rate notes, payoff plan, balance transfer info, refinance thoughts..."
-                                style={{ minHeight: 110, width: "100%", resize: "vertical" }}
-                              />
-                            </Field>
-                          </div>
-
-                          <div
-                            style={{
-                              display: "flex",
-                              justifyContent: "space-between",
-                              gap: 12,
-                              flexWrap: "wrap",
-                              marginTop: 16,
-                            }}
-                          >
-                            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                              <button
-                                className="btnGhost"
-                                onClick={() => updateDebt(debt.id, { isActive: !debt.isActive })}
-                              >
-                                {debt.isActive ? "Mark inactive" : "Mark active"}
-                              </button>
-
-                              <button
-                                className="btnGhost"
-                                onClick={() => duplicateDebt(debt)}
-                              >
-                                Duplicate
-                              </button>
-                            </div>
-
+                          <div className="deActionRow" style={{ marginTop: 14 }}>
                             <button
-                              className="btnGhost"
-                              onClick={() => removeDebt(debt.id)}
-                              style={{
-                                borderColor: "rgba(239,68,68,.25)",
-                                background: "rgba(239,68,68,.08)",
-                              }}
+                              className="deOpenBtn"
+                              type="button"
+                              onClick={() => setOpenId((prev) => (prev === debt.id ? null : debt.id))}
                             >
+                              {isOpen ? "Close details" : "Open details"}
+                            </button>
+                            <button className="deGhostBtn" type="button" onClick={() => duplicateDebt(debt)}>
+                              Duplicate
+                            </button>
+                            <button
+                              className="deGhostBtn"
+                              type="button"
+                              onClick={() => updateDebt(debt.id, { isActive: !debt.isActive })}
+                            >
+                              {debt.isActive ? "Mark inactive" : "Mark active"}
+                            </button>
+                            <button className="deDangerBtn" type="button" onClick={() => removeDebt(debt.id)}>
                               Delete debt
                             </button>
                           </div>
                         </div>
-                      ) : null}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        </div>
 
-        <div style={{ display: "grid", gap: 18 }}>
-          <div className="card" style={{ padding: 18 }}>
-            <div style={{ fontWeight: 950, fontSize: 22 }}>Priority Queue</div>
-            <div className="muted" style={{ marginTop: 4, fontSize: 14 }}>
-              {settings.strategy === "avalanche" ? "Highest APR first." : "Smallest balance first."}
-            </div>
+                        {isOpen ? (
+                          <div className="deDebtExpanded">
+                            <div className="deExpandedGrid">
+                              <Field label="Debt name">
+                                <input
+                                  className="deField"
+                                  value={debt.name}
+                                  onChange={(e) => updateDebt(debt.id, { name: e.target.value })}
+                                  placeholder="Amex Gold, Mortgage, Car Loan..."
+                                />
+                              </Field>
 
-            <div style={{ display: "grid", gap: 12, marginTop: 14 }}>
-              {rankedDebts.length === 0 ? (
-                <EmptyState title="Nothing to rank yet" sub="Add active balances and monthly payments to build a payoff order." />
-              ) : (
-                rankedDebts.map((d) => {
-                  const chip = getDebtChip(d, d.priority);
-                  const due = getDueStatus(d.dueDay);
+                              <Field label="Debt type">
+                                <select
+                                  className="deSelect"
+                                  value={debt.type}
+                                  onChange={(e) => updateDebt(debt.id, { type: e.target.value })}
+                                >
+                                  <option value="mortgage">Mortgage</option>
+                                  <option value="auto">Auto Loan</option>
+                                  <option value="credit_card">Credit Card</option>
+                                  <option value="personal_loan">Personal Loan</option>
+                                  <option value="student_loan">Student Loan</option>
+                                  <option value="other">Other Debt</option>
+                                </select>
+                              </Field>
 
-                  return (
-                    <div key={d.id} className="card" style={{ padding: 14 }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
-                        <div>
-                          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                            <Tag text={`#${d.priority}`} tone={d.priority === 1 ? "accent" : "neutral"} />
-                            <span style={{ fontWeight: 900 }}>{d.name}</span>
-                            <Tag text={chip.label} tone={chip.tone} />
+                              <Field label="Lender">
+                                <input
+                                  className="deField"
+                                  value={debt.lender}
+                                  onChange={(e) => updateDebt(debt.id, { lender: e.target.value })}
+                                  placeholder="Bank / lender"
+                                />
+                              </Field>
+
+                              <Field label="Current balance">
+                                <input
+                                  className="deField"
+                                  value={String(debt.balance || "")}
+                                  onChange={(e) =>
+                                    updateDebt(debt.id, { balance: safeNum(parseMoneyInput(e.target.value), 0) })
+                                  }
+                                  placeholder="e.g. 8200"
+                                />
+                              </Field>
+
+                              <Field label="Original balance">
+                                <input
+                                  className="deField"
+                                  value={String(debt.originalBalance || "")}
+                                  onChange={(e) =>
+                                    updateDebt(debt.id, {
+                                      originalBalance: safeNum(parseMoneyInput(e.target.value), 0),
+                                    })
+                                  }
+                                  placeholder="Optional"
+                                />
+                              </Field>
+
+                              <Field label="Credit limit">
+                                <input
+                                  className="deField"
+                                  value={String(debt.creditLimit || "")}
+                                  onChange={(e) =>
+                                    updateDebt(debt.id, {
+                                      creditLimit: safeNum(parseMoneyInput(e.target.value), 0),
+                                    })
+                                  }
+                                  placeholder="Cards only"
+                                />
+                              </Field>
+
+                              <Field label="APR %">
+                                <input
+                                  className="deField"
+                                  value={String(debt.apr || "")}
+                                  onChange={(e) => updateDebt(debt.id, { apr: safeNum(e.target.value, 0) })}
+                                  placeholder="e.g. 24.99"
+                                />
+                              </Field>
+
+                              <Field label="Due day">
+                                <input
+                                  className="deField"
+                                  value={debt.dueDay}
+                                  onChange={(e) => updateDebt(debt.id, { dueDay: e.target.value })}
+                                  placeholder="1-31"
+                                />
+                              </Field>
+
+                              <Field label="Minimum payment">
+                                <input
+                                  className="deField"
+                                  value={String(debt.minimumPayment || "")}
+                                  onChange={(e) =>
+                                    updateDebt(debt.id, {
+                                      minimumPayment: safeNum(parseMoneyInput(e.target.value), 0),
+                                    })
+                                  }
+                                  placeholder="e.g. 145"
+                                />
+                              </Field>
+
+                              <Field label="Extra payment">
+                                <input
+                                  className="deField"
+                                  value={String(debt.extraPayment || "")}
+                                  onChange={(e) =>
+                                    updateDebt(debt.id, {
+                                      extraPayment: safeNum(parseMoneyInput(e.target.value), 0),
+                                    })
+                                  }
+                                  placeholder="e.g. 75"
+                                />
+                              </Field>
+
+                              <Field label="Monthly payment">
+                                <input
+                                  className="deField"
+                                  value={String(debt.monthlyPayment || "")}
+                                  onChange={(e) =>
+                                    updateDebt(debt.id, {
+                                      monthlyPayment: safeNum(parseMoneyInput(e.target.value), 0),
+                                    })
+                                  }
+                                  placeholder="For fixed/installment debt"
+                                />
+                              </Field>
+
+                              <Field label="Promo APR %">
+                                <input
+                                  className="deField"
+                                  value={debt.promoApr}
+                                  onChange={(e) => updateDebt(debt.id, { promoApr: e.target.value })}
+                                  placeholder="Optional intro APR"
+                                />
+                              </Field>
+
+                              <Field label="Promo ends">
+                                <input
+                                  className="deField"
+                                  type="date"
+                                  value={debt.promoEnds || ""}
+                                  onChange={(e) => updateDebt(debt.id, { promoEnds: e.target.value })}
+                                />
+                              </Field>
+                            </div>
+
+                            {debt.type === "mortgage" ? (
+                              <div className="deMortgageCard">
+                                <div
+                                  style={{
+                                    display: "grid",
+                                    gridTemplateColumns: "1fr auto",
+                                    gap: 12,
+                                    alignItems: "start",
+                                    marginBottom: 14,
+                                  }}
+                                >
+                                  <div>
+                                    <div style={{ fontWeight: 950, fontSize: 16 }}>Mortgage Payment Breakdown</div>
+                                    <div className="deSectionText" style={{ marginTop: 4 }}>
+                                      Principal should trend up over time. Interest-heavy payments stay warmer.
+                                    </div>
+                                  </div>
+
+                                  <div className="dePill" style={tagToneStyle("good")}>
+                                    Total {fmtMoney(getMortgageTotal(debt))}
+                                  </div>
+                                </div>
+
+                                <div style={{ marginBottom: 14 }}>
+                                  <ProgressBar
+                                    fill={getPrincipalShare(debt) ?? 0}
+                                    tone={(getPrincipalShare(debt) ?? 0) < 25 ? "warn" : "good"}
+                                  />
+                                </div>
+
+                                <div className="deMortgageGrid">
+                                  <Field label="Principal portion">
+                                    <input
+                                      className="deField"
+                                      value={String(debt.principalPortion || "")}
+                                      onChange={(e) =>
+                                        updateDebt(debt.id, {
+                                          principalPortion: safeNum(parseMoneyInput(e.target.value), 0),
+                                        })
+                                      }
+                                      placeholder="e.g. 612.34"
+                                    />
+                                  </Field>
+
+                                  <Field label="Interest portion">
+                                    <input
+                                      className="deField"
+                                      value={String(debt.interestPortion || "")}
+                                      onChange={(e) =>
+                                        updateDebt(debt.id, {
+                                          interestPortion: safeNum(parseMoneyInput(e.target.value), 0),
+                                        })
+                                      }
+                                      placeholder="e.g. 1542.11"
+                                    />
+                                  </Field>
+
+                                  <Field label="Escrow / tax / insurance">
+                                    <input
+                                      className="deField"
+                                      value={String(debt.escrowPortion || "")}
+                                      onChange={(e) =>
+                                        updateDebt(debt.id, {
+                                          escrowPortion: safeNum(parseMoneyInput(e.target.value), 0),
+                                        })
+                                      }
+                                      placeholder="e.g. 649.45"
+                                    />
+                                  </Field>
+                                </div>
+                              </div>
+                            ) : null}
+
+                            <div style={{ marginTop: 16 }}>
+                              <Field label="Notes">
+                                <textarea
+                                  className="deTextarea"
+                                  value={debt.notes}
+                                  onChange={(e) => updateDebt(debt.id, { notes: e.target.value })}
+                                  placeholder="Rate notes, payoff plan, balance transfer info, refinance thoughts..."
+                                />
+                              </Field>
+                            </div>
                           </div>
-                          <div className="muted" style={{ marginTop: 6, fontSize: 12 }}>
-                            {d.lender || "No lender"} • {fmtPct(d.apr)} APR • {due.label}
-                          </div>
-                        </div>
-
-                        <div style={{ textAlign: "right" }}>
-                          <div className="muted" style={{ fontSize: 11 }}>Balance</div>
-                          <div style={{ fontWeight: 900 }}>{fmtMoney(d.balance)}</div>
-                        </div>
+                        ) : null}
                       </div>
-
-                      <div style={{ marginTop: 12 }}>
-                        <ProgressBar fill={getDebtProgressPercent(d)} tone={getDebtBarTone(d)} />
-                      </div>
-
-                      <div
-                        style={{
-                          display: "grid",
-                          gridTemplateColumns: "repeat(3, minmax(0,1fr))",
-                          gap: 10,
-                          marginTop: 12,
-                        }}
-                      >
-                        <MiniMetric label="Min" value={fmtMoney(d.minimumPayment)} />
-                        <MiniMetric label="Extra" value={fmtMoney(d.extraPayment)} />
-                        <MiniMetric label="Payoff" value={d.payoff === Infinity ? "Never" : monthLabel(d.payoff)} />
-                      </div>
-                    </div>
-                  );
-                })
+                    );
+                  })}
+                </div>
               )}
             </div>
           </div>
 
-          <div className="card" style={{ padding: 18 }}>
-            <div style={{ fontWeight: 950, fontSize: 22 }}>Debt Snapshot</div>
-            <div className="muted" style={{ marginTop: 4, fontSize: 14 }}>
-              Quick monthly picture.
+          <div className="deRightStack">
+            <div className="deCard">
+              <div className="deCardHead">
+                <div>
+                  <h2 className="deSectionMini">Priority Queue</h2>
+                  <div className="deSectionText">
+                    {settings.strategy === "avalanche" ? "Highest APR first." : "Smallest balance first."}
+                  </div>
+                </div>
+              </div>
+
+              <div className="deList">
+                {rankedDebts.length === 0 ? (
+                  <EmptyState
+                    title="Nothing to rank yet"
+                    sub="Add active balances and monthly payments to build a payoff order."
+                  />
+                ) : (
+                  rankedDebts.map((d) => {
+                    const chip = getDebtChip(d, d.priority);
+                    const due = getDueStatus(d.dueDay);
+
+                    return (
+                      <div className="deCard" key={d.id} style={{ padding: 14 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
+                          <div>
+                            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                              <Tag text={`#${d.priority}`} tone={d.priority === 1 ? "accent" : "neutral"} />
+                              <span style={{ fontWeight: 900 }}>{d.name}</span>
+                              <Tag text={chip.label} tone={chip.tone} />
+                            </div>
+                            <div className="deSectionText" style={{ marginTop: 6 }}>
+                              {d.lender || "No lender"} • {fmtPct(d.apr)} APR • {due.label}
+                            </div>
+                          </div>
+
+                          <div style={{ textAlign: "right" }}>
+                            <div className="deTiny">Balance</div>
+                            <div style={{ fontWeight: 900 }}>{fmtMoney(d.balance)}</div>
+                          </div>
+                        </div>
+
+                        <div style={{ marginTop: 12 }}>
+                          <ProgressBar fill={getDebtProgressPercent(d)} tone={getDebtBarTone(d)} />
+                        </div>
+
+                        <div
+                          style={{
+                            display: "grid",
+                            gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+                            gap: 10,
+                            marginTop: 12,
+                          }}
+                        >
+                          <MiniMetric label="Min" value={fmtMoney(d.minimumPayment)} />
+                          <MiniMetric label="Extra" value={fmtMoney(d.extraPayment)} />
+                          <MiniMetric label="Payoff" value={d.payoff === Infinity ? "Never" : monthLabel(d.payoff)} />
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
             </div>
 
-            <div style={{ display: "grid", gap: 10, marginTop: 14 }}>
-              <SnapshotRow label="Total minimums" value={fmtMoney(totals.totalMinimum)} />
-              <SnapshotRow label="Debt-specific extra" value={fmtMoney(totals.totalExtra)} />
-              <SnapshotRow label="Global extra pool" value={fmtMoney(settings.globalExtraPool)} />
-              <SnapshotRow label="Total monthly attack" value={fmtMoney(totals.totalMinimum + totals.totalExtra + settings.globalExtraPool)} strong />
-              <SnapshotRow label="Credit cards" value={String(quickStats.creditCards)} />
-              <SnapshotRow label="Installment debts" value={String(quickStats.installment)} />
-            </div>
-          </div>
+            <div className="deCard">
+              <div className="deCardHead">
+                <div>
+                  <h2 className="deSectionMini">Debt Snapshot</h2>
+                  <div className="deSectionText">Quick monthly picture.</div>
+                </div>
+              </div>
 
-          <div className="card" style={{ padding: 18 }}>
-            <div style={{ fontWeight: 950, fontSize: 22 }}>Projected First Win</div>
-            <div className="muted" style={{ marginTop: 4, fontSize: 14 }}>
-              Based on current payment inputs only.
+              <div className="deList">
+                <SnapshotRow label="Total minimums" value={fmtMoney(totals.totalMinimum)} />
+                <SnapshotRow label="Debt-specific extra" value={fmtMoney(totals.totalExtra)} />
+                <SnapshotRow label="Global extra pool" value={fmtMoney(settings.globalExtraPool)} />
+                <SnapshotRow
+                  label="Total monthly attack"
+                  value={fmtMoney(totals.totalMinimum + totals.totalExtra + settings.globalExtraPool)}
+                  strong
+                />
+                <SnapshotRow label="Credit cards" value={String(quickStats.creditCards)} />
+                <SnapshotRow label="Installment debts" value={String(quickStats.installment)} />
+              </div>
             </div>
 
-            <div style={{ marginTop: 14 }}>
+            <div className="deCard">
+              <div className="deCardHead">
+                <div>
+                  <h2 className="deSectionMini">Projected First Win</h2>
+                  <div className="deSectionText">Based on current payment inputs only.</div>
+                </div>
+              </div>
+
               {topTarget ? (
-                <div style={{ display: "grid", gap: 10 }}>
+                <div className="deList">
                   <SnapshotRow label="Target" value={topTarget.name} />
-                  <SnapshotRow label="Payoff estimate" value={topTarget.payoff === Infinity ? "Never" : monthLabel(topTarget.payoff)} />
-                  <SnapshotRow label="Approx payoff month" value={topTarget.payoff === Infinity ? "—" : nextMonthDate(Math.ceil(topTarget.payoff))} />
+                  <SnapshotRow
+                    label="Payoff estimate"
+                    value={topTarget.payoff === Infinity ? "Never" : monthLabel(topTarget.payoff)}
+                  />
+                  <SnapshotRow
+                    label="Approx payoff month"
+                    value={topTarget.payoff === Infinity ? "—" : nextMonthDate(Math.ceil(topTarget.payoff))}
+                  />
                 </div>
               ) : (
                 <EmptyState title="No projection yet" sub="Add a debt with balance, APR, and payment info." />
               )}
             </div>
+
+            <div className="deCard">
+              <div className="deCardHead">
+                <div>
+                  <h2 className="deSectionMini">Due Soon</h2>
+                  <div className="deSectionText">Fast action view for urgent payments.</div>
+                </div>
+              </div>
+
+              <div className="deList">
+                {dueSoon.length === 0 ? (
+                  <EmptyState title="Nothing urgent right now" sub="No active debt with immediate due pressure." />
+                ) : (
+                  dueSoon.map((d) => (
+                    <div className="deCard" key={d.id} style={{ padding: 14 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
+                        <div>
+                          <div style={{ fontWeight: 900 }}>{d.name}</div>
+                          <div className="deSectionText" style={{ marginTop: 6 }}>
+                            {d.due.label}
+                          </div>
+                        </div>
+                        <Tag text={d.due.label} tone={d.due.tone === "neutral" ? "neutral" : d.due.tone} />
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            <div className="deCard">
+              <div className="deCardHead">
+                <div>
+                  <h2 className="deSectionMini">Mortgage Insight</h2>
+                  <div className="deSectionText">Principal, interest, and escrow at a glance.</div>
+                </div>
+              </div>
+
+              <div className="deList">
+                <SnapshotRow label="Principal / month" value={fmtMoney(totals.mortgagePrincipal)} />
+                <SnapshotRow label="Interest / month" value={fmtMoney(totals.mortgageInterest)} />
+                <SnapshotRow label="Escrow / month" value={fmtMoney(totals.mortgageEscrow)} />
+              </div>
+
+              <div style={{ marginTop: 14 }}>
+                <ProgressBar
+                  fill={
+                    totals.mortgagePrincipal + totals.mortgageInterest + totals.mortgageEscrow > 0
+                      ? (totals.mortgagePrincipal /
+                          (totals.mortgagePrincipal + totals.mortgageInterest + totals.mortgageEscrow)) *
+                        100
+                      : 0
+                  }
+                  tone={
+                    totals.mortgagePrincipal + totals.mortgageInterest + totals.mortgageEscrow > 0 &&
+                    totals.mortgagePrincipal /
+                      (totals.mortgagePrincipal + totals.mortgageInterest + totals.mortgageEscrow) <
+                      0.25
+                      ? "warn"
+                      : "good"
+                  }
+                />
+              </div>
+            </div>
           </div>
-
-          <div className="card" style={{ padding: 18 }}>
-            <div style={{ fontWeight: 950, fontSize: 22 }}>Mortgage Insight</div>
-            <div className="muted" style={{ marginTop: 4, fontSize: 14 }}>
-              Uses the same visual logic as the bills page.
-            </div>
-
-            <div style={{ display: "grid", gap: 10, marginTop: 14 }}>
-              <SnapshotRow label="Principal / month" value={fmtMoney(totals.mortgagePrincipal)} />
-              <SnapshotRow label="Interest / month" value={fmtMoney(totals.mortgageInterest)} />
-              <SnapshotRow label="Escrow / month" value={fmtMoney(totals.mortgageEscrow)} />
-            </div>
-
-            <div style={{ marginTop: 14 }}>
-              <ProgressBar
-                fill={
-                  totals.mortgagePrincipal + totals.mortgageInterest + totals.mortgageEscrow > 0
-                    ? (totals.mortgagePrincipal /
-                        (totals.mortgagePrincipal + totals.mortgageInterest + totals.mortgageEscrow)) *
-                      100
-                    : 0
-                }
-                tone={
-                  totals.mortgagePrincipal + totals.mortgageInterest + totals.mortgageEscrow > 0 &&
-                  totals.mortgagePrincipal /
-                    (totals.mortgagePrincipal + totals.mortgageInterest + totals.mortgageEscrow) <
-                    0.25
-                    ? "warn"
-                    : "good"
-                }
-              />
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <style jsx>{`
-        @media (max-width: 1280px) {
-          section[style*="grid-template-columns: 1.55fr 1fr"] {
-            grid-template-columns: 1fr !important;
-          }
-        }
-
-        @media (max-width: 1100px) {
-          section[style*="grid-template-columns: repeat(4, minmax(0, 1fr))"] {
-            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-          }
-
-          div[style*="grid-template-columns: 1.1fr 1fr 1fr auto"] {
-            grid-template-columns: 1fr !important;
-          }
-
-          div[style*="grid-template-columns: repeat(3, minmax(0, 1fr))"] {
-            grid-template-columns: 1fr !important;
-          }
-        }
-
-        @media (max-width: 900px) {
-          div[style*="grid-template-columns: 1fr auto"] {
-            grid-template-columns: 1fr !important;
-          }
-
-          div[style*="min-width: 430"] {
-            min-width: 100% !important;
-            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-          }
-        }
-
-        @media (max-width: 760px) {
-          section[style*="grid-template-columns: repeat(4, minmax(0, 1fr))"] {
-            grid-template-columns: 1fr !important;
-          }
-
-          div[style*="min-width: 430"] {
-            grid-template-columns: 1fr 1fr !important;
-          }
-        }
-      `}</style>
-    </div>
+        </section>
+      </div>
+    </main>
   );
 }
 
-/* =========================
-   components
-========================= */
-function TopStatCard({ label, value, sub, fill, tone }) {
+function TopMetricCard({ label, value, sub, fill, tone }) {
   return (
-    <div className="card" style={{ padding: 16 }}>
-      <div className="muted" style={{ fontSize: 14 }}>{label}</div>
-      <div style={{ marginTop: 10, fontWeight: 950, fontSize: 22 }}>{value}</div>
+    <div className="deMetric">
+      <div className="deMetricLabel">{label}</div>
+      <div className="deMetricValue">{value}</div>
       <div style={{ marginTop: 10 }}>
         <ProgressBar fill={fill} tone={tone} />
       </div>
-      <div className="muted" style={{ marginTop: 10, fontSize: 13 }}>{sub}</div>
+      <div className="deMetricSub">{sub}</div>
     </div>
   );
 }
@@ -1454,7 +1920,7 @@ function TopStatCard({ label, value, sub, fill, tone }) {
 function Field({ label, children }) {
   return (
     <label style={{ display: "block" }}>
-      <div className="muted" style={{ fontSize: 13, marginBottom: 8 }}>{label}</div>
+      <div className="deTiny">{label}</div>
       {children}
     </label>
   );
@@ -1462,17 +1928,8 @@ function Field({ label, children }) {
 
 function MiniMetric({ label, value }) {
   return (
-    <div
-      style={{
-        border: "1px solid rgba(255,255,255,.10)",
-        borderRadius: 14,
-        padding: "10px 12px",
-        background: "rgba(255,255,255,.03)",
-      }}
-    >
-      <div className="muted" style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.14em" }}>
-        {label}
-      </div>
+    <div className="deMiniMetric">
+      <div className="deTiny">{label}</div>
       <div style={{ marginTop: 6, fontWeight: 900, fontSize: 16 }}>{value}</div>
     </div>
   );
@@ -1480,19 +1937,10 @@ function MiniMetric({ label, value }) {
 
 function SnapshotRow({ label, value, strong }) {
   return (
-    <div
-      style={{
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        gap: 14,
-        padding: "12px 14px",
-        borderRadius: 14,
-        border: "1px solid rgba(255,255,255,.10)",
-        background: "rgba(255,255,255,.03)",
-      }}
-    >
-      <div className="muted" style={{ fontSize: 14 }}>{label}</div>
+    <div className="deSnapshotRow">
+      <div className="deMuted" style={{ fontSize: 14 }}>
+        {label}
+      </div>
       <div style={{ fontWeight: strong ? 950 : 850 }}>{value}</div>
     </div>
   );
@@ -1500,24 +1948,14 @@ function SnapshotRow({ label, value, strong }) {
 
 function EmptyState({ title, sub }) {
   return (
-    <div
-      style={{
-        borderRadius: 16,
-        border: "1px dashed rgba(255,255,255,.18)",
-        padding: "26px 18px",
-        textAlign: "center",
-        background: "rgba(255,255,255,.02)",
-      }}
-    >
-      <div style={{ fontWeight: 900, fontSize: 17 }}>{title}</div>
-      <div className="muted" style={{ marginTop: 8, fontSize: 14, lineHeight: 1.5 }}>
-        {sub}
-      </div>
+    <div className="deEmpty">
+      <div className="deEmptyTitle">{title}</div>
+      <div className="deEmptySub">{sub}</div>
     </div>
   );
 }
 
-function Tag({ text, tone = "neutral" }) {
+function tagToneStyle(tone = "neutral") {
   const styles = {
     neutral: {
       border: "1px solid rgba(255,255,255,.12)",
@@ -1546,14 +1984,15 @@ function Tag({ text, tone = "neutral" }) {
     },
   };
 
+  return styles[tone] || styles.neutral;
+}
+
+function Tag({ text, tone = "neutral" }) {
   return (
     <span
+      className="dePill"
       style={{
-        ...styles[tone],
-        borderRadius: 999,
-        padding: "5px 10px",
-        fontSize: 11,
-        fontWeight: 900,
+        ...tagToneStyle(tone),
         whiteSpace: "nowrap",
       }}
     >
@@ -1572,24 +2011,12 @@ function ProgressBar({ fill = 0, tone = "accent" }) {
   };
 
   return (
-    <div
-      style={{
-        height: 10,
-        width: "100%",
-        borderRadius: 999,
-        background: "rgba(255,255,255,.06)",
-        border: "1px solid rgba(255,255,255,.08)",
-        overflow: "hidden",
-      }}
-    >
+    <div className="deProgress">
       <div
+        className="deProgressFill"
         style={{
           width: `${normalized}%`,
-          height: "100%",
-          borderRadius: 999,
           background: toneMap[tone] || toneMap.accent,
-          boxShadow: "0 0 16px rgba(255,255,255,.08)",
-          transition: "width .22s ease",
         }}
       />
     </div>

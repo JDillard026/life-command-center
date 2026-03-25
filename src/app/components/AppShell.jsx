@@ -1,3 +1,4 @@
+// src/app/components/AppShell.jsx
 "use client";
 
 import { useEffect, useState } from "react";
@@ -16,6 +17,9 @@ export default function AppShell({ children }) {
   const pathname = usePathname() || "";
   const [mobileOpen, setMobileOpen] = useState(false);
   const [desktopCollapsed, setDesktopCollapsed] = useState(false);
+
+  const hideAiHelp =
+    pathname.startsWith("/investments") || pathname.startsWith("/market");
 
   useEffect(() => {
     setMobileOpen(false);
@@ -79,9 +83,7 @@ export default function AppShell({ children }) {
 
         <div className={styles.mobileBrand}>
           <div className={styles.mobileBrandMark}>LCC</div>
-          <div className={styles.mobileBrandText}>
-            Life Command Center
-          </div>
+          <div className={styles.mobileBrandText}>Life Command Center</div>
         </div>
 
         <div className={styles.mobileTopbarSpacer} />
@@ -98,10 +100,7 @@ export default function AppShell({ children }) {
 
       <div className={styles.layout}>
         <aside
-          className={cx(
-            styles.sidebar,
-            mobileOpen && styles.sidebarOpen
-          )}
+          className={cx(styles.sidebar, mobileOpen && styles.sidebarOpen)}
           aria-label="Primary navigation"
         >
           <SideNav
@@ -114,11 +113,9 @@ export default function AppShell({ children }) {
         <main className={styles.main}>
           <div className={styles.page}>{children}</div>
         </main>
-
-        <aside className={styles.aiRail}>
-          <AiHelpPanel />
-        </aside>
       </div>
+
+      {!hideAiHelp ? <AiHelpPanel /> : null}
     </div>
   );
 }

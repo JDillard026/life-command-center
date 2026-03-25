@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 
+const DISPLAY_FONT = 'Georgia, "Times New Roman", serif';
+
 const DEFAULT_UNIVERSE = {
   popularStocks: [
     { symbol: "AAPL", name: "Apple Inc.", type: "Stock", exchange: "NASDAQ", currency: "USD" },
@@ -45,109 +47,190 @@ const DEFAULT_UNIVERSE = {
 function money(n) {
   const num = Number(n);
   if (!Number.isFinite(num)) return "—";
-  return num.toLocaleString(undefined, { style: "currency", currency: "USD" });
+  return num.toLocaleString(undefined, {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 2,
+  });
 }
 
-function toNum(value) {
-  const n = Number(value);
+function toNum(v) {
+  const n = Number(v);
   return Number.isFinite(n) ? n : null;
 }
 
-function changeTone(value) {
-  const n = Number(value);
-  if (!Number.isFinite(n) || n === 0) return "neutral";
-  return n > 0 ? "up" : "down";
-}
-
-function tintVars(tone = "neutral") {
-  if (tone === "up") {
-    return {
-      border: "rgba(16,185,129,.24)",
-      glow: "rgba(16,185,129,.16)",
-      top: "rgba(16,185,129,.10)",
-      text: "#86efac",
-    };
-  }
-
-  if (tone === "down") {
-    return {
-      border: "rgba(244,63,94,.24)",
-      glow: "rgba(244,63,94,.16)",
-      top: "rgba(244,63,94,.10)",
-      text: "#fda4af",
-    };
-  }
-
-  return {
-    border: "rgba(59,130,246,.18)",
-    glow: "rgba(59,130,246,.12)",
-    top: "rgba(59,130,246,.07)",
-    text: "rgba(255,255,255,.92)",
-  };
-}
-
-function shellPanel(tone = "neutral", strong = false) {
-  const t = tintVars(tone);
-
-  return {
-    borderRadius: 26,
-    border: `1px solid ${t.border}`,
-    background: `
-      radial-gradient(circle at top left, ${t.top} 0%, rgba(255,255,255,0) 26%),
-      linear-gradient(180deg, rgba(5,10,22,.94) 0%, rgba(3,8,20,.98) 100%)
-    `,
-    boxShadow: strong
-      ? `0 0 0 1px rgba(255,255,255,.02) inset, 0 18px 55px rgba(0,0,0,.42), 0 0 34px ${t.glow}`
-      : `0 0 0 1px rgba(255,255,255,.02) inset, 0 16px 42px rgba(0,0,0,.34), 0 0 20px ${t.glow}`,
-    backdropFilter: "blur(10px)",
-  };
-}
-
-function softPanel(tone = "neutral") {
-  const t = tintVars(tone);
-
-  return {
-    borderRadius: 22,
-    border: `1px solid ${t.border}`,
-    background: `
-      radial-gradient(circle at top left, ${t.top} 0%, rgba(255,255,255,0) 24%),
-      linear-gradient(180deg, rgba(7,12,26,.90) 0%, rgba(4,9,22,.96) 100%)
-    `,
-    boxShadow: `0 14px 32px rgba(0,0,0,.28), 0 0 18px ${t.glow}`,
-  };
-}
-
-function microPanel(tone = "neutral") {
-  const t = tintVars(tone);
-
-  return {
-    borderRadius: 18,
-    border: `1px solid ${t.border}`,
-    background: `
-      radial-gradient(circle at top left, ${t.top} 0%, rgba(255,255,255,0) 28%),
-      linear-gradient(180deg, rgba(10,15,30,.86) 0%, rgba(5,9,20,.94) 100%)
-    `,
-    boxShadow: `0 10px 24px rgba(0,0,0,.24), 0 0 14px ${t.glow}`,
-  };
-}
-
-function priceTextFromQuote(quote) {
+function quotePriceText(quote) {
   if (!quote) return "Loading";
   const price = toNum(quote.price);
   if (!Number.isFinite(price) || price <= 0) return "Pending";
   return money(price);
 }
 
-function changeTextFromQuote(quote) {
+function quoteChangeText(quote) {
   if (!quote) return "Waiting on quote";
+
   const change = toNum(quote.change);
   const pct = toNum(quote.changesPercentage);
 
   if (!Number.isFinite(change) && !Number.isFinite(pct)) return "Live quote";
-  if (!Number.isFinite(change) && Number.isFinite(pct)) return `${pct > 0 ? "+" : ""}${pct.toFixed(2)}%`;
-  if (Number.isFinite(change) && !Number.isFinite(pct)) return `${change > 0 ? "+" : ""}${money(change)}`;
+  if (!Number.isFinite(change) && Number.isFinite(pct)) {
+    return `${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%`;
+  }
+  if (Number.isFinite(change) && !Number.isFinite(pct)) {
+    return `${change >= 0 ? "+" : ""}${money(change)}`;
+  }
+  return `${change >= 0 ? "+" : ""}${money(change)} • ${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%`;
+}
 
-  return `${change > 0 ? "+" : ""}${money(change)} • ${pct > 0 ? "+" : ""}${pct.toFixed(2)}%`;
+function toneByChange(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n === 0) return "neutral";
+  return n > 0 ? "good" : "bad";
+}
+
+function toneVars(tone = "neutral") {
+  if (tone === "good") {
+    return {
+      border: "rgba(92, 247, 184, 0.18)",
+      glow: "rgba(92, 247, 184, 0.12)",
+      accent: "#95f7ca",
+      top: "rgba(92, 247, 184, 0.10)",
+    };
+  }
+  if (tone === "bad") {
+    return {
+      border: "rgba(255, 126, 169, 0.18)",
+      glow: "rgba(255, 126, 169, 0.12)",
+      accent: "#ffb3cb",
+      top: "rgba(255, 126, 169, 0.10)",
+    };
+  }
+  if (tone === "violet") {
+    return {
+      border: "rgba(176, 122, 255, 0.18)",
+      glow: "rgba(176, 122, 255, 0.10)",
+      accent: "#ddc1ff",
+      top: "rgba(176, 122, 255, 0.10)",
+    };
+  }
+  return {
+    border: "rgba(225, 235, 255, 0.14)",
+    glow: "rgba(133, 173, 255, 0.10)",
+    accent: "rgba(255,255,255,.92)",
+    top: "rgba(109, 146, 255, 0.10)",
+  };
+}
+
+function pageShell() {
+  return {
+    minHeight: "100vh",
+    maxWidth: 1480,
+    margin: "0 auto",
+    padding: "24px 20px 56px",
+    color: "rgba(255,255,255,.96)",
+    background: `
+      radial-gradient(circle at 12% 8%, rgba(85,135,255,.08) 0%, rgba(0,0,0,0) 24%),
+      radial-gradient(circle at 78% 6%, rgba(255,255,255,.04) 0%, rgba(0,0,0,0) 18%),
+      radial-gradient(circle at 50% 36%, rgba(99, 135, 255, .04) 0%, rgba(0,0,0,0) 28%)
+    `,
+  };
+}
+
+function glass(tone = "neutral", radius = 28) {
+  const t = toneVars(tone);
+
+  return {
+    position: "relative",
+    overflow: "hidden",
+    borderRadius: radius,
+    border: `1px solid ${t.border}`,
+    background: `
+      linear-gradient(180deg, rgba(255,255,255,.10) 0%, rgba(255,255,255,.045) 10%, rgba(255,255,255,.01) 20%, rgba(255,255,255,0) 34%),
+      radial-gradient(circle at top left, ${t.top} 0%, rgba(255,255,255,0) 28%),
+      linear-gradient(180deg, rgba(9,14,28,.28) 0%, rgba(7,11,22,.16) 100%)
+    `,
+    boxShadow: `
+      0 0 0 1px rgba(255,255,255,.02) inset,
+      0 14px 38px rgba(0,0,0,.14),
+      0 0 20px ${t.glow}
+    `,
+    backdropFilter: "blur(26px)",
+    WebkitBackdropFilter: "blur(26px)",
+  };
+}
+
+function heroRail() {
+  return {
+    ...glass("neutral", 34),
+    padding: "26px 24px 24px",
+  };
+}
+
+function overlineStyle(color = "rgba(255,255,255,.56)") {
+  return {
+    fontSize: 11,
+    letterSpacing: "0.28em",
+    textTransform: "uppercase",
+    fontWeight: 800,
+    color,
+  };
+}
+
+function pill(active = false) {
+  return {
+    height: 40,
+    padding: "0 16px",
+    borderRadius: 999,
+    border: active
+      ? "1px solid rgba(255,255,255,.28)"
+      : "1px solid rgba(255,255,255,.10)",
+    background: active
+      ? "linear-gradient(180deg, rgba(255,255,255,.94) 0%, rgba(236,241,248,.88) 100%)"
+      : "linear-gradient(180deg, rgba(255,255,255,.08) 0%, rgba(255,255,255,.04) 100%)",
+    color: active ? "#0b1220" : "rgba(255,255,255,.92)",
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    textDecoration: "none",
+    fontWeight: 800,
+    fontSize: 14,
+    whiteSpace: "nowrap",
+  };
+}
+
+function actionBtn(primary = false) {
+  return {
+    height: 42,
+    padding: "0 14px",
+    borderRadius: 999,
+    border: primary
+      ? "1px solid rgba(255,255,255,.28)"
+      : "1px solid rgba(255,255,255,.10)",
+    background: primary
+      ? "linear-gradient(180deg, rgba(255,255,255,.95) 0%, rgba(233,239,248,.88) 100%)"
+      : "linear-gradient(180deg, rgba(255,255,255,.08) 0%, rgba(255,255,255,.03) 100%)",
+    color: primary ? "#0b1220" : "rgba(255,255,255,.94)",
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    textDecoration: "none",
+    fontWeight: 800,
+    fontSize: 14,
+    cursor: "pointer",
+  };
+}
+
+function inputBase() {
+  return {
+    height: 50,
+    borderRadius: 16,
+    border: "1px solid rgba(255,255,255,.10)",
+    background: "rgba(255,255,255,.05)",
+    color: "rgba(255,255,255,.96)",
+    padding: "0 14px",
+    outline: "none",
+    boxShadow: "inset 0 1px 0 rgba(255,255,255,.04)",
+  };
 }
 
 export default function DiscoverInvestmentsPage() {
@@ -221,10 +304,7 @@ export default function DiscoverInvestmentsPage() {
         );
         const data = await res.json();
 
-        if (!res.ok) {
-          throw new Error(data?.error || "Failed to search market.");
-        }
-
+        if (!res.ok) throw new Error(data?.error || "Failed to search market.");
         setResults(Array.isArray(data?.results) ? data.results : []);
       } catch (err) {
         console.error(err);
@@ -245,10 +325,12 @@ export default function DiscoverInvestmentsPage() {
   useEffect(() => {
     async function loadPrices() {
       const symbols = [
-        ...new Set([
-          ...activeRows.map((x) => String(x.symbol || "").toUpperCase()),
-          ...favorites.map((x) => String(x.symbol || "").toUpperCase()),
-        ]),
+        ...new Set(
+          [
+            ...activeRows.map((x) => String(x.symbol || "").toUpperCase()),
+            ...favorites.map((x) => String(x.symbol || "").toUpperCase()),
+          ]
+        ),
       ].filter(Boolean);
 
       if (!symbols.length) {
@@ -263,7 +345,6 @@ export default function DiscoverInvestmentsPage() {
           `/api/prices-batch?symbols=${encodeURIComponent(symbols.join(","))}`,
           { cache: "no-store" }
         );
-
         const batchData = await batchRes.json();
 
         if (batchRes.ok && batchData?.prices && typeof batchData.prices === "object") {
@@ -300,19 +381,17 @@ export default function DiscoverInvestmentsPage() {
         await Promise.all(
           missing.map(async (sym) => {
             try {
-              const singleRes = await fetch(`/api/prices?symbol=${encodeURIComponent(sym)}`, {
+              const res = await fetch(`/api/prices?symbol=${encodeURIComponent(sym)}`, {
                 cache: "no-store",
               });
-              const singleData = await singleRes.json();
+              const data = await res.json();
 
-              if (singleRes.ok) {
+              if (res.ok) {
                 nextPrices[sym] = {
-                  price: toNum(singleData?.price),
-                  change: toNum(singleData?.change),
+                  price: toNum(data?.price),
+                  change: toNum(data?.change),
                   changesPercentage: toNum(
-                    singleData?.changesPercentage ??
-                      singleData?.changePercent ??
-                      singleData?.percent_change
+                    data?.changesPercentage ?? data?.changePercent ?? data?.percent_change
                   ),
                 };
               }
@@ -323,10 +402,7 @@ export default function DiscoverInvestmentsPage() {
         );
       }
 
-      setPrices((prev) => ({
-        ...prev,
-        ...nextPrices,
-      }));
+      setPrices((prev) => ({ ...prev, ...nextPrices }));
     }
 
     loadPrices();
@@ -339,24 +415,16 @@ export default function DiscoverInvestmentsPage() {
 
     const favoriteMatches = activeRows.filter((x) =>
       favorites.some(
-        (f) =>
-          String(f.symbol || "").toUpperCase() === String(x.symbol || "").toUpperCase()
+        (f) => String(f.symbol || "").toUpperCase() === String(x.symbol || "").toUpperCase()
       )
     ).length;
 
-    const stocks = activeRows.filter(
-      (x) => String(x.type || "").toUpperCase() === "STOCK"
-    ).length;
-
-    const etfs = activeRows.filter(
-      (x) => String(x.type || "").toUpperCase() === "ETF"
-    ).length;
+    const etfs = activeRows.filter((x) => String(x.type || "").toUpperCase() === "ETF").length;
 
     return {
       showing: activeRows.length,
       ownedMatches,
       favoriteMatches,
-      stocks,
       etfs,
     };
   }, [activeRows, savedSymbols, favorites]);
@@ -443,9 +511,7 @@ export default function DiscoverInvestmentsPage() {
         return;
       }
 
-      const alreadyFavorite = favorites.some(
-        (f) => String(f.symbol || "").toUpperCase() === symbol
-      );
+      const alreadyFavorite = favorites.some((f) => String(f.symbol || "").toUpperCase() === symbol);
 
       if (alreadyFavorite) {
         setError(`${symbol} is already in favorites.`);
@@ -495,10 +561,7 @@ export default function DiscoverInvestmentsPage() {
       return;
     }
 
-    const { error } = await supabase
-      .from("investment_favorites")
-      .delete()
-      .eq("id", favorite.id);
+    const { error } = await supabase.from("investment_favorites").delete().eq("id", favorite.id);
 
     if (error) {
       console.error(error);
@@ -513,200 +576,208 @@ export default function DiscoverInvestmentsPage() {
   }
 
   return (
-    <main
-      style={{
-        background:
-          "radial-gradient(circle at top left, rgba(37,99,235,.10) 0%, rgba(0,0,0,0) 22%), radial-gradient(circle at top right, rgba(168,85,247,.06) 0%, rgba(0,0,0,0) 22%), linear-gradient(180deg, #030712 0%, #050a16 100%)",
-        padding: "34px 28px 46px",
-        maxWidth: "1280px",
-        margin: "0 auto",
-        color: "rgba(255,255,255,.96)",
-        minHeight: "100vh",
-      }}
-    >
-      <div
-        style={{
-          ...shellPanel("neutral", true),
-          padding: 22,
-          marginBottom: 18,
-          display: "grid",
-          gridTemplateColumns: "1fr auto",
-          gap: 16,
-          alignItems: "end",
-        }}
-      >
-        <div>
-          <div
-            style={{
-              fontSize: 12,
-              fontWeight: 900,
-              textTransform: "uppercase",
-              letterSpacing: "0.22em",
-              marginBottom: 8,
-              color: "rgba(134,239,172,.82)",
-            }}
-          >
-            Life Command Center
-          </div>
+    <main style={pageShell()}>
+      <style jsx>{`
+        input::placeholder {
+          color: rgba(255, 255, 255, 0.42);
+        }
+      `}</style>
 
-          <h1
-            style={{
-              margin: 0,
-              fontSize: "clamp(2.1rem, 4vw, 3.2rem)",
-              lineHeight: 1.02,
-              fontWeight: 950,
-              letterSpacing: "-0.03em",
-            }}
-          >
-            Discover Market Assets
-          </h1>
-
-          <div
-            style={{
-              marginTop: 10,
-              fontSize: 15,
-              maxWidth: 860,
-              color: "rgba(255,255,255,.68)",
-            }}
-          >
-            Search public symbols fast, scan your core universe, and add holdings or favorites without the ugly old card style.
-          </div>
-        </div>
-
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "flex-end" }}>
-          <Link href="/investments" className="btnGhost">
-            Portfolio
-          </Link>
-        </div>
-      </div>
-
-      {(status || error) && (
+      <section style={heroRail()}>
         <div
           style={{
-            ...softPanel(error ? "down" : "up"),
-            padding: 14,
-            marginBottom: 18,
+            display: "grid",
+            gridTemplateColumns: "1fr auto",
+            gap: 18,
+            alignItems: "start",
           }}
         >
-          <div style={{ fontWeight: 900 }}>{error ? "Fix this" : "Status"}</div>
-          <div style={{ marginTop: 6, color: "rgba(255,255,255,.70)" }}>{error || status}</div>
+          <div>
+            <div style={overlineStyle("rgba(190,255,223,.84)")}>Life Command Center</div>
+
+            <h1
+              style={{
+                margin: "10px 0 0",
+                fontFamily: DISPLAY_FONT,
+                fontSize: "clamp(2.6rem, 5vw, 4.8rem)",
+                lineHeight: 0.95,
+                letterSpacing: "-0.05em",
+                fontWeight: 700,
+                color: "rgba(255,255,255,.98)",
+              }}
+            >
+              Discover Market Assets
+            </h1>
+
+            <div
+              style={{
+                marginTop: 14,
+                maxWidth: 780,
+                fontSize: 15,
+                lineHeight: 1.7,
+                color: "rgba(255,255,255,.76)",
+              }}
+            >
+              Search public symbols fast, scan your core universe, and add holdings or favorites
+              without ugly heavy cards.
+            </div>
+          </div>
+
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "flex-end" }}>
+            <Link href="/investments" style={pill(false)}>
+              Portfolio
+            </Link>
+          </div>
         </div>
+      </section>
+
+      {(status || error) && (
+        <section
+          style={{
+            ...glass(error ? "bad" : "good", 22),
+            padding: "12px 16px",
+            marginTop: 14,
+          }}
+        >
+          <div style={{ fontWeight: 800, color: error ? "#ffcade" : "#dffff1" }}>
+            {error || status}
+          </div>
+        </section>
       )}
 
-      <div
+      <section
         style={{
           display: "grid",
-          gridTemplateColumns: "1.45fr .85fr",
-          gap: 18,
-          marginBottom: 18,
-          alignItems: "stretch",
+          gridTemplateColumns: "minmax(0,1.7fr) minmax(320px,.9fr)",
+          gap: 14,
+          marginTop: 14,
         }}
       >
-        <div style={{ ...shellPanel("neutral", false), padding: 20 }}>
-          <div style={{ fontWeight: 950, fontSize: 22 }}>
-            {searchMode ? "Search Market" : "Market Universe"}
+        <div style={{ ...glass("neutral", 30), padding: 20 }}>
+          <div
+            style={{
+              fontFamily: DISPLAY_FONT,
+              fontSize: 22,
+              fontWeight: 700,
+              color: "rgba(255,255,255,.96)",
+            }}
+          >
+            Market Universe
           </div>
           <div style={{ marginTop: 6, fontSize: 14, color: "rgba(255,255,255,.66)" }}>
-            {searchMode
-              ? "Live search by symbol or company name."
-              : "Curated default universe loaded on first open."}
+            Curated default universe loaded on first open.
           </div>
 
-          <div style={{ height: 16 }} />
+          <div style={{ marginTop: 16 }}>
+            <input
+              style={{ ...inputBase(), width: "100%" }}
+              placeholder="Search AAPL, Apple, VOO, Nvidia..."
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+          </div>
 
-          <input
-            className="input"
-            placeholder="Search AAPL, Apple, VOO, Nvidia..."
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            style={{
-              width: "100%",
-              background: "rgba(255,255,255,.04)",
-              border: "1px solid rgba(255,255,255,.10)",
-              borderRadius: 16,
-            }}
-          />
-
-          <div style={{ marginTop: 10, fontSize: 12, color: "rgba(255,255,255,.56)" }}>
+          <div style={{ marginTop: 10, fontSize: 13, color: "rgba(255,255,255,.58)" }}>
             {loadingResults
               ? "Searching live market symbols..."
               : searchMode
-                ? "Showing live search results."
+                ? `Matches: ${results.length}`
                 : "Showing your default market universe."}
           </div>
         </div>
 
-        <div style={{ ...shellPanel("neutral", false), padding: 20 }}>
-          <div style={{ fontWeight: 950, fontSize: 22 }}>Scanner Snapshot</div>
+        <div style={{ ...glass("neutral", 30), padding: 20 }}>
+          <div
+            style={{
+              fontFamily: DISPLAY_FONT,
+              fontSize: 22,
+              fontWeight: 700,
+              color: "rgba(255,255,255,.96)",
+            }}
+          >
+            Scanner Snapshot
+          </div>
 
           <div
             style={{
               display: "grid",
               gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
               gap: 12,
-              marginTop: 16,
+              marginTop: 18,
             }}
           >
-            <MiniStat title="Showing" value={String(stats.showing)} tone="neutral" />
-            <MiniStat title="Owned" value={String(stats.ownedMatches)} tone="up" />
-            <MiniStat title="Favs" value={String(stats.favoriteMatches)} tone="up" />
-            <MiniStat title="ETFs" value={String(stats.etfs)} tone="neutral" />
+            <StatMini title="Showing" value={String(stats.showing)} />
+            <StatMini title="Owned" value={String(stats.ownedMatches)} tone="good" />
+            <StatMini title="Favs" value={String(stats.favoriteMatches)} tone="violet" />
+            <StatMini title="ETFs" value={String(stats.etfs)} />
           </div>
         </div>
-      </div>
+      </section>
 
-      <div style={{ ...shellPanel("neutral", false), padding: 20, marginBottom: 18 }}>
-        <div style={{ fontWeight: 950, fontSize: 22 }}>Favorites</div>
+      <section
+        style={{
+          ...glass("neutral", 30),
+          padding: 20,
+          marginTop: 14,
+        }}
+      >
+        <div
+          style={{
+            fontFamily: DISPLAY_FONT,
+            fontSize: 22,
+            fontWeight: 700,
+            color: "rgba(255,255,255,.96)",
+          }}
+        >
+          Favorites
+        </div>
         <div style={{ marginTop: 6, fontSize: 14, color: "rgba(255,255,255,.66)" }}>
           Quick-access symbols pinned from Discover.
         </div>
 
-        <div style={{ height: 16 }} />
+        <div style={{ marginTop: 16 }}>
+          {favorites.length ? (
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+                gap: 12,
+              }}
+            >
+              {favorites.slice(0, 8).map((f) => {
+                const sym = String(f.symbol || "").toUpperCase();
+                const quote = prices[sym] || null;
 
-        {favorites.length ? (
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
-              gap: 12,
-            }}
-          >
-            {favorites.slice(0, 8).map((f) => {
-              const sym = String(f.symbol || "").toUpperCase();
-              const quote = prices[sym] || null;
-
-              return (
-                <AssetCard
-                  key={f.id}
-                  item={{
-                    symbol: sym,
-                    name: f.name || sym,
-                    type: String(f.asset_type || "stock").toUpperCase() === "ETF" ? "ETF" : "Stock",
-                    exchange: "Saved",
-                  }}
-                  quote={quote}
-                  owned={savedSymbols.includes(sym)}
-                  favorited={true}
-                  busy={favoriteSymbol === sym}
-                  onToggleFavorite={() => removeFavoriteBySymbol(sym)}
-                  onAddAsset={() => {}}
-                  onOpenMarket={`/market/${encodeURIComponent(sym)}`}
-                  addDisabled
-                  favoriteLabel="Remove"
-                />
-              );
-            })}
-          </div>
-        ) : (
-          <EmptyState
-            title="No favorites yet"
-            sub="Favorite any symbol below to pin it here."
-          />
-        )}
-      </div>
+                return (
+                  <AssetCard
+                    key={f.id}
+                    item={{
+                      symbol: sym,
+                      name: f.name || sym,
+                      type: String(f.asset_type || "").toUpperCase() === "ETF" ? "ETF" : "Stock",
+                      exchange: "Saved",
+                    }}
+                    quote={quote}
+                    owned={savedSymbols.includes(sym)}
+                    favorited
+                    busy={favoriteSymbol === sym}
+                    onToggleFavorite={() => removeFavoriteBySymbol(sym)}
+                    onAddAsset={() => {}}
+                    onOpenMarket={`/market/${encodeURIComponent(sym)}`}
+                    addDisabled
+                    favoriteLabel="Remove"
+                  />
+                );
+              })}
+            </div>
+          ) : (
+            <EmptyState title="No favorites yet" sub="Favorite any symbol below to pin it here." />
+          )}
+        </div>
+      </section>
 
       {!searchMode ? (
-        <div style={{ display: "grid", gap: 18 }}>
+        <div style={{ display: "grid", gap: 14, marginTop: 14 }}>
           <UniverseSection
             title="Popular Stocks"
             sub="Big names most people actually care about first."
@@ -723,7 +794,7 @@ export default function DiscoverInvestmentsPage() {
 
           <UniverseSection
             title="Popular ETFs"
-            sub="Core index funds and broad market favorites."
+            sub="Core broad market funds and index favorites."
             items={DEFAULT_UNIVERSE.popularEtfs}
             prices={prices}
             savedSymbols={savedSymbols}
@@ -750,7 +821,13 @@ export default function DiscoverInvestmentsPage() {
           />
         </div>
       ) : (
-        <div style={{ ...shellPanel("neutral", false), padding: 20 }}>
+        <section
+          style={{
+            ...glass("neutral", 30),
+            padding: 20,
+            marginTop: 14,
+          }}
+        >
           <div
             style={{
               display: "flex",
@@ -803,17 +880,11 @@ export default function DiscoverInvestmentsPage() {
               })}
             </div>
           ) : loadingResults ? (
-            <EmptyState
-              title="Searching..."
-              sub="Pulling live symbols from your market provider."
-            />
+            <EmptyState title="Searching..." sub="Pulling live symbols from your market provider." />
           ) : (
-            <EmptyState
-              title="No matches found"
-              sub="Try a ticker or company name."
-            />
+            <EmptyState title="No matches found" sub="Try a ticker or company name." />
           )}
-        </div>
+        </section>
       )}
     </main>
   );
@@ -833,17 +904,16 @@ function UniverseSection({
   onRemoveFavorite,
 }) {
   return (
-    <div style={{ ...shellPanel("neutral", false), padding: 20 }}>
+    <section style={{ ...glass("neutral", 30), padding: 20 }}>
       <div style={{ fontWeight: 950, fontSize: 22 }}>{title}</div>
       <div style={{ marginTop: 6, fontSize: 14, color: "rgba(255,255,255,.66)" }}>{sub}</div>
-
-      <div style={{ height: 16 }} />
 
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+          gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
           gap: 12,
+          marginTop: 16,
         }}
       >
         {items.map((item) => {
@@ -852,13 +922,12 @@ function UniverseSection({
           const alreadyFavorite = favorites.some(
             (f) => String(f.symbol || "").toUpperCase() === sym
           );
-          const quote = prices[sym] || null;
 
           return (
             <AssetCard
               key={sym}
               item={item}
-              quote={quote}
+              quote={prices[sym] || null}
               owned={alreadyOwned}
               favorited={alreadyFavorite}
               busy={addingSymbol === sym || favoriteSymbol === sym}
@@ -866,117 +935,12 @@ function UniverseSection({
                 alreadyFavorite ? onRemoveFavorite(sym) : onAddFavorite(item)
               }
               onAddAsset={() => onAddAsset(item)}
-              onOpenMarket={`/market/${encodeURIComponent(sym)}`}
+              onOpenMarket={`/market/${encodeURIComponent(item.symbol)}`}
             />
           );
         })}
       </div>
-    </div>
-  );
-}
-
-function SearchRow({
-  item,
-  quote,
-  owned,
-  favorited,
-  addBusy,
-  favoriteBusy,
-  onAddAsset,
-  onToggleFavorite,
-}) {
-  const tone = changeTone(quote?.change);
-
-  return (
-    <div
-      style={{
-        ...softPanel(tone),
-        padding: 16,
-      }}
-    >
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "1.2fr .9fr auto",
-          gap: 16,
-          alignItems: "center",
-        }}
-      >
-        <div>
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-            <div style={{ fontWeight: 950, fontSize: 22 }}>{item.symbol}</div>
-            <span style={pillStyle()}>{item.type || "Stock"}</span>
-            <span style={pillStyle()}>{item.exchange || "—"}</span>
-            <span
-              style={pillStyle(
-                favorited ? "#86efac" : "rgba(255,255,255,.82)",
-                favorited ? "rgba(74,222,128,.14)" : "rgba(255,255,255,.06)"
-              )}
-            >
-              {favorited ? "Favorited" : item.currency || "USD"}
-            </span>
-          </div>
-
-          <div style={{ marginTop: 10, fontWeight: 800, fontSize: 16 }}>
-            {item.name}
-          </div>
-
-          <div
-            style={{
-              marginTop: 8,
-              fontSize: 13,
-              color:
-                tone === "up"
-                  ? "#86efac"
-                  : tone === "down"
-                    ? "#fda4af"
-                    : "rgba(255,255,255,.60)",
-            }}
-          >
-            {changeTextFromQuote(quote)}
-          </div>
-        </div>
-
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-            gap: 10,
-          }}
-        >
-          <MiniBox label="Live Price" value={priceTextFromQuote(quote)} tone={tone} />
-          <MiniBox label="Status" value={owned ? "Owned" : favorited ? "Favorite" : "Available"} tone="neutral" />
-        </div>
-
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "flex-end" }}>
-          <Link href={`/market/${encodeURIComponent(item.symbol)}`} className="btnGhost">
-            View Market
-          </Link>
-
-          <button
-            className="btnGhost"
-            onClick={onToggleFavorite}
-            disabled={favoriteBusy}
-            style={{ minWidth: 110, opacity: favoriteBusy ? 0.75 : 1 }}
-          >
-            {favoriteBusy ? "Working..." : favorited ? "Unfavorite" : "Favorite"}
-          </button>
-
-          <button
-            className={owned ? "btnGhost" : "btn"}
-            onClick={onAddAsset}
-            disabled={owned || addBusy}
-            style={{
-              minWidth: 110,
-              opacity: owned || addBusy ? 0.75 : 1,
-              cursor: owned || addBusy ? "not-allowed" : "pointer",
-            }}
-          >
-            {owned ? "Added" : addBusy ? "Adding..." : "Add Asset"}
-          </button>
-        </div>
-      </div>
-    </div>
+    </section>
   );
 }
 
@@ -992,156 +956,255 @@ function AssetCard({
   addDisabled = false,
   favoriteLabel,
 }) {
-  const tone = changeTone(quote?.change);
+  const tone = toneByChange(quote?.change);
 
   return (
     <div
       style={{
-        ...microPanel(tone),
-        padding: 14,
+        ...glass(tone, 24),
+        padding: 16,
+        minHeight: 250,
+        display: "flex",
+        flexDirection: "column",
       }}
     >
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          gap: 10,
+          alignItems: "start",
+        }}
+      >
         <div>
           <div style={{ fontWeight: 950, fontSize: 18 }}>{item.symbol}</div>
-          <div style={{ marginTop: 4, fontSize: 12, color: "rgba(255,255,255,.56)" }}>
+          <div style={{ marginTop: 4, fontSize: 12, color: "rgba(255,255,255,.58)" }}>
             {item.type} • {item.exchange}
           </div>
         </div>
 
-        <button
-          className="btnGhost"
-          onClick={onToggleFavorite}
-          disabled={busy}
-        >
+        <button style={actionBtn(false)} onClick={onToggleFavorite} disabled={busy}>
           {busy ? "..." : favoriteLabel || (favorited ? "Saved" : "Favorite")}
         </button>
       </div>
 
-      <div style={{ marginTop: 10, fontWeight: 800, minHeight: 42 }}>
+      <div
+        style={{
+          marginTop: 12,
+          minHeight: 44,
+          fontSize: 15,
+          lineHeight: 1.45,
+          fontWeight: 700,
+          color: "rgba(255,255,255,.90)",
+        }}
+      >
         {item.name}
       </div>
 
-      <div style={{ marginTop: 12 }}>
-        <div style={{ fontSize: 12, color: "rgba(255,255,255,.54)" }}>Live Price</div>
-        <div style={{ marginTop: 4, fontWeight: 900, fontSize: 20 }}>
-          {priceTextFromQuote(quote)}
+      <div
+        style={{
+          marginTop: 14,
+          padding: 12,
+          borderRadius: 16,
+          border: "1px solid rgba(255,255,255,.07)",
+          background: "rgba(255,255,255,.03)",
+        }}
+      >
+        <div style={overlineStyle("rgba(255,255,255,.42)")}>Live Price</div>
+        <div
+          style={{
+            marginTop: 8,
+            fontFamily: DISPLAY_FONT,
+            fontSize: 24,
+            fontWeight: 700,
+            letterSpacing: "-0.04em",
+          }}
+        >
+          {quotePriceText(quote)}
         </div>
         <div
           style={{
-            marginTop: 6,
+            marginTop: 8,
             fontSize: 12,
-            minHeight: 18,
             color:
-              tone === "up"
-                ? "#86efac"
-                : tone === "down"
-                  ? "#fda4af"
-                  : "rgba(255,255,255,.56)",
+              tone === "good"
+                ? "#9df4cb"
+                : tone === "bad"
+                  ? "#ffbdd0"
+                  : "rgba(255,255,255,.58)",
           }}
         >
-          {changeTextFromQuote(quote)}
+          {quoteChangeText(quote)}
         </div>
       </div>
 
-      <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
-        <Link href={onOpenMarket} className="btnGhost">
+      <div style={{ marginTop: "auto", display: "flex", gap: 8, flexWrap: "wrap", paddingTop: 14 }}>
+        <Link href={onOpenMarket} style={actionBtn(false)}>
           Market
         </Link>
 
-        {!addDisabled && (
-          <button
-            className={owned ? "btnGhost" : "btn"}
-            onClick={onAddAsset}
-            disabled={owned || busy}
-            style={{ opacity: owned || busy ? 0.75 : 1 }}
+        <button
+          style={actionBtn(true)}
+          onClick={onAddAsset}
+          disabled={owned || busy || addDisabled}
+        >
+          {owned ? "Added" : busy ? "..." : "Add"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function SearchRow({
+  item,
+  quote,
+  owned,
+  favorited,
+  addBusy,
+  favoriteBusy,
+  onAddAsset,
+  onToggleFavorite,
+}) {
+  const tone = toneByChange(quote?.change);
+
+  return (
+    <div style={{ ...glass(tone, 24), padding: 16 }}>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "minmax(0,1.2fr) minmax(220px,.8fr) auto",
+          gap: 16,
+          alignItems: "center",
+        }}
+      >
+        <div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+            <div style={{ fontWeight: 950, fontSize: 22, letterSpacing: "-0.03em" }}>
+              {item.symbol}
+            </div>
+            <Tag>{item.type || "Stock"}</Tag>
+            <Tag>{item.exchange || "—"}</Tag>
+            {favorited ? <Tag tone="good">Favorited</Tag> : null}
+          </div>
+
+          <div
+            style={{
+              marginTop: 10,
+              fontSize: 16,
+              fontWeight: 800,
+              color: "rgba(255,255,255,.92)",
+            }}
           >
-            {owned ? "Added" : busy ? "..." : "Add"}
+            {item.name}
+          </div>
+
+          <div
+            style={{
+              marginTop: 8,
+              fontSize: 13,
+              color:
+                tone === "good"
+                  ? "#9df4cb"
+                  : tone === "bad"
+                    ? "#ffbdd0"
+                    : "rgba(255,255,255,.58)",
+            }}
+          >
+            {quoteChangeText(quote)}
+          </div>
+        </div>
+
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+            gap: 10,
+          }}
+        >
+          <InfoMini label="Live Price" value={quotePriceText(quote)} tone={tone} />
+          <InfoMini label="Status" value={owned ? "Owned" : favorited ? "Favorite" : "Available"} />
+        </div>
+
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "flex-end" }}>
+          <Link href={`/market/${encodeURIComponent(item.symbol)}`} style={actionBtn(false)}>
+            View Market
+          </Link>
+
+          <button style={actionBtn(false)} onClick={onToggleFavorite} disabled={favoriteBusy}>
+            {favoriteBusy ? "Working..." : favorited ? "Unfavorite" : "Favorite"}
           </button>
-        )}
+
+          <button style={actionBtn(true)} onClick={onAddAsset} disabled={owned || addBusy}>
+            {owned ? "Added" : addBusy ? "Adding..." : "Add Asset"}
+          </button>
+        </div>
       </div>
     </div>
   );
 }
 
-function pillStyle(color = "rgba(255,255,255,.82)", background = "rgba(255,255,255,.06)") {
-  return {
-    fontSize: 11,
-    fontWeight: 900,
-    padding: "5px 9px",
-    borderRadius: 999,
-    background,
-    color,
-    border: "1px solid rgba(255,255,255,.08)",
-    whiteSpace: "nowrap",
-  };
-}
-
-function MiniStat({ title, value, tone = "neutral" }) {
+function StatMini({ title, value, tone = "neutral" }) {
   return (
-    <div
-      style={{
-        ...microPanel(tone),
-        padding: 14,
-      }}
-    >
+    <div style={{ ...glass(tone, 22), padding: 14, minHeight: 90 }}>
+      <div style={overlineStyle("rgba(255,255,255,.42)")}>{title}</div>
       <div
         style={{
-          fontSize: 11,
-          textTransform: "uppercase",
-          letterSpacing: "0.12em",
-          color: "rgba(255,255,255,.54)",
+          marginTop: 10,
+          fontFamily: DISPLAY_FONT,
+          fontSize: 20,
+          fontWeight: 700,
         }}
       >
-        {title}
-      </div>
-      <div style={{ marginTop: 8, fontWeight: 950, fontSize: 22 }}>
         {value}
       </div>
     </div>
   );
 }
 
-function MiniBox({ label, value, tone = "neutral" }) {
+function InfoMini({ label, value, tone = "neutral" }) {
   return (
-    <div
+    <div style={{ ...glass(tone, 20), padding: 12 }}>
+      <div style={overlineStyle("rgba(255,255,255,.42)")}>{label}</div>
+      <div style={{ marginTop: 8, fontSize: 14, fontWeight: 800 }}>{value}</div>
+    </div>
+  );
+}
+
+function Tag({ children, tone = "neutral" }) {
+  const t = toneVars(tone);
+
+  return (
+    <span
       style={{
-        ...microPanel(tone),
-        padding: 12,
+        height: 26,
+        padding: "0 10px",
+        borderRadius: 999,
+        border: `1px solid ${t.border}`,
+        background: "rgba(255,255,255,.04)",
+        color: tone === "good" ? "#9df4cb" : t.accent,
+        display: "inline-flex",
+        alignItems: "center",
+        fontSize: 11,
+        fontWeight: 800,
       }}
     >
-      <div
-        style={{
-          fontSize: 11,
-          textTransform: "uppercase",
-          letterSpacing: "0.12em",
-          color: "rgba(255,255,255,.54)",
-        }}
-      >
-        {label}
-      </div>
-      <div style={{ marginTop: 7, fontWeight: 800 }}>
-        {value}
-      </div>
-    </div>
+      {children}
+    </span>
   );
 }
 
 function EmptyState({ title, sub }) {
   return (
-    <div
-      style={{
-        borderRadius: 20,
-        border: "1px dashed rgba(255,255,255,.14)",
-        padding: "26px 18px",
-        background:
-          "linear-gradient(180deg, rgba(8,13,26,.84) 0%, rgba(4,8,18,.94) 100%)",
-        textAlign: "center",
-        boxShadow: "0 14px 32px rgba(0,0,0,.24)",
-      }}
-    >
-      <div style={{ fontWeight: 900, fontSize: 16 }}>{title}</div>
-      <div style={{ marginTop: 8, fontSize: 14, lineHeight: 1.45, color: "rgba(255,255,255,.62)" }}>
+    <div style={{ ...glass("neutral", 22), padding: 20, textAlign: "center" }}>
+      <div style={{ fontWeight: 800, fontSize: 16, color: "rgba(255,255,255,.94)" }}>{title}</div>
+      <div
+        style={{
+          marginTop: 8,
+          fontSize: 14,
+          lineHeight: 1.6,
+          color: "rgba(255,255,255,.62)",
+        }}
+      >
         {sub}
       </div>
     </div>
