@@ -1,144 +1,160 @@
 .pane {
-  --pane-radius: 28px;
-  --pane-pad: 22px;
-
-  --pane-border: rgba(202, 216, 255, 0.14);
-  --pane-border-strong: rgba(255, 255, 255, 0.08);
-  --pane-fill-top: rgba(12, 18, 31, 0.56);
-  --pane-fill-bottom: rgba(6, 10, 20, 0.36);
-  --pane-glow: rgba(102, 128, 200, 0.12);
-  --pane-soft: rgba(255, 255, 255, 0.05);
-  --pane-highlight: rgba(255, 255, 255, 0.07);
+  --pane-border: rgba(160, 190, 255, 0.16);
+  --pane-edge: rgba(255, 255, 255, 0.06);
+  --pane-glow: rgba(84, 124, 255, 0.1);
+  --pane-fill: rgba(8, 12, 22, 0.72);
+  --pane-shadow: rgba(0, 0, 0, 0.38);
 
   position: relative;
   overflow: hidden;
-  border-radius: var(--pane-radius);
+  border-radius: 24px;
   border: 1px solid var(--pane-border);
   background:
     linear-gradient(
       180deg,
-      rgba(255, 255, 255, 0.055) 0%,
-      rgba(255, 255, 255, 0.018) 14%,
+      rgba(255, 255, 255, 0.06) 0%,
+      rgba(255, 255, 255, 0.025) 14%,
+      rgba(255, 255, 255, 0.01) 26%,
       rgba(255, 255, 255, 0) 42%
     ),
-    radial-gradient(
-      110% 140% at 0% 0%,
-      rgba(107, 146, 255, 0.10) 0%,
-      rgba(107, 146, 255, 0.035) 28%,
-      transparent 55%
-    ),
-    radial-gradient(
-      85% 120% at 100% 100%,
-      rgba(86, 120, 200, 0.12) 0%,
-      rgba(86, 120, 200, 0.04) 30%,
-      transparent 60%
-    ),
     linear-gradient(
-      180deg,
-      var(--pane-fill-top) 0%,
-      var(--pane-fill-bottom) 100%
-    );
+      135deg,
+      rgba(255, 255, 255, 0.045) 0%,
+      rgba(255, 255, 255, 0.012) 22%,
+      rgba(255, 255, 255, 0) 52%
+    ),
+    var(--pane-fill);
+  backdrop-filter: blur(14px) saturate(120%);
+  -webkit-backdrop-filter: blur(14px) saturate(120%);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    inset 0 1px 0 var(--pane-edge),
     inset 0 -1px 0 rgba(255, 255, 255, 0.015),
-    0 18px 38px rgba(0, 0, 0, 0.26),
-    0 0 0 1px rgba(255, 255, 255, 0.018),
-    0 0 30px var(--pane-glow);
-  backdrop-filter: blur(24px) saturate(135%);
-  -webkit-backdrop-filter: blur(24px) saturate(135%);
-  isolation: isolate;
+    0 16px 36px var(--pane-shadow),
+    0 0 0 1px rgba(255, 255, 255, 0.015),
+    0 0 24px var(--pane-glow);
 }
 
 .pane::before {
   content: "";
   position: absolute;
   inset: 0;
-  border-radius: inherit;
   pointer-events: none;
   background:
-    linear-gradient(
-      180deg,
-      rgba(255, 255, 255, 0.075) 0%,
-      rgba(255, 255, 255, 0.02) 16%,
-      rgba(255, 255, 255, 0) 36%
+    radial-gradient(
+      circle at 82% 12%,
+      rgba(255, 255, 255, 0.06),
+      transparent 18%
+    ),
+    radial-gradient(
+      circle at 100% 100%,
+      var(--pane-glow),
+      transparent 38%
     );
-  opacity: 0.9;
+  opacity: 0.72;
 }
 
 .pane::after {
   content: "";
   position: absolute;
   inset: 1px;
-  border-radius: calc(var(--pane-radius) - 1px);
+  border-radius: inherit;
   pointer-events: none;
-  border: 1px solid rgba(255, 255, 255, 0.025);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.03),
-    inset 0 0 40px rgba(255, 255, 255, 0.015);
+    inset 0 1px 0 rgba(255, 255, 255, 0.035),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.14);
 }
 
 .inner {
   position: relative;
   z-index: 1;
-  padding: var(--pane-pad);
 }
 
 .sizeHero {
-  --pane-radius: 30px;
-  --pane-pad: 24px;
+  border-radius: 28px;
+  padding: 22px;
 }
 
 .sizeCard {
-  --pane-radius: 26px;
-  --pane-pad: 20px;
+  border-radius: 24px;
+  padding: 18px;
 }
 
 .sizeCompact {
-  --pane-radius: 20px;
-  --pane-pad: 14px;
+  border-radius: 18px;
+  padding: 14px;
 }
 
-/* tones */
-
 .toneNeutral {
-  --pane-border: rgba(214, 226, 255, 0.14);
-  --pane-glow: rgba(110, 138, 212, 0.10);
+  --pane-border: rgba(160, 190, 255, 0.16);
+  --pane-edge: rgba(255, 255, 255, 0.06);
+  --pane-glow: rgba(84, 124, 255, 0.1);
+  --pane-fill: rgba(8, 12, 22, 0.72);
+  --pane-shadow: rgba(0, 0, 0, 0.4);
 }
 
 .toneGreen {
-  --pane-border: rgba(158, 240, 192, 0.18);
-  --pane-fill-top: rgba(10, 20, 16, 0.54);
-  --pane-fill-bottom: rgba(6, 12, 10, 0.34);
-  --pane-glow: rgba(158, 240, 192, 0.10);
+  --pane-border: rgba(90, 230, 170, 0.16);
+  --pane-edge: rgba(255, 255, 255, 0.05);
+  --pane-glow: rgba(66, 214, 151, 0.1);
+  --pane-fill: rgba(7, 15, 13, 0.72);
+  --pane-shadow: rgba(0, 0, 0, 0.38);
 }
 
 .toneAmber {
-  --pane-border: rgba(255, 208, 137, 0.18);
-  --pane-fill-top: rgba(20, 17, 10, 0.54);
-  --pane-fill-bottom: rgba(12, 10, 6, 0.34);
-  --pane-glow: rgba(255, 208, 137, 0.10);
+  --pane-border: rgba(255, 191, 92, 0.17);
+  --pane-edge: rgba(255, 255, 255, 0.05);
+  --pane-glow: rgba(255, 184, 77, 0.1);
+  --pane-fill: rgba(18, 13, 8, 0.72);
+  --pane-shadow: rgba(0, 0, 0, 0.38);
 }
 
 .toneRed {
-  --pane-border: rgba(255, 178, 194, 0.18);
-  --pane-fill-top: rgba(20, 11, 16, 0.56);
-  --pane-fill-bottom: rgba(11, 7, 10, 0.36);
-  --pane-glow: rgba(255, 178, 194, 0.12);
+  --pane-border: rgba(255, 118, 146, 0.17);
+  --pane-edge: rgba(255, 255, 255, 0.05);
+  --pane-glow: rgba(255, 96, 128, 0.1);
+  --pane-fill: rgba(18, 9, 12, 0.72);
+  --pane-shadow: rgba(0, 0, 0, 0.38);
 }
 
-@media (max-width: 900px) {
+@media (max-width: 920px) {
+  .pane {
+    border-radius: 20px;
+    backdrop-filter: blur(10px) saturate(115%);
+    -webkit-backdrop-filter: blur(10px) saturate(115%);
+    box-shadow:
+      inset 0 1px 0 var(--pane-edge),
+      inset 0 -1px 0 rgba(255, 255, 255, 0.012),
+      0 12px 26px var(--pane-shadow),
+      0 0 18px var(--pane-glow);
+  }
+
   .sizeHero {
-    --pane-radius: 26px;
-    --pane-pad: 20px;
+    border-radius: 22px;
+    padding: 18px;
   }
 
   .sizeCard {
-    --pane-radius: 22px;
-    --pane-pad: 18px;
+    border-radius: 20px;
+    padding: 16px;
   }
 
   .sizeCompact {
-    --pane-radius: 18px;
-    --pane-pad: 12px;
+    border-radius: 16px;
+    padding: 12px;
+  }
+}
+
+@media (max-width: 640px) {
+  .pane {
+    border-radius: 18px;
+  }
+
+  .sizeHero,
+  .sizeCard {
+    padding: 14px;
+  }
+
+  .sizeCompact {
+    padding: 11px;
   }
 }
