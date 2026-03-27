@@ -8,6 +8,7 @@ const SHELL_HIDDEN_ROUTES = [
   "/signup",
   "/forgot-password",
   "/reset-password",
+  "/logout",
 ];
 
 export default function ClientLayout({ children }) {

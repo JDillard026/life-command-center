@@ -1,4 +1,3 @@
-// src/app/components/AppShell.jsx
 "use client";
 
 import { useEffect, useState } from "react";
@@ -45,7 +44,8 @@ export default function AppShell({ children }) {
 
   useEffect(() => {
     const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = mobileOpen ? "hidden" : "";
+    if (mobileOpen) document.body.style.overflow = "hidden";
+
     return () => {
       document.body.style.overflow = previousOverflow;
     };
@@ -53,10 +53,7 @@ export default function AppShell({ children }) {
 
   return (
     <div
-      className={cx(
-        styles.shell,
-        desktopCollapsed && styles.shellCollapsed
-      )}
+      className={cx(styles.shell, desktopCollapsed && styles.shellCollapsed)}
     >
       <div className={styles.cosmos} aria-hidden="true">
         <div className={styles.voidLayer} />

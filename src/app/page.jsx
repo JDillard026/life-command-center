@@ -3,12 +3,11 @@
 import Link from "next/link";
 import { useEffect, useId, useMemo, useState } from "react";
 import {
-  AlertTriangle,
   ArrowRight,
   ChevronRight,
+  CreditCard,
   Landmark,
   PiggyBank,
-  Sparkles,
   TrendingUp,
   Wallet,
   X,
@@ -17,9 +16,6 @@ import { supabase } from "@/lib/supabaseClient";
 import GlassPane from "./components/GlassPane";
 
 export const dynamic = "force-dynamic";
-
-const DASH_FONT_STACK =
-  'Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
 
 function safeNum(n, fallback = 0) {
   const x = Number(n);
@@ -56,6 +52,15 @@ function isoDate(d = new Date()) {
   return `${yyyy}-${mm}-${dd}`;
 }
 
+function startOfMonthISO(d = new Date()) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
+}
+
+function endOfMonthISO(d = new Date()) {
+  const end = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+  return isoDate(end);
+}
+
 function monthKeyFromISO(iso) {
   const s = String(iso || "");
   return s.length >= 7 ? s.slice(0, 7) : "";
@@ -82,22 +87,27 @@ function fmtShort(iso) {
   });
 }
 
+function fmtDateTime(iso) {
+  if (!iso) return "—";
+  const d = new Date(`${iso}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+  });
+}
+
 function daysUntil(iso) {
   if (!iso) return null;
   const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const today = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate()
+  ).getTime();
   const due = new Date(`${iso}T00:00:00`).getTime();
   if (!Number.isFinite(due)) return null;
   return Math.round((due - today) / 86400000);
-}
-
-function startOfMonthISO(d = new Date()) {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
-}
-
-function endOfMonthISO(d = new Date()) {
-  const end = new Date(d.getFullYear(), d.getMonth() + 1, 0);
-  return isoDate(end);
 }
 
 function freqToMonthlyMult(freq) {
@@ -116,6 +126,53 @@ function freqToMonthlyMult(freq) {
     default:
       return 1;
   }
+}
+
+function toneByValue(value, inverse = false) {
+  const num = safeNum(value, 0);
+  if (num === 0) return "neutral";
+  if (inverse) return num > 0 ? "red" : "green";
+  return num > 0 ? "green" : "red";
+}
+
+function toneMeta(tone = "neutral") {
+  if (tone === "green") {
+    return {
+      text: "#97efc7",
+      border: "rgba(143, 240, 191, 0.16)",
+      glow: "rgba(110, 229, 173, 0.10)",
+      dot: "#8ef4bb",
+      iconBg: "rgba(12, 22, 17, 0.72)",
+    };
+  }
+
+  if (tone === "amber") {
+    return {
+      text: "#f5cf88",
+      border: "rgba(255, 204, 112, 0.16)",
+      glow: "rgba(255, 194, 92, 0.10)",
+      dot: "#ffd089",
+      iconBg: "rgba(24, 18, 11, 0.72)",
+    };
+  }
+
+  if (tone === "red") {
+    return {
+      text: "#ffb4c5",
+      border: "rgba(255, 132, 163, 0.16)",
+      glow: "rgba(255, 108, 145, 0.10)",
+      dot: "#ff96ae",
+      iconBg: "rgba(24, 11, 15, 0.72)",
+    };
+  }
+
+  return {
+    text: "#f7fbff",
+    border: "rgba(214, 226, 255, 0.13)",
+    glow: "rgba(140, 170, 255, 0.08)",
+    dot: "#f7fbff",
+    iconBg: "rgba(12, 16, 24, 0.72)",
+  };
 }
 
 function mapAccountRowToClient(row) {
@@ -192,75 +249,16 @@ function initialsFromLabel(label = "") {
   const clean = String(label).trim();
   if (!clean) return "—";
   const parts = clean.split(/\s+/).slice(0, 2);
-  return parts.map((p) => p[0]).join("").toUpperCase();
+  return parts
+    .map((p) => p[0])
+    .join("")
+    .toUpperCase();
 }
 
 function severityRank(severity) {
   if (severity === "critical") return 0;
   if (severity === "warning") return 1;
   return 2;
-}
-
-function toneMeta(tone = "neutral") {
-  if (tone === "green") {
-    return {
-      text: "#97efc7",
-      border: "rgba(143, 240, 191, 0.16)",
-      glow: "rgba(110, 229, 173, 0.10)",
-      dot: "#8ef4bb",
-      pillBg: "rgba(8,18,12,0.42)",
-      iconBg: "rgba(12, 22, 17, 0.72)",
-    };
-  }
-
-  if (tone === "amber") {
-    return {
-      text: "#f5cf88",
-      border: "rgba(255, 204, 112, 0.16)",
-      glow: "rgba(255, 194, 92, 0.10)",
-      dot: "#ffd089",
-      pillBg: "rgba(18,14,8,0.42)",
-      iconBg: "rgba(24, 18, 11, 0.72)",
-    };
-  }
-
-  if (tone === "red") {
-    return {
-      text: "#ffb4c5",
-      border: "rgba(255, 132, 163, 0.16)",
-      glow: "rgba(255, 108, 145, 0.10)",
-      dot: "#ff96ae",
-      pillBg: "rgba(18,8,11,0.42)",
-      iconBg: "rgba(24, 11, 15, 0.72)",
-    };
-  }
-
-  return {
-    text: "#f7fbff",
-    border: "rgba(214, 226, 255, 0.13)",
-    glow: "rgba(140, 170, 255, 0.08)",
-    dot: "#f7fbff",
-    pillBg: "rgba(10,14,21,0.40)",
-    iconBg: "rgba(12, 16, 24, 0.72)",
-  };
-}
-
-function eyebrowStyle() {
-  return {
-    fontSize: 10,
-    textTransform: "uppercase",
-    letterSpacing: ".22em",
-    fontWeight: 800,
-    color: "rgba(255,255,255,0.42)",
-  };
-}
-
-function mutedStyle() {
-  return {
-    fontSize: 13,
-    color: "rgba(255,255,255,0.62)",
-    lineHeight: 1.5,
-  };
 }
 
 function samplePoints(points, maxPoints = 6) {
@@ -272,7 +270,10 @@ function samplePoints(points, maxPoints = 6) {
   const step = (points.length - 2) / middleCount;
 
   for (let i = 1; i <= middleCount; i += 1) {
-    const index = Math.min(points.length - 2, Math.max(1, Math.round(i * step)));
+    const index = Math.min(
+      points.length - 2,
+      Math.max(1, Math.round(i * step))
+    );
     sampled.push(points[index]);
   }
 
@@ -301,9 +302,7 @@ function buildCashMovementPoints(monthStart, today, spendingTx, incomeDeposits) 
     daily.set(date, current + safeNum(delta, 0));
   }
 
-  incomeDeposits.forEach((row) => {
-    addDelta(row.date, row.amount);
-  });
+  incomeDeposits.forEach((row) => addDelta(row.date, row.amount));
 
   spendingTx.forEach((row) => {
     const type = String(row.type || "").toLowerCase();
@@ -325,8 +324,8 @@ function buildCashMovementPoints(monthStart, today, spendingTx, incomeDeposits) 
     });
   });
 
-  const lastPoint = rawPoints[rawPoints.length - 1];
-  if (!lastPoint || lastPoint.iso !== today) {
+  const last = rawPoints[rawPoints.length - 1];
+  if (!last || last.iso !== today) {
     rawPoints.push({
       iso: today,
       label: fmtShort(today),
@@ -337,9 +336,72 @@ function buildCashMovementPoints(monthStart, today, spendingTx, incomeDeposits) 
   return samplePoints(rawPoints, 6);
 }
 
+function buildPositionMap(assets, txns, quoteMap) {
+  const byAsset = new Map();
+
+  assets.forEach((asset) => {
+    byAsset.set(asset.id, {
+      asset,
+      shares: 0,
+      basis: 0,
+      currentValue: null,
+      unrealizedPnl: null,
+    });
+  });
+
+  const ordered = [...txns].sort((a, b) =>
+    String(a.date).localeCompare(String(b.date))
+  );
+
+  ordered.forEach((tx) => {
+    const entry = byAsset.get(tx.assetId);
+    if (!entry) return;
+
+    const qty = safeNum(tx.qty, 0);
+    const price = safeNum(tx.price, 0);
+    if (qty <= 0) return;
+
+    if (tx.type === "BUY") {
+      entry.shares += qty;
+      entry.basis += qty * price;
+      return;
+    }
+
+    if (tx.type === "SELL" && entry.shares > 0) {
+      const sellQty = Math.min(qty, entry.shares);
+      const avgCost = entry.shares > 0 ? entry.basis / entry.shares : 0;
+      entry.shares -= sellQty;
+      entry.basis -= avgCost * sellQty;
+
+      if (entry.shares <= 0.000001) {
+        entry.shares = 0;
+        entry.basis = 0;
+      }
+    }
+  });
+
+  byAsset.forEach((entry) => {
+    const symbol = String(entry.asset.symbol || "").toUpperCase();
+    const live = safeNum(quoteMap[symbol], NaN);
+
+    if (Number.isFinite(live) && entry.shares > 0) {
+      entry.currentValue = entry.shares * live;
+      entry.unrealizedPnl = entry.currentValue - entry.basis;
+    }
+  });
+
+  return byAsset;
+}
+
 async function fetchQuoteMap(symbols) {
-  const unique = [...new Set(symbols.map((s) => String(s || "").trim().toUpperCase()).filter(Boolean))];
-  if (unique.length === 0) return {};
+  const unique = [
+    ...new Set(
+      symbols
+        .map((s) => String(s || "").trim().toUpperCase())
+        .filter(Boolean)
+    ),
+  ];
+  if (!unique.length) return {};
 
   try {
     const res = await fetch(
@@ -402,12 +464,10 @@ async function fetchQuoteMap(symbols) {
     if (json && typeof json === "object" && !Array.isArray(json)) {
       Object.entries(json).forEach(([symbol, value]) => {
         if (out[String(symbol).toUpperCase()]) return;
-
         if (typeof value === "number") {
           assign(symbol, value);
           return;
         }
-
         if (value && typeof value === "object") {
           assign(
             value.symbol ?? symbol,
@@ -446,11 +506,11 @@ function MiniPill({ children, tone = "neutral" }) {
   return (
     <div
       style={{
-        minHeight: 32,
+        minHeight: 30,
         display: "inline-flex",
         alignItems: "center",
         gap: 8,
-        padding: "0 11px",
+        padding: "0 10px",
         borderRadius: 999,
         border: `1px solid ${meta.border}`,
         background:
@@ -474,25 +534,36 @@ function PaneHeader({ title, subcopy, right }) {
         display: "flex",
         justifyContent: "space-between",
         alignItems: "flex-start",
-        gap: 12,
+        gap: 10,
         flexWrap: "wrap",
-        marginBottom: 12,
+        marginBottom: 10,
       }}
     >
       <div style={{ minWidth: 0 }}>
         <div
           style={{
-            fontSize: 18,
-            lineHeight: 1.1,
-            fontWeight: 800,
-            letterSpacing: "-0.03em",
+            fontSize: 17,
+            lineHeight: 1.08,
+            fontWeight: 850,
+            letterSpacing: "-0.035em",
             color: "#fff",
           }}
         >
           {title}
         </div>
 
-        {subcopy ? <div style={{ ...mutedStyle(), marginTop: 4 }}>{subcopy}</div> : null}
+        {subcopy ? (
+          <div
+            style={{
+              marginTop: 3,
+              fontSize: 12,
+              lineHeight: 1.45,
+              color: "rgba(255,255,255,0.60)",
+            }}
+          >
+            {subcopy}
+          </div>
+        ) : null}
       </div>
 
       {right || null}
@@ -573,11 +644,11 @@ function StatCard({
     <GlassPane tone={tone} size="card" style={{ height: "100%" }}>
       <div
         style={{
-          minHeight: 138,
+          minHeight: 118,
           height: "100%",
           display: "grid",
           gridTemplateRows: "auto auto auto 1fr",
-          gap: 8,
+          gap: 7,
         }}
       >
         <div
@@ -585,50 +656,59 @@ function StatCard({
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
-            gap: 12,
+            gap: 10,
           }}
         >
           <div
             style={{
-              width: 38,
-              height: 38,
-              borderRadius: 13,
+              width: 34,
+              height: 34,
+              borderRadius: 12,
               display: "grid",
               placeItems: "center",
               border: `1px solid ${meta.border}`,
               background: meta.iconBg,
               color: tone === "neutral" ? "#fff" : meta.text,
-              boxShadow: `0 0 12px ${meta.glow}`,
+              boxShadow: `0 0 10px ${meta.glow}`,
               flexShrink: 0,
             }}
           >
-            <Icon size={16} />
+            <Icon size={15} />
           </div>
 
-          <StatusDot tone={tone} size={8} />
+          <StatusDot tone={tone} size={7} />
         </div>
 
         <div style={{ minWidth: 0 }}>
-          <div style={eyebrowStyle()}>{label}</div>
+          <div
+            style={{
+              fontSize: 10,
+              textTransform: "uppercase",
+              letterSpacing: ".2em",
+              fontWeight: 800,
+              color: "rgba(255,255,255,0.40)",
+            }}
+          >
+            {label}
+          </div>
 
           {badge ? (
-            <div style={{ marginTop: 7 }}>
+            <div style={{ marginTop: 6 }}>
               <div
                 style={{
-                  minHeight: 22,
+                  minHeight: 20,
                   display: "inline-flex",
                   alignItems: "center",
-                  padding: "0 8px",
+                  padding: "0 7px",
                   borderRadius: 999,
-                  fontSize: 10,
+                  fontSize: 9,
                   fontWeight: 800,
-                  letterSpacing: ".1em",
+                  letterSpacing: ".08em",
                   textTransform: "uppercase",
                   border: `1px solid ${meta.border}`,
                   color: tone === "neutral" ? "rgba(255,255,255,0.82)" : meta.text,
-                  background: meta.pillBg,
-                  whiteSpace: "normal",
-                  lineHeight: 1.2,
+                  background: "rgba(255,255,255,0.03)",
+                  lineHeight: 1.15,
                 }}
               >
                 {badge}
@@ -639,7 +719,7 @@ function StatCard({
 
         <div
           style={{
-            fontSize: "clamp(22px, 2.9vw, 34px)",
+            fontSize: "clamp(18px, 2.3vw, 28px)",
             lineHeight: 1,
             fontWeight: 850,
             letterSpacing: "-0.05em",
@@ -652,9 +732,9 @@ function StatCard({
 
         <div
           style={{
-            fontSize: 12,
-            lineHeight: 1.45,
-            color: "rgba(255,255,255,0.62)",
+            fontSize: 11.5,
+            lineHeight: 1.4,
+            color: "rgba(255,255,255,0.60)",
             overflowWrap: "anywhere",
           }}
         >
@@ -677,7 +757,17 @@ function HeaderBar({
     <GlassPane size="card">
       <div className="lccDashHeroGrid" style={{ alignItems: "center" }}>
         <div style={{ minWidth: 0 }}>
-          <div style={eyebrowStyle()}>Life Command Center</div>
+          <div
+            style={{
+              fontSize: 10,
+              textTransform: "uppercase",
+              letterSpacing: ".22em",
+              fontWeight: 800,
+              color: "rgba(255,255,255,0.42)",
+            }}
+          >
+            Life Command Center
+          </div>
 
           <div
             style={{
@@ -704,7 +794,9 @@ function HeaderBar({
             <StatusDot tone={focusTone} />
             <div
               style={{
-                ...mutedStyle(),
+                fontSize: 13,
+                lineHeight: 1.5,
+                color: "rgba(255,255,255,0.62)",
                 whiteSpace: "normal",
                 overflowWrap: "anywhere",
               }}
@@ -725,15 +817,16 @@ function HeaderBar({
           <MiniPill>{monthLabel}</MiniPill>
           <MiniPill>{primaryName || "Primary account"}</MiniPill>
           <MiniPill>{accountCount} accounts</MiniPill>
+
           <button
             type="button"
             onClick={onOpenAlerts}
             style={{
-              minHeight: 32,
+              minHeight: 30,
               display: "inline-flex",
               alignItems: "center",
               gap: 8,
-              padding: "0 11px",
+              padding: "0 10px",
               borderRadius: 999,
               border: "1px solid rgba(214,226,255,0.14)",
               background:
@@ -756,12 +849,12 @@ function EmptyState({ title, detail, linkHref, linkLabel }) {
   return (
     <div
       style={{
-        minHeight: 140,
+        minHeight: 130,
         display: "grid",
         placeItems: "center",
       }}
     >
-      <div style={{ width: "100%", maxWidth: 340 }}>
+      <div style={{ width: "100%", maxWidth: 360 }}>
         <div
           style={{
             fontSize: 17,
@@ -786,7 +879,13 @@ function EmptyState({ title, detail, linkHref, linkLabel }) {
         </div>
 
         {linkHref && linkLabel ? (
-          <div style={{ marginTop: 14, display: "flex", justifyContent: "center" }}>
+          <div
+            style={{
+              marginTop: 14,
+              display: "flex",
+              justifyContent: "center",
+            }}
+          >
             <ActionLink href={linkHref}>
               {linkLabel} <ArrowRight size={14} />
             </ActionLink>
@@ -797,39 +896,45 @@ function EmptyState({ title, detail, linkHref, linkLabel }) {
   );
 }
 
-function ListRow({ title, subtitle, value, tone = "neutral", initials = "—" }) {
+function ListRow({
+  title,
+  subtitle,
+  value,
+  tone = "neutral",
+  initials = "—",
+}) {
   const meta = toneMeta(tone);
 
   return (
     <div
       style={{
-        minHeight: 70,
+        minHeight: 60,
         display: "grid",
-        gridTemplateColumns: "46px minmax(0, 1fr) auto",
-        gap: 12,
+        gridTemplateColumns: "42px minmax(0, 1fr) auto",
+        gap: 10,
         alignItems: "center",
-        padding: "11px 13px",
-        borderRadius: 18,
+        padding: "10px 12px",
+        borderRadius: 16,
         border: `1px solid ${meta.border}`,
         background:
-          "linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01))",
-        boxShadow: `inset 0 1px 0 rgba(255,255,255,0.035), 0 0 12px ${meta.glow}`,
+          "linear-gradient(180deg, rgba(255,255,255,0.028), rgba(255,255,255,0.01))",
+        boxShadow: `inset 0 1px 0 rgba(255,255,255,0.03), 0 0 10px ${meta.glow}`,
       }}
     >
       <div
         style={{
-          width: 46,
-          height: 46,
-          borderRadius: 14,
+          width: 42,
+          height: 42,
+          borderRadius: 13,
           display: "grid",
           placeItems: "center",
           border: `1px solid ${meta.border}`,
           background:
-            "linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.012))",
+            "linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01))",
           color: tone === "neutral" ? "#fff" : meta.text,
           fontWeight: 800,
-          fontSize: 13,
-          letterSpacing: ".06em",
+          fontSize: 12,
+          letterSpacing: ".05em",
         }}
       >
         {initials}
@@ -838,10 +943,10 @@ function ListRow({ title, subtitle, value, tone = "neutral", initials = "—" })
       <div style={{ minWidth: 0 }}>
         <div
           style={{
-            fontSize: 14,
+            fontSize: 13,
             fontWeight: 800,
             color: "#fff",
-            lineHeight: 1.25,
+            lineHeight: 1.2,
             overflowWrap: "anywhere",
           }}
         >
@@ -850,10 +955,10 @@ function ListRow({ title, subtitle, value, tone = "neutral", initials = "—" })
 
         <div
           style={{
-            marginTop: 3,
-            fontSize: 12,
-            color: "rgba(255,255,255,0.58)",
-            lineHeight: 1.35,
+            marginTop: 2,
+            fontSize: 11.5,
+            color: "rgba(255,255,255,0.56)",
+            lineHeight: 1.3,
             overflowWrap: "anywhere",
           }}
         >
@@ -863,7 +968,7 @@ function ListRow({ title, subtitle, value, tone = "neutral", initials = "—" })
 
       <div
         style={{
-          fontSize: 14,
+          fontSize: 13,
           fontWeight: 800,
           color: tone === "neutral" ? "rgba(255,255,255,0.92)" : meta.text,
           whiteSpace: "nowrap",
@@ -875,51 +980,36 @@ function ListRow({ title, subtitle, value, tone = "neutral", initials = "—" })
   );
 }
 
-function RangeChip({ children, active = false }) {
-  return (
-    <button
-      type="button"
-      style={{
-        minHeight: 32,
-        padding: "6px 11px",
-        borderRadius: 12,
-        border: active
-          ? "1px solid rgba(214,226,255,0.14)"
-          : "1px solid rgba(255,255,255,0.06)",
-        background: active
-          ? "linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.014))"
-          : "rgba(255,255,255,0.01)",
-        color: active ? "#fff" : "rgba(255,255,255,0.66)",
-        fontWeight: 800,
-        fontSize: 12,
-        boxShadow: active ? "inset 0 1px 0 rgba(255,255,255,0.05)" : "none",
-        cursor: "default",
-      }}
-    >
-      {children}
-    </button>
-  );
-}
-
 function ChartSummaryTile({ label, value, tone = "neutral" }) {
   const meta = toneMeta(tone);
 
   return (
     <div
       style={{
-        minHeight: 78,
-        borderRadius: 16,
+        minHeight: 68,
+        borderRadius: 15,
         border: `1px solid ${meta.border}`,
         background:
-          "linear-gradient(180deg, rgba(255,255,255,0.032), rgba(255,255,255,0.01))",
-        padding: 13,
+          "linear-gradient(180deg, rgba(255,255,255,0.028), rgba(255,255,255,0.01))",
+        padding: 11,
       }}
     >
-      <div style={eyebrowStyle()}>{label}</div>
       <div
         style={{
-          marginTop: 7,
-          fontSize: 19,
+          fontSize: 10,
+          textTransform: "uppercase",
+          letterSpacing: ".2em",
+          fontWeight: 800,
+          color: "rgba(255,255,255,0.40)",
+        }}
+      >
+        {label}
+      </div>
+
+      <div
+        style={{
+          marginTop: 6,
+          fontSize: 16,
           fontWeight: 850,
           letterSpacing: "-0.04em",
           color: tone === "neutral" ? "#fff" : meta.text,
@@ -950,11 +1040,11 @@ function CashMovementCard({
         ];
 
   const width = 980;
-  const height = 286;
-  const padLeft = 18;
-  const padRight = 18;
-  const padTop = 18;
-  const padBottom = 38;
+  const height = 236;
+  const padLeft = 14;
+  const padRight = 14;
+  const padTop = 14;
+  const padBottom = 32;
 
   const values = safePoints.map((p) => safeNum(p.value, 0));
   const minVal = Math.min(0, ...values);
@@ -968,7 +1058,9 @@ function CashMovementCard({
   const coords = safePoints.map((point, index) => {
     const x = padLeft + index * step;
     const y =
-      height - padBottom - ((safeNum(point.value, 0) - minVal) / range) * innerH;
+      height -
+      padBottom -
+      ((safeNum(point.value, 0) - minVal) / range) * innerH;
     return { ...point, x, y };
   });
 
@@ -984,7 +1076,6 @@ function CashMovementCard({
   ].join(" ");
 
   const lastPoint = coords[coords.length - 1];
-
   const bubbleTone =
     chartTone === "red"
       ? {
@@ -1009,27 +1100,27 @@ function CashMovementCard({
       <PaneHeader
         title="Cash Movement"
         subcopy="Month-to-date cash movement from logged income and spending."
-        right={
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <RangeChip>1W</RangeChip>
-            <RangeChip active>1M</RangeChip>
-            <RangeChip>YTD</RangeChip>
-            <RangeChip>All</RangeChip>
-          </div>
-        }
       />
 
-      <div className="lccDashChartSummaryGrid" style={{ marginBottom: 12 }}>
+      <div className="lccDashChartSummaryGrid" style={{ marginBottom: 10 }}>
         <ChartSummaryTile label="Movement" value={chartValue} tone={chartTone} />
         <ChartSummaryTile label="Income" value={money(monthIncome)} tone="green" />
-        <ChartSummaryTile label="Spending" value={money(monthSpending)} tone="neutral" />
-        <ChartSummaryTile label="Bill Pressure" value={money(monthPressure)} tone="amber" />
+        <ChartSummaryTile
+          label="Spending"
+          value={money(monthSpending)}
+          tone="neutral"
+        />
+        <ChartSummaryTile
+          label="Bill Pressure"
+          value={money(monthPressure)}
+          tone="amber"
+        />
       </div>
 
       <div
         style={{
           position: "relative",
-          minHeight: "clamp(214px, 28vw, 286px)",
+          minHeight: "clamp(180px, 22vw, 236px)",
         }}
       >
         <svg
@@ -1044,13 +1135,7 @@ function CashMovementCard({
               <stop offset="100%" stopColor="rgba(255,255,255,0)" />
             </linearGradient>
 
-            <linearGradient
-              id={`lcc-chart-line-${chartId}`}
-              x1="0"
-              x2="1"
-              y1="0"
-              y2="0"
-            >
+            <linearGradient id={`lcc-chart-line-${chartId}`} x1="0" x2="1" y1="0" y2="0">
               <stop offset="0%" stopColor="rgba(196,220,255,0.9)" />
               <stop offset="60%" stopColor="rgba(181,198,255,0.92)" />
               <stop offset="100%" stopColor="rgba(196,177,255,0.92)" />
@@ -1074,7 +1159,7 @@ function CashMovementCard({
                 x2={width - padRight}
                 y1={y}
                 y2={y}
-                stroke="rgba(255,255,255,0.022)"
+                stroke="rgba(255,255,255,0.02)"
                 strokeWidth="1"
                 strokeDasharray="4 10"
               />
@@ -1088,7 +1173,7 @@ function CashMovementCard({
               x2={p.x}
               y1={padTop}
               y2={height - padBottom}
-              stroke="rgba(255,255,255,0.01)"
+              stroke="rgba(255,255,255,0.009)"
               strokeWidth="1"
             />
           ))}
@@ -1110,12 +1195,12 @@ function CashMovementCard({
               <circle
                 cx={p.x}
                 cy={p.y}
-                r="5.4"
+                r="5"
                 fill="rgba(8,10,14,0.9)"
                 stroke="rgba(245,248,255,0.92)"
                 strokeWidth="2"
               />
-              <circle cx={p.x} cy={p.y} r="1.8" fill="rgba(255,255,255,0.98)" />
+              <circle cx={p.x} cy={p.y} r="1.7" fill="rgba(255,255,255,0.98)" />
             </g>
           ))}
 
@@ -1123,9 +1208,9 @@ function CashMovementCard({
             <text
               key={`${p.iso}-label`}
               x={p.x}
-              y={height - 10}
-              fill="rgba(255,255,255,0.42)"
-              fontSize="11"
+              y={height - 8}
+              fill="rgba(255,255,255,0.40)"
+              fontSize="10"
               fontWeight="700"
               textAnchor="middle"
             >
@@ -1138,27 +1223,20 @@ function CashMovementCard({
           <div
             style={{
               position: "absolute",
-              top:
-                Math.max(16, Math.min(210, (lastPoint.y / height) * 100 - 2)) + "%",
-              right: 14,
-              transform: "translateY(-50%)",
-              padding: "9px 14px",
-              borderRadius: 16,
+              right: 10,
+              top: 12,
+              minHeight: 30,
+              padding: "7px 10px",
+              borderRadius: 13,
               border: `1px solid ${bubbleTone.border}`,
-              background:
-                "linear-gradient(180deg, rgba(10,14,22,0.86), rgba(10,14,22,0.74))",
-              boxShadow: `
-                inset 0 1px 0 rgba(255,255,255,0.04),
-                0 10px 18px rgba(0,0,0,0.16),
-                0 0 12px ${bubbleTone.glow}
-              `,
+              background: "rgba(6,10,16,0.76)",
               color: bubbleTone.text,
-              fontSize: 16,
-              fontWeight: 850,
-              letterSpacing: "-0.03em",
+              fontSize: 11.5,
+              fontWeight: 800,
+              boxShadow: `0 0 16px ${bubbleTone.glow}`,
             }}
           >
-            {chartValue}
+            {signedMoney(lastPoint.value)}
           </div>
         ) : null}
       </div>
@@ -1173,130 +1251,14 @@ function SignalBadge({ severity }) {
       : severity === "warning"
       ? "amber"
       : "green";
+  const label =
+    severity === "critical"
+      ? "Critical"
+      : severity === "warning"
+      ? "Watch"
+      : "Stable";
 
-  const meta = toneMeta(tone);
-
-  return (
-    <div
-      style={{
-        minHeight: 22,
-        display: "inline-flex",
-        alignItems: "center",
-        padding: "0 8px",
-        borderRadius: 999,
-        fontSize: 10,
-        fontWeight: 800,
-        letterSpacing: ".1em",
-        textTransform: "uppercase",
-        border: `1px solid ${meta.border}`,
-        color: meta.text,
-        background: meta.pillBg,
-        whiteSpace: "nowrap",
-      }}
-    >
-      {severity}
-    </div>
-  );
-}
-
-function SignalRow({ item }) {
-  const tone =
-    item.severity === "critical"
-      ? "red"
-      : item.severity === "warning"
-      ? "amber"
-      : "green";
-
-  return (
-    <GlassPane tone={tone} size="compact">
-      <div style={{ display: "grid", gap: 10 }}>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "start",
-            justifyContent: "space-between",
-            gap: 10,
-            flexWrap: "wrap",
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "start", gap: 10 }}>
-            <div
-              style={{
-                width: 38,
-                height: 38,
-                borderRadius: 12,
-                display: "grid",
-                placeItems: "center",
-                border: "1px solid rgba(255,255,255,0.08)",
-                background: "rgba(255,255,255,0.03)",
-                color: "#fff",
-                flexShrink: 0,
-              }}
-            >
-              <AlertTriangle size={16} />
-            </div>
-
-            <div style={{ minWidth: 0 }}>
-              <div
-                style={{
-                  fontSize: 14,
-                  fontWeight: 800,
-                  color: "#fff",
-                  lineHeight: 1.25,
-                  overflowWrap: "anywhere",
-                }}
-              >
-                {item.title}
-              </div>
-
-              <div
-                style={{
-                  marginTop: 3,
-                  fontSize: 12,
-                  color: "rgba(255,255,255,0.62)",
-                  lineHeight: 1.45,
-                  overflowWrap: "anywhere",
-                }}
-              >
-                {item.detail}
-              </div>
-            </div>
-          </div>
-
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              flexWrap: "wrap",
-            }}
-          >
-            {item.amount ? (
-              <div
-                style={{
-                  fontSize: 13,
-                  fontWeight: 800,
-                  color: "rgba(255,255,255,0.92)",
-                }}
-              >
-                {item.amount}
-              </div>
-            ) : null}
-
-            <SignalBadge severity={item.severity} />
-          </div>
-        </div>
-
-        {item.href ? (
-          <div>
-            <ActionLink href={item.href}>
-              {item.hrefLabel || "Open"} <ChevronRight size={14} />
-            </ActionLink>
-          </div>
-        ) : null}
-      </div>
-    </GlassPane>
-  );
+  return <MiniPill tone={tone}>{label}</MiniPill>;
 }
 
 function SignalPreviewRow({ item }) {
@@ -1312,7 +1274,7 @@ function SignalPreviewRow({ item }) {
   return (
     <div
       style={{
-        minHeight: 58,
+        minHeight: 56,
         display: "grid",
         gridTemplateColumns: "minmax(0, 1fr) auto",
         gap: 10,
@@ -1336,12 +1298,13 @@ function SignalPreviewRow({ item }) {
         >
           {item.title}
         </div>
+
         <div
           style={{
             marginTop: 3,
-            fontSize: 12,
+            fontSize: 11.5,
             color: "rgba(255,255,255,0.58)",
-            lineHeight: 1.35,
+            lineHeight: 1.3,
             overflowWrap: "anywhere",
           }}
         >
@@ -1349,7 +1312,15 @@ function SignalPreviewRow({ item }) {
         </div>
       </div>
 
-      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          flexWrap: "wrap",
+          justifyContent: "flex-end",
+        }}
+      >
         {item.amount ? (
           <div
             style={{
@@ -1362,6 +1333,7 @@ function SignalPreviewRow({ item }) {
             {item.amount}
           </div>
         ) : null}
+
         <SignalBadge severity={item.severity} />
       </div>
     </div>
@@ -1378,75 +1350,39 @@ function SignalCenterModal({
   cashMovement,
   dueSoonTotal,
 }) {
-  useEffect(() => {
-    if (!open) return;
-
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-
-    function onKey(e) {
-      if (e.key === "Escape") onClose();
-    }
-
-    window.addEventListener("keydown", onKey);
-
-    return () => {
-      document.body.style.overflow = prev;
-      window.removeEventListener("keydown", onKey);
-    };
-  }, [open, onClose]);
-
   if (!open) return null;
 
-  const summaryTone =
-    signalTone === "red"
-      ? "red"
-      : signalTone === "amber"
-      ? "amber"
-      : "green";
-
   return (
-    <div
-      onClick={onClose}
-      style={{
-        position: "fixed",
-        inset: 0,
-        zIndex: 120,
-        background: "rgba(0,0,0,0.72)",
-        backdropFilter: "blur(10px)",
-        WebkitBackdropFilter: "blur(10px)",
-        display: "flex",
-        alignItems: "flex-end",
-        justifyContent: "center",
-        padding: 12,
-      }}
-    >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        style={{
-          width: "min(100%, 760px)",
-          maxHeight: "88vh",
-          overflowY: "auto",
-          borderRadius: 26,
-        }}
-      >
-        <GlassPane tone={summaryTone} size="hero">
+    <div className="lccSignalModalRoot">
+      <div className="lccSignalBackdrop" onClick={onClose} />
+      <div className="lccSignalModalCard">
+        <GlassPane tone={signalTone} size="card">
           <div
             style={{
               display: "flex",
-              alignItems: "start",
+              alignItems: "flex-start",
               justifyContent: "space-between",
-              gap: 14,
+              gap: 12,
             }}
           >
-            <div>
-              <div style={eyebrowStyle()}>Signal center</div>
+            <div style={{ minWidth: 0 }}>
+              <div
+                style={{
+                  fontSize: 10,
+                  textTransform: "uppercase",
+                  letterSpacing: ".22em",
+                  fontWeight: 800,
+                  color: "rgba(255,255,255,0.42)",
+                }}
+              >
+                Signal Center
+              </div>
 
               <div
                 style={{
                   marginTop: 8,
-                  fontSize: "clamp(22px, 5vw, 32px)",
-                  lineHeight: 1,
+                  fontSize: "clamp(24px, 3vw, 30px)",
+                  lineHeight: 1.02,
                   fontWeight: 850,
                   letterSpacing: "-0.05em",
                   color: "#fff",
@@ -1459,162 +1395,130 @@ function SignalCenterModal({
                 style={{
                   marginTop: 8,
                   fontSize: 13,
-                  color: "rgba(255,255,255,0.66)",
                   lineHeight: 1.55,
+                  color: "rgba(255,255,255,0.66)",
+                  maxWidth: 720,
                 }}
               >
-                Exact pressure points showing on the board right now.
+                Quick read on what needs attention right now.
               </div>
             </div>
 
             <button
               type="button"
               onClick={onClose}
-              aria-label="Close alerts"
+              aria-label="Close signal center"
               style={{
                 width: 40,
                 height: 40,
                 borderRadius: 14,
-                border: "1px solid rgba(255,255,255,0.08)",
+                border: "1px solid rgba(214,226,255,0.10)",
                 background: "rgba(255,255,255,0.03)",
                 color: "#fff",
                 display: "grid",
                 placeItems: "center",
-                flexShrink: 0,
                 cursor: "pointer",
+                flexShrink: 0,
               }}
             >
-              <X size={18} />
+              <X size={16} />
             </button>
           </div>
 
-          <div
-            style={{
-              marginTop: 16,
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
-              gap: 10,
-            }}
-          >
-            <GlassPane size="compact">
-              <div style={eyebrowStyle()}>Cash Position</div>
-              <div
-                style={{
-                  marginTop: 8,
-                  fontSize: 21,
-                  fontWeight: 850,
-                  color: "#fff",
-                }}
-              >
-                {money(cashPosition)}
-              </div>
-            </GlassPane>
-
-            <GlassPane
-              tone={cashMovement < 0 ? "red" : cashMovement > 0 ? "green" : "neutral"}
-              size="compact"
-            >
-              <div style={eyebrowStyle()}>Cash Movement</div>
-              <div
-                style={{
-                  marginTop: 8,
-                  fontSize: 21,
-                  fontWeight: 850,
-                  color: "#fff",
-                }}
-              >
-                {signedMoney(cashMovement)}
-              </div>
-            </GlassPane>
-
-            <GlassPane tone={dueSoonTotal > 0 ? "amber" : "green"} size="compact">
-              <div style={eyebrowStyle()}>Due Soon</div>
-              <div
-                style={{
-                  marginTop: 8,
-                  fontSize: 21,
-                  fontWeight: 850,
-                  color: "#fff",
-                }}
-              >
-                {money(dueSoonTotal)}
-              </div>
-            </GlassPane>
+          <div className="lccSignalSummaryGrid" style={{ marginTop: 14 }}>
+            <ChartSummaryTile
+              label="Cash Position"
+              value={money(cashPosition)}
+              tone={cashPosition < 0 ? "red" : "neutral"}
+            />
+            <ChartSummaryTile
+              label="Month Movement"
+              value={signedMoney(cashMovement)}
+              tone={toneByValue(cashMovement)}
+            />
+            <ChartSummaryTile
+              label="Due Soon"
+              value={money(dueSoonTotal)}
+              tone={dueSoonTotal > 0 ? "amber" : "green"}
+            />
           </div>
+        </GlassPane>
 
-          <div style={{ marginTop: 18, display: "grid", gap: 10 }}>
-            {signalItems.length === 0 ? (
-              <GlassPane tone="green" size="card">
-                <div style={{ fontSize: 16, fontWeight: 800, color: "#fff" }}>
-                  No active problems
-                </div>
-                <div
-                  style={{
-                    marginTop: 6,
-                    fontSize: 13,
-                    color: "rgba(255,255,255,0.66)",
-                    lineHeight: 1.5,
-                  }}
-                >
-                  Right now the dashboard does not see any critical or warning issues.
-                </div>
-              </GlassPane>
-            ) : (
-              signalItems.map((item) => <SignalRow key={item.id} item={item} />)
-            )}
-          </div>
+        <div style={{ height: 14 }} />
+
+        <GlassPane size="card">
+          <PaneHeader
+            title="Active signals"
+            subcopy={`${signalItems.length} items on the board right now.`}
+          />
+
+          {signalItems.length ? (
+            <div className="lccDashStack">
+              {signalItems.map((item) => (
+                <SignalPreviewRow key={item.id} item={item} />
+              ))}
+            </div>
+          ) : (
+            <EmptyState
+              title="No active signals"
+              detail="Nothing is pressing right now. That is the goal."
+            />
+          )}
         </GlassPane>
       </div>
     </div>
   );
 }
 
+function recentActivityLabel(count) {
+  if (!count) return "No movement";
+  if (count === 1) return "1 item";
+  return `${count} items`;
+}
+
 export default function DashboardPage() {
+  const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [pageError, setPageError] = useState("");
-  const [user, setUser] = useState(null);
 
   const [accounts, setAccounts] = useState([]);
   const [primaryId, setPrimaryId] = useState("");
   const [bills, setBills] = useState([]);
   const [spendingTx, setSpendingTx] = useState([]);
   const [incomeDeposits, setIncomeDeposits] = useState([]);
-
   const [investmentAssets, setInvestmentAssets] = useState([]);
   const [investmentTxns, setInvestmentTxns] = useState([]);
   const [quoteMap, setQuoteMap] = useState({});
-
   const [signalsOpen, setSignalsOpen] = useState(false);
 
   useEffect(() => {
     let mounted = true;
 
     async function bootstrap() {
+      setLoading(true);
+      setPageError("");
+
       try {
-        setLoading(true);
+        if (!supabase) {
+          throw new Error("Missing Supabase environment variables.");
+        }
 
         const {
           data: { user: currentUser },
-          error: userError,
+          error: userErr,
         } = await supabase.auth.getUser();
 
-        if (userError) throw userError;
-        if (!mounted) return;
-
-        setUser(currentUser || null);
+        if (userErr) throw userErr;
 
         if (!currentUser) {
-          setAccounts([]);
-          setBills([]);
-          setSpendingTx([]);
-          setIncomeDeposits([]);
-          setInvestmentAssets([]);
-          setInvestmentTxns([]);
-          setQuoteMap({});
-          setPrimaryId("");
-          setPageError("");
+          if (!mounted) return;
+          setUser(null);
+          setLoading(false);
           return;
         }
+
+        if (!mounted) return;
+        setUser(currentUser);
 
         const monthStart = startOfMonthISO();
         const monthEnd = endOfMonthISO();
@@ -1644,7 +1548,6 @@ export default function DashboardPage() {
             .from("bills")
             .select("*")
             .eq("user_id", currentUser.id)
-            .eq("active", true)
             .order("due_date", { ascending: true }),
 
           supabase
@@ -1653,7 +1556,7 @@ export default function DashboardPage() {
             .eq("user_id", currentUser.id)
             .gte("tx_date", monthStart)
             .lte("tx_date", monthEnd)
-            .order("tx_date", { ascending: true }),
+            .order("tx_date", { ascending: false }),
 
           supabase
             .from("income_deposits")
@@ -1661,7 +1564,7 @@ export default function DashboardPage() {
             .eq("user_id", currentUser.id)
             .gte("deposit_date", monthStart)
             .lte("deposit_date", monthEnd)
-            .order("deposit_date", { ascending: true }),
+            .order("deposit_date", { ascending: false }),
 
           supabase
             .from("investment_assets")
@@ -1688,8 +1591,8 @@ export default function DashboardPage() {
         const loadedBills = (billsRes.data || []).map(mapBillRowToClient);
         const loadedSpending = (spendingRes.data || []).map(mapSpendingTxRowToClient);
         const loadedIncome = (incomeRes.data || []).map(mapIncomeDepositRowToClient);
-        const loadedInvestmentAssets = (assetRes.data || []).map(mapInvestmentAssetRow);
-        const loadedInvestmentTxns = (txnRes.data || []).map(mapInvestmentTxnRow);
+        const loadedAssets = (assetRes.data || []).map(mapInvestmentAssetRow);
+        const loadedTxns = (txnRes.data || []).map(mapInvestmentTxnRow);
 
         const nextPrimary =
           settingsRes.data?.primary_account_id &&
@@ -1697,10 +1600,7 @@ export default function DashboardPage() {
             ? settingsRes.data.primary_account_id
             : loadedAccounts[0]?.id || "";
 
-        const symbols = loadedInvestmentAssets
-          .map((a) => a.symbol)
-          .filter(Boolean);
-
+        const symbols = loadedAssets.map((a) => a.symbol).filter(Boolean);
         const nextQuotes = await fetchQuoteMap(symbols);
 
         if (!mounted) return;
@@ -1710,10 +1610,9 @@ export default function DashboardPage() {
         setBills(loadedBills);
         setSpendingTx(loadedSpending);
         setIncomeDeposits(loadedIncome);
-        setInvestmentAssets(loadedInvestmentAssets);
-        setInvestmentTxns(loadedInvestmentTxns);
+        setInvestmentAssets(loadedAssets);
+        setInvestmentTxns(loadedTxns);
         setQuoteMap(nextQuotes);
-        setPageError("");
       } catch (err) {
         if (!mounted) return;
         setPageError(err?.message || "Failed to load dashboard.");
@@ -1740,206 +1639,136 @@ export default function DashboardPage() {
       ["checking", "savings", "cash"].includes(String(a.type || "").toLowerCase())
     );
 
-    const investmentAccounts = accounts.filter(
-      (a) => String(a.type || "").toLowerCase() === "investment"
-    );
+    const cashPositionAccounts = accounts.filter((a) => {
+      const type = String(a.type || "").toLowerCase();
+      return type !== "credit" && type !== "investment";
+    });
 
     const creditAccounts = accounts.filter(
       (a) => String(a.type || "").toLowerCase() === "credit"
     );
 
-    const visibleBalanceAccounts = accounts.filter((a) => {
-      const type = String(a.type || "").toLowerCase();
-      return type !== "investment" && type !== "credit";
-    });
-
-    const nonDebtAssets = accounts
-      .filter((a) => String(a.type || "").toLowerCase() !== "credit")
-      .reduce((sum, a) => sum + safeNum(a.balance, 0), 0);
-
-    const creditDebt = creditAccounts.reduce(
-      (sum, a) => sum + Math.max(0, safeNum(a.balance, 0)),
-      0
-    );
-
-    const investmentTotal = investmentAccounts.reduce(
-      (sum, a) => sum + safeNum(a.balance, 0),
-      0
-    );
-
-    const accountBalancesExInvestments = visibleBalanceAccounts.reduce(
-      (sum, a) => sum + safeNum(a.balance, 0),
-      0
-    );
-
-    const netWorth = nonDebtAssets - creditDebt;
-
     const monthlyIncome =
       incomeDeposits.reduce((sum, row) => sum + safeNum(row.amount, 0), 0) +
-      spendingTx.reduce((sum, row) => {
-        return String(row.type || "").toLowerCase() === "income"
-          ? sum + safeNum(row.amount, 0)
-          : sum;
-      }, 0);
+      spendingTx
+        .filter((row) => String(row.type || "").toLowerCase() === "income")
+        .reduce((sum, row) => sum + safeNum(row.amount, 0), 0);
 
-    const monthlySpending = spendingTx.reduce((sum, row) => {
-      const type = String(row.type || "").toLowerCase();
-      if (type === "income") return sum;
-      return sum + safeNum(row.amount, 0);
-    }, 0);
+    const monthlySpending = spendingTx
+      .filter((row) => String(row.type || "").toLowerCase() !== "income")
+      .reduce((sum, row) => sum + safeNum(row.amount, 0), 0);
 
-    const monthlyBillPressure = bills.reduce((sum, row) => {
-      return sum + safeNum(row.amount, 0) * freqToMonthlyMult(row.frequency);
-    }, 0);
+    const monthlyBillPressure = bills
+      .filter((b) => b.active !== false)
+      .reduce(
+        (sum, b) => sum + safeNum(b.amount, 0) * freqToMonthlyMult(b.frequency),
+        0
+      );
 
-    const cashMovement = monthlyIncome - monthlySpending;
-    const burnPct =
-      monthlyIncome > 0
-        ? ((monthlySpending + monthlyBillPressure) / monthlyIncome) * 100
-        : 0;
-
-    const dueSoonBills = bills
-      .filter((bill) => bill.active && bill.dueDate)
-      .map((bill) => ({
-        ...bill,
-        days: daysUntil(bill.dueDate),
-      }))
-      .filter((bill) => bill.days !== null && bill.days <= 7)
-      .sort((a, b) => safeNum(a.days, 999) - safeNum(b.days, 999));
-
-    const overdueBills = dueSoonBills.filter((bill) => safeNum(bill.days, 0) < 0);
-    const nextThreeDayBills = dueSoonBills.filter((bill) => {
-      const d = safeNum(bill.days, 999);
-      return d >= 0 && d <= 3;
-    });
-
-    const dueSoonTotal = dueSoonBills.reduce(
-      (sum, bill) => sum + safeNum(bill.amount, 0),
+    const accountBalancesExInvestments = cashPositionAccounts.reduce(
+      (sum, a) => sum + safeNum(a.balance, 0),
       0
     );
 
-    const signalItems = [];
+    const creditDebt = creditAccounts.reduce(
+      (sum, a) => sum + safeNum(a.balance, 0),
+      0
+    );
 
-    if (accounts.length === 0) {
-      signalItems.push({
-        id: "no-accounts",
-        severity: "warning",
-        title: "No accounts connected yet",
-        detail: "Add your accounts so the dashboard can calculate real balances.",
-        href: "/accounts",
-        hrefLabel: "Open Accounts",
-      });
-    }
+    const positionMap = buildPositionMap(
+      investmentAssets,
+      investmentTxns,
+      quoteMap
+    );
 
-    if (primary && safeNum(primary.balance, 0) < 0) {
-      signalItems.push({
-        id: "primary-negative",
-        severity: "critical",
-        title: `${primary.name || "Primary account"} is negative`,
-        detail: "Your selected main cash account is below zero right now.",
-        amount: money(primary.balance),
-        href: "/accounts",
-        hrefLabel: "Review accounts",
-      });
-    }
+    const positions = [...positionMap.values()].filter((entry) => entry.shares > 0);
+    const holdingCount = positions.length;
+    const pricedHoldingCount = positions.filter(
+      (entry) => entry.currentValue != null
+    ).length;
 
-    if (overdueBills.length > 0) {
-      signalItems.push({
-        id: "overdue-bills",
-        severity: "critical",
-        title: `${overdueBills.length} overdue bill${overdueBills.length === 1 ? "" : "s"}`,
-        detail: "You have bills that are already past due and need attention now.",
-        amount: money(
-          overdueBills.reduce((sum, bill) => sum + safeNum(bill.amount, 0), 0)
-        ),
-        href: "/bills",
-        hrefLabel: "Open bills",
-      });
-    }
+    const portfolioMarketValue = positions.reduce(
+      (sum, entry) => sum + safeNum(entry.currentValue, 0),
+      0
+    );
 
-    if (nextThreeDayBills.length > 0) {
-      signalItems.push({
-        id: "due-soon-bills",
-        severity:
-          dueSoonTotal > accountBalancesExInvestments ? "critical" : "warning",
-        title: `${nextThreeDayBills.length} bill${nextThreeDayBills.length === 1 ? "" : "s"} due within 3 days`,
-        detail:
-          dueSoonTotal > accountBalancesExInvestments
-            ? "Bills due soon are larger than your visible cash position."
-            : "Bills are stacking up fast over the next few days.",
-        amount: money(
-          nextThreeDayBills.reduce((sum, bill) => sum + safeNum(bill.amount, 0), 0)
-        ),
-        href: "/bills",
-        hrefLabel: "Review due bills",
-      });
-    }
+    const portfolioCostBasis = positions.reduce(
+      (sum, entry) => sum + safeNum(entry.basis, 0),
+      0
+    );
 
-    if (cashMovement < 0) {
-      signalItems.push({
-        id: "negative-cash-movement",
-        severity: "warning",
-        title: "Month cash movement is negative",
-        detail: "Logged spending is ahead of logged income this month.",
-        amount: signedMoney(cashMovement),
-        href: "/spending",
-        hrefLabel: "Open spending",
-      });
-    }
+    const portfolioPnL = positions.reduce(
+      (sum, entry) => sum + safeNum(entry.unrealizedPnl, 0),
+      0
+    );
 
-    if (monthlyIncome > 0 && burnPct >= 95) {
-      signalItems.push({
-        id: "burn-rate",
-        severity: burnPct >= 110 ? "critical" : "warning",
-        title: "Monthly pressure is high",
-        detail:
-          "Spending plus monthly bill pressure is eating almost all of current monthly income.",
-        amount: `${Math.round(burnPct)}%`,
-        href: "/bills",
-        hrefLabel: "Review pressure",
-      });
-    }
+    const investmentTotal = pricedHoldingCount
+      ? portfolioMarketValue
+      : portfolioCostBasis;
 
-    signalItems.sort((a, b) => severityRank(a.severity) - severityRank(b.severity));
+    const netWorth = accountBalancesExInvestments + investmentTotal - creditDebt;
 
-    const hasCritical = signalItems.some((item) => item.severity === "critical");
-    const hasWarning = signalItems.some((item) => item.severity === "warning");
+    const upcomingBills = bills
+      .filter((b) => b.active !== false && b.dueDate)
+      .map((bill) => {
+        const days = daysUntil(bill.dueDate);
+        return {
+          ...bill,
+          days,
+        };
+      })
+      .filter((bill) => bill.days == null || bill.days <= 21)
+      .sort((a, b) => {
+        const ad = a.days == null ? 9999 : a.days;
+        const bd = b.days == null ? 9999 : b.days;
+        return ad - bd;
+      })
+      .slice(0, 4);
 
-    const signalTone = hasCritical ? "red" : hasWarning ? "amber" : "green";
-    const signalLabel = hasCritical
-      ? "Critical"
-      : hasWarning
-      ? "Attention"
-      : "Clear";
-    const signalCount = signalItems.length;
+    const dueSoonTotal = upcomingBills
+      .filter((bill) => bill.days != null && bill.days >= 0 && bill.days <= 14)
+      .reduce((sum, bill) => sum + safeNum(bill.amount, 0), 0);
 
-    let focus = {
-      title: "Board looks stable right now.",
-      tone: "green",
-    };
-
-    if (accounts.length === 0) {
-      focus = {
-        title: "Add accounts to light up the board with real numbers.",
-        tone: "amber",
-      };
-    } else if (hasCritical) {
-      focus = {
-        title: signalItems[0]?.title || "Critical issues need attention.",
-        tone: "red",
-      };
-    } else if (hasWarning) {
-      focus = {
-        title: signalItems[0]?.title || "A few pressure points need cleanup.",
-        tone: "amber",
-      };
-    } else if (cashMovement > 0) {
-      focus = {
-        title: `Cash movement is ${signedMoney(cashMovement)} this month.`,
+    const recentActivity = [
+      ...incomeDeposits.map((row) => ({
+        id: `income-${row.id}`,
+        title: row.source || "Income",
+        subtitle: `${fmtDateTime(row.date)} • deposit`,
+        value: signedMoney(row.amount),
         tone: "green",
-      };
-    }
+        initials: initialsFromLabel(row.source || "Income"),
+        sortDate: row.date || "",
+      })),
+      ...spendingTx
+        .filter((row) => String(row.type || "").toLowerCase() !== "income")
+        .map((row) => ({
+          id: `spending-${row.id}`,
+          title: row.merchant || "Expense",
+          subtitle: `${fmtDateTime(row.date)} • ${row.note || "spending"}`,
+          value: signedMoney(-safeNum(row.amount, 0)),
+          tone: "red",
+          initials: initialsFromLabel(row.merchant || "Expense"),
+          sortDate: row.date || "",
+        })),
+    ]
+      .sort((a, b) => String(b.sortDate).localeCompare(String(a.sortDate)))
+      .slice(0, 4);
 
+    const topAccounts = [...cashPositionAccounts]
+      .sort(
+        (a, b) => Math.abs(safeNum(b.balance, 0)) - Math.abs(safeNum(a.balance, 0))
+      )
+      .slice(0, 4)
+      .map((a) => ({
+        id: a.id,
+        title: a.name || "Account",
+        subtitle: String(a.type || "other").replace(/_/g, " "),
+        value: money(a.balance),
+        tone: safeNum(a.balance, 0) < 0 ? "red" : "neutral",
+        initials: initialsFromLabel(a.name || "A"),
+      }));
+
+    const cashMovement = monthlyIncome - monthlySpending;
     const chartPoints = buildCashMovementPoints(
       monthStart,
       today,
@@ -1947,149 +1776,128 @@ export default function DashboardPage() {
       incomeDeposits
     );
 
-    const topAccounts = visibleBalanceAccounts
-      .slice()
-      .sort((a, b) => safeNum(b.balance, 0) - safeNum(a.balance, 0))
-      .slice(0, 4)
-      .map((account) => ({
-        id: account.id,
-        title: account.name || "Account",
-        subtitle: String(account.type || "account").replace(/^\w/, (m) => m.toUpperCase()),
-        value: money(account.balance),
-        tone: safeNum(account.balance, 0) < 0 ? "red" : "neutral",
-        initials: initialsFromLabel(account.name || "AC"),
-      }));
+    const signalItems = [];
 
-    const recentActivity = [
-      ...incomeDeposits.map((row) => ({
-        id: `income-${row.id}`,
-        iso: row.date || "",
-        title: row.source || "Income deposit",
-        subtitle: row.note || fmtShort(row.date),
-        value: signedMoney(row.amount),
-        tone: "green",
-        initials: initialsFromLabel(row.source || "IN"),
-      })),
-      ...spendingTx.map((row) => {
-        const type = String(row.type || "").toLowerCase();
-        const isIncome = type === "income";
-        const title = row.merchant || row.note || (isIncome ? "Income" : "Expense");
-        return {
-          id: `spend-${row.id}`,
-          iso: row.date || "",
-          title,
-          subtitle: row.note || fmtShort(row.date),
-          value: isIncome ? signedMoney(row.amount) : signedMoney(-row.amount),
-          tone: isIncome ? "green" : "neutral",
-          initials: initialsFromLabel(title),
-        };
-      }),
-    ]
-      .sort((a, b) => String(b.iso).localeCompare(String(a.iso)))
-      .slice(0, 5);
-
-    const upcomingBills = dueSoonBills.slice(0, 5).map((bill) => ({
-      id: bill.id,
-      title: bill.name || "Bill",
-      subtitle:
-        safeNum(bill.days, 999) < 0
-          ? `${Math.abs(safeNum(bill.days, 0))} day(s) late`
-          : safeNum(bill.days, 999) === 0
-          ? "Due today"
-          : `${safeNum(bill.days, 0)} day(s) left`,
-      value: money(bill.amount),
-      tone:
-        safeNum(bill.days, 999) < 0
-          ? "red"
-          : safeNum(bill.days, 999) <= 3
-          ? "amber"
-          : "neutral",
-      initials: initialsFromLabel(bill.name || "BL"),
-    }));
-
-    const assetsById = new Map(investmentAssets.map((asset) => [asset.id, asset]));
-    const txnsByAsset = new Map();
-
-    investmentTxns.forEach((txn) => {
-      const existing = txnsByAsset.get(txn.assetId) || [];
-      existing.push(txn);
-      txnsByAsset.set(txn.assetId, existing);
-    });
-
-    let pricedHoldingCount = 0;
-    let holdingCount = 0;
-    let portfolioMarketValue = 0;
-    let portfolioCostBasis = 0;
-
-    investmentAssets.forEach((asset) => {
-      const txns = (txnsByAsset.get(asset.id) || []).slice().sort((a, b) =>
-        String(a.date).localeCompare(String(b.date))
-      );
-
-      let qty = 0;
-      let remainingCost = 0;
-
-      txns.forEach((txn) => {
-        const t = String(txn.type || "").toUpperCase();
-        const txnQty = safeNum(txn.qty, 0);
-        const txnPrice = safeNum(txn.price, 0);
-
-        if (t === "BUY") {
-          qty += txnQty;
-          remainingCost += txnQty * txnPrice;
-          return;
-        }
-
-        if (t === "SELL" && txnQty > 0) {
-          const avgCost = qty > 0 ? remainingCost / qty : 0;
-          const qtySold = Math.min(qty, txnQty);
-          qty -= qtySold;
-          remainingCost -= avgCost * qtySold;
-        }
+    if (!accounts.length) {
+      signalItems.push({
+        id: "no-accounts",
+        severity: "critical",
+        title: "No real accounts added",
+        detail:
+          "Add your actual money buckets first so the dashboard stops being fake.",
+        amount: "",
       });
+    }
 
-      if (qty <= 0) return;
+    const overdueBills = upcomingBills.filter(
+      (bill) => bill.days != null && bill.days < 0
+    );
+    const dueSoonBills = upcomingBills.filter(
+      (bill) => bill.days != null && bill.days >= 0 && bill.days <= 7
+    );
 
-      holdingCount += 1;
-
-      const symbol = String(asset.symbol || "").toUpperCase();
-      const livePrice = safeNum(quoteMap[symbol], NaN);
-
-      if (Number.isFinite(livePrice) && livePrice > 0) {
-        pricedHoldingCount += 1;
-        portfolioMarketValue += qty * livePrice;
-        portfolioCostBasis += remainingCost;
-      }
+    overdueBills.forEach((bill) => {
+      signalItems.push({
+        id: `bill-overdue-${bill.id}`,
+        severity: "critical",
+        title: `${bill.name} is overdue`,
+        detail: `${Math.abs(bill.days)} day${
+          Math.abs(bill.days) === 1 ? "" : "s"
+        } late.`,
+        amount: money(bill.amount),
+      });
     });
 
-    const portfolioPnL =
-      pricedHoldingCount > 0 ? portfolioMarketValue - portfolioCostBasis : null;
+    dueSoonBills.slice(0, 3).forEach((bill) => {
+      signalItems.push({
+        id: `bill-due-${bill.id}`,
+        severity: bill.days <= 2 ? "critical" : "warning",
+        title: `${bill.name} due ${
+          bill.days === 0 ? "today" : `in ${bill.days} day${bill.days === 1 ? "" : "s"}`
+        }`,
+        detail: "This one is close enough that it should already be on your radar.",
+        amount: money(bill.amount),
+      });
+    });
 
-    const portfolioTone =
-      portfolioPnL === null
-        ? "neutral"
-        : portfolioPnL > 0
-        ? "green"
-        : portfolioPnL < 0
+    if (accountBalancesExInvestments < 0) {
+      signalItems.push({
+        id: "cash-negative",
+        severity: "critical",
+        title: "Cash position is negative",
+        detail: "Your non-investment balances are underwater right now.",
+        amount: money(accountBalancesExInvestments),
+      });
+    } else if (
+      accountBalancesExInvestments > 0 &&
+      accountBalancesExInvestments < 500
+    ) {
+      signalItems.push({
+        id: "cash-low",
+        severity: "warning",
+        title: "Cash position is thin",
+        detail: "You do not have much room if something hits this week.",
+        amount: money(accountBalancesExInvestments),
+      });
+    }
+
+    if (monthlyIncome > 0 && monthlySpending > monthlyIncome) {
+      signalItems.push({
+        id: "cash-burn",
+        severity: "warning",
+        title: "Spending is outrunning income",
+        detail:
+          "This month is currently burning more cash than it is bringing in.",
+        amount: signedMoney(cashMovement),
+      });
+    }
+
+    if (creditDebt > 0) {
+      signalItems.push({
+        id: "credit-debt",
+        severity: creditDebt >= 3000 ? "critical" : "warning",
+        title: "Credit debt is still sitting there",
+        detail: "This is pressure, not background noise.",
+        amount: money(creditDebt),
+      });
+    }
+
+    if (holdingCount > 0 && pricedHoldingCount < holdingCount) {
+      signalItems.push({
+        id: "unpriced-holdings",
+        severity: "warning",
+        title: "Some holdings are not live priced",
+        detail:
+          "Part of the portfolio view is still relying on stored values instead of live quotes.",
+        amount: `${pricedHoldingCount}/${holdingCount} live`,
+      });
+    }
+
+    signalItems.sort(
+      (a, b) => severityRank(a.severity) - severityRank(b.severity)
+    );
+
+    const signalCount = signalItems.length;
+    const signalTone =
+      signalItems[0]?.severity === "critical"
         ? "red"
-        : "neutral";
+        : signalItems[0]?.severity === "warning"
+        ? "amber"
+        : "green";
 
-    const portfolioValueText =
-      portfolioPnL === null ? "—" : signedMoney(portfolioPnL);
+    const signalLabel =
+      signalCount === 0
+        ? "Stable"
+        : signalItems[0]?.severity === "critical"
+        ? "Critical"
+        : "Watch";
 
-    const portfolioDetail =
-      holdingCount === 0
-        ? "Add investment holdings to show portfolio P/L."
-        : pricedHoldingCount === 0
-        ? "No live price coverage yet for tracked holdings."
-        : `Unrealized across ${pricedHoldingCount}/${holdingCount} live-priced holding${
-            holdingCount === 1 ? "" : "s"
-          }.`;
-
-    const portfolioBadge =
-      holdingCount > 0 && pricedHoldingCount > 0
-        ? `${pricedHoldingCount}/${holdingCount} live priced`
-        : "";
+    const focus =
+      signalCount > 0
+        ? signalItems[0].title
+        : accountBalancesExInvestments > 0
+        ? "Cash position is holding. Keep the board clean and stay ahead of due dates."
+        : "Get the base accounts in so the dashboard can show real numbers.";
 
     return {
       monthLabel: fmtMonthLabel(thisMonth),
@@ -2107,7 +1915,8 @@ export default function DashboardPage() {
       upcomingBills,
       chartPoints,
       chartValue: signedMoney(cashMovement),
-      chartTone: cashMovement < 0 ? "red" : cashMovement > 0 ? "green" : "neutral",
+      chartTone:
+        cashMovement < 0 ? "red" : cashMovement > 0 ? "green" : "neutral",
       dueSoonTotal,
       cashMovement,
       monthlyIncome,
@@ -2115,11 +1924,22 @@ export default function DashboardPage() {
       monthlyBillPressure,
       investmentTotal,
       creditDebt,
-      liquidTotal: liquidAccounts.reduce((sum, a) => sum + safeNum(a.balance, 0), 0),
-      portfolioPnLText: portfolioValueText,
-      portfolioTone,
-      portfolioDetail,
-      portfolioBadge,
+      liquidTotal: liquidAccounts.reduce(
+        (sum, a) => sum + safeNum(a.balance, 0),
+        0
+      ),
+      portfolioPnLText: signedMoney(portfolioPnL),
+      portfolioTone: toneByValue(portfolioPnL),
+      portfolioDetail:
+        holdingCount > 0
+          ? `${pricedHoldingCount}/${holdingCount} live priced • basis ${money(
+              portfolioCostBasis
+            )}`
+          : "No live positions yet.",
+      portfolioBadge:
+        holdingCount > 0
+          ? `${holdingCount} holding${holdingCount === 1 ? "" : "s"}`
+          : "",
       portfolioMarketValue,
       portfolioCostBasis,
     };
@@ -2136,8 +1956,8 @@ export default function DashboardPage() {
 
   if (loading) {
     return (
-      <main style={{ padding: "18px 0 28px", fontFamily: DASH_FONT_STACK }}>
-        <div style={{ width: "min(100%, 1280px)", margin: "0 auto" }}>
+      <main className="lccDashRoot">
+        <div className="lccDashInner">
           <GlassPane size="card">
             <div style={{ fontWeight: 800, fontSize: 18, color: "#fff" }}>
               Loading dashboard.
@@ -2150,8 +1970,8 @@ export default function DashboardPage() {
 
   if (!user) {
     return (
-      <main style={{ padding: "18px 0 28px", fontFamily: DASH_FONT_STACK }}>
-        <div style={{ width: "min(100%, 1280px)", margin: "0 auto" }}>
+      <main className="lccDashRoot">
+        <div className="lccDashInner">
           <GlassPane size="card">
             <div style={{ fontWeight: 800, fontSize: 18, color: "#fff" }}>
               Please log in
@@ -2164,6 +1984,11 @@ export default function DashboardPage() {
               }}
             >
               This dashboard needs an authenticated user.
+            </div>
+            <div style={{ marginTop: 14 }}>
+              <ActionLink href="/login">
+                Go to login <ArrowRight size={14} />
+              </ActionLink>
             </div>
           </GlassPane>
         </div>
@@ -2206,38 +2031,48 @@ export default function DashboardPage() {
           <HeaderBar
             monthLabel={computed.monthLabel}
             primaryName={computed.primaryName}
-            focusTitle={computed.focus.title}
-            focusTone={computed.focus.tone}
+            focusTitle={computed.focus}
+            focusTone={computed.signalTone}
             accountCount={computed.accountCount}
             onOpenAlerts={() => setSignalsOpen(true)}
           />
 
-          <section className="lccDashMetrics">
+          <section className="lccDashMetricGrid">
             <StatCard
               icon={Landmark}
               label="Net Worth"
               value={money(computed.netWorth)}
-              detail="Assets minus credit debt."
-              tone="neutral"
+              detail="Non-investment balances plus portfolio value minus credit debt."
+              tone={toneByValue(computed.netWorth)}
             />
-
             <StatCard
               icon={Wallet}
               label="Cash Position"
               value={money(computed.accountBalancesExInvestments)}
-              detail="Visible balances excluding investments."
-              tone="neutral"
-              badge={computed.investmentTotal > 0 ? "Investments excluded" : ""}
+              detail="Total account balances minus investments and credit debt buckets."
+              tone={
+                computed.accountBalancesExInvestments < 500 ? "amber" : "neutral"
+              }
             />
-
             <StatCard
               icon={PiggyBank}
-              label="Month Movement"
-              value={signedMoney(computed.cashMovement)}
-              detail="Logged income minus logged spending this month."
-              tone={computed.chartTone}
+              label="Bill Pressure"
+              value={money(computed.monthlyBillPressure)}
+              detail="Estimated monthly weight from your active recurring bills."
+              tone={computed.monthlyBillPressure > 0 ? "amber" : "green"}
+              badge={
+                computed.dueSoonTotal > 0
+                  ? `${money(computed.dueSoonTotal)} due soon`
+                  : ""
+              }
             />
-
+            <StatCard
+              icon={CreditCard}
+              label="Credit Debt"
+              value={money(computed.creditDebt)}
+              detail="Outstanding balance sitting in credit accounts."
+              tone={computed.creditDebt > 0 ? "red" : "green"}
+            />
             <StatCard
               icon={TrendingUp}
               label="Portfolio P/L"
@@ -2248,8 +2083,35 @@ export default function DashboardPage() {
             />
           </section>
 
-          <section className="lccDashMain">
-            <div className="lccDashLeftCol">
+          <GlassPane size="card">
+            <PaneHeader
+              title="Action Strip"
+              subcopy="Go straight to the pages that usually need the next move."
+              right={
+                <MiniPill tone={computed.signalTone}>
+                  {computed.signalCount} signals
+                </MiniPill>
+              }
+            />
+
+            <div className="lccDashActionGrid">
+              <ActionLink href="/accounts" full>
+                Open Accounts <ArrowRight size={14} />
+              </ActionLink>
+              <ActionLink href="/bills" full>
+                Review Bills <ArrowRight size={14} />
+              </ActionLink>
+              <ActionLink href="/spending" full>
+                Check Spending <ArrowRight size={14} />
+              </ActionLink>
+              <ActionLink href="/calendar" full>
+                Open Calendar <ArrowRight size={14} />
+              </ActionLink>
+            </div>
+          </GlassPane>
+
+          <section className="lccDashMainGrid">
+            <div className="lccDashStack">
               <CashMovementCard
                 points={computed.chartPoints}
                 chartValue={computed.chartValue}
@@ -2258,157 +2120,17 @@ export default function DashboardPage() {
                 monthSpending={computed.monthlySpending}
                 monthPressure={computed.monthlyBillPressure}
               />
-            </div>
 
-            <div className="lccDashRightCol">
-              <GlassPane tone={computed.signalTone} size="card" style={{ height: "100%" }}>
+              <GlassPane size="card">
                 <PaneHeader
-                  title="Signal Center"
-                  subcopy="What actually needs attention right now."
-                  right={
-                    <button
-                      type="button"
-                      onClick={() => setSignalsOpen(true)}
-                      style={{
-                        minHeight: 34,
-                        padding: "0 11px",
-                        borderRadius: 12,
-                        border: "1px solid rgba(255,255,255,0.08)",
-                        background: "rgba(255,255,255,0.03)",
-                        color: "#fff",
-                        fontWeight: 800,
-                        fontSize: 12,
-                        cursor: "pointer",
-                      }}
-                    >
-                      Open
-                    </button>
-                  }
+                  title="Top Accounts"
+                  subcopy="Highest-impact real-money buckets, not filler cards."
+                  right={<MiniPill>{computed.topAccounts.length} shown</MiniPill>}
                 />
 
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-                    gap: 8,
-                    marginBottom: 10,
-                  }}
-                >
-                  <div
-                    style={{
-                      borderRadius: 15,
-                      border: "1px solid rgba(255,255,255,0.08)",
-                      background:
-                        "linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01))",
-                      padding: 11,
-                    }}
-                  >
-                    <div style={eyebrowStyle()}>Status</div>
-                    <div
-                      style={{
-                        marginTop: 6,
-                        fontSize: 16,
-                        fontWeight: 800,
-                        color: "#fff",
-                      }}
-                    >
-                      {computed.signalLabel}
-                    </div>
-                  </div>
-
-                  <div
-                    style={{
-                      borderRadius: 15,
-                      border: "1px solid rgba(255,255,255,0.08)",
-                      background:
-                        "linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01))",
-                      padding: 11,
-                    }}
-                  >
-                    <div style={eyebrowStyle()}>Count</div>
-                    <div
-                      style={{
-                        marginTop: 6,
-                        fontSize: 16,
-                        fontWeight: 800,
-                        color: "#fff",
-                      }}
-                    >
-                      {computed.signalCount}
-                    </div>
-                  </div>
-
-                  <div
-                    style={{
-                      borderRadius: 15,
-                      border: "1px solid rgba(255,255,255,0.08)",
-                      background:
-                        "linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01))",
-                      padding: 11,
-                    }}
-                  >
-                    <div style={eyebrowStyle()}>Due Soon</div>
-                    <div
-                      style={{
-                        marginTop: 6,
-                        fontSize: 16,
-                        fontWeight: 800,
-                        color: "#fff",
-                      }}
-                    >
-                      {money(computed.dueSoonTotal)}
-                    </div>
-                  </div>
-                </div>
-
-                <div style={{ display: "grid", gap: 8 }}>
-                  {computed.signalItems.length === 0 ? (
-                    <GlassPane tone="green" size="compact">
-                      <div style={{ fontSize: 15, fontWeight: 800, color: "#fff" }}>
-                        Everything looks clean
-                      </div>
-                      <div
-                        style={{
-                          marginTop: 5,
-                          fontSize: 13,
-                          lineHeight: 1.5,
-                          color: "rgba(255,255,255,0.64)",
-                        }}
-                      >
-                        No critical or warning issues are active right now.
-                      </div>
-                    </GlassPane>
-                  ) : (
-                    computed.signalItems
-                      .slice(0, 3)
-                      .map((item) => <SignalPreviewRow key={item.id} item={item} />)
-                  )}
-                </div>
-
-                <div style={{ marginTop: 10 }}>
-                  <ActionButton onClick={() => setSignalsOpen(true)} full>
-                    Review signals <ArrowRight size={14} />
-                  </ActionButton>
-                </div>
-              </GlassPane>
-
-              <GlassPane size="card" style={{ height: "100%" }}>
-                <PaneHeader
-                  title="Recent Activity"
-                  subcopy="Latest income and spending touching this month."
-                  right={<MiniPill>{computed.recentActivity.length} items</MiniPill>}
-                />
-
-                <div style={{ display: "grid", gap: 8 }}>
-                  {computed.recentActivity.length === 0 ? (
-                    <EmptyState
-                      title="No recent activity"
-                      detail="Once income or spending is logged, this panel will fill in."
-                      linkHref="/spending"
-                      linkLabel="Open Spending"
-                    />
-                  ) : (
-                    computed.recentActivity.map((item) => (
+                {computed.topAccounts.length ? (
+                  <div className="lccDashStack">
+                    {computed.topAccounts.map((item) => (
                       <ListRow
                         key={item.id}
                         title={item.title}
@@ -2417,31 +2139,108 @@ export default function DashboardPage() {
                         tone={item.tone}
                         initials={item.initials}
                       />
+                    ))}
+                  </div>
+                ) : (
+                  <EmptyState
+                    title="No accounts yet"
+                    detail="Add your real checking, savings, cash, and debt buckets first."
+                    linkHref="/accounts"
+                    linkLabel="Add accounts"
+                  />
+                )}
+              </GlassPane>
+            </div>
+
+            <div className="lccDashStack">
+              <GlassPane tone={computed.signalTone} size="card">
+                <PaneHeader
+                  title="Signal Center"
+                  subcopy="The pressure board for what needs attention first."
+                  right={<MiniPill tone={computed.signalTone}>{computed.signalLabel}</MiniPill>}
+                />
+
+                <div className="lccDashStack">
+                  {computed.signalItems.length ? (
+                    computed.signalItems.slice(0, 4).map((item) => (
+                      <SignalPreviewRow key={item.id} item={item} />
                     ))
+                  ) : (
+                    <EmptyState
+                      title="Nothing urgent"
+                      detail="This is exactly how the board should look when things are under control."
+                    />
                   )}
                 </div>
+
+                <div style={{ height: 10 }} />
+
+                <ActionButton onClick={() => setSignalsOpen(true)} full>
+                  Open full signal center <ChevronRight size={14} />
+                </ActionButton>
+              </GlassPane>
+
+              <GlassPane size="card">
+                <PaneHeader
+                  title="Upcoming Bills"
+                  subcopy="Bills close enough to matter this month."
+                  right={
+                    <MiniPill tone={computed.dueSoonTotal > 0 ? "amber" : "green"}>
+                      {money(computed.dueSoonTotal)} due soon
+                    </MiniPill>
+                  }
+                />
+
+                {computed.upcomingBills.length ? (
+                  <div className="lccDashStack">
+                    {computed.upcomingBills.map((bill) => (
+                      <ListRow
+                        key={bill.id}
+                        title={bill.name}
+                        subtitle={
+                          bill.days == null
+                            ? "No due date"
+                            : bill.days < 0
+                            ? `${Math.abs(bill.days)} day${
+                                Math.abs(bill.days) === 1 ? "" : "s"
+                              } overdue`
+                            : bill.days === 0
+                            ? "Due today"
+                            : `Due in ${bill.days} day${bill.days === 1 ? "" : "s"}`
+                        }
+                        value={money(bill.amount)}
+                        tone={
+                          bill.days != null && bill.days < 0
+                            ? "red"
+                            : bill.days != null && bill.days <= 7
+                            ? "amber"
+                            : "neutral"
+                        }
+                        initials={initialsFromLabel(bill.name)}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <EmptyState
+                    title="No upcoming bills"
+                    detail="Nothing in the next couple weeks is showing pressure right now."
+                  />
+                )}
               </GlassPane>
             </div>
           </section>
 
-          <section className="lccDashLower">
-            <GlassPane size="card" style={{ height: "100%" }}>
+          <section className="lccDashBottomGrid">
+            <GlassPane size="card">
               <PaneHeader
-                title="Top Accounts"
-                subcopy="Largest visible balances on the board right now."
-                right={<MiniPill>{computed.topAccounts.length} shown</MiniPill>}
+                title="Recent Activity"
+                subcopy="Latest logged movement across income and spending."
+                right={<MiniPill>{recentActivityLabel(computed.recentActivity.length)}</MiniPill>}
               />
 
-              <div style={{ display: "grid", gap: 8 }}>
-                {computed.topAccounts.length === 0 ? (
-                  <EmptyState
-                    title="No accounts yet"
-                    detail="Add your accounts so this panel starts showing real balance leaders."
-                    linkHref="/accounts"
-                    linkLabel="Add accounts"
-                  />
-                ) : (
-                  computed.topAccounts.map((item) => (
+              {computed.recentActivity.length ? (
+                <div className="lccDashStack">
+                  {computed.recentActivity.map((item) => (
                     <ListRow
                       key={item.id}
                       title={item.title}
@@ -2450,117 +2249,59 @@ export default function DashboardPage() {
                       tone={item.tone}
                       initials={item.initials}
                     />
-                  ))
-                )}
-              </div>
+                  ))}
+                </div>
+              ) : (
+                <EmptyState
+                  title="No recent activity"
+                  detail="Once you log income or spending this month, it will show up here."
+                />
+              )}
             </GlassPane>
 
-            <GlassPane size="card" style={{ height: "100%" }}>
+            <GlassPane size="card">
               <PaneHeader
-                title="Upcoming Bills"
-                subcopy="What is due soon or already late."
-                right={<MiniPill tone="amber">{money(computed.dueSoonTotal)}</MiniPill>}
-              />
-
-              <div style={{ display: "grid", gap: 8 }}>
-                {computed.upcomingBills.length === 0 ? (
-                  <EmptyState
-                    title="No bills due soon"
-                    detail="Nothing in the next 7 days is currently landing on this panel."
-                    linkHref="/bills"
-                    linkLabel="Open Bills"
-                  />
-                ) : (
-                  computed.upcomingBills.map((item) => (
-                    <ListRow
-                      key={item.id}
-                      title={item.title}
-                      subtitle={item.subtitle}
-                      value={item.value}
-                      tone={item.tone}
-                      initials={item.initials}
-                    />
-                  ))
-                )}
-              </div>
-            </GlassPane>
-
-            <GlassPane size="card" style={{ height: "100%" }}>
-              <PaneHeader
-                title="Quick Links"
-                subcopy="Fast routes into the pages that move the numbers."
+                title="Portfolio Snapshot"
+                subcopy="What the investment side is doing without overpowering the dashboard."
                 right={
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <Sparkles size={14} color="rgba(255,255,255,0.68)" />
-                    <span style={{ ...eyebrowStyle(), color: "rgba(255,255,255,0.5)" }}>
-                      Workflow
-                    </span>
-                  </div>
+                  <MiniPill tone={computed.portfolioTone}>
+                    {computed.portfolioBadge || "No holdings"}
+                  </MiniPill>
                 }
               />
 
-              <div
-                style={{
-                  display: "grid",
-                  gap: 8,
-                  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-                }}
-              >
-                <ActionLink href="/accounts" full>
-                  Accounts <ArrowRight size={14} />
-                </ActionLink>
-                <ActionLink href="/bills" full>
-                  Bills <ArrowRight size={14} />
-                </ActionLink>
-                <ActionLink href="/income" full>
-                  Income <ArrowRight size={14} />
-                </ActionLink>
-                <ActionLink href="/spending" full>
-                  Spending <ArrowRight size={14} />
-                </ActionLink>
-                <ActionLink href="/investments" full>
-                  Investments <ArrowRight size={14} />
-                </ActionLink>
-                <ActionLink href="/savings" full>
-                  Savings <ArrowRight size={14} />
-                </ActionLink>
+              <div className="lccDashChartSummaryGrid">
+                <ChartSummaryTile
+                  label="Market Value"
+                  value={money(computed.portfolioMarketValue)}
+                  tone="neutral"
+                />
+                <ChartSummaryTile
+                  label="Cost Basis"
+                  value={money(computed.portfolioCostBasis)}
+                  tone="neutral"
+                />
+                <ChartSummaryTile
+                  label="Unrealized P/L"
+                  value={computed.portfolioPnLText}
+                  tone={computed.portfolioTone}
+                />
+                <ChartSummaryTile
+                  label="Liquid Cash"
+                  value={money(computed.liquidTotal)}
+                  tone="green"
+                />
               </div>
 
-              <div
-                style={{
-                  marginTop: 12,
-                  display: "grid",
-                  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-                  gap: 8,
-                }}
-              >
-                <GlassPane size="compact">
-                  <div style={eyebrowStyle()}>Liquid Cash</div>
-                  <div
-                    style={{
-                      marginTop: 7,
-                      fontSize: 20,
-                      fontWeight: 850,
-                      color: "#fff",
-                    }}
-                  >
-                    {money(computed.liquidTotal)}
-                  </div>
-                </GlassPane>
+              <div style={{ height: 10 }} />
 
-                <GlassPane tone={computed.creditDebt > 0 ? "red" : "green"} size="compact">
-                  <div style={eyebrowStyle()}>Credit Debt</div>
-                  <div
-                    style={{
-                      marginTop: 7,
-                      fontSize: 20,
-                      fontWeight: 850,
-                      color: "#fff",
-                    }}
-                  >
-                    {money(computed.creditDebt)}
-                  </div>
-                </GlassPane>
+              <div className="lccDashActionGrid" style={{ gridTemplateColumns: "repeat(2, minmax(0, 1fr))" }}>
+                <ActionLink href="/investments" full>
+                  Open Investments <ArrowRight size={14} />
+                </ActionLink>
+                <ActionLink href="/market/SPY" full>
+                  Open Market <ArrowRight size={14} />
+                </ActionLink>
               </div>
             </GlassPane>
           </section>
@@ -2569,107 +2310,127 @@ export default function DashboardPage() {
 
       <style jsx global>{`
         .lccDashRoot {
-          position: relative;
-          z-index: 1;
-          padding: 18px 0 28px;
-          font-family: ${DASH_FONT_STACK};
+          padding: 12px 0 20px;
+          font-family: var(--lcc-font-sans);
         }
 
         .lccDashInner {
           width: min(100%, 1320px);
           margin: 0 auto;
           display: grid;
-          gap: 14px;
+          gap: 12px;
+        }
+
+        .lccDashStack {
+          display: grid;
+          gap: 10px;
         }
 
         .lccDashHeroGrid {
           display: grid;
-          grid-template-columns: minmax(0, 1fr) auto;
-          gap: 14px;
-        }
-
-        .lccDashMetrics {
-          display: grid;
-          grid-template-columns: repeat(4, minmax(0, 1fr));
+          grid-template-columns: minmax(0, 1.1fr) auto;
           gap: 12px;
-          align-items: stretch;
         }
 
-        .lccDashMain {
+        .lccDashMetricGrid {
           display: grid;
-          grid-template-columns: minmax(0, 1.38fr) minmax(360px, 0.88fr);
-          gap: 14px;
-          align-items: stretch;
+          grid-template-columns: repeat(5, minmax(0, 1fr));
+          gap: 12px;
         }
 
-        .lccDashLeftCol,
-        .lccDashRightCol {
-          display: grid;
-          gap: 14px;
-          min-width: 0;
-        }
-
-        .lccDashLower {
-          display: grid;
-          grid-template-columns: repeat(3, minmax(0, 1fr));
-          gap: 14px;
-          align-items: stretch;
-        }
-
-        .lccDashChartSummaryGrid {
+        .lccDashActionGrid {
           display: grid;
           grid-template-columns: repeat(4, minmax(0, 1fr));
           gap: 8px;
         }
 
+        .lccDashMainGrid {
+          display: grid;
+          grid-template-columns: minmax(0, 1.24fr) minmax(300px, 0.8fr);
+          gap: 12px;
+          align-items: start;
+        }
+
+        .lccDashBottomGrid {
+          display: grid;
+          grid-template-columns: minmax(0, 1.08fr) minmax(320px, 0.92fr);
+          gap: 12px;
+          align-items: start;
+        }
+
+        .lccDashChartSummaryGrid,
+        .lccSignalSummaryGrid {
+          display: grid;
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+          gap: 8px;
+        }
+
+        .lccSignalModalRoot {
+          position: fixed;
+          inset: 0;
+          z-index: 90;
+          display: grid;
+          place-items: center;
+          padding: 18px;
+        }
+
+        .lccSignalBackdrop {
+          position: absolute;
+          inset: 0;
+          background: rgba(2, 5, 10, 0.68);
+          backdrop-filter: blur(8px);
+          -webkit-backdrop-filter: blur(8px);
+        }
+
+        .lccSignalModalCard {
+          position: relative;
+          z-index: 1;
+          width: min(100%, 980px);
+          max-height: min(88vh, 920px);
+          overflow: auto;
+        }
+
         @media (max-width: 1260px) {
-          .lccDashMetrics {
-            grid-template-columns: repeat(2, minmax(0, 1fr));
+          .lccDashMetricGrid {
+            grid-template-columns: repeat(3, minmax(0, 1fr));
           }
 
-          .lccDashMain {
-            grid-template-columns: 1fr;
-          }
-
-          .lccDashLower {
+          .lccDashActionGrid {
             grid-template-columns: repeat(2, minmax(0, 1fr));
           }
         }
 
-        @media (max-width: 860px) {
+        @media (max-width: 1024px) {
+          .lccDashHeroGrid,
+          .lccDashMainGrid,
+          .lccDashBottomGrid {
+            grid-template-columns: 1fr;
+          }
+
+          .lccDashMetricGrid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+          }
+
+          .lccDashChartSummaryGrid,
+          .lccSignalSummaryGrid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+          }
+        }
+
+        @media (max-width: 640px) {
           .lccDashRoot {
-            padding: 10px 0 22px;
+            padding: 8px 0 14px;
           }
 
-          .lccDashInner {
-            gap: 12px;
-          }
-
-          .lccDashHeroGrid {
+          .lccDashMetricGrid,
+          .lccDashActionGrid,
+          .lccDashChartSummaryGrid,
+          .lccSignalSummaryGrid {
             grid-template-columns: 1fr;
           }
 
-          .lccDashMetrics {
-            grid-template-columns: 1fr;
-            gap: 10px;
-          }
-
-          .lccDashLower {
-            grid-template-columns: 1fr;
-          }
-
-          .lccDashChartSummaryGrid {
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-          }
-        }
-
-        @media (max-width: 560px) {
-          .lccDashInner {
-            gap: 10px;
-          }
-
-          .lccDashChartSummaryGrid {
-            grid-template-columns: 1fr;
+          .lccSignalModalRoot {
+            padding: 10px;
           }
         }
       `}</style>

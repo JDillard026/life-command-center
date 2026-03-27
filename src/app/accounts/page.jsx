@@ -1,18 +1,35 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import {
+  ArrowRightLeft,
+  ChevronRight,
+  CreditCard,
+  Landmark,
+  PencilLine,
+  PiggyBank,
+  Plus,
+  Search,
+  Star,
+  Trash2,
+  Wallet,
+  X,
+} from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
+import GlassPane from "../components/GlassPane";
 
 export const dynamic = "force-dynamic";
 
-/* =========================
-   utils
-========================= */
 function uid() {
   return (
     globalThis.crypto?.randomUUID?.() ??
     `${Date.now()}-${Math.random().toString(16).slice(2)}`
   );
+}
+
+function safeNum(n, fallback = 0) {
+  const x = Number(n);
+  return Number.isFinite(x) ? x : fallback;
 }
 
 function parseMoneyInput(v) {
@@ -21,9 +38,8 @@ function parseMoneyInput(v) {
   return Number.isFinite(num) ? num : NaN;
 }
 
-function safeNum(n, fallback = 0) {
-  const x = Number(n);
-  return Number.isFinite(x) ? x : fallback;
+function nowTs() {
+  return Date.now();
 }
 
 function fmtMoney(n) {
@@ -32,11 +48,17 @@ function fmtMoney(n) {
   return num.toLocaleString(undefined, {
     style: "currency",
     currency: "USD",
+    maximumFractionDigits: 0,
   });
 }
 
-function nowTs() {
-  return Date.now();
+function fmtMoneyTight(n) {
+  const num = Number(n);
+  if (!Number.isFinite(num)) return "—";
+  return num.toLocaleString(undefined, {
+    style: "currency",
+    currency: "USD",
+  });
 }
 
 function fmtWhen(ts) {
@@ -61,17 +83,51 @@ function typeLabel(t) {
   return "Other";
 }
 
-function badgeText(type) {
+function typeTone(type) {
   const t = String(type || "other").toLowerCase();
-  if (t === "checking") return "Daily";
-  if (t === "savings") return "Reserve";
-  if (t === "credit") return "Debt";
-  if (t === "investment") return "Growth";
-  if (t === "cash") return "Cash";
-  return "Account";
+  if (t === "savings") return "green";
+  if (t === "cash") return "amber";
+  if (t === "credit") return "red";
+  return "neutral";
 }
 
-function typeIcon(type) {
+function toneMeta(tone = "neutral") {
+  if (tone === "green") {
+    return {
+      text: "#97efc7",
+      border: "rgba(143, 240, 191, 0.18)",
+      glow: "rgba(110, 229, 173, 0.10)",
+      bg: "rgba(11, 22, 17, 0.66)",
+    };
+  }
+
+  if (tone === "amber") {
+    return {
+      text: "#f5cf88",
+      border: "rgba(255, 204, 112, 0.18)",
+      glow: "rgba(255, 194, 92, 0.10)",
+      bg: "rgba(22, 17, 11, 0.66)",
+    };
+  }
+
+  if (tone === "red") {
+    return {
+      text: "#ffb4c5",
+      border: "rgba(255, 132, 163, 0.18)",
+      glow: "rgba(255, 108, 145, 0.10)",
+      bg: "rgba(22, 11, 15, 0.66)",
+    };
+  }
+
+  return {
+    text: "#f7fbff",
+    border: "rgba(214, 226, 255, 0.14)",
+    glow: "rgba(140, 170, 255, 0.08)",
+    bg: "rgba(10, 15, 24, 0.66)",
+  };
+}
+
+function typeEmoji(type) {
   const t = String(type || "other").toLowerCase();
   if (t === "checking") return "🏦";
   if (t === "savings") return "💰";
@@ -81,19 +137,14 @@ function typeIcon(type) {
   return "📁";
 }
 
-function typeAccent(type) {
-  const t = String(type || "other").toLowerCase();
-  if (t === "checking")
-    return "linear-gradient(135deg, rgba(59,130,246,.18), rgba(37,99,235,.05))";
-  if (t === "savings")
-    return "linear-gradient(135deg, rgba(34,197,94,.18), rgba(21,128,61,.05))";
-  if (t === "cash")
-    return "linear-gradient(135deg, rgba(245,158,11,.18), rgba(217,119,6,.05))";
-  if (t === "credit")
-    return "linear-gradient(135deg, rgba(244,114,182,.18), rgba(190,24,93,.05))";
-  if (t === "investment")
-    return "linear-gradient(135deg, rgba(168,85,247,.18), rgba(126,34,206,.05))";
-  return "linear-gradient(135deg, rgba(148,163,184,.15), rgba(100,116,139,.05))";
+function initialsFromLabel(label = "") {
+  const clean = String(label).trim();
+  if (!clean) return "—";
+  const parts = clean.split(/\s+/).slice(0, 2);
+  return parts
+    .map((p) => p[0])
+    .join("")
+    .toUpperCase();
 }
 
 function transactionLabel(kind) {
@@ -103,7 +154,6 @@ function transactionLabel(kind) {
   if (k === "transfer_in") return "Transfer In";
   if (k === "transfer_out") return "Transfer Out";
   if (k === "set") return "Set Balance";
-  if (k === "bill_payment") return "Bill Payment";
   if (k === "create") return "Account Created";
   if (k === "delete") return "Account Deleted";
   return "Transaction";
@@ -111,49 +161,10 @@ function transactionLabel(kind) {
 
 function transactionTone(kind) {
   const k = String(kind || "").toLowerCase();
-  if (["deposit", "transfer_in"].includes(k)) return "good";
-  if (["withdraw", "transfer_out", "bill_payment"].includes(k)) return "bad";
+  if (["deposit", "transfer_in"].includes(k)) return "green";
+  if (["withdraw", "transfer_out", "delete"].includes(k)) return "red";
+  if (["set", "create"].includes(k)) return "amber";
   return "neutral";
-}
-
-function transactionChipStyle(kind) {
-  const tone = transactionTone(kind);
-
-  if (tone === "good") {
-    return {
-      background: "rgba(34,197,94,.13)",
-      border: "1px solid rgba(34,197,94,.24)",
-      color: "rgb(134 239 172)",
-    };
-  }
-
-  if (tone === "bad") {
-    return {
-      background: "rgba(244,114,182,.12)",
-      border: "1px solid rgba(244,114,182,.24)",
-      color: "rgb(251 207 232)",
-    };
-  }
-
-  return {
-    background: "rgba(148,163,184,.12)",
-    border: "1px solid rgba(148,163,184,.22)",
-    color: "rgb(226 232 240)",
-  };
-}
-
-function signedDelta(kind, amount) {
-  const amt = Math.abs(safeNum(amount, 0));
-  const k = String(kind || "").toLowerCase();
-  if (["withdraw", "transfer_out", "bill_payment"].includes(k)) return -amt;
-  if (["deposit", "transfer_in"].includes(k)) return amt;
-  return safeNum(amount, 0);
-}
-
-function fmtDelta(n) {
-  const num = safeNum(n, 0);
-  if (num === 0) return fmtMoney(0);
-  return `${num > 0 ? "+" : "−"}${fmtMoney(Math.abs(num))}`;
 }
 
 function defaultAccounts() {
@@ -175,9 +186,6 @@ function defaultAccounts() {
   ];
 }
 
-/* =========================
-   db mappers
-========================= */
 function mapAccountRowToClient(row) {
   return {
     id: row.id,
@@ -206,13 +214,11 @@ function mapLedgerRowToClient(row) {
     ts: row.created_at ? new Date(row.created_at).getTime() : nowTs(),
     kind: row.kind || "transaction",
     amount: safeNum(row.amount, 0),
-    delta: safeNum(row.delta, signedDelta(row.kind, row.amount)),
+    delta: safeNum(row.delta, 0),
     resultingBalance: safeNum(row.resulting_balance, 0),
     note: row.note || "",
     relatedAccountId: row.related_account_id || "",
     relatedAccountName: row.related_account_name || "",
-    sourceType: row.source_type || "",
-    sourceId: row.source_id || "",
   };
 }
 
@@ -223,93 +229,578 @@ function mapLedgerClientToRow(entry, userId) {
     account_id: entry.accountId,
     kind: entry.kind || "transaction",
     amount: safeNum(entry.amount, 0),
-    delta: safeNum(entry.delta, signedDelta(entry.kind, entry.amount)),
+    delta: safeNum(entry.delta, 0),
     resulting_balance: safeNum(entry.resultingBalance, 0),
     note: entry.note || "",
     related_account_id: entry.relatedAccountId || null,
     related_account_name: entry.relatedAccountName || "",
-    source_type: entry.sourceType || "",
-    source_id: entry.sourceId || "",
     created_at: new Date(entry.ts || nowTs()).toISOString(),
   };
 }
 
-/* =========================
-   modal
-========================= */
-function Modal({ open, title, subtitle, onClose, children }) {
-  if (!open) return null;
+function MiniPill({ children, tone = "neutral" }) {
+  const meta = toneMeta(tone);
 
   return (
     <div
-      role="dialog"
-      aria-modal="true"
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose?.();
-      }}
       style={{
-        position: "fixed",
-        inset: 0,
-        zIndex: 100,
-        background: "rgba(2,6,23,.78)",
-        backdropFilter: "blur(12px)",
-        display: "flex",
+        minHeight: 30,
+        display: "inline-flex",
         alignItems: "center",
-        justifyContent: "center",
-        padding: 16,
+        gap: 8,
+        padding: "0 10px",
+        borderRadius: 999,
+        border: `1px solid ${meta.border}`,
+        background:
+          "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.012))",
+        boxShadow: `inset 0 1px 0 rgba(255,255,255,0.03), 0 0 10px ${meta.glow}`,
+        color: tone === "neutral" ? "rgba(255,255,255,0.88)" : meta.text,
+        fontSize: 11,
+        fontWeight: 800,
+        whiteSpace: "nowrap",
       }}
     >
+      {children}
+    </div>
+  );
+}
+
+function PaneHeader({ title, subcopy, right }) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "flex-start",
+        gap: 10,
+        flexWrap: "wrap",
+        marginBottom: 10,
+      }}
+    >
+      <div style={{ minWidth: 0 }}>
+        <div
+          style={{
+            fontSize: 17,
+            lineHeight: 1.08,
+            fontWeight: 850,
+            letterSpacing: "-0.035em",
+            color: "#fff",
+          }}
+        >
+          {title}
+        </div>
+
+        {subcopy ? (
+          <div
+            style={{
+              marginTop: 3,
+              fontSize: 12,
+              lineHeight: 1.45,
+              color: "rgba(255,255,255,0.60)",
+            }}
+          >
+            {subcopy}
+          </div>
+        ) : null}
+      </div>
+
+      {right || null}
+    </div>
+  );
+}
+
+function StatCard({ icon: Icon, label, value, detail, tone = "neutral" }) {
+  const meta = toneMeta(tone);
+
+  return (
+    <GlassPane tone={tone} size="card" style={{ height: "100%" }}>
       <div
         style={{
-          width: "min(760px, 100%)",
-          borderRadius: 28,
-          border: "1px solid rgba(255,255,255,.09)",
-          background:
-            "linear-gradient(180deg, rgba(13,19,34,.96), rgba(4,8,16,.94))",
-          boxShadow:
-            "0 30px 100px rgba(0,0,0,.48), inset 0 1px 0 rgba(255,255,255,.06)",
-          overflow: "hidden",
+          minHeight: 112,
+          display: "grid",
+          gridTemplateRows: "auto auto 1fr",
+          gap: 7,
         }}
       >
         <div
           style={{
-            padding: 18,
-            borderBottom: "1px solid rgba(255,255,255,.06)",
-            display: "flex",
-            justifyContent: "space-between",
-            gap: 12,
-            alignItems: "flex-start",
+            width: 34,
+            height: 34,
+            borderRadius: 12,
+            display: "grid",
+            placeItems: "center",
+            border: `1px solid ${meta.border}`,
+            background: meta.bg,
+            color: tone === "neutral" ? "#fff" : meta.text,
+            boxShadow: `0 0 10px ${meta.glow}`,
           }}
         >
-          <div>
-            <div style={{ fontWeight: 900, fontSize: 20 }}>{title}</div>
-            {subtitle ? (
-              <div
-                style={{
-                  fontSize: 12,
-                  color: "rgba(220,228,255,.64)",
-                  marginTop: 6,
-                }}
-              >
-                {subtitle}
-              </div>
-            ) : null}
-          </div>
-
-          <button className="ghostBtn" type="button" onClick={onClose}>
-            Close
-          </button>
+          <Icon size={15} />
         </div>
 
-        <div style={{ padding: 18 }}>{children}</div>
+        <div>
+          <div
+            style={{
+              fontSize: 10,
+              textTransform: "uppercase",
+              letterSpacing: ".2em",
+              fontWeight: 800,
+              color: "rgba(255,255,255,0.40)",
+            }}
+          >
+            {label}
+          </div>
+
+          <div
+            style={{
+              marginTop: 8,
+              fontSize: "clamp(18px, 2.2vw, 28px)",
+              lineHeight: 1,
+              fontWeight: 850,
+              letterSpacing: "-0.05em",
+              color: tone === "neutral" ? "#fff" : meta.text,
+            }}
+          >
+            {value}
+          </div>
+        </div>
+
+        <div
+          style={{
+            fontSize: 11.5,
+            lineHeight: 1.4,
+            color: "rgba(255,255,255,0.60)",
+          }}
+        >
+          {detail}
+        </div>
+      </div>
+    </GlassPane>
+  );
+}
+
+function ActionBtn({
+  children,
+  onClick,
+  variant = "ghost",
+  full = false,
+  type = "button",
+  disabled = false,
+}) {
+  const isPrimary = variant === "primary";
+  const isDanger = variant === "danger";
+
+  return (
+    <button
+      type={type}
+      onClick={onClick}
+      disabled={disabled}
+      className="accountsActionBtn"
+      style={{
+        width: full ? "100%" : undefined,
+        border: isDanger
+          ? "1px solid rgba(255,132,163,0.18)"
+          : isPrimary
+          ? "1px solid rgba(143,177,255,0.18)"
+          : "1px solid rgba(214,226,255,0.10)",
+        background: isDanger
+          ? "linear-gradient(180deg, rgba(255,132,163,0.10), rgba(255,132,163,0.05))"
+          : isPrimary
+          ? "linear-gradient(180deg, rgba(143,177,255,0.14), rgba(143,177,255,0.06))"
+          : "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.012))",
+        color: isDanger ? "#ffd3df" : "#f7fbff",
+        opacity: disabled ? 0.55 : 1,
+        cursor: disabled ? "not-allowed" : "pointer",
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
+function Modal({ open, title, subtitle, onClose, children }) {
+  if (!open) return null;
+
+  return (
+    <div className="accountsModalRoot">
+      <div className="accountsModalBackdrop" onClick={onClose} />
+      <div className="accountsModalCard">
+        <GlassPane size="card">
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "flex-start",
+              gap: 12,
+              marginBottom: 14,
+            }}
+          >
+            <div>
+              <div
+                style={{
+                  fontSize: 18,
+                  lineHeight: 1.08,
+                  fontWeight: 850,
+                  letterSpacing: "-0.035em",
+                  color: "#fff",
+                }}
+              >
+                {title}
+              </div>
+              {subtitle ? (
+                <div
+                  style={{
+                    marginTop: 4,
+                    fontSize: 12,
+                    color: "rgba(255,255,255,0.60)",
+                    lineHeight: 1.45,
+                  }}
+                >
+                  {subtitle}
+                </div>
+              ) : null}
+            </div>
+
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Close"
+              style={{
+                width: 38,
+                height: 38,
+                borderRadius: 14,
+                border: "1px solid rgba(214,226,255,0.10)",
+                background: "rgba(255,255,255,0.03)",
+                display: "grid",
+                placeItems: "center",
+                color: "#fff",
+                cursor: "pointer",
+                flexShrink: 0,
+              }}
+            >
+              <X size={16} />
+            </button>
+          </div>
+
+          {children}
+        </GlassPane>
       </div>
     </div>
   );
 }
 
-/* =========================
-   page
-========================= */
+function CompactAccountRow({
+  account,
+  selected,
+  primary,
+  onSelect,
+  onEdit,
+  onSetPrimary,
+  onDelete,
+}) {
+  const tone = typeTone(account.type);
+  const meta = toneMeta(tone);
+
+  return (
+    <div
+      className="accountsCompactRow"
+      onClick={onSelect}
+      style={{
+        borderColor: selected ? meta.border : "rgba(255,255,255,0.07)",
+        boxShadow: selected
+          ? `inset 0 1px 0 rgba(255,255,255,0.03), 0 0 0 1px rgba(255,255,255,0.01), 0 0 24px ${meta.glow}`
+          : "inset 0 1px 0 rgba(255,255,255,0.025)",
+      }}
+    >
+      <div
+        className="accountsCompactAvatar"
+        style={{
+          borderColor: meta.border,
+          color: tone === "neutral" ? "#fff" : meta.text,
+          boxShadow: `0 0 12px ${meta.glow}`,
+        }}
+      >
+        {initialsFromLabel(account.name)}
+      </div>
+
+      <div style={{ minWidth: 0 }}>
+        <div
+          style={{
+            display: "flex",
+            gap: 8,
+            alignItems: "center",
+            flexWrap: "wrap",
+          }}
+        >
+          <div className="accountsCompactTitle">{account.name}</div>
+          {primary ? <MiniPill>Primary</MiniPill> : null}
+          <MiniPill tone={tone}>
+            {typeEmoji(account.type)} {typeLabel(account.type)}
+          </MiniPill>
+        </div>
+
+        <div className="accountsCompactSub">
+          Updated {fmtWhen(account.updatedAt)}
+        </div>
+      </div>
+
+      <div className="accountsCompactValue">{fmtMoney(account.balance)}</div>
+
+      <div
+        className="accountsCompactActions"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <button
+          type="button"
+          className="accountsIconBtn"
+          onClick={onEdit}
+          aria-label="Edit account"
+          title="Edit account"
+        >
+          <PencilLine size={14} />
+        </button>
+        <button
+          type="button"
+          className="accountsIconBtn"
+          onClick={onSetPrimary}
+          aria-label="Set primary"
+          title="Set primary"
+        >
+          <Star size={14} />
+        </button>
+        <button
+          type="button"
+          className="accountsIconBtn accountsDangerBtn"
+          onClick={onDelete}
+          aria-label="Delete account"
+          title="Delete account"
+        >
+          <Trash2 size={14} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function FocusCard({
+  selectedAccount,
+  primaryId,
+  onAdjust,
+  onTransfer,
+  onSetExact,
+  onEdit,
+}) {
+  if (!selectedAccount) {
+    return (
+      <GlassPane size="card">
+        <PaneHeader
+          title="Selected Account"
+          subcopy="Choose one from the roster to work it here."
+        />
+        <div className="accountsEmptyState" style={{ minHeight: 170 }}>
+          <div>
+            <div className="accountsEmptyTitle">No account selected</div>
+            <div className="accountsEmptyText">
+              Pick one from the roster on the left.
+            </div>
+          </div>
+        </div>
+      </GlassPane>
+    );
+  }
+
+  const tone = typeTone(selectedAccount.type);
+  const meta = toneMeta(tone);
+  const isCredit = String(selectedAccount.type || "").toLowerCase() === "credit";
+
+  return (
+    <GlassPane tone={tone} size="card">
+      <PaneHeader
+        title={selectedAccount.name}
+        subcopy="Focused controls for the account you are actively touching."
+        right={
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {selectedAccount.id === primaryId ? <MiniPill>Primary</MiniPill> : null}
+            <MiniPill tone={tone}>
+              {typeEmoji(selectedAccount.type)} {typeLabel(selectedAccount.type)}
+            </MiniPill>
+          </div>
+        }
+      />
+
+      <div className="accountsFocusBox">
+        <div className="accountsTinyLabel">
+          {isCredit ? "Amount Owed" : "Current Balance"}
+        </div>
+
+        <div
+          style={{
+            marginTop: 8,
+            fontSize: "clamp(30px, 4vw, 46px)",
+            lineHeight: 1,
+            fontWeight: 850,
+            letterSpacing: "-0.05em",
+            color: tone === "neutral" ? "#fff" : meta.text,
+          }}
+        >
+          {fmtMoney(selectedAccount.balance)}
+        </div>
+
+        <div
+          style={{
+            marginTop: 10,
+            fontSize: 12,
+            color: "rgba(255,255,255,0.58)",
+          }}
+        >
+          Updated {fmtWhen(selectedAccount.updatedAt)}
+        </div>
+
+        <div className="accountsActionGrid" style={{ marginTop: 14 }}>
+          <ActionBtn variant="primary" onClick={onAdjust} full>
+            <Wallet size={14} /> Add Transaction
+          </ActionBtn>
+          <ActionBtn onClick={onTransfer} full>
+            <ArrowRightLeft size={14} /> Transfer
+          </ActionBtn>
+          <ActionBtn onClick={onSetExact} full>
+            <Landmark size={14} /> Set Exact
+          </ActionBtn>
+          <ActionBtn onClick={onEdit} full>
+            <PencilLine size={14} /> Edit Account
+          </ActionBtn>
+        </div>
+      </div>
+    </GlassPane>
+  );
+}
+
+function AddAccountCard({ adding, setAdding, addAccount }) {
+  return (
+    <GlassPane size="card">
+      <PaneHeader
+        title="Add Account"
+        subcopy="Keep this fast and simple."
+        right={<MiniPill><Plus size={13} /> New</MiniPill>}
+      />
+
+      <form onSubmit={addAccount} className="accountsFormStack">
+        <div>
+          <div className="accountsTinyLabel">Account Name</div>
+          <input
+            className="accountsField"
+            placeholder="Account name"
+            value={adding.name}
+            onChange={(e) => setAdding((p) => ({ ...p, name: e.target.value }))}
+          />
+        </div>
+
+        <div>
+          <div className="accountsTinyLabel">Type</div>
+          <select
+            className="accountsField"
+            value={adding.type}
+            onChange={(e) => setAdding((p) => ({ ...p, type: e.target.value }))}
+          >
+            <option value="checking">🏦 Checking</option>
+            <option value="savings">💰 Savings</option>
+            <option value="cash">💵 Cash</option>
+            <option value="credit">💳 Credit Card</option>
+            <option value="investment">📈 Investment</option>
+            <option value="other">📁 Other</option>
+          </select>
+        </div>
+
+        <div>
+          <div className="accountsTinyLabel">Starting Balance</div>
+          <input
+            className="accountsField"
+            placeholder="Starting balance"
+            value={adding.balance}
+            onChange={(e) =>
+              setAdding((p) => ({ ...p, balance: e.target.value }))
+            }
+          />
+        </div>
+
+        <ActionBtn variant="primary" type="submit" full>
+          <Plus size={14} /> Add Account
+        </ActionBtn>
+
+        <div className="accountsFootnote">
+          Credit accounts should store the amount owed as a positive number.
+        </div>
+      </form>
+    </GlassPane>
+  );
+}
+
+function LedgerItem({ item }) {
+  const tone = transactionTone(item.kind);
+  const meta = toneMeta(tone);
+
+  return (
+    <div
+      className="accountsLedgerItem"
+      style={{
+        borderColor: meta.border,
+        boxShadow: `inset 0 1px 0 rgba(255,255,255,0.03), 0 0 12px ${meta.glow}`,
+      }}
+    >
+      <div className="accountsLedgerGrid">
+        <div style={{ minWidth: 0 }}>
+          <div
+            style={{
+              display: "flex",
+              gap: 8,
+              flexWrap: "wrap",
+              alignItems: "center",
+            }}
+          >
+            <MiniPill tone={tone}>{transactionLabel(item.kind)}</MiniPill>
+            {item.relatedAccountName ? <MiniPill>{item.relatedAccountName}</MiniPill> : null}
+          </div>
+
+          <div className="accountsLedgerTitle">
+            {item.note || "No note"}
+          </div>
+
+          <div className="accountsLedgerSub">{fmtWhen(item.ts)}</div>
+        </div>
+
+        <div className="accountsLedgerRight">
+          <div className="accountsLedgerLabel">Delta</div>
+          <div
+            style={{
+              marginTop: 6,
+              fontSize: 14,
+              fontWeight: 850,
+              color: tone === "neutral" ? "#fff" : meta.text,
+            }}
+          >
+            {item.delta > 0 ? "+" : item.delta < 0 ? "−" : ""}
+            {fmtMoneyTight(Math.abs(item.delta))}
+          </div>
+        </div>
+
+        <div className="accountsLedgerRight">
+          <div className="accountsLedgerLabel">Balance</div>
+          <div
+            style={{
+              marginTop: 6,
+              fontSize: 14,
+              fontWeight: 850,
+              color: "#fff",
+            }}
+          >
+            {fmtMoneyTight(item.resultingBalance)}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function AccountsPage() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -319,26 +810,28 @@ export default function AccountsPage() {
   const [primaryId, setPrimaryId] = useState("");
   const [ledger, setLedger] = useState([]);
 
+  const [query, setQuery] = useState("");
+  const [typeFilter, setTypeFilter] = useState("all");
+  const [sort, setSort] = useState("updated");
+  const [ledgerSearch, setLedgerSearch] = useState("");
+
   const [adding, setAdding] = useState({
     name: "",
     type: "checking",
     balance: "",
   });
 
-  const [query, setQuery] = useState("");
-  const [sort, setSort] = useState("updated");
-  const [typeFilter, setTypeFilter] = useState("all");
-
   const [selectedAccountId, setSelectedAccountId] = useState("");
-  const [ledgerSearch, setLedgerSearch] = useState("");
 
   const [modalOpen, setModalOpen] = useState(false);
+  const [modalType, setModalType] = useState("adjust");
   const [modalAccountId, setModalAccountId] = useState("");
-  const [mode, setMode] = useState("adjust"); // adjust | set | transfer
   const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");
   const [adjustSign, setAdjustSign] = useState("deposit");
   const [transferToId, setTransferToId] = useState("");
+  const [editName, setEditName] = useState("");
+  const [editType, setEditType] = useState("checking");
 
   useEffect(() => {
     let mounted = true;
@@ -395,6 +888,7 @@ export default function AccountsPage() {
           const insertRows = seeded.map((a) =>
             mapAccountClientToRow(a, currentUser.id)
           );
+
           const insertRes = await supabase
             .from("accounts")
             .insert(insertRows)
@@ -441,14 +935,14 @@ export default function AccountsPage() {
     };
   }, []);
 
-  const primary = useMemo(
-    () => accounts.find((a) => a.id === primaryId) || null,
-    [accounts, primaryId]
-  );
-
   const selectedAccount = useMemo(
     () => accounts.find((a) => a.id === selectedAccountId) || null,
     [accounts, selectedAccountId]
+  );
+
+  const modalAccount = useMemo(
+    () => accounts.find((a) => a.id === modalAccountId) || null,
+    [accounts, modalAccountId]
   );
 
   const totals = useMemo(() => {
@@ -484,13 +978,10 @@ export default function AccountsPage() {
     );
 
     return {
-      checking,
-      savings,
-      cash,
+      liquid,
       invest,
       debts,
       assets,
-      liquid,
       netWorth,
       updatedMax,
     };
@@ -502,7 +993,7 @@ export default function AccountsPage() {
 
     if (q) {
       list = list.filter((a) => {
-        const hay = `${a.name} ${typeLabel(a.type)} ${badgeText(a.type)}`.toLowerCase();
+        const hay = `${a.name} ${typeLabel(a.type)}`.toLowerCase();
         return hay.includes(q);
       });
     }
@@ -522,11 +1013,13 @@ export default function AccountsPage() {
     }
 
     if (primaryId) {
-      list.sort((a, b) => (a.id === primaryId ? -1 : b.id === primaryId ? 1 : 0));
+      list.sort((a, b) =>
+        a.id === primaryId ? -1 : b.id === primaryId ? 1 : 0
+      );
     }
 
     return list;
-  }, [accounts, query, sort, typeFilter, primaryId]);
+  }, [accounts, query, typeFilter, sort, primaryId]);
 
   const selectedLedger = useMemo(() => {
     if (!selectedAccountId) return [];
@@ -536,19 +1029,15 @@ export default function AccountsPage() {
       .filter((x) => x.accountId === selectedAccountId)
       .filter((x) => {
         if (!q) return true;
-
         const hay = [
           transactionLabel(x.kind),
           x.note,
           x.relatedAccountName,
-          x.sourceType,
-          x.sourceId,
-          fmtMoney(x.amount),
-          fmtMoney(x.resultingBalance),
+          fmtMoneyTight(x.amount),
+          fmtMoneyTight(x.resultingBalance),
         ]
           .join(" ")
           .toLowerCase();
-
         return hay.includes(q);
       })
       .sort((a, b) => safeNum(b.ts, 0) - safeNum(a.ts, 0));
@@ -587,7 +1076,7 @@ export default function AccountsPage() {
     }
 
     setLedger((prev) => [mapLedgerRowToClient(data), ...prev]);
-    return { ok: true, entry: mapLedgerRowToClient(data) };
+    return { ok: true };
   }
 
   async function saveAccountPatch(accountId, patch) {
@@ -606,7 +1095,9 @@ export default function AccountsPage() {
       .select()
       .single();
 
-    if (error) return { ok: false, error: error.message || "Failed to save account." };
+    if (error) {
+      return { ok: false, error: error.message || "Failed to save account." };
+    }
 
     const saved = mapAccountRowToClient(data);
     setAccounts((prev) => prev.map((a) => (a.id === accountId ? saved : a)));
@@ -614,9 +1105,7 @@ export default function AccountsPage() {
   }
 
   async function saveAccountBalance(accountId, nextBalance) {
-    return saveAccountPatch(accountId, {
-      balance: safeNum(nextBalance, 0),
-    });
+    return saveAccountPatch(accountId, { balance: safeNum(nextBalance, 0) });
   }
 
   async function addAccount(e) {
@@ -651,6 +1140,7 @@ export default function AccountsPage() {
 
     const saved = mapAccountRowToClient(data);
     setAccounts((prev) => [...prev, saved]);
+    setSelectedAccountId(saved.id);
 
     await createLedgerEntry({
       id: uid(),
@@ -663,55 +1153,17 @@ export default function AccountsPage() {
       note: "Account created",
       relatedAccountId: "",
       relatedAccountName: "",
-      sourceType: "accounts_page",
-      sourceId: "",
     });
 
     if (!primaryId) {
       await savePrimary(saved.id);
     }
 
-    setSelectedAccountId(saved.id);
     setAdding({ name: "", type: "checking", balance: "" });
-  }
-
-  async function renameAccount(id, nextName) {
-    setAccounts((prev) =>
-      prev.map((a) => (a.id === id ? { ...a, name: nextName, updatedAt: nowTs() } : a))
-    );
-
-    const { error } = await supabase
-      .from("accounts")
-      .update({
-        name: nextName,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", id)
-      .eq("user_id", user.id);
-
-    if (error) setPageError(error.message || "Failed to rename account.");
-  }
-
-  async function retypeAccount(id, nextType) {
-    setAccounts((prev) =>
-      prev.map((a) => (a.id === id ? { ...a, type: nextType, updatedAt: nowTs() } : a))
-    );
-
-    const { error } = await supabase
-      .from("accounts")
-      .update({
-        account_type: nextType,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", id)
-      .eq("user_id", user.id);
-
-    if (error) setPageError(error.message || "Failed to update account type.");
   }
 
   async function deleteAccount(id) {
     if (!user || !supabase) return;
-
     if (accounts.length <= 1) {
       alert("You need at least 1 account.");
       return;
@@ -746,8 +1198,6 @@ export default function AccountsPage() {
       note: `${acc?.name || "Account"} deleted`,
       relatedAccountId: "",
       relatedAccountName: "",
-      sourceType: "accounts_page",
-      sourceId: "",
     });
 
     if (primaryId === id) {
@@ -760,29 +1210,45 @@ export default function AccountsPage() {
     }
   }
 
-  function openModalFor(id, nextMode = "adjust") {
-    setModalAccountId(id);
+  function openModal(type, accountId) {
+    const acc = accounts.find((a) => a.id === accountId) || null;
+    setModalType(type);
+    setModalAccountId(accountId);
     setModalOpen(true);
-    setMode(nextMode);
     setAmount("");
     setNote("");
     setAdjustSign("deposit");
     setTransferToId("");
+    setEditName(acc?.name || "");
+    setEditType(acc?.type || "checking");
   }
-
-  const modalAccount = useMemo(
-    () => accounts.find((a) => a.id === modalAccountId) || null,
-    [accounts, modalAccountId]
-  );
 
   async function applyModal() {
     setPageError("");
     if (!modalAccount) return;
 
+    if (modalType === "edit") {
+      const name = editName.trim();
+      if (!name) return;
+
+      const saveRes = await saveAccountPatch(modalAccount.id, {
+        name,
+        account_type: editType,
+      });
+
+      if (!saveRes.ok) {
+        setPageError(saveRes.error || "Failed to update account.");
+        return;
+      }
+
+      setModalOpen(false);
+      return;
+    }
+
     const amt = parseMoneyInput(amount);
     const cur = safeNum(modalAccount.balance, 0);
 
-    if (mode === "set") {
+    if (modalType === "set") {
       if (!Number.isFinite(amt) || amt < 0) return;
 
       const saveRes = await saveAccountBalance(modalAccount.id, amt);
@@ -802,8 +1268,6 @@ export default function AccountsPage() {
         note: note?.trim() || "Manual balance set",
         relatedAccountId: "",
         relatedAccountName: "",
-        sourceType: "accounts_page",
-        sourceId: "",
       });
 
       setModalOpen(false);
@@ -812,12 +1276,13 @@ export default function AccountsPage() {
 
     if (!Number.isFinite(amt) || amt <= 0) return;
 
-    if (mode === "transfer") {
+    if (modalType === "transfer") {
       const target = accounts.find((a) => a.id === transferToId);
       if (!target) {
         alert("Choose the account receiving the transfer.");
         return;
       }
+
       if (target.id === modalAccount.id) {
         alert("Cannot transfer to the same account.");
         return;
@@ -852,8 +1317,6 @@ export default function AccountsPage() {
           note: commonNote,
           relatedAccountId: target.id,
           relatedAccountName: target.name,
-          sourceType: "accounts_page",
-          sourceId: "",
         }),
         createLedgerEntry({
           id: uid(),
@@ -866,8 +1329,6 @@ export default function AccountsPage() {
           note: commonNote,
           relatedAccountId: modalAccount.id,
           relatedAccountName: modalAccount.name,
-          sourceType: "accounts_page",
-          sourceId: "",
         }),
       ]);
 
@@ -895,44 +1356,9 @@ export default function AccountsPage() {
       note: note?.trim() || "",
       relatedAccountId: "",
       relatedAccountName: "",
-      sourceType: "accounts_page",
-      sourceId: "",
     });
 
     setModalOpen(false);
-  }
-
-  function quickChip(v) {
-    setAmount(String(v));
-  }
-
-  async function addDemoBillPayment() {
-    if (!selectedAccount) return;
-
-    const amt = 125;
-    const cur = safeNum(selectedAccount.balance, 0);
-    const nextBal = cur - amt;
-
-    const saveRes = await saveAccountBalance(selectedAccount.id, nextBal);
-    if (!saveRes.ok) {
-      setPageError(saveRes.error || "Failed to create demo bill payment.");
-      return;
-    }
-
-    await createLedgerEntry({
-      id: uid(),
-      ts: nowTs(),
-      kind: "bill_payment",
-      accountId: selectedAccount.id,
-      amount: amt,
-      delta: -amt,
-      resultingBalance: nextBal,
-      note: "Example bill payment",
-      relatedAccountId: "",
-      relatedAccountName: "",
-      sourceType: "bill",
-      sourceId: "demo-bill-id",
-    });
   }
 
   const currentMonth = new Date().toLocaleString(undefined, {
@@ -940,605 +1366,17 @@ export default function AccountsPage() {
     year: "numeric",
   });
 
-  const pageStyles = (
-    <style jsx global>{`
-      .accountsPage {
-        --page-text: #f5f7ff;
-        --muted: rgba(220, 228, 255, 0.68);
-        --muted-2: rgba(220, 228, 255, 0.48);
-        --line: rgba(255, 255, 255, 0.1);
-        --line-strong: rgba(255, 255, 255, 0.16);
-        --card-bg: linear-gradient(
-          180deg,
-          rgba(9, 14, 28, 0.88),
-          rgba(4, 8, 16, 0.78)
-        );
-        --card-bg-2: linear-gradient(
-          180deg,
-          rgba(8, 13, 24, 0.82),
-          rgba(3, 7, 14, 0.76)
-        );
-        --shadow: 0 24px 80px rgba(0, 0, 0, 0.34),
-          inset 0 1px 0 rgba(255, 255, 255, 0.05);
-
-        color: var(--page-text);
-        color-scheme: dark;
-      }
-
-      .accountsPage *,
-      .accountsPage *::before,
-      .accountsPage *::after {
-        box-sizing: border-box;
-      }
-
-      .accountsPage .pageShell {
-        max-width: 1680px;
-        margin: 0 auto;
-        padding: 22px 18px 48px;
-      }
-
-      .accountsPage .heroCard,
-      .accountsPage .glassCard,
-      .accountsPage .metricCard,
-      .accountsPage .emptyState,
-      .accountsPage .errorCard {
-        position: relative;
-        overflow: hidden;
-        border-radius: 28px;
-        border: 1px solid rgba(255, 255, 255, 0.08);
-        background: var(--card-bg);
-        box-shadow: var(--shadow);
-        backdrop-filter: blur(16px);
-      }
-
-      .accountsPage .heroCard::before,
-      .accountsPage .glassCard::before,
-      .accountsPage .metricCard::before {
-        content: "";
-        position: absolute;
-        inset: 0;
-        pointer-events: none;
-        background:
-          radial-gradient(circle at top left, rgba(80, 120, 255, 0.14), transparent 28%),
-          radial-gradient(circle at top right, rgba(255, 255, 255, 0.07), transparent 22%),
-          radial-gradient(circle at bottom center, rgba(56, 189, 248, 0.08), transparent 24%);
-      }
-
-      .accountsPage .heroCard {
-        padding: 22px 22px 20px;
-        margin-bottom: 16px;
-      }
-
-      .accountsPage .heroTop {
-        position: relative;
-        z-index: 1;
-        display: flex;
-        justify-content: space-between;
-        gap: 18px;
-        align-items: flex-start;
-        flex-wrap: wrap;
-      }
-
-      .accountsPage .eyebrow {
-        font-size: 11px;
-        text-transform: uppercase;
-        letter-spacing: 0.18em;
-        color: var(--muted-2);
-        margin-bottom: 10px;
-      }
-
-      .accountsPage .heroTitle {
-        margin: 0;
-        font-size: clamp(32px, 4.4vw, 56px);
-        line-height: 0.98;
-        font-weight: 950;
-        letter-spacing: -0.04em;
-      }
-
-      .accountsPage .heroSub {
-        margin: 10px 0 0;
-        max-width: 900px;
-        color: var(--muted);
-        line-height: 1.55;
-        font-size: 14px;
-      }
-
-      .accountsPage .heroMeta {
-        display: flex;
-        gap: 10px;
-        flex-wrap: wrap;
-        justify-content: flex-end;
-      }
-
-      .accountsPage .metaPill,
-      .accountsPage .softChip,
-      .accountsPage .toneChip {
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-        min-height: 38px;
-        padding: 10px 14px;
-        border-radius: 999px;
-        border: 1px solid rgba(255, 255, 255, 0.08);
-        background: rgba(255, 255, 255, 0.04);
-        color: #f5f7ff;
-        font-size: 12px;
-        font-weight: 700;
-        letter-spacing: 0.04em;
-      }
-
-      .accountsPage .chipRow {
-        display: flex;
-        gap: 10px;
-        flex-wrap: wrap;
-        margin-top: 14px;
-      }
-
-      .accountsPage .metricGrid {
-        display: grid;
-        grid-template-columns: repeat(4, minmax(0, 1fr));
-        gap: 14px;
-        margin-bottom: 16px;
-      }
-
-      .accountsPage .metricCard {
-        padding: 16px 18px;
-        min-height: 150px;
-      }
-
-      .accountsPage .metricLabel {
-        position: relative;
-        z-index: 1;
-        font-size: 11px;
-        text-transform: uppercase;
-        letter-spacing: 0.18em;
-        color: var(--muted-2);
-      }
-
-      .accountsPage .metricValue {
-        position: relative;
-        z-index: 1;
-        margin-top: 12px;
-        font-size: clamp(28px, 3vw, 46px);
-        line-height: 1;
-        font-weight: 950;
-        letter-spacing: -0.04em;
-      }
-
-      .accountsPage .metricSub {
-        position: relative;
-        z-index: 1;
-        margin-top: 14px;
-        color: var(--muted);
-        font-size: 13px;
-        line-height: 1.45;
-      }
-
-      .accountsPage .metricAccentPink {
-        color: #f7a9c4;
-      }
-
-      .accountsPage .mainGrid {
-        display: grid;
-        grid-template-columns: minmax(360px, 0.95fr) minmax(520px, 1.35fr);
-        gap: 16px;
-        align-items: start;
-      }
-
-      .accountsPage .glassCard {
-        padding: 18px;
-      }
-
-      .accountsPage .focusGrid {
-        display: grid;
-        grid-template-columns: 1.25fr 0.85fr;
-        gap: 16px;
-        margin-bottom: 16px;
-      }
-
-      .accountsPage .sectionTop {
-        display: flex;
-        justify-content: space-between;
-        gap: 14px;
-        align-items: flex-start;
-        flex-wrap: wrap;
-        margin-bottom: 14px;
-        position: relative;
-        z-index: 1;
-      }
-
-      .accountsPage .sectionTitle {
-        margin: 0;
-        font-size: 28px;
-        line-height: 1;
-        font-weight: 900;
-        letter-spacing: -0.03em;
-      }
-
-      .accountsPage .sectionMini {
-        margin: 0;
-        font-size: 18px;
-        line-height: 1.1;
-        font-weight: 900;
-      }
-
-      .accountsPage .sectionText {
-        margin-top: 8px;
-        color: var(--muted);
-        font-size: 13px;
-        line-height: 1.5;
-      }
-
-      .accountsPage .tinyLabel {
-        color: var(--muted-2);
-        text-transform: uppercase;
-        letter-spacing: 0.12em;
-        font-size: 10px;
-        margin-bottom: 8px;
-        font-weight: 700;
-      }
-
-      .accountsPage .mutedText {
-        color: var(--muted);
-      }
-
-      .accountsPage .mutedTiny {
-        color: var(--muted-2);
-        font-size: 12px;
-      }
-
-      .accountsPage .focusCardInner {
-        position: relative;
-        z-index: 1;
-        border-radius: 22px;
-        padding: 16px;
-        border: 1px solid rgba(255, 255, 255, 0.08);
-        background:
-          linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,.01));
-      }
-
-      .accountsPage .focusValue {
-        margin-top: 10px;
-        font-size: clamp(32px, 4vw, 54px);
-        line-height: 1;
-        font-weight: 950;
-        letter-spacing: -0.04em;
-      }
-
-      .accountsPage .valueBlock {
-        display: flex;
-        flex-direction: column;
-        gap: 6px;
-      }
-
-      .accountsPage .actionRow {
-        display: flex;
-        gap: 10px;
-        flex-wrap: wrap;
-      }
-
-      .accountsPage .stack {
-        display: grid;
-        gap: 12px;
-      }
-
-      .accountsPage .field {
-        width: 100%;
-        min-height: 48px;
-        border-radius: 16px;
-        border: 1px solid rgba(177, 196, 255, 0.16);
-        background: rgba(8, 13, 24, 0.84) !important;
-        color: #f4f7ff !important;
-        font-size: 14px;
-        font-weight: 600;
-        padding: 0 14px;
-        outline: none;
-        box-shadow:
-          inset 0 1px 0 rgba(255, 255, 255, 0.03),
-          0 0 0 rgba(0, 0, 0, 0);
-        transition: border-color 0.18s ease, box-shadow 0.18s ease,
-          background 0.18s ease;
-      }
-
-      .accountsPage textarea.field {
-        min-height: 96px;
-        padding: 12px 14px;
-        resize: vertical;
-      }
-
-      .accountsPage .field::placeholder {
-        color: rgba(233, 238, 255, 0.44) !important;
-      }
-
-      .accountsPage .field:focus {
-        border-color: rgba(121, 163, 255, 0.48);
-        box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.12);
-      }
-
-      .accountsPage select.field {
-        cursor: pointer;
-      }
-
-      .accountsPage select.field option {
-        background: #08111f !important;
-        color: #f4f7ff !important;
-      }
-
-      .accountsPage input:-webkit-autofill,
-      .accountsPage input:-webkit-autofill:hover,
-      .accountsPage input:-webkit-autofill:focus,
-      .accountsPage textarea:-webkit-autofill,
-      .accountsPage select:-webkit-autofill {
-        -webkit-text-fill-color: #f4f7ff !important;
-        -webkit-box-shadow: 0 0 0px 1000px #0a1321 inset !important;
-        box-shadow: 0 0 0px 1000px #0a1321 inset !important;
-        transition: background-color 9999s ease-in-out 0s;
-      }
-
-      .accountsPage .controlGrid {
-        display: grid;
-        grid-template-columns: 1.2fr 0.9fr 0.9fr;
-        gap: 10px;
-        margin-bottom: 14px;
-      }
-
-      .accountsPage .accountList {
-        display: grid;
-        gap: 12px;
-      }
-
-      .accountsPage .accountItem {
-        position: relative;
-        overflow: hidden;
-        border-radius: 24px;
-        border: 1px solid rgba(255, 255, 255, 0.07);
-        background: var(--card-bg-2);
-        padding: 16px;
-        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
-        cursor: pointer;
-        transition: transform 0.18s ease, border-color 0.18s ease,
-          box-shadow 0.18s ease;
-      }
-
-      .accountsPage .accountItem:hover {
-        transform: translateY(-1px);
-        border-color: rgba(255, 255, 255, 0.12);
-      }
-
-      .accountsPage .accountItem.selected {
-        border-color: rgba(109, 169, 255, 0.34);
-        box-shadow: 0 12px 34px rgba(6, 12, 24, 0.34),
-          inset 0 1px 0 rgba(255, 255, 255, 0.04);
-      }
-
-      .accountsPage .accountHeader {
-        display: flex;
-        justify-content: space-between;
-        gap: 12px;
-        align-items: flex-start;
-        flex-wrap: wrap;
-        margin-bottom: 14px;
-      }
-
-      .accountsPage .accountActions {
-        display: flex;
-        gap: 8px;
-        flex-wrap: wrap;
-        justify-content: flex-end;
-      }
-
-      .accountsPage .accountEditGrid {
-        display: grid;
-        grid-template-columns: 1fr 220px;
-        gap: 10px;
-        margin-bottom: 14px;
-      }
-
-      .accountsPage .balanceValue {
-        font-size: clamp(28px, 3vw, 40px);
-        line-height: 1;
-        font-weight: 950;
-        letter-spacing: -0.04em;
-      }
-
-      .accountsPage .ledgerList {
-        display: grid;
-        gap: 12px;
-      }
-
-      .accountsPage .ledgerItem {
-        position: relative;
-        overflow: hidden;
-        border-radius: 22px;
-        padding: 14px;
-        border: 1px solid rgba(255, 255, 255, 0.07);
-        background: linear-gradient(
-          180deg,
-          rgba(8, 13, 24, 0.78),
-          rgba(4, 8, 16, 0.72)
-        );
-      }
-
-      .accountsPage .ledgerGrid {
-        display: grid;
-        grid-template-columns: minmax(0, 1.5fr) auto auto;
-        gap: 14px;
-        align-items: center;
-      }
-
-      .accountsPage .ledgerRight {
-        text-align: right;
-      }
-
-      .accountsPage .emptyState {
-        padding: 16px;
-      }
-
-      .accountsPage .emptyStateTitle {
-        font-size: 18px;
-        line-height: 1.1;
-        font-weight: 900;
-        margin: 0;
-      }
-
-      .accountsPage .emptyStateText {
-        margin-top: 8px;
-        color: var(--muted);
-        line-height: 1.5;
-        font-size: 13px;
-      }
-
-      .accountsPage .errorCard {
-        padding: 14px 16px;
-        margin-bottom: 16px;
-        border-color: rgba(244, 114, 182, 0.26);
-        background:
-          linear-gradient(180deg, rgba(96, 17, 44, 0.38), rgba(36, 8, 18, 0.32));
-      }
-
-      .accountsPage .errorTitle {
-        font-weight: 900;
-        font-size: 15px;
-      }
-
-      .accountsPage .solidBtn,
-      .accountsPage .ghostBtn,
-      .accountsPage .dangerBtn {
-        min-height: 42px;
-        padding: 0 14px;
-        border-radius: 14px;
-        font-size: 13px;
-        font-weight: 800;
-        letter-spacing: 0.02em;
-        cursor: pointer;
-        transition: transform 0.18s ease, border-color 0.18s ease,
-          background 0.18s ease, box-shadow 0.18s ease;
-      }
-
-      .accountsPage .solidBtn:hover,
-      .accountsPage .ghostBtn:hover,
-      .accountsPage .dangerBtn:hover {
-        transform: translateY(-1px);
-      }
-
-      .accountsPage .solidBtn {
-        border: 1px solid rgba(130, 170, 255, 0.28);
-        background:
-          linear-gradient(180deg, rgba(77, 124, 255, 0.28), rgba(32, 74, 189, 0.16));
-        color: #f7f9ff;
-        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
-      }
-
-      .accountsPage .ghostBtn {
-        border: 1px solid rgba(255, 255, 255, 0.09);
-        background: rgba(255, 255, 255, 0.04);
-        color: #f4f7ff;
-      }
-
-      .accountsPage .dangerBtn {
-        border: 1px solid rgba(244, 114, 182, 0.22);
-        background: rgba(244, 114, 182, 0.09);
-        color: #ffd5e5;
-      }
-
-      .accountsPage .modalTabs {
-        display: flex;
-        gap: 10px;
-        flex-wrap: wrap;
-        margin-bottom: 14px;
-      }
-
-      .accountsPage .divider {
-        height: 1px;
-        margin: 14px 0;
-        background: linear-gradient(
-          90deg,
-          transparent,
-          rgba(255, 255, 255, 0.08),
-          transparent
-        );
-      }
-
-      @media (max-width: 1380px) {
-        .accountsPage .metricGrid {
-          grid-template-columns: repeat(2, minmax(0, 1fr));
-        }
-
-        .accountsPage .focusGrid {
-          grid-template-columns: 1fr;
-        }
-      }
-
-      @media (max-width: 1180px) {
-        .accountsPage .mainGrid {
-          grid-template-columns: 1fr;
-        }
-      }
-
-      @media (max-width: 860px) {
-        .accountsPage .pageShell {
-          padding: 16px 12px 34px;
-        }
-
-        .accountsPage .heroCard,
-        .accountsPage .glassCard,
-        .accountsPage .metricCard {
-          border-radius: 22px;
-        }
-
-        .accountsPage .metricGrid {
-          grid-template-columns: 1fr;
-        }
-
-        .accountsPage .controlGrid {
-          grid-template-columns: 1fr;
-        }
-
-        .accountsPage .accountEditGrid {
-          grid-template-columns: 1fr;
-        }
-
-        .accountsPage .ledgerGrid {
-          grid-template-columns: 1fr;
-        }
-
-        .accountsPage .ledgerRight {
-          text-align: left;
-        }
-
-        .accountsPage .sectionTitle {
-          font-size: 24px;
-        }
-
-        .accountsPage .heroTitle {
-          font-size: 34px;
-        }
-
-        .accountsPage .actionRow,
-        .accountsPage .accountActions,
-        .accountsPage .heroMeta {
-          width: 100%;
-          justify-content: flex-start;
-        }
-      }
-    `}</style>
-  );
-
   if (loading) {
     return (
       <main className="accountsPage">
-        {pageStyles}
-        <div className="pageShell">
-          <section className="heroCard">
-            <div className="heroTop">
-              <div>
-                <div className="eyebrow">LIVE FINANCE BOARD</div>
-                <h1 className="heroTitle">Accounts Command</h1>
-                <p className="heroSub">Loading accounts...</p>
-              </div>
+        <div className="accountsPageShell">
+          <GlassPane size="card">
+            <div style={{ fontWeight: 800, fontSize: 18, color: "#fff" }}>
+              Loading accounts.
             </div>
-          </section>
+          </GlassPane>
         </div>
+        <style jsx global>{globalStyles}</style>
       </main>
     );
   }
@@ -1546,139 +1384,130 @@ export default function AccountsPage() {
   if (!user) {
     return (
       <main className="accountsPage">
-        {pageStyles}
-        <div className="pageShell">
-          <section className="heroCard">
-            <div className="heroTop">
-              <div>
-                <div className="eyebrow">LIVE FINANCE BOARD</div>
-                <h1 className="heroTitle">Accounts Command</h1>
-                <p className="heroSub">
-                  This page is now Supabase-backed, so it needs an authenticated
-                  user.
-                </p>
-              </div>
+        <div className="accountsPageShell">
+          <GlassPane size="card">
+            <div style={{ fontWeight: 800, fontSize: 18, color: "#fff" }}>
+              Please log in
             </div>
-          </section>
-
-          <section className="emptyState">
-            <h2 className="emptyStateTitle">Please log in</h2>
-            <div className="emptyStateText">
-              Once you sign in, this page will load your synced accounts and
-              transactions.
-            </div>
-          </section>
+          </GlassPane>
         </div>
+        <style jsx global>{globalStyles}</style>
       </main>
     );
   }
 
   return (
-    <main className="accountsPage">
-      {pageStyles}
-
-      <div className="pageShell">
-        <header className="heroCard">
-          <div className="heroTop">
-            <div>
-              <div className="eyebrow">LIVE FINANCE BOARD</div>
-              <h1 className="heroTitle">Accounts Command</h1>
-              <p className="heroSub">
-                Clean balances, transfer-ready account control, and a real
-                ledger view. This version fixes the ugly white input and
-                dropdown bars so everything stays dark, readable, and on theme.
-              </p>
-
-              <div className="chipRow">
-                <span className="softChip">{accounts.length} ACCOUNTS</span>
-                <span className="softChip">
-                  LAST UPDATE {fmtWhen(totals.updatedMax)}
-                </span>
-                {primary ? (
-                  <span className="softChip">PRIMARY • {primary.name}</span>
-                ) : null}
+    <>
+      <main className="accountsPage">
+        <div className="accountsPageShell">
+          {pageError ? (
+            <GlassPane tone="red" size="card">
+              <div style={{ fontWeight: 800, fontSize: 16, color: "#fff" }}>
+                Accounts error
               </div>
-            </div>
+              <div
+                style={{
+                  marginTop: 6,
+                  fontSize: 13,
+                  color: "rgba(255,255,255,0.74)",
+                }}
+              >
+                {pageError}
+              </div>
+            </GlassPane>
+          ) : null}
 
-            <div className="heroMeta">
-              <span className="metaPill">{currentMonth}</span>
-              <span className="metaPill">
-                {primary ? primary.name.toUpperCase() : "NO PRIMARY ACCOUNT"}
-              </span>
-            </div>
-          </div>
-        </header>
-
-        {pageError ? (
-          <div className="errorCard">
-            <div className="errorTitle">Error</div>
-            <div className="sectionText" style={{ marginTop: 6 }}>
-              {pageError}
-            </div>
-          </div>
-        ) : null}
-
-        <section className="metricGrid">
-          <article className="metricCard">
-            <div className="metricLabel">Net Worth</div>
-            <div className="metricValue">{fmtMoney(totals.netWorth)}</div>
-            <div className="metricSub">
-              Assets {fmtMoney(totals.assets)} minus credit debt{" "}
-              {fmtMoney(totals.debts)}.
-            </div>
-          </article>
-
-          <article className="metricCard">
-            <div className="metricLabel">Liquid Balances</div>
-            <div className="metricValue">{fmtMoney(totals.liquid)}</div>
-            <div className="metricSub">
-              Checking, savings, and cash only. Investments excluded.
-            </div>
-          </article>
-
-          <article className="metricCard">
-            <div className="metricLabel">Investment Accounts</div>
-            <div className="metricValue">{fmtMoney(totals.invest)}</div>
-            <div className="metricSub">
-              Tracked investment account balances currently on the board.
-            </div>
-          </article>
-
-          <article className="metricCard">
-            <div className="metricLabel">Credit Exposure</div>
-            <div className="metricValue metricAccentPink">
-              {fmtMoney(totals.debts)}
-            </div>
-            <div className="metricSub">
-              Credit accounts should store the amount owed, not negative cash.
-            </div>
-          </article>
-        </section>
-
-        <section className="mainGrid">
-          <div>
-            <article className="glassCard">
-              <div className="sectionTop">
-                <div>
-                  <h2 className="sectionTitle">Account Roster</h2>
-                  <div className="sectionText">
-                    Pick an account on the left, then work it on the right.
-                  </div>
+          <GlassPane size="card">
+            <div className="accountsHeroGrid">
+              <div style={{ minWidth: 0 }}>
+                <div className="accountsEyebrow">Life Command Center</div>
+                <div className="accountsHeroTitle">Accounts Command</div>
+                <div className="accountsHeroSub">
+                  Clean balances, faster controls, and a tighter account roster.
                 </div>
 
-                <div className="softChip">{filteredAccounts.length} SHOWING</div>
+                <div className="accountsPillRow">
+                  <MiniPill>{accounts.length} accounts</MiniPill>
+                  <MiniPill>{currentMonth}</MiniPill>
+                  {primaryId ? (
+                    <MiniPill>
+                      Primary • {accounts.find((a) => a.id === primaryId)?.name || "—"}
+                    </MiniPill>
+                  ) : null}
+                </div>
               </div>
 
-              <div className="controlGrid">
-                <input
-                  className="field"
-                  placeholder="Search accounts..."
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                />
+              <div
+                style={{
+                  display: "flex",
+                  gap: 8,
+                  flexWrap: "wrap",
+                  justifyContent: "flex-end",
+                }}
+              >
+                <MiniPill>{fmtWhen(totals.updatedMax)}</MiniPill>
+                <MiniPill tone="green">{fmtMoney(totals.liquid)} liquid</MiniPill>
+                <MiniPill tone={totals.debts > 0 ? "red" : "green"}>
+                  {fmtMoney(totals.debts)} credit
+                </MiniPill>
+              </div>
+            </div>
+          </GlassPane>
+
+          <section className="accountsMetricGrid">
+            <StatCard
+              icon={Landmark}
+              label="Net Worth"
+              value={fmtMoney(totals.netWorth)}
+              detail={`Assets ${fmtMoney(totals.assets)} minus credit debt ${fmtMoney(
+                totals.debts
+              )}.`}
+              tone={totals.netWorth >= 0 ? "green" : "red"}
+            />
+            <StatCard
+              icon={Wallet}
+              label="Liquid Balances"
+              value={fmtMoney(totals.liquid)}
+              detail="Checking, savings, and cash only."
+              tone="neutral"
+            />
+            <StatCard
+              icon={PiggyBank}
+              label="Investment Accounts"
+              value={fmtMoney(totals.invest)}
+              detail="Tracked investment account balances."
+              tone="neutral"
+            />
+            <StatCard
+              icon={CreditCard}
+              label="Credit Exposure"
+              value={fmtMoney(totals.debts)}
+              detail="Credit accounts should store the amount owed."
+              tone={totals.debts > 0 ? "red" : "green"}
+            />
+          </section>
+
+          <section className="accountsMainGrid">
+            <GlassPane size="card">
+              <PaneHeader
+                title="Account Roster"
+                subcopy="Compact list on the left. Work the selected account on the right."
+                right={<MiniPill>{filteredAccounts.length} showing</MiniPill>}
+              />
+
+              <div className="accountsRosterControls">
+                <div className="accountsSearchWrap">
+                  <Search size={15} />
+                  <input
+                    className="accountsField accountsSearchField"
+                    placeholder="Search accounts"
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                  />
+                </div>
 
                 <select
-                  className="field"
+                  className="accountsField"
                   value={typeFilter}
                   onChange={(e) => setTypeFilter(e.target.value)}
                 >
@@ -1692,7 +1521,7 @@ export default function AccountsPage() {
                 </select>
 
                 <select
-                  className="field"
+                  className="accountsField"
                   value={sort}
                   onChange={(e) => setSort(e.target.value)}
                 >
@@ -1702,711 +1531,733 @@ export default function AccountsPage() {
                 </select>
               </div>
 
-              <div className="accountList">
-                {filteredAccounts.length === 0 ? (
-                  <div className="emptyState">
-                    <h3 className="emptyStateTitle">No accounts found</h3>
-                    <div className="emptyStateText">
+              {filteredAccounts.length ? (
+                <div className="accountsRosterListCompact">
+                  {filteredAccounts.map((a) => (
+                    <CompactAccountRow
+                      key={a.id}
+                      account={a}
+                      selected={a.id === selectedAccountId}
+                      primary={a.id === primaryId}
+                      onSelect={() => setSelectedAccountId(a.id)}
+                      onEdit={() => openModal("edit", a.id)}
+                      onSetPrimary={() => savePrimary(a.id)}
+                      onDelete={() => deleteAccount(a.id)}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <div className="accountsEmptyState">
+                  <div>
+                    <div className="accountsEmptyTitle">No accounts found</div>
+                    <div className="accountsEmptyText">
                       Clear filters or add another account.
                     </div>
                   </div>
-                ) : (
-                  filteredAccounts.map((a) => {
-                    const isPrimary = a.id === primaryId;
-                    const isSelected = a.id === selectedAccountId;
-                    const isCredit =
-                      String(a.type || "").toLowerCase() === "credit";
-
-                    return (
-                      <div
-                        key={a.id}
-                        className={`accountItem ${isSelected ? "selected" : ""}`}
-                        style={{
-                          background: isSelected
-                            ? `${typeAccent(a.type)}, linear-gradient(180deg, rgba(8,13,24,.86), rgba(4,8,16,.78))`
-                            : "linear-gradient(180deg, rgba(8,13,24,.78), rgba(4,8,16,.74))",
-                        }}
-                        onClick={() => setSelectedAccountId(a.id)}
-                      >
-                        <div className="accountHeader">
-                          <div className="chipRow" style={{ marginTop: 0 }}>
-                            <span className="softChip">
-                              {typeIcon(a.type)} {badgeText(a.type)}
-                            </span>
-
-                            {isPrimary ? (
-                              <span
-                                className="softChip"
-                                style={{
-                                  background: "rgba(77,124,255,.16)",
-                                  border: "1px solid rgba(77,124,255,.28)",
-                                }}
-                              >
-                                Primary
-                              </span>
-                            ) : null}
-                          </div>
-
-                          <div className="accountActions">
-                            <button
-                              className="ghostBtn"
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                openModalFor(a.id, "adjust");
-                              }}
-                            >
-                              Adjust
-                            </button>
-
-                            <button
-                              className="ghostBtn"
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                openModalFor(a.id, "transfer");
-                              }}
-                            >
-                              Transfer
-                            </button>
-
-                            <button
-                              className={isPrimary ? "solidBtn" : "ghostBtn"}
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                savePrimary(a.id);
-                              }}
-                            >
-                              {isPrimary ? "Primary" : "Set Primary"}
-                            </button>
-
-                            <button
-                              className="dangerBtn"
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                deleteAccount(a.id);
-                              }}
-                            >
-                              Delete
-                            </button>
-                          </div>
-                        </div>
-
-                        <div className="accountEditGrid">
-                          <div>
-                            <div className="tinyLabel">Account Name</div>
-                            <input
-                              className="field"
-                              value={a.name}
-                              onClick={(e) => e.stopPropagation()}
-                              onChange={(e) => renameAccount(a.id, e.target.value)}
-                            />
-                          </div>
-
-                          <div>
-                            <div className="tinyLabel">Account Type</div>
-                            <select
-                              className="field"
-                              value={a.type || "other"}
-                              onClick={(e) => e.stopPropagation()}
-                              onChange={(e) => retypeAccount(a.id, e.target.value)}
-                            >
-                              <option value="checking">🏦 Checking</option>
-                              <option value="savings">💰 Savings</option>
-                              <option value="cash">💵 Cash</option>
-                              <option value="credit">💳 Credit Card</option>
-                              <option value="investment">📈 Investment</option>
-                              <option value="other">📁 Other</option>
-                            </select>
-                          </div>
-                        </div>
-
-                        <div className="tinyLabel">
-                          {isCredit ? "Amount Owed" : "Balance"}
-                        </div>
-                        <div className="balanceValue">{fmtMoney(a.balance)}</div>
-                        <div className="sectionText" style={{ marginTop: 10 }}>
-                          Updated {fmtWhen(a.updatedAt)}
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-            </article>
-          </div>
-
-          <div>
-            <div className="focusGrid">
-              <article className="glassCard">
-                <div className="sectionTop">
-                  <div>
-                    <h2 className="sectionTitle">
-                      {selectedAccount ? selectedAccount.name : "Selected Account"}
-                    </h2>
-                    <div className="sectionText">
-                      Focus card for the account you are actively working.
-                    </div>
-                  </div>
-
-                  {selectedAccount ? (
-                    <span className="softChip">
-                      {typeIcon(selectedAccount.type)} {typeLabel(selectedAccount.type)}
-                    </span>
-                  ) : null}
-                </div>
-
-                {selectedAccount ? (
-                  <div
-                    className="focusCardInner"
-                    style={{
-                      background: `${typeAccent(
-                        selectedAccount.type
-                      )}, linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,.01))`,
-                    }}
-                  >
-                    <div className="stack">
-                      <div className="valueBlock">
-                        <div className="tinyLabel">
-                          {String(selectedAccount.type || "").toLowerCase() === "credit"
-                            ? "Amount Owed"
-                            : "Current Balance"}
-                        </div>
-                        <div className="focusValue">
-                          {fmtMoney(selectedAccount.balance)}
-                        </div>
-                      </div>
-
-                      <div className="chipRow" style={{ marginTop: 0 }}>
-                        <span className="softChip">
-                          {selectedAccount.id === primaryId ? "PRIMARY" : "STANDARD"}
-                        </span>
-                        <span className="softChip">
-                          UPDATED {fmtWhen(selectedAccount.updatedAt)}
-                        </span>
-                      </div>
-
-                      <div className="actionRow">
-                        <button
-                          className="solidBtn"
-                          type="button"
-                          onClick={() => openModalFor(selectedAccount.id, "adjust")}
-                        >
-                          Add Transaction
-                        </button>
-
-                        <button
-                          className="ghostBtn"
-                          type="button"
-                          onClick={() => openModalFor(selectedAccount.id, "transfer")}
-                        >
-                          Transfer
-                        </button>
-
-                        <button
-                          className="ghostBtn"
-                          type="button"
-                          onClick={() => openModalFor(selectedAccount.id, "set")}
-                        >
-                          Set Exact
-                        </button>
-
-                        <button
-                          className="ghostBtn"
-                          type="button"
-                          onClick={addDemoBillPayment}
-                        >
-                          Demo Bill Payment
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="emptyState">
-                    <h3 className="emptyStateTitle">No account selected</h3>
-                    <div className="emptyStateText">
-                      Choose one from the roster to view and manage it here.
-                    </div>
-                  </div>
-                )}
-              </article>
-
-              <article className="glassCard">
-                <div className="sectionTop">
-                  <div>
-                    <h3 className="sectionMini">Add Account</h3>
-                    <div className="sectionText">
-                      Keep this clean. Real financial buckets only.
-                    </div>
-                  </div>
-                </div>
-
-                <form onSubmit={addAccount} className="stack">
-                  <div>
-                    <div className="tinyLabel">Account Name</div>
-                    <input
-                      className="field"
-                      placeholder="Account name"
-                      value={adding.name}
-                      onChange={(e) =>
-                        setAdding((p) => ({ ...p, name: e.target.value }))
-                      }
-                    />
-                  </div>
-
-                  <div>
-                    <div className="tinyLabel">Type</div>
-                    <select
-                      className="field"
-                      value={adding.type}
-                      onChange={(e) =>
-                        setAdding((p) => ({ ...p, type: e.target.value }))
-                      }
-                    >
-                      <option value="checking">🏦 Checking</option>
-                      <option value="savings">💰 Savings</option>
-                      <option value="cash">💵 Cash</option>
-                      <option value="credit">💳 Credit Card</option>
-                      <option value="investment">📈 Investment</option>
-                      <option value="other">📁 Other</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <div className="tinyLabel">Starting Balance</div>
-                    <input
-                      className="field"
-                      placeholder="Starting balance"
-                      value={adding.balance}
-                      onChange={(e) =>
-                        setAdding((p) => ({ ...p, balance: e.target.value }))
-                      }
-                    />
-                  </div>
-
-                  <button className="solidBtn" type="submit">
-                    Add Account
-                  </button>
-                </form>
-
-                <div className="divider" />
-
-                <div className="mutedTiny">
-                  Credit accounts should hold the amount owed as a positive
-                  number.
-                </div>
-              </article>
-            </div>
-
-            <article className="glassCard">
-              <div className="sectionTop">
-                <div>
-                  <h2 className="sectionTitle">
-                    {selectedAccount
-                      ? `${selectedAccount.name} Ledger`
-                      : "Transaction Ledger"}
-                  </h2>
-                  <div className="sectionText">
-                    Real movement history for the account you selected.
-                  </div>
-                </div>
-
-                {selectedAccount ? (
-                  <div className="actionRow">
-                    <button
-                      className="solidBtn"
-                      type="button"
-                      onClick={() => openModalFor(selectedAccount.id, "adjust")}
-                    >
-                      Add Transaction
-                    </button>
-
-                    <button
-                      className="ghostBtn"
-                      type="button"
-                      onClick={() => openModalFor(selectedAccount.id, "transfer")}
-                    >
-                      Transfer
-                    </button>
-                  </div>
-                ) : null}
-              </div>
-
-              {selectedAccount ? (
-                <div
-                  className="focusCardInner"
-                  style={{
-                    marginBottom: 14,
-                    background: `${typeAccent(
-                      selectedAccount.type
-                    )}, linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,.01))`,
-                  }}
-                >
-                  <div
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-                      gap: 12,
-                    }}
-                  >
-                    <div>
-                      <div className="tinyLabel">Account</div>
-                      <div style={{ fontWeight: 900, fontSize: 18 }}>
-                        {typeIcon(selectedAccount.type)} {selectedAccount.name}
-                      </div>
-                      <div className="sectionText" style={{ marginTop: 6 }}>
-                        {typeLabel(selectedAccount.type)}
-                      </div>
-                    </div>
-
-                    <div>
-                      <div className="tinyLabel">Current Balance</div>
-                      <div style={{ fontWeight: 950, fontSize: 30 }}>
-                        {fmtMoney(selectedAccount.balance)}
-                      </div>
-                    </div>
-
-                    <div>
-                      <div className="tinyLabel">Status</div>
-                      <div style={{ fontWeight: 900, fontSize: 18 }}>
-                        {selectedAccount.id === primaryId ? "Primary" : "Standard"}
-                      </div>
-                      <div className="sectionText" style={{ marginTop: 6 }}>
-                        Updated {fmtWhen(selectedAccount.updatedAt)}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ) : null}
-
-              <input
-                className="field"
-                placeholder="Search this account's transactions..."
-                value={ledgerSearch}
-                onChange={(e) => setLedgerSearch(e.target.value)}
-              />
-
-              <div style={{ height: 14 }} />
-
-              {!selectedAccount ? (
-                <div className="emptyState">
-                  <h3 className="emptyStateTitle">No account selected</h3>
-                  <div className="emptyStateText">
-                    Choose an account on the left to view the ledger.
-                  </div>
-                </div>
-              ) : selectedLedger.length === 0 ? (
-                <div className="emptyState">
-                  <h3 className="emptyStateTitle">No transactions yet</h3>
-                  <div className="emptyStateText">
-                    Use Adjust, Transfer, or bill-linked entries to build the
-                    history.
-                  </div>
-                </div>
-              ) : (
-                <div className="ledgerList">
-                  {selectedLedger.map((entry) => {
-                    const tone = transactionTone(entry.kind);
-
-                    return (
-                      <div
-                        key={entry.id}
-                        className="ledgerItem"
-                        style={{
-                          border:
-                            tone === "good"
-                              ? "1px solid rgba(34,197,94,.18)"
-                              : tone === "bad"
-                                ? "1px solid rgba(244,114,182,.18)"
-                                : "1px solid rgba(255,255,255,.07)",
-                          background:
-                            tone === "good"
-                              ? "linear-gradient(180deg, rgba(34,197,94,.08), rgba(6,12,24,.75))"
-                              : tone === "bad"
-                                ? "linear-gradient(180deg, rgba(244,114,182,.08), rgba(6,12,24,.75))"
-                                : "linear-gradient(180deg, rgba(8,13,24,.78), rgba(4,8,16,.72))",
-                        }}
-                      >
-                        <div className="ledgerGrid">
-                          <div>
-                            <div
-                              style={{
-                                display: "flex",
-                                gap: 8,
-                                alignItems: "center",
-                                flexWrap: "wrap",
-                              }}
-                            >
-                              <span
-                                className="toneChip"
-                                style={{
-                                  minHeight: 34,
-                                  padding: "8px 10px",
-                                  ...transactionChipStyle(entry.kind),
-                                }}
-                              >
-                                {transactionLabel(entry.kind)}
-                              </span>
-
-                              {entry.relatedAccountName ? (
-                                <span className="mutedTiny">
-                                  {String(entry.kind).includes("transfer")
-                                    ? `with ${entry.relatedAccountName}`
-                                    : entry.relatedAccountName}
-                                </span>
-                              ) : null}
-
-                              {entry.sourceType === "bill" ? (
-                                <span
-                                  className="softChip"
-                                  style={{
-                                    minHeight: 34,
-                                    padding: "8px 10px",
-                                    background: "rgba(77,124,255,.14)",
-                                    border: "1px solid rgba(77,124,255,.22)",
-                                  }}
-                                >
-                                  Bill-linked
-                                </span>
-                              ) : null}
-                            </div>
-
-                            <div className="sectionText" style={{ marginTop: 8 }}>
-                              {fmtWhen(entry.ts)}
-                            </div>
-
-                            {entry.note ? (
-                              <div
-                                style={{
-                                  marginTop: 8,
-                                  lineHeight: 1.5,
-                                  color: "#eef4ff",
-                                  fontSize: 14,
-                                }}
-                              >
-                                {entry.note}
-                              </div>
-                            ) : null}
-                          </div>
-
-                          <div className="ledgerRight">
-                            <div className="tinyLabel">Change</div>
-                            <div
-                              style={{
-                                fontWeight: 950,
-                                fontSize: 20,
-                                color:
-                                  tone === "good"
-                                    ? "rgb(134 239 172)"
-                                    : tone === "bad"
-                                      ? "rgb(251 207 232)"
-                                      : "#f5f7ff",
-                              }}
-                            >
-                              {fmtDelta(entry.delta)}
-                            </div>
-                          </div>
-
-                          <div className="ledgerRight">
-                            <div className="tinyLabel">Balance After</div>
-                            <div style={{ fontWeight: 900, fontSize: 20 }}>
-                              {fmtMoney(entry.resultingBalance)}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
                 </div>
               )}
-            </article>
-          </div>
-        </section>
-      </div>
+            </GlassPane>
+
+            <div className="accountsRightStack">
+              <div className="accountsTopRightGrid">
+                <FocusCard
+                  selectedAccount={selectedAccount}
+                  primaryId={primaryId}
+                  onAdjust={() => selectedAccount && openModal("adjust", selectedAccount.id)}
+                  onTransfer={() => selectedAccount && openModal("transfer", selectedAccount.id)}
+                  onSetExact={() => selectedAccount && openModal("set", selectedAccount.id)}
+                  onEdit={() => selectedAccount && openModal("edit", selectedAccount.id)}
+                />
+
+                <AddAccountCard
+                  adding={adding}
+                  setAdding={setAdding}
+                  addAccount={addAccount}
+                />
+              </div>
+
+              <GlassPane size="card">
+                <PaneHeader
+                  title={
+                    selectedAccount
+                      ? `${selectedAccount.name} Ledger`
+                      : "Transaction Ledger"
+                  }
+                  subcopy="Movement history for the selected account."
+                  right={
+                    <MiniPill>
+                      {selectedLedger.length} item{selectedLedger.length === 1 ? "" : "s"}
+                    </MiniPill>
+                  }
+                />
+
+                <div className="accountsSearchWrap" style={{ marginBottom: 10 }}>
+                  <Search size={15} />
+                  <input
+                    className="accountsField accountsSearchField"
+                    placeholder="Search ledger"
+                    value={ledgerSearch}
+                    onChange={(e) => setLedgerSearch(e.target.value)}
+                  />
+                </div>
+
+                {selectedAccount ? (
+                  selectedLedger.length ? (
+                    <div className="accountsLedgerList accountsLedgerListTight">
+                      {selectedLedger.map((item) => (
+                        <LedgerItem key={item.id} item={item} />
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="accountsEmptyState" style={{ minHeight: 140 }}>
+                      <div>
+                        <div className="accountsEmptyTitle">No ledger entries yet</div>
+                        <div className="accountsEmptyText">
+                          Transactions, transfers, and exact balance sets will land here.
+                        </div>
+                      </div>
+                    </div>
+                  )
+                ) : (
+                  <div className="accountsEmptyState" style={{ minHeight: 140 }}>
+                    <div>
+                      <div className="accountsEmptyTitle">No account selected</div>
+                      <div className="accountsEmptyText">
+                        Choose one from the roster to view its ledger.
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </GlassPane>
+            </div>
+          </section>
+        </div>
+      </main>
 
       <Modal
         open={modalOpen}
-        title={modalAccount ? `${modalAccount.name} transaction` : "Transaction"}
-        subtitle={
-          modalAccount
-            ? `${typeIcon(modalAccount.type)} ${typeLabel(
-                modalAccount.type
-              )} • Current balance ${fmtMoney(modalAccount.balance)}`
-            : ""
-        }
         onClose={() => setModalOpen(false)}
+        title={
+          modalType === "edit"
+            ? `Edit ${modalAccount?.name || "account"}`
+            : modalType === "transfer"
+            ? `Transfer from ${modalAccount?.name || "account"}`
+            : modalType === "set"
+            ? `Set exact balance for ${modalAccount?.name || "account"}`
+            : `Adjust ${modalAccount?.name || "account"}`
+        }
+        subtitle="This writes to the account and saves a matching ledger entry where relevant."
       >
-        {!modalAccount ? (
-          <div className="mutedText">No account selected.</div>
-        ) : (
-          <>
-            <div className="modalTabs">
-              <button
-                className={mode === "adjust" ? "solidBtn" : "ghostBtn"}
-                type="button"
-                onClick={() => setMode("adjust")}
-              >
-                Deposit / Withdraw
-              </button>
-
-              <button
-                className={mode === "transfer" ? "solidBtn" : "ghostBtn"}
-                type="button"
-                onClick={() => setMode("transfer")}
-              >
-                Transfer
-              </button>
-
-              <button
-                className={mode === "set" ? "solidBtn" : "ghostBtn"}
-                type="button"
-                onClick={() => setMode("set")}
-              >
-                Set Exact Balance
-              </button>
-
-              <span className="softChip" style={{ marginLeft: "auto" }}>
-                PRIMARY: {modalAccount.id === primaryId ? "YES" : "NO"}
-              </span>
+        {modalType === "edit" ? (
+          <div className="accountsFormStack">
+            <div>
+              <div className="accountsTinyLabel">Account Name</div>
+              <input
+                className="accountsField"
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+              />
             </div>
 
-            {mode === "adjust" ? (
-              <div className="stack">
-                <div className="actionRow">
-                  <button
-                    className={adjustSign === "deposit" ? "solidBtn" : "ghostBtn"}
-                    type="button"
-                    onClick={() => setAdjustSign("deposit")}
-                  >
-                    Deposit
-                  </button>
+            <div>
+              <div className="accountsTinyLabel">Account Type</div>
+              <select
+                className="accountsField"
+                value={editType}
+                onChange={(e) => setEditType(e.target.value)}
+              >
+                <option value="checking">🏦 Checking</option>
+                <option value="savings">💰 Savings</option>
+                <option value="cash">💵 Cash</option>
+                <option value="credit">💳 Credit Card</option>
+                <option value="investment">📈 Investment</option>
+                <option value="other">📁 Other</option>
+              </select>
+            </div>
+          </div>
+        ) : null}
 
-                  <button
-                    className={adjustSign === "withdraw" ? "solidBtn" : "ghostBtn"}
-                    type="button"
-                    onClick={() => setAdjustSign("withdraw")}
-                  >
-                    Withdraw
-                  </button>
-                </div>
+        {modalType === "adjust" ? (
+          <div className="accountsFormStack">
+            <div>
+              <div className="accountsTinyLabel">Direction</div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <ActionBtn
+                  variant={adjustSign === "deposit" ? "primary" : "ghost"}
+                  onClick={() => setAdjustSign("deposit")}
+                >
+                  Deposit
+                </ActionBtn>
+                <ActionBtn
+                  variant={adjustSign === "withdraw" ? "primary" : "ghost"}
+                  onClick={() => setAdjustSign("withdraw")}
+                >
+                  Withdraw
+                </ActionBtn>
+              </div>
+            </div>
 
-                <div>
-                  <div className="tinyLabel">Amount</div>
-                  <input
-                    className="field"
-                    placeholder="Amount"
-                    value={amount}
-                    onChange={(e) => setAmount(e.target.value)}
-                  />
-                </div>
+            <div>
+              <div className="accountsTinyLabel">Amount</div>
+              <input
+                className="accountsField"
+                placeholder="0.00"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+              />
+            </div>
 
-                <div className="actionRow">
-                  {[10, 20, 50, 100, 200, 500, 1000].map((v) => (
-                    <button
-                      key={v}
-                      className="ghostBtn"
-                      type="button"
-                      onClick={() => quickChip(v)}
-                    >
-                      {fmtMoney(v)}
-                    </button>
+            <div>
+              <div className="accountsTinyLabel">Note</div>
+              <textarea
+                className="accountsField"
+                placeholder="Optional note"
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                rows={4}
+              />
+            </div>
+          </div>
+        ) : null}
+
+        {modalType === "transfer" ? (
+          <div className="accountsFormStack">
+            <div>
+              <div className="accountsTinyLabel">Amount</div>
+              <input
+                className="accountsField"
+                placeholder="0.00"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+              />
+            </div>
+
+            <div>
+              <div className="accountsTinyLabel">Transfer To</div>
+              <select
+                className="accountsField"
+                value={transferToId}
+                onChange={(e) => setTransferToId(e.target.value)}
+              >
+                <option value="">Choose account</option>
+                {accounts
+                  .filter((a) => a.id !== modalAccountId)
+                  .map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.name} • {typeLabel(a.type)}
+                    </option>
                   ))}
-                </div>
+              </select>
+            </div>
 
-                <div>
-                  <div className="tinyLabel">Note</div>
-                  <input
-                    className="field"
-                    placeholder="Note (optional)"
-                    value={note}
-                    onChange={(e) => setNote(e.target.value)}
-                  />
-                </div>
+            <div>
+              <div className="accountsTinyLabel">Note</div>
+              <textarea
+                className="accountsField"
+                placeholder="Optional note"
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                rows={4}
+              />
+            </div>
+          </div>
+        ) : null}
 
-                <button className="solidBtn" type="button" onClick={applyModal}>
-                  Apply Transaction
-                </button>
-              </div>
-            ) : null}
+        {modalType === "set" ? (
+          <div className="accountsFormStack">
+            <div>
+              <div className="accountsTinyLabel">Exact Balance</div>
+              <input
+                className="accountsField"
+                placeholder="0.00"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+              />
+            </div>
 
-            {mode === "transfer" ? (
-              <div className="stack">
-                <div>
-                  <div className="tinyLabel">Destination Account</div>
-                  <select
-                    className="field"
-                    value={transferToId}
-                    onChange={(e) => setTransferToId(e.target.value)}
-                  >
-                    <option value="">Choose destination account</option>
-                    {accounts
-                      .filter((a) => a.id !== modalAccount.id)
-                      .map((a) => (
-                        <option key={a.id} value={a.id}>
-                          {a.name} — {typeLabel(a.type)}
-                        </option>
-                      ))}
-                  </select>
-                </div>
+            <div>
+              <div className="accountsTinyLabel">Note</div>
+              <textarea
+                className="accountsField"
+                placeholder="Optional note"
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                rows={4}
+              />
+            </div>
+          </div>
+        ) : null}
 
-                <div>
-                  <div className="tinyLabel">Transfer Amount</div>
-                  <input
-                    className="field"
-                    placeholder="Transfer amount"
-                    value={amount}
-                    onChange={(e) => setAmount(e.target.value)}
-                  />
-                </div>
-
-                <div>
-                  <div className="tinyLabel">Note</div>
-                  <input
-                    className="field"
-                    placeholder="Note (optional)"
-                    value={note}
-                    onChange={(e) => setNote(e.target.value)}
-                  />
-                </div>
-
-                <button className="solidBtn" type="button" onClick={applyModal}>
-                  Complete Transfer
-                </button>
-              </div>
-            ) : null}
-
-            {mode === "set" ? (
-              <div className="stack">
-                <div>
-                  <div className="tinyLabel">New Exact Balance</div>
-                  <input
-                    className="field"
-                    placeholder="New exact balance"
-                    value={amount}
-                    onChange={(e) => setAmount(e.target.value)}
-                  />
-                </div>
-
-                <div>
-                  <div className="tinyLabel">Note</div>
-                  <input
-                    className="field"
-                    placeholder="Note (optional)"
-                    value={note}
-                    onChange={(e) => setNote(e.target.value)}
-                  />
-                </div>
-
-                <button className="solidBtn" type="button" onClick={applyModal}>
-                  Set Balance
-                </button>
-              </div>
-            ) : null}
-          </>
-        )}
+        <div
+          style={{
+            marginTop: 14,
+            display: "flex",
+            gap: 10,
+            flexWrap: "wrap",
+            justifyContent: "flex-end",
+          }}
+        >
+          <ActionBtn onClick={() => setModalOpen(false)}>Cancel</ActionBtn>
+          <ActionBtn variant="primary" onClick={applyModal}>
+            Apply <ChevronRight size={14} />
+          </ActionBtn>
+        </div>
       </Modal>
-    </main>
+
+      <style jsx global>{globalStyles}</style>
+    </>
   );
 }
+
+const globalStyles = `
+  .accountsPage {
+    color: var(--lcc-text);
+    font-family: var(--lcc-font-sans);
+  }
+
+  .accountsPageShell {
+    width: min(100%, 1320px);
+    margin: 0 auto;
+    padding: 12px 0 20px;
+    display: grid;
+    gap: 12px;
+  }
+
+  .accountsEyebrow {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: .22em;
+    font-weight: 800;
+    color: rgba(255,255,255,0.42);
+  }
+
+  .accountsHeroTitle {
+    margin-top: 8px;
+    font-size: clamp(24px, 3.2vw, 34px);
+    line-height: 1.02;
+    font-weight: 850;
+    letter-spacing: -0.05em;
+    color: #fff;
+  }
+
+  .accountsHeroSub {
+    margin-top: 8px;
+    font-size: 13px;
+    line-height: 1.55;
+    color: rgba(255,255,255,0.62);
+    max-width: 760px;
+  }
+
+  .accountsHeroGrid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.1fr) auto;
+    gap: 12px;
+    align-items: start;
+  }
+
+  .accountsPillRow {
+    margin-top: 12px;
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .accountsMetricGrid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  .accountsMainGrid {
+    display: grid;
+    grid-template-columns: minmax(360px, 0.92fr) minmax(0, 1.08fr);
+    gap: 12px;
+    align-items: start;
+  }
+
+  .accountsRightStack {
+    display: grid;
+    gap: 12px;
+  }
+
+  .accountsTopRightGrid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.02fr) minmax(300px, 0.82fr);
+    gap: 12px;
+    align-items: start;
+  }
+
+  .accountsRosterControls {
+    display: grid;
+    grid-template-columns: 1.2fr 0.8fr 0.9fr;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+
+  .accountsSearchWrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 44px;
+    border-radius: 14px;
+    border: 1px solid rgba(214,226,255,0.10);
+    background:
+      linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.012)),
+      rgba(8, 12, 20, 0.76);
+    color: rgba(255,255,255,0.58);
+    padding: 0 12px;
+  }
+
+  .accountsSearchField {
+    min-height: 42px !important;
+    border: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+  }
+
+  .accountsRosterListCompact {
+    display: grid;
+    gap: 8px;
+    max-height: 560px;
+    overflow: auto;
+    padding-right: 2px;
+  }
+
+  .accountsCompactRow {
+    display: grid;
+    grid-template-columns: 42px minmax(0, 1fr) auto auto;
+    gap: 10px;
+    align-items: center;
+    min-height: 78px;
+    padding: 10px 12px;
+    border-radius: 18px;
+    border: 1px solid rgba(255,255,255,0.07);
+    background:
+      linear-gradient(180deg, rgba(8,13,24,0.78), rgba(4,8,16,0.72));
+    cursor: pointer;
+    transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+  }
+
+  .accountsCompactRow:hover {
+    transform: translateY(-1px);
+  }
+
+  .accountsCompactAvatar {
+    width: 42px;
+    height: 42px;
+    border-radius: 14px;
+    display: grid;
+    place-items: center;
+    border: 1px solid rgba(255,255,255,0.08);
+    background:
+      linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.012)),
+      rgba(9, 14, 23, 0.68);
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: .05em;
+  }
+
+  .accountsCompactTitle {
+    font-size: 13.5px;
+    font-weight: 800;
+    color: #fff;
+    line-height: 1.2;
+    overflow-wrap: anywhere;
+  }
+
+  .accountsCompactSub {
+    margin-top: 4px;
+    font-size: 11.5px;
+    color: rgba(255,255,255,0.54);
+    line-height: 1.3;
+  }
+
+  .accountsCompactValue {
+    font-size: 15px;
+    font-weight: 850;
+    color: #fff;
+    white-space: nowrap;
+  }
+
+  .accountsCompactActions {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+  }
+
+  .accountsIconBtn {
+    width: 34px;
+    height: 34px;
+    border-radius: 12px;
+    border: 1px solid rgba(214,226,255,0.10);
+    background:
+      linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.012));
+    color: rgba(247,251,255,0.88);
+    display: grid;
+    place-items: center;
+    cursor: pointer;
+  }
+
+  .accountsDangerBtn {
+    border-color: rgba(255,132,163,0.18);
+    color: #ffd3df;
+  }
+
+  .accountsFocusBox {
+    border-radius: 22px;
+    border: 1px solid rgba(214,226,255,0.12);
+    background:
+      linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01));
+    padding: 16px;
+  }
+
+  .accountsActionGrid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .accountsFormStack {
+    display: grid;
+    gap: 12px;
+  }
+
+  .accountsTinyLabel {
+    display: block;
+    margin-bottom: 8px;
+    font-size: 10px;
+    color: rgba(255,255,255,0.46);
+    text-transform: uppercase;
+    letter-spacing: .16em;
+    font-weight: 800;
+  }
+
+  .accountsField {
+    width: 100%;
+    min-height: 44px;
+    border-radius: 14px;
+    border: 1px solid rgba(214,226,255,0.10);
+    background:
+      linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.012)),
+      rgba(8, 12, 20, 0.76);
+    color: var(--lcc-text);
+    padding: 0 13px;
+    outline: none;
+    font: inherit;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
+    transition: border-color 160ms ease, box-shadow 160ms ease, background 160ms ease;
+  }
+
+  .accountsField:focus {
+    border-color: rgba(143,177,255,0.30);
+    box-shadow:
+      0 0 0 4px rgba(79,114,255,0.08),
+      inset 0 1px 0 rgba(255,255,255,0.035);
+  }
+
+  .accountsField::placeholder {
+    color: rgba(225,233,245,0.38);
+  }
+
+  .accountsField option {
+    background: #08111f;
+    color: #f4f7ff;
+  }
+
+  textarea.accountsField {
+    min-height: 96px;
+    resize: vertical;
+    padding: 12px 13px;
+  }
+
+  .accountsActionBtn {
+    min-height: 40px;
+    padding: 10px 13px;
+    border-radius: 14px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    font-size: 13px;
+    font-weight: 800;
+    line-height: 1;
+    transition: transform 160ms ease, border-color 160ms ease, background 160ms ease, box-shadow 160ms ease;
+  }
+
+  .accountsActionBtn:hover {
+    transform: translateY(-1px);
+  }
+
+  .accountsLedgerList {
+    display: grid;
+    gap: 10px;
+  }
+
+  .accountsLedgerListTight {
+    max-height: 420px;
+    overflow: auto;
+    padding-right: 2px;
+  }
+
+  .accountsLedgerItem {
+    border-radius: 18px;
+    border: 1px solid rgba(255,255,255,0.07);
+    background:
+      linear-gradient(180deg, rgba(8,13,24,0.78), rgba(4,8,16,0.72));
+    padding: 12px;
+  }
+
+  .accountsLedgerGrid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.7fr) auto auto;
+    gap: 14px;
+    align-items: center;
+  }
+
+  .accountsLedgerTitle {
+    margin-top: 10px;
+    font-size: 13px;
+    font-weight: 800;
+    color: #fff;
+    line-height: 1.25;
+    overflow-wrap: anywhere;
+  }
+
+  .accountsLedgerSub {
+    margin-top: 4px;
+    font-size: 11.5px;
+    color: rgba(255,255,255,0.54);
+    line-height: 1.35;
+  }
+
+  .accountsLedgerLabel {
+    font-size: 11px;
+    color: rgba(255,255,255,0.50);
+    text-transform: uppercase;
+    letter-spacing: .14em;
+    font-weight: 700;
+  }
+
+  .accountsLedgerRight {
+    text-align: right;
+  }
+
+  .accountsFootnote {
+    font-size: 12px;
+    color: rgba(255,255,255,0.48);
+    line-height: 1.45;
+  }
+
+  .accountsEmptyState {
+    min-height: 150px;
+    display: grid;
+    place-items: center;
+    text-align: center;
+    padding: 14px;
+  }
+
+  .accountsEmptyTitle {
+    font-size: 16px;
+    font-weight: 850;
+    color: #fff;
+  }
+
+  .accountsEmptyText {
+    margin-top: 6px;
+    font-size: 13px;
+    line-height: 1.5;
+    color: rgba(255,255,255,0.60);
+    max-width: 360px;
+  }
+
+  .accountsModalRoot {
+    position: fixed;
+    inset: 0;
+    z-index: 90;
+    display: grid;
+    place-items: center;
+    padding: 18px;
+  }
+
+  .accountsModalBackdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(2,5,10,0.68);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+
+  .accountsModalCard {
+    position: relative;
+    z-index: 1;
+    width: min(100%, 720px);
+    max-height: min(88vh, 920px);
+    overflow: auto;
+  }
+
+  @media (max-width: 1260px) {
+    .accountsMetricGrid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .accountsTopRightGrid {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  @media (max-width: 1100px) {
+    .accountsHeroGrid,
+    .accountsMainGrid {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  @media (max-width: 1024px) {
+    .accountsRosterControls,
+    .accountsActionGrid,
+    .accountsLedgerGrid {
+      grid-template-columns: 1fr;
+    }
+
+    .accountsLedgerRight {
+      text-align: left;
+    }
+
+    .accountsCompactRow {
+      grid-template-columns: 42px minmax(0, 1fr);
+    }
+
+    .accountsCompactValue {
+      white-space: normal;
+    }
+
+    .accountsCompactActions {
+      grid-column: 2;
+      justify-content: flex-start;
+    }
+  }
+
+  @media (max-width: 760px) {
+    .accountsPageShell {
+      padding: 8px 0 14px;
+    }
+
+    .accountsMetricGrid,
+    .accountsTopRightGrid {
+      grid-template-columns: 1fr;
+    }
+
+    .accountsModalRoot {
+      padding: 10px;
+    }
+  }
+
+  @media (max-width: 640px) {
+    .accountsMetricGrid,
+    .accountsActionGrid {
+      grid-template-columns: 1fr;
+    }
+  }
+`;

@@ -1,4 +1,3 @@
-// src/app/components/SideNav.jsx
 "use client";
 
 import Image from "next/image";
@@ -9,8 +8,6 @@ import {
   CreditCard,
   Gem,
   LayoutDashboard,
-  PanelLeftClose,
-  PanelLeftOpen,
   PiggyBank,
   Receipt,
   Shield,
@@ -205,16 +202,24 @@ export default function SideNav({
 
       <div className={styles.inner}>
         <div className={cx(styles.brandRow, collapsed && styles.brandRowCollapsed)}>
-          <div className={styles.logoWrap}>
-            <Image
-              src="/brand/lcc-logo.png"
-              alt="Life Command Center logo"
-              width={46}
-              height={46}
-              priority
-              className={styles.logo}
-            />
-          </div>
+          <button
+            type="button"
+            onClick={onToggle}
+            className={styles.logoButton}
+            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          >
+            <div className={styles.logoWrap}>
+              <Image
+                src="/brand/lcc-logo.png"
+                alt="Life Command Center logo"
+                width={46}
+                height={46}
+                priority
+                className={styles.logo}
+              />
+            </div>
+          </button>
 
           {!collapsed ? (
             <div className={styles.brandCopy}>
@@ -223,27 +228,15 @@ export default function SideNav({
             </div>
           ) : null}
 
-          <div className={styles.brandActions}>
-            <button
-              type="button"
-              onClick={onToggle}
-              className={styles.desktopToggle}
-              aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-              title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-            >
-              {collapsed ? <PanelLeftOpen size={15} /> : <PanelLeftClose size={15} />}
-            </button>
-
-            <button
-              type="button"
-              onClick={onCloseMobile}
-              className={styles.mobileClose}
-              aria-label="Close navigation"
-              title="Close navigation"
-            >
-              <X size={15} />
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={onCloseMobile}
+            className={styles.mobileClose}
+            aria-label="Close navigation"
+            title="Close navigation"
+          >
+            <X size={15} />
+          </button>
         </div>
 
         <nav className={styles.navList}>

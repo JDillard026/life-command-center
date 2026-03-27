@@ -5,22 +5,30 @@ import { usePathname, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { getCurrentUserRole } from "@/lib/getCurrentUserRole";
 
-const PUBLIC_ROUTES = ["/login", "/reset-password"];
+const PUBLIC_ROUTES = [
+  "/login",
+  "/signup",
+  "/forgot-password",
+  "/reset-password",
+  "/logout",
+];
+
 const PUBLIC_PREFIXES = ["/auth"];
 
-function isPublicRoute(pathname) {
+function isPublicRoute(pathname = "") {
   if (PUBLIC_ROUTES.includes(pathname)) return true;
-  return PUBLIC_PREFIXES.some((prefix) => pathname?.startsWith(prefix));
+  return PUBLIC_PREFIXES.some((prefix) => pathname.startsWith(prefix));
 }
 
 export default function AppAccessGate({ children }) {
   const router = useRouter();
-  const pathname = usePathname();
+  const pathname = usePathname() || "";
+
   const [ready, setReady] = useState(false);
 
+  const mountedRef = useRef(false);
   const checkingRef = useRef(false);
   const rerunRef = useRef(false);
-  const mountedRef = useRef(false);
   const signingOutRef = useRef(false);
 
   useEffect(() => {
@@ -37,10 +45,15 @@ export default function AppAccessGate({ children }) {
       checkingRef.current = true;
 
       try {
+        if (!supabase) {
+          setReady(true);
+          return;
+        }
+
         const publicRoute = isPublicRoute(pathname);
 
         if (publicRoute) {
-          if (mountedRef.current) setReady(true);
+          setReady(true);
           return;
         }
 
@@ -61,6 +74,8 @@ export default function AppAccessGate({ children }) {
             signingOutRef.current = true;
             try {
               await supabase.auth.signOut();
+            } catch {
+              // ignore signout failure, still redirect
             } finally {
               signingOutRef.current = false;
             }
@@ -91,12 +106,19 @@ export default function AppAccessGate({ children }) {
 
     queueCheck();
 
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(() => {
-      // DO NOT await Supabase calls directly in this callback.
-      queueCheck();
-    });
+    let unsubscribe = null;
+
+    try {
+      const {
+        data: { subscription },
+      } = supabase.auth.onAuthStateChange(() => {
+        queueCheck();
+      });
+
+      unsubscribe = () => subscription?.unsubscribe?.();
+    } catch {
+      unsubscribe = null;
+    }
 
     function handleFocus() {
       queueCheck();
@@ -113,7 +135,9 @@ export default function AppAccessGate({ children }) {
 
     return () => {
       mountedRef.current = false;
-      subscription?.unsubscribe();
+      try {
+        unsubscribe?.();
+      } catch {}
       window.removeEventListener("focus", handleFocus);
       document.removeEventListener("visibilitychange", handleVisibility);
     };
@@ -121,9 +145,12 @@ export default function AppAccessGate({ children }) {
 
   if (!ready) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#040915] px-6 text-white">
-        <div className="rounded-3xl border border-white/10 bg-white/[0.04] px-6 py-5 text-sm text-white/75 shadow-[0_20px_60px_rgba(0,0,0,0.35)]">
-          Checking access...
+      <div className="lccGate">
+        <div className="lccGateCard">
+          <div className="lccGateTitle">Checking access</div>
+          <div className="lccGateText">
+            Loading your command center and verifying session status.
+          </div>
         </div>
       </div>
     );
