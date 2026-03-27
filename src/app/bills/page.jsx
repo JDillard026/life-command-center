@@ -1,9 +1,9 @@
 "use client";
 
+export const dynamic = "force-dynamic";
+
 import * as React from "react";
 import { supabase } from "@/lib/supabaseClient";
-
-export const dynamic = "force-dynamic";
 
 const FREQUENCY_OPTIONS = [
   { value: "weekly", label: "Weekly" },
@@ -19,8 +19,11 @@ const BILL_TYPE_OPTIONS = [
   { value: "controllable", label: "Debt / Controllable" },
 ];
 
-function uid() {
-  return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+function makeId() {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
 function pad2(n) {
@@ -38,14 +41,23 @@ function toDate(iso) {
   return Number.isFinite(d.getTime()) ? d : null;
 }
 
-function money(n) {
-  const x = Number(n);
-  if (!Number.isFinite(x)) return "$0.00";
-  return x.toLocaleString(undefined, { style: "currency", currency: "USD" });
+function shortDate(iso) {
+  const d = toDate(iso);
+  if (!d) return "—";
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
-function num(v, fallback = 0) {
-  const cleaned = String(v ?? "").replace(/[^0-9.-]/g, "");
+function money(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return "$0.00";
+  return n.toLocaleString(undefined, {
+    style: "currency",
+    currency: "USD",
+  });
+}
+
+function num(value, fallback = 0) {
+  const cleaned = String(value ?? "").replace(/[^0-9.-]/g, "");
   const n = Number(cleaned);
   return Number.isFinite(n) ? n : fallback;
 }
@@ -98,6 +110,16 @@ function dueLabel(days) {
   if (days === 0) return "Due today";
   if (days === 1) return "Due tomorrow";
   return `${days} days left`;
+}
+
+function formatMonths(n) {
+  if (n == null) return "No payoff";
+  if (n <= 0) return "Paid";
+  const years = Math.floor(n / 12);
+  const months = n % 12;
+  if (years <= 0) return `${months} mo`;
+  if (months === 0) return `${years} yr`;
+  return `${years} yr ${months} mo`;
 }
 
 function payoffSimulation(balance, aprPct, monthlyPay) {
@@ -163,22 +185,6 @@ function payoffSimulation(balance, aprPct, monthlyPay) {
   };
 }
 
-function shortDate(iso) {
-  const d = toDate(iso);
-  if (!d) return "No date";
-  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
-}
-
-function formatMonths(n) {
-  if (n == null) return "No payoff";
-  if (n <= 0) return "Paid";
-  const years = Math.floor(n / 12);
-  const months = n % 12;
-  if (years <= 0) return `${months} mo`;
-  if (months === 0) return `${years} yr`;
-  return `${years} yr ${months} mo`;
-}
-
 function mapBillRowToClient(row) {
   return {
     id: row.id,
@@ -224,12 +230,21 @@ function mapBillClientToRow(bill, userId) {
   };
 }
 
-function ProgressBar({ value = 0, color = "#4ade80" }) {
+function ProgressBar({ value = 0, tone = "green" }) {
   const pct = clamp(value, 0, 100);
+  const colors = {
+    green: "#4ade80",
+    amber: "#f59e0b",
+    red: "#ff6b7f",
+    neutral: "#93a9d8",
+  };
+
+  const color = colors[tone] || colors.green;
+
   return (
-    <div className="blProgress">
+    <div className="billProgress">
       <div
-        className="blProgressFill"
+        className="billProgressFill"
         style={{
           width: `${pct}%`,
           background: `linear-gradient(90deg, ${color} 0%, rgba(255,255,255,.92) 220%)`,
@@ -237,6 +252,36 @@ function ProgressBar({ value = 0, color = "#4ade80" }) {
         }}
       />
     </div>
+  );
+}
+
+function StatCard({ label, value, sub, tone = "neutral" }) {
+  return (
+    <article className={`billStat billTone_${tone}`}>
+      <div className="billStatLabel">{label}</div>
+      <div className="billStatValue">{value}</div>
+      <div className="billStatSub">{sub}</div>
+    </article>
+  );
+}
+
+function TonePill({ tone = "neutral", children }) {
+  return <span className={`tonePill tonePill_${tone}`}>{children}</span>;
+}
+
+function SectionCard({ title, text, action, children, compact = false }) {
+  return (
+    <section className={`billCard ${compact ? "billCard_compact" : ""}`}>
+      <div className="billCardHead">
+        <div>
+          <div className="billEyebrow">{compact ? "SECTION" : "BILLS"}</div>
+          <h2 className={compact ? "billSectionMini" : "billSectionTitle"}>{title}</h2>
+          {text ? <div className="billSectionText">{text}</div> : null}
+        </div>
+        {action ? <div className="billCardAction">{action}</div> : null}
+      </div>
+      {children}
+    </section>
   );
 }
 
@@ -304,7 +349,6 @@ export default function BillsPage() {
         ]);
 
         if (billsRes.error) throw billsRes.error;
-
         if (!mounted) return;
 
         setBills((billsRes.data || []).map(mapBillRowToClient));
@@ -352,17 +396,19 @@ export default function BillsPage() {
         if (aDays == null && bDays != null) return 1;
         if (aDays != null && bDays == null) return -1;
         if (aDays != null && bDays != null && aDays !== bDays) return aDays - bDays;
-        return a.name.localeCompare(b.name);
+        return monthlyEquivalent(b) - monthlyEquivalent(a);
       });
   }, [bills, filter, search]);
 
+  const activeBills = React.useMemo(() => bills.filter((bill) => bill.active), [bills]);
+
   const controllableBills = React.useMemo(
-    () => bills.filter((b) => b.active && b.type === "controllable"),
+    () => bills.filter((bill) => bill.active && bill.type === "controllable"),
     [bills]
   );
 
   const fixedBills = React.useMemo(
-    () => bills.filter((b) => b.active && b.type === "noncontrollable"),
+    () => bills.filter((bill) => bill.active && bill.type === "noncontrollable"),
     [bills]
   );
 
@@ -396,20 +442,26 @@ export default function BillsPage() {
     [bills]
   );
 
+  const strongestPressure = React.useMemo(() => {
+    if (!activeBills.length) return null;
+    return [...activeBills].sort((a, b) => monthlyEquivalent(b) - monthlyEquivalent(a))[0];
+  }, [activeBills]);
+
   const payoffRows = React.useMemo(() => {
     return controllableBills
       .map((bill) => {
         const monthlyPay =
           (Number(bill.minPay) || 0) + (Number(bill.extraPay) || 0) || Number(bill.amount) || 0;
-        const sim = payoffSimulation(bill.balance, bill.aprPct, monthlyPay);
-        const utilization =
-          bill.balance > 0 && monthlyPay > 0 ? clamp((monthlyPay / bill.balance) * 100 * 12, 0, 100) : 0;
+        const payoff = payoffSimulation(bill.balance, bill.aprPct, monthlyPay);
 
         return {
           ...bill,
           monthlyPay,
-          payoff: sim,
-          utilization,
+          payoff,
+          progress:
+            bill.balance > 0 && monthlyPay > 0
+              ? clamp((monthlyPay / bill.balance) * 100 * 12, 0, 100)
+              : 0,
         };
       })
       .sort((a, b) => {
@@ -418,13 +470,6 @@ export default function BillsPage() {
         return (a.payoff.months ?? 9999) - (b.payoff.months ?? 9999);
       });
   }, [controllableBills]);
-
-  const strongestPressure = React.useMemo(() => {
-    if (!bills.length) return null;
-    return [...bills]
-      .filter((b) => b.active)
-      .sort((a, b) => monthlyEquivalent(b) - monthlyEquivalent(a))[0];
-  }, [bills]);
 
   function resetForm() {
     setFormType("noncontrollable");
@@ -440,29 +485,31 @@ export default function BillsPage() {
     setFormMinPay("");
     setFormExtraPay("");
     setFormAutopay(false);
+    setPageError("");
   }
 
-  async function addBill() {
-    if (!user) return;
-
+  function validateForm() {
     const name = formName.trim();
-    if (!name) {
-      alert("Name is required.");
-      return;
-    }
+    if (!name) return "Name is required.";
 
     const amount = num(formAmount, NaN);
-    if (!Number.isFinite(amount) || amount < 0) {
-      alert("Enter a valid amount.");
-      return;
-    }
+    if (!Number.isFinite(amount) || amount < 0) return "Enter a valid amount.";
 
     if (formType === "controllable") {
       const balance = num(formBalance, NaN);
-      if (!Number.isFinite(balance) || balance < 0) {
-        alert("Enter a valid balance.");
-        return;
-      }
+      if (!Number.isFinite(balance) || balance < 0) return "Enter a valid balance.";
+    }
+
+    return "";
+  }
+
+  async function addBill() {
+    if (!user || saving) return;
+
+    const validationError = validateForm();
+    if (validationError) {
+      setPageError(validationError);
+      return;
     }
 
     setSaving(true);
@@ -470,12 +517,12 @@ export default function BillsPage() {
 
     try {
       const draft = {
-        id: uid(),
-        name,
+        id: makeId(),
+        name: formName.trim(),
         type: formType,
         frequency: formFrequency,
         dueDate: formDueDate,
-        amount,
+        amount: num(formAmount, 0),
         active: true,
         notes: formNotes.trim(),
         balance: num(formBalance, 0),
@@ -507,10 +554,10 @@ export default function BillsPage() {
 
   async function deleteBill(id) {
     if (!user) return;
-    if (!confirm("Delete this bill?")) return;
+    if (typeof window !== "undefined" && !window.confirm("Delete this bill?")) return;
 
     const previous = bills;
-    setBills((prev) => prev.filter((b) => b.id !== id));
+    setBills((prev) => prev.filter((bill) => bill.id !== id));
 
     try {
       const { error } = await supabase.from("bills").delete().eq("id", id).eq("user_id", user.id);
@@ -524,15 +571,18 @@ export default function BillsPage() {
   async function toggleActive(bill) {
     if (!user) return;
 
-    const next = !bill.active;
     const previous = bills;
+    const next = !bill.active;
 
-    setBills((prev) => prev.map((b) => (b.id === bill.id ? { ...b, active: next } : b)));
+    setBills((prev) => prev.map((item) => (item.id === bill.id ? { ...item, active: next } : item)));
 
     try {
       const { error } = await supabase
         .from("bills")
-        .update({ active: next, updated_at: new Date().toISOString() })
+        .update({
+          active: next,
+          updated_at: new Date().toISOString(),
+        })
         .eq("id", bill.id)
         .eq("user_id", user.id);
 
@@ -550,7 +600,7 @@ export default function BillsPage() {
     const nextDate = todayISO();
 
     setBills((prev) =>
-      prev.map((b) => (b.id === bill.id ? { ...b, lastPaidDate: nextDate } : b))
+      prev.map((item) => (item.id === bill.id ? { ...item, lastPaidDate: nextDate } : item))
     );
 
     try {
@@ -570,16 +620,16 @@ export default function BillsPage() {
     }
   }
 
-  const styles = (
+  const pageStyles = (
     <style jsx global>{`
       .billsPage {
-        --text: #f7f8ff;
-        --muted: rgba(225, 232, 255, 0.72);
-        --muted2: rgba(225, 232, 255, 0.46);
-        --glass: linear-gradient(180deg, rgba(6, 12, 24, 0.42), rgba(4, 8, 16, 0.18));
-        --shadow: 0 22px 60px rgba(0, 0, 0, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.045);
-        color: var(--text);
-        color-scheme: dark;
+        --bill-text: #f5f8ff;
+        --bill-muted: rgba(219, 231, 255, 0.72);
+        --bill-soft: rgba(219, 231, 255, 0.52);
+        --bill-line: rgba(147, 175, 255, 0.14);
+        --bill-fill: rgba(7, 11, 18, 0.66);
+        --bill-fill-2: rgba(10, 15, 26, 0.82);
+        color: var(--bill-text);
       }
 
       .billsPage *,
@@ -588,226 +638,274 @@ export default function BillsPage() {
         box-sizing: border-box;
       }
 
-      .billsPage .blShell {
+      .billsShell {
         width: 100%;
-        max-width: none;
-        margin: 0;
-        padding: 22px 8px 56px 0;
+        padding: 14px 0 44px;
+        display: grid;
+        gap: 16px;
       }
 
-      .billsPage .blHero,
-      .billsPage .blCard,
-      .billsPage .blMetric {
+      .billsHero,
+      .billCard,
+      .billStat {
         position: relative;
         overflow: hidden;
-        border-radius: 30px;
-        border: 1px solid rgba(255, 255, 255, 0.075);
-        background: var(--glass);
-        box-shadow: var(--shadow);
-        backdrop-filter: blur(15px) saturate(126%);
-        -webkit-backdrop-filter: blur(15px) saturate(126%);
+        border-radius: 28px;
+        border: 1px solid var(--bill-line);
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.015)),
+          var(--bill-fill);
+        backdrop-filter: blur(18px);
+        box-shadow:
+          0 20px 60px rgba(0, 0, 0, 0.28),
+          inset 0 1px 0 rgba(255, 255, 255, 0.05);
       }
 
-      .billsPage .blHero::before,
-      .billsPage .blCard::before,
-      .billsPage .blMetric::before {
+      .billsHero::before,
+      .billCard::before,
+      .billStat::before {
         content: "";
         position: absolute;
         inset: 0;
         pointer-events: none;
         background:
           radial-gradient(circle at top left, rgba(80, 120, 255, 0.08), transparent 28%),
-          radial-gradient(circle at top right, rgba(255, 255, 255, 0.022), transparent 18%),
+          radial-gradient(circle at 84% 12%, rgba(74, 222, 128, 0.05), transparent 24%),
           radial-gradient(circle at bottom center, rgba(255, 107, 127, 0.03), transparent 28%);
       }
 
-      .billsPage .blHero {
-        padding: 28px;
-        margin-bottom: 22px;
+      .billsHero {
+        padding: 26px;
       }
 
-      .billsPage .blHeroTop {
+      .billsHeroTop {
         position: relative;
         z-index: 1;
         display: flex;
-        align-items: flex-start;
         justify-content: space-between;
-        gap: 18px;
+        align-items: flex-start;
+        gap: 16px;
         flex-wrap: wrap;
       }
 
-      .billsPage .blEyebrow {
-        font-size: 11px;
+      .billEyebrow {
+        color: var(--bill-soft);
+        font-size: 0.72rem;
+        font-weight: 800;
+        letter-spacing: 0.18em;
         text-transform: uppercase;
-        letter-spacing: 0.2em;
-        color: var(--muted2);
-        margin-bottom: 12px;
+        margin-bottom: 10px;
       }
 
-      .billsPage .blTitle {
+      .billsTitle {
         margin: 0;
-        font-size: clamp(34px, 4vw, 64px);
+        font-size: clamp(2rem, 4vw, 4rem);
         line-height: 0.95;
-        font-weight: 950;
         letter-spacing: -0.045em;
+        font-weight: 950;
       }
 
-      .billsPage .blSub {
+      .billsSub {
         margin-top: 12px;
-        max-width: 940px;
-        color: var(--muted);
+        max-width: 880px;
+        color: var(--bill-muted);
         line-height: 1.6;
-        font-size: 15px;
+        font-size: 0.95rem;
       }
 
-      .billsPage .blChipRow,
-      .billsPage .blActionRow {
+      .chipRow,
+      .heroActions,
+      .billActionRow,
+      .buttonRow {
         display: flex;
-        gap: 10px;
         flex-wrap: wrap;
+        gap: 10px;
       }
 
-      .billsPage .blChip {
+      .heroChip,
+      .tonePill {
         display: inline-flex;
         align-items: center;
-        justify-content: center;
-        min-height: 40px;
-        padding: 10px 15px;
+        min-height: 34px;
+        padding: 0 12px;
         border-radius: 999px;
-        border: 1px solid rgba(255, 255, 255, 0.075);
-        background: rgba(255, 255, 255, 0.038);
-        color: #f5f7ff;
-        font-size: 12px;
+        font-size: 0.78rem;
         font-weight: 800;
-        letter-spacing: 0.04em;
+        border: 1px solid rgba(255, 255, 255, 0.08);
       }
 
-      .billsPage .blSegment {
+      .heroChip {
+        color: #edf3ff;
+        background: rgba(255, 255, 255, 0.05);
+      }
+
+      .tonePill_neutral {
+        color: #dbe7ff;
+        background: rgba(147, 175, 255, 0.1);
+        border-color: rgba(147, 175, 255, 0.16);
+      }
+
+      .tonePill_green {
+        color: #bdf7cf;
+        background: rgba(74, 222, 128, 0.11);
+        border-color: rgba(74, 222, 128, 0.18);
+      }
+
+      .tonePill_amber {
+        color: #ffe2a5;
+        background: rgba(245, 158, 11, 0.12);
+        border-color: rgba(245, 158, 11, 0.18);
+      }
+
+      .tonePill_red {
+        color: #ffd0d7;
+        background: rgba(255, 107, 127, 0.11);
+        border-color: rgba(255, 107, 127, 0.18);
+      }
+
+      .tabGroup,
+      .typeGroup {
         display: inline-flex;
         gap: 6px;
         padding: 4px;
         border-radius: 999px;
-        border: 1px solid rgba(255, 255, 255, 0.08);
         background: rgba(255, 255, 255, 0.04);
+        border: 1px solid rgba(255, 255, 255, 0.08);
       }
 
-      .billsPage .blSegmentBtn,
-      .billsPage .blTabBtn,
-      .billsPage .blSolidBtn,
-      .billsPage .blGhostBtn,
-      .billsPage .blDangerBtn {
-        min-height: 44px;
-        padding: 0 16px;
+      .tabBtn,
+      .typeBtn,
+      .ghostBtn,
+      .solidBtn,
+      .dangerBtn {
+        min-height: 42px;
+        padding: 0 15px;
         border-radius: 14px;
-        font-size: 13px;
+        font-size: 0.84rem;
         font-weight: 800;
-        letter-spacing: 0.02em;
+        letter-spacing: 0.01em;
         cursor: pointer;
         transition:
           transform 0.18s ease,
-          border-color 0.18s ease,
           background 0.18s ease,
-          box-shadow 0.18s ease,
+          border-color 0.18s ease,
           opacity 0.18s ease;
       }
 
-      .billsPage .blSegmentBtn:hover,
-      .billsPage .blTabBtn:hover,
-      .billsPage .blSolidBtn:hover,
-      .billsPage .blGhostBtn:hover,
-      .billsPage .blDangerBtn:hover {
+      .tabBtn:hover,
+      .typeBtn:hover,
+      .ghostBtn:hover,
+      .solidBtn:hover,
+      .dangerBtn:hover {
         transform: translateY(-1px);
       }
 
-      .billsPage .blSegmentBtn,
-      .billsPage .blTabBtn,
-      .billsPage .blGhostBtn {
-        border: 1px solid rgba(255, 255, 255, 0.09);
+      .tabBtn,
+      .typeBtn,
+      .ghostBtn {
+        color: #eef4ff;
+        border: 1px solid rgba(255, 255, 255, 0.08);
         background: rgba(255, 255, 255, 0.03);
-        color: #f5f7ff;
       }
 
-      .billsPage .blSegmentBtn.active,
-      .billsPage .blTabBtn.active {
-        border-color: rgba(255, 255, 255, 0.14);
-        background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(233, 237, 246, 0.92));
+      .tabBtn.active,
+      .typeBtn.active {
         color: #08111f;
+        background: linear-gradient(180deg, rgba(255,255,255,0.98), rgba(233,237,246,0.92));
+        border-color: rgba(255, 255, 255, 0.14);
       }
 
-      .billsPage .blSolidBtn {
+      .solidBtn {
+        color: #f7f9ff;
         border: 1px solid rgba(130, 170, 255, 0.24);
         background: linear-gradient(180deg, rgba(77, 124, 255, 0.22), rgba(32, 74, 189, 0.12));
-        color: #f7f9ff;
       }
 
-      .billsPage .blDangerBtn {
-        border: 1px solid rgba(244, 114, 182, 0.22);
-        background: rgba(244, 114, 182, 0.08);
-        color: #ffd5e5;
+      .dangerBtn {
+        color: #ffd3dd;
+        border: 1px solid rgba(255, 107, 127, 0.22);
+        background: rgba(255, 107, 127, 0.08);
       }
 
-      .billsPage .blMetricGrid {
+      .metricGrid {
         display: grid;
-        grid-template-columns: repeat(4, minmax(230px, 1fr));
-        gap: 18px;
-        margin-bottom: 22px;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 14px;
       }
 
-      .billsPage .blMetric {
-        padding: 22px;
-        min-height: 166px;
+      .billStat {
+        padding: 20px;
+        min-height: 160px;
       }
 
-      .billsPage .blMetricLabel {
+      .billStatLabel {
         position: relative;
         z-index: 1;
-        font-size: 11px;
+        color: var(--bill-soft);
+        font-size: 0.72rem;
+        font-weight: 800;
+        letter-spacing: 0.16em;
         text-transform: uppercase;
-        letter-spacing: 0.18em;
-        color: var(--muted2);
       }
 
-      .billsPage .blMetricValue {
+      .billStatValue {
         position: relative;
         z-index: 1;
         margin-top: 14px;
-        font-size: clamp(30px, 3vw, 48px);
+        font-size: clamp(1.8rem, 3vw, 3rem);
         line-height: 1;
-        font-weight: 950;
         letter-spacing: -0.04em;
+        font-weight: 950;
       }
 
-      .billsPage .blMetricSub {
+      .billStatSub {
         position: relative;
         z-index: 1;
-        margin-top: 14px;
-        color: var(--muted);
-        font-size: 13px;
-        line-height: 1.5;
+        margin-top: 12px;
+        color: var(--bill-muted);
+        line-height: 1.55;
+        font-size: 0.88rem;
       }
 
-      .billsPage .blGridTop,
-      .billsPage .blGridBottom,
-      .billsPage .blManageGrid {
+      .billTone_green .billStatValue {
+        color: #bdf7cf;
+      }
+
+      .billTone_amber .billStatValue {
+        color: #ffe2a5;
+      }
+
+      .billTone_red .billStatValue {
+        color: #ffd0d7;
+      }
+
+      .overviewGridTop,
+      .overviewGridBottom,
+      .manageGrid {
         display: grid;
-        gap: 20px;
+        gap: 16px;
       }
 
-      .billsPage .blGridTop {
-        grid-template-columns: minmax(0, 1.58fr) minmax(520px, 1fr);
-        margin-bottom: 20px;
+      .overviewGridTop {
+        grid-template-columns: minmax(0, 1.35fr) minmax(380px, 0.95fr);
       }
 
-      .billsPage .blGridBottom,
-      .billsPage .blManageGrid {
-        grid-template-columns: minmax(0, 1.42fr) minmax(460px, 1fr);
+      .overviewGridBottom,
+      .manageGrid {
+        grid-template-columns: minmax(0, 1.3fr) minmax(340px, 0.9fr);
       }
 
-      .billsPage .blCard {
-        padding: 24px;
+      .billCard {
+        padding: 20px;
+        display: grid;
+        gap: 14px;
       }
 
-      .billsPage .blCardHead {
+      .billCard_compact {
+        gap: 12px;
+      }
+
+      .billCardHead {
         position: relative;
         z-index: 1;
         display: flex;
@@ -815,239 +913,273 @@ export default function BillsPage() {
         justify-content: space-between;
         gap: 14px;
         flex-wrap: wrap;
-        margin-bottom: 16px;
       }
 
-      .billsPage .blSectionTitle {
+      .billCardAction {
+        flex: 0 0 auto;
+      }
+
+      .billSectionTitle,
+      .billSectionMini {
         margin: 0;
-        font-size: 34px;
         line-height: 1;
-        font-weight: 900;
         letter-spacing: -0.03em;
-      }
-
-      .billsPage .blSectionMini {
-        margin: 0;
-        font-size: 20px;
-        line-height: 1.1;
         font-weight: 900;
       }
 
-      .billsPage .blSectionText {
-        margin-top: 8px;
-        color: var(--muted);
-        font-size: 13px;
-        line-height: 1.55;
+      .billSectionTitle {
+        font-size: 2rem;
       }
 
-      .billsPage .blTiny {
-        color: var(--muted2);
+      .billSectionMini {
+        font-size: 1.2rem;
+      }
+
+      .billSectionText {
+        margin-top: 8px;
+        color: var(--bill-muted);
+        line-height: 1.55;
+        font-size: 0.88rem;
+      }
+
+      .errorBar {
+        padding: 14px 16px;
+        border-radius: 18px;
+        border: 1px solid rgba(255, 107, 127, 0.24);
+        background: rgba(83, 24, 24, 0.72);
+        color: #ffd5d5;
+        font-weight: 700;
+      }
+
+      .fieldGrid2,
+      .fieldGrid4,
+      .metaGrid,
+      .sideStack,
+      .cardList,
+      .formStack {
+        display: grid;
+        gap: 12px;
+      }
+
+      .fieldGrid2 {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .fieldGrid4 {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+      }
+
+      .metaGrid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+
+      .sideStack,
+      .cardList,
+      .formStack {
+        grid-template-columns: 1fr;
+      }
+
+      .fieldWrap {
+        min-width: 0;
+      }
+
+      .fieldLabel {
+        color: var(--bill-soft);
         text-transform: uppercase;
         letter-spacing: 0.12em;
-        font-size: 10px;
-        font-weight: 700;
+        font-size: 0.66rem;
+        font-weight: 800;
         margin-bottom: 8px;
       }
 
-      .billsPage .blField,
-      .billsPage .blSelect,
-      .billsPage .blTextarea {
+      .field,
+      .select,
+      .textarea {
         width: 100%;
-        min-height: 50px;
+        min-height: 48px;
         border-radius: 16px;
         border: 1px solid rgba(177, 196, 255, 0.14);
-        background: rgba(8, 13, 24, 0.52) !important;
+        background: rgba(8, 13, 24, 0.54) !important;
         color: #f4f7ff !important;
-        font-size: 14px;
+        font-size: 0.92rem;
         font-weight: 600;
         padding: 0 14px;
         outline: none;
         transition: border-color 0.18s ease, box-shadow 0.18s ease;
       }
 
-      .billsPage .blTextarea {
-        min-height: 102px;
+      .textarea {
+        min-height: 108px;
         padding: 12px 14px;
         resize: vertical;
       }
 
-      .billsPage .blField::placeholder,
-      .billsPage .blTextarea::placeholder {
+      .field::placeholder,
+      .textarea::placeholder {
         color: rgba(233, 238, 255, 0.44) !important;
       }
 
-      .billsPage .blField:focus,
-      .billsPage .blSelect:focus,
-      .billsPage .blTextarea:focus {
+      .field:focus,
+      .select:focus,
+      .textarea:focus {
         border-color: rgba(121, 163, 255, 0.36);
         box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.08);
       }
 
-      .billsPage .blSelect option {
-        background: #08111f !important;
-        color: #f4f7ff !important;
+      .select option {
+        background: #08111f;
+        color: #f4f7ff;
       }
 
-      .billsPage .blQuickGrid4 {
-        display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 14px;
+      .checkRow {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        color: var(--bill-muted);
+        font-size: 0.92rem;
+        font-weight: 700;
       }
 
-      .billsPage .blQuickGrid2 {
-        display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 14px;
-      }
-
-      .billsPage .blList,
-      .billsPage .blColumnStack,
-      .billsPage .blStack {
-        display: grid;
-        gap: 14px;
-      }
-
-      .billsPage .blSplit {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 16px;
-      }
-
-      .billsPage .blBill {
+      .billItem,
+      .payoffItem {
         position: relative;
         overflow: hidden;
-        border-radius: 24px;
+        border-radius: 22px;
         border: 1px solid rgba(255, 255, 255, 0.055);
         background: linear-gradient(180deg, rgba(10, 16, 28, 0.38), rgba(5, 9, 17, 0.14));
         padding: 16px;
       }
 
-      .billsPage .blBillHead {
+      .billItemHead {
         display: flex;
-        align-items: flex-start;
         justify-content: space-between;
+        align-items: flex-start;
         gap: 12px;
         flex-wrap: wrap;
       }
 
-      .billsPage .blBillTitle {
-        font-size: 18px;
+      .billName {
+        font-size: 1.02rem;
         font-weight: 900;
-        line-height: 1.1;
+        line-height: 1.15;
       }
 
-      .billsPage .blPill {
-        display: inline-flex;
-        align-items: center;
-        min-height: 30px;
-        padding: 6px 10px;
-        border-radius: 999px;
-        font-size: 11px;
-        font-weight: 900;
-        letter-spacing: 0.04em;
+      .billNameSub {
+        margin-top: 5px;
+        color: var(--bill-muted);
+        font-size: 0.86rem;
+        line-height: 1.45;
       }
 
-      .billsPage .blProgress {
+      .miniMeta {
+        text-align: right;
+      }
+
+      .miniMetaValue {
+        font-weight: 900;
+      }
+
+      .miniMetaSub {
+        margin-top: 6px;
+        color: var(--bill-muted);
+        font-size: 0.84rem;
+      }
+
+      .billProgress {
         height: 10px;
         overflow: hidden;
         border-radius: 999px;
         background: rgba(255, 255, 255, 0.1);
       }
 
-      .billsPage .blProgressFill {
+      .billProgressFill {
         height: 100%;
         border-radius: 999px;
         transition: width 0.45s ease;
       }
 
-      .billsPage .blMetaGrid {
-        display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-        gap: 12px;
-        margin-top: 12px;
-      }
-
-      .billsPage .blPayoffCard {
-        border-radius: 22px;
-        border: 1px solid rgba(255, 255, 255, 0.055);
-        background: linear-gradient(180deg, rgba(8, 13, 24, 0.34), rgba(4, 8, 16, 0.12));
-        padding: 16px;
-      }
-
-      .billsPage .blError {
-        padding: 14px 16px;
-        margin-bottom: 18px;
-        border-radius: 22px;
-        border: 1px solid rgba(244, 114, 182, 0.26);
-        background: linear-gradient(180deg, rgba(96, 17, 44, 0.28), rgba(36, 8, 18, 0.2));
-      }
-
-      .billsPage .blEmpty {
-        border: 1px dashed rgba(255, 255, 255, 0.1);
+      .emptyState {
         border-radius: 18px;
+        border: 1px dashed rgba(255, 255, 255, 0.1);
         padding: 16px;
-        color: var(--muted);
+        color: var(--bill-muted);
         background: rgba(255, 255, 255, 0.018);
       }
 
-      .billsPage .blGood {
-        color: rgb(134 239 172);
+      .goodText {
+        color: #bdf7cf;
         font-weight: 900;
       }
 
-      .billsPage .blBad {
-        color: rgb(255 176 196);
+      .badText {
+        color: #ffd0d7;
         font-weight: 900;
       }
 
-      .billsPage .blWarn {
-        color: rgb(253 224 71);
+      .warnText {
+        color: #ffe2a5;
         font-weight: 900;
       }
 
-      @media (max-width: 1380px) {
-        .billsPage .blMetricGrid {
+      @media (max-width: 1260px) {
+        .metricGrid {
           grid-template-columns: repeat(2, minmax(0, 1fr));
         }
 
-        .billsPage .blGridTop,
-        .billsPage .blGridBottom,
-        .billsPage .blManageGrid {
+        .overviewGridTop,
+        .overviewGridBottom,
+        .manageGrid {
           grid-template-columns: 1fr;
         }
       }
 
-      @media (max-width: 980px) {
-        .billsPage .blQuickGrid4,
-        .billsPage .blQuickGrid2,
-        .billsPage .blSplit,
-        .billsPage .blMetaGrid {
+      @media (max-width: 900px) {
+        .fieldGrid2,
+        .fieldGrid4,
+        .metaGrid {
           grid-template-columns: 1fr;
         }
       }
 
-      @media (max-width: 760px) {
-        .billsPage .blShell {
-          padding: 16px 6px 34px 0;
-        }
-
-        .billsPage .blHero,
-        .billsPage .blCard,
-        .billsPage .blMetric {
+      @media (max-width: 680px) {
+        .billsHero,
+        .billCard,
+        .billStat {
           border-radius: 22px;
-          padding: 18px;
         }
 
-        .billsPage .blMetricGrid {
+        .billsHero,
+        .billCard,
+        .billStat {
+          padding: 16px;
+        }
+
+        .metricGrid {
           grid-template-columns: 1fr;
         }
 
-        .billsPage .blTitle {
-          font-size: 36px;
+        .billsTitle {
+          font-size: 2.2rem;
         }
 
-        .billsPage .blSectionTitle {
-          font-size: 26px;
+        .billSectionTitle {
+          font-size: 1.55rem;
+        }
+
+        .billCardHead {
+          flex-direction: column;
+          align-items: stretch;
+        }
+
+        .tabGroup,
+        .typeGroup {
+          width: 100%;
+          overflow-x: auto;
+        }
+
+        .tabBtn,
+        .typeBtn {
+          white-space: nowrap;
         }
       }
     `}</style>
@@ -1056,17 +1188,17 @@ export default function BillsPage() {
   if (loading) {
     return (
       <main className="billsPage">
-        {styles}
-        <div className="blShell">
-          <section className="blHero">
-            <div className="blHeroTop">
+        {pageStyles}
+        <div className="billsShell">
+          <header className="billsHero">
+            <div className="billsHeroTop">
               <div>
-                <div className="blEyebrow">DEBT + BILLS CONTROL</div>
-                <h1 className="blTitle">Bills Center</h1>
-                <div className="blSub">Loading bills…</div>
+                <div className="billEyebrow">Debt + Bills Control</div>
+                <h1 className="billsTitle">Bills Center</h1>
+                <div className="billsSub">Loading your bill pressure, debt stack, and due dates.</div>
               </div>
             </div>
-          </section>
+          </header>
         </div>
       </main>
     );
@@ -1075,17 +1207,17 @@ export default function BillsPage() {
   if (!user) {
     return (
       <main className="billsPage">
-        {styles}
-        <div className="blShell">
-          <section className="blHero">
-            <div className="blHeroTop">
+        {pageStyles}
+        <div className="billsShell">
+          <header className="billsHero">
+            <div className="billsHeroTop">
               <div>
-                <div className="blEyebrow">DEBT + BILLS CONTROL</div>
-                <h1 className="blTitle">Bills Center</h1>
-                <div className="blSub">This page needs an authenticated user.</div>
+                <div className="billEyebrow">Debt + Bills Control</div>
+                <h1 className="billsTitle">Bills Center</h1>
+                <div className="billsSub">This page needs an authenticated user.</div>
               </div>
             </div>
-          </section>
+          </header>
         </div>
       </main>
     );
@@ -1093,37 +1225,38 @@ export default function BillsPage() {
 
   return (
     <main className="billsPage">
-      {styles}
+      {pageStyles}
 
-      <div className="blShell">
-        <header className="blHero">
-          <div className="blHeroTop">
+      <div className="billsShell">
+        <header className="billsHero">
+          <div className="billsHeroTop">
             <div>
-              <div className="blEyebrow">DEBT + BILLS CONTROL</div>
-              <h1 className="blTitle">Bills Center</h1>
-              <div className="blSub">
-                Wider layout, cleaner debt visibility, and more glass transparency so the background still breathes.
+              <div className="billEyebrow">Debt + Bills Control</div>
+              <h1 className="billsTitle">Bills Center</h1>
+              <div className="billsSub">
+                Premium dark glass, stronger signal colors, wider scanning lanes, and mobile-first layout that still
+                feels like a real finance product.
               </div>
 
-              <div className="blChipRow" style={{ marginTop: 14 }}>
-                <span className="blChip">{bills.length} TOTAL</span>
-                <span className="blChip">{controllableBills.length} DEBTS</span>
-                <span className="blChip">{fixedBills.length} FIXED</span>
-                <span className="blChip">{dueSoon.length} DUE SOON</span>
+              <div className="chipRow" style={{ marginTop: 14 }}>
+                <span className="heroChip">{bills.length} total</span>
+                <span className="heroChip">{controllableBills.length} debts</span>
+                <span className="heroChip">{fixedBills.length} fixed</span>
+                <span className="heroChip">{dueSoon.length} due soon</span>
               </div>
             </div>
 
-            <div className="blSegment">
+            <div className="tabGroup">
               <button
                 type="button"
-                className={`blTabBtn ${tab === "overview" ? "active" : ""}`}
+                className={`tabBtn ${tab === "overview" ? "active" : ""}`}
                 onClick={() => setTab("overview")}
               >
                 Overview
               </button>
               <button
                 type="button"
-                className={`blTabBtn ${tab === "manage" ? "active" : ""}`}
+                className={`tabBtn ${tab === "manage" ? "active" : ""}`}
                 onClick={() => setTab("manage")}
               >
                 Manage
@@ -1132,67 +1265,48 @@ export default function BillsPage() {
           </div>
         </header>
 
-        {pageError ? (
-          <div className="blError">
-            <div style={{ fontWeight: 900, fontSize: 15 }}>Database issue</div>
-            <div className="blSectionText" style={{ marginTop: 6 }}>
-              {pageError}
-            </div>
-          </div>
-        ) : null}
+        {pageError ? <div className="errorBar">{pageError}</div> : null}
 
-        <section className="blMetricGrid">
-          <article className="blMetric">
-            <div className="blMetricLabel">Monthly Pressure</div>
-            <div className="blMetricValue">{money(monthlyPressure)}</div>
-            <div className="blMetricSub">Normalized monthly hit from bills and debt payments.</div>
-          </article>
-
-          <article className="blMetric">
-            <div className="blMetricLabel">Total Debt</div>
-            <div className="blMetricValue">{money(totalDebt)}</div>
-            <div className="blMetricSub">Active controllable balance across debt accounts.</div>
-          </article>
-
-          <article className="blMetric">
-            <div className="blMetricLabel">Due Soon</div>
-            <div className="blMetricValue">{dueSoon.length}</div>
-            <div className="blMetricSub">
-              {overdueCount > 0 ? `${overdueCount} overdue right now.` : "Nothing overdue right now."}
-            </div>
-          </article>
-
-          <article className="blMetric">
-            <div className="blMetricLabel">Highest Pressure</div>
-            <div className="blMetricValue">
-              {strongestPressure ? money(monthlyEquivalent(strongestPressure)) : "$0.00"}
-            </div>
-            <div className="blMetricSub">
-              {strongestPressure ? strongestPressure.name : "No active bills yet."}
-            </div>
-          </article>
+        <section className="metricGrid">
+          <StatCard
+            label="Monthly Pressure"
+            value={money(monthlyPressure)}
+            sub="Normalized monthly hit from fixed bills and debt payments."
+            tone="neutral"
+          />
+          <StatCard
+            label="Total Debt"
+            value={money(totalDebt)}
+            sub="Active controllable balance across your debt accounts."
+            tone="red"
+          />
+          <StatCard
+            label="Due Soon"
+            value={dueSoon.length}
+            sub={overdueCount > 0 ? `${overdueCount} overdue right now.` : "Nothing overdue right now."}
+            tone={overdueCount > 0 ? "red" : "amber"}
+          />
+          <StatCard
+            label="Highest Pressure"
+            value={strongestPressure ? money(monthlyEquivalent(strongestPressure)) : "$0.00"}
+            sub={strongestPressure ? strongestPressure.name : "No active bills yet."}
+            tone="green"
+          />
         </section>
 
         {tab === "overview" ? (
           <>
-            <section className="blGridTop">
-              <article className="blCard">
-                <div className="blCardHead">
-                  <div>
-                    <h2 className="blSectionTitle">Pressure Board</h2>
-                    <div className="blSectionText">
-                      Clean view of what is due first and what is hitting the hardest.
-                    </div>
-                  </div>
-                  <span className="blChip">ACTIVE FIRST</span>
-                </div>
-
-                <div className="blList">
-                  {bills.filter((b) => b.active).length === 0 ? (
-                    <div className="blEmpty">No active bills yet.</div>
+            <section className="overviewGridTop">
+              <SectionCard
+                title="Pressure Board"
+                text="See what is due first and what is hitting the hardest."
+                action={<span className="heroChip">Active first</span>}
+              >
+                <div className="cardList">
+                  {!activeBills.length ? (
+                    <div className="emptyState">No active bills yet.</div>
                   ) : (
-                    [...bills]
-                      .filter((b) => b.active)
+                    [...activeBills]
                       .sort((a, b) => {
                         const ad = daysUntil(a.dueDate);
                         const bd = daysUntil(b.dueDate);
@@ -1204,80 +1318,43 @@ export default function BillsPage() {
                       .slice(0, 8)
                       .map((bill) => {
                         const due = daysUntil(bill.dueDate);
-                        const pressure =
-                          monthlyPressure > 0 ? (monthlyEquivalent(bill) / monthlyPressure) * 100 : 0;
                         const tone = dueTone(due);
+                        const pressure = monthlyPressure > 0 ? (monthlyEquivalent(bill) / monthlyPressure) * 100 : 0;
 
                         return (
-                          <div key={bill.id} className="blBill">
-                            <div className="blBillHead">
+                          <div key={bill.id} className="billItem">
+                            <div className="billItemHead">
                               <div>
-                                <div className="blBillTitle">{bill.name}</div>
-                                <div className="blSectionText">
+                                <div className="billName">{bill.name}</div>
+                                <div className="billNameSub">
                                   {bill.type === "controllable" ? "Debt / Controllable" : "Fixed Bill"} •{" "}
                                   {bill.frequency || "monthly"} • Due {bill.dueDate ? shortDate(bill.dueDate) : "—"}
                                 </div>
                               </div>
 
-                              <span
-                                className="blPill"
-                                style={{
-                                  color:
-                                    tone === "red"
-                                      ? "#ffd6df"
-                                      : tone === "amber"
-                                        ? "#ffe8b4"
-                                        : tone === "green"
-                                          ? "#cbffe1"
-                                          : "#d8e1ff",
-                                  background:
-                                    tone === "red"
-                                      ? "rgba(255,107,127,.12)"
-                                      : tone === "amber"
-                                        ? "rgba(245,158,11,.12)"
-                                        : tone === "green"
-                                          ? "rgba(74,222,128,.12)"
-                                          : "rgba(148,163,184,.12)",
-                                  border:
-                                    tone === "red"
-                                      ? "1px solid rgba(255,107,127,.22)"
-                                      : tone === "amber"
-                                        ? "1px solid rgba(245,158,11,.24)"
-                                        : tone === "green"
-                                          ? "1px solid rgba(74,222,128,.24)"
-                                          : "1px solid rgba(148,163,184,.22)",
-                                }}
-                              >
-                                {dueLabel(due)}
-                              </span>
+                              <TonePill tone={tone}>{dueLabel(due)}</TonePill>
                             </div>
 
                             <div style={{ marginTop: 12 }}>
-                              <ProgressBar
-                                value={pressure}
-                                color={tone === "red" ? "#ff6b7f" : tone === "amber" ? "#f59e0b" : "#4ade80"}
-                              />
+                              <ProgressBar value={pressure} tone={tone} />
                             </div>
 
-                            <div className="blMetaGrid">
+                            <div className="metaGrid" style={{ marginTop: 12 }}>
                               <div>
-                                <div className="blTiny">Monthly Hit</div>
-                                <div style={{ fontWeight: 900 }}>{money(monthlyEquivalent(bill))}</div>
+                                <div className="fieldLabel">Monthly Hit</div>
+                                <div className="miniMetaValue">{money(monthlyEquivalent(bill))}</div>
                               </div>
-                              {bill.type === "controllable" ? (
-                                <div>
-                                  <div className="blTiny">Balance</div>
-                                  <div style={{ fontWeight: 900 }}>{money(bill.balance)}</div>
-                                </div>
-                              ) : (
-                                <div>
-                                  <div className="blTiny">Amount</div>
-                                  <div style={{ fontWeight: 900 }}>{money(bill.amount)}</div>
-                                </div>
-                              )}
+
                               <div>
-                                <div className="blTiny">Last Paid</div>
-                                <div style={{ fontWeight: 900 }}>
+                                <div className="fieldLabel">{bill.type === "controllable" ? "Balance" : "Amount"}</div>
+                                <div className="miniMetaValue">
+                                  {bill.type === "controllable" ? money(bill.balance) : money(bill.amount)}
+                                </div>
+                              </div>
+
+                              <div>
+                                <div className="fieldLabel">Last Paid</div>
+                                <div className="miniMetaValue">
                                   {bill.lastPaidDate ? shortDate(bill.lastPaidDate) : "—"}
                                 </div>
                               </div>
@@ -1287,47 +1364,42 @@ export default function BillsPage() {
                       })
                   )}
                 </div>
-              </article>
+              </SectionCard>
 
-              <article className="blCard">
-                <div className="blCardHead">
-                  <div>
-                    <h2 className="blSectionTitle">Quick Add</h2>
-                    <div className="blSectionText">
-                      Add a fixed bill or a debt account without the page feeling cramped.
-                    </div>
-                  </div>
-
-                  <div className="blSegment">
+              <SectionCard
+                title="Quick Add"
+                text="Add a fixed bill or debt account without making the page feel cramped."
+                action={
+                  <div className="typeGroup">
                     {BILL_TYPE_OPTIONS.map((option) => (
                       <button
                         key={option.value}
                         type="button"
-                        className={`blSegmentBtn ${formType === option.value ? "active" : ""}`}
+                        className={`typeBtn ${formType === option.value ? "active" : ""}`}
                         onClick={() => setFormType(option.value)}
                       >
                         {option.label}
                       </button>
                     ))}
                   </div>
-                </div>
-
-                <div className="blStack">
-                  <div className="blQuickGrid2">
-                    <div>
-                      <div className="blTiny">Name</div>
+                }
+              >
+                <div className="formStack">
+                  <div className="fieldGrid2">
+                    <div className="fieldWrap">
+                      <div className="fieldLabel">Name</div>
                       <input
-                        className="blField"
+                        className="field"
                         value={formName}
                         onChange={(e) => setFormName(e.target.value)}
                         placeholder="Chase Card, Rent, Insurance..."
                       />
                     </div>
 
-                    <div>
-                      <div className="blTiny">Category</div>
+                    <div className="fieldWrap">
+                      <div className="fieldLabel">Category</div>
                       <input
-                        className="blField"
+                        className="field"
                         value={formCategory}
                         onChange={(e) => setFormCategory(e.target.value)}
                         placeholder="Housing, Credit Card, Utilities..."
@@ -1335,11 +1407,11 @@ export default function BillsPage() {
                     </div>
                   </div>
 
-                  <div className="blQuickGrid4">
-                    <div>
-                      <div className="blTiny">{formType === "controllable" ? "Current Pay" : "Amount"}</div>
+                  <div className="fieldGrid4">
+                    <div className="fieldWrap">
+                      <div className="fieldLabel">{formType === "controllable" ? "Current Pay" : "Amount"}</div>
                       <input
-                        className="blField"
+                        className="field"
                         inputMode="decimal"
                         value={formAmount}
                         onChange={(e) => setFormAmount(e.target.value)}
@@ -1347,10 +1419,10 @@ export default function BillsPage() {
                       />
                     </div>
 
-                    <div>
-                      <div className="blTiny">Frequency</div>
+                    <div className="fieldWrap">
+                      <div className="fieldLabel">Frequency</div>
                       <select
-                        className="blSelect"
+                        className="select"
                         value={formFrequency}
                         onChange={(e) => setFormFrequency(e.target.value)}
                       >
@@ -1362,27 +1434,27 @@ export default function BillsPage() {
                       </select>
                     </div>
 
-                    <div>
-                      <div className="blTiny">Due Date</div>
+                    <div className="fieldWrap">
+                      <div className="fieldLabel">Due Date</div>
                       <input
-                        className="blField"
+                        className="field"
                         type="date"
                         value={formDueDate}
                         onChange={(e) => setFormDueDate(e.target.value)}
                       />
                     </div>
 
-                    <div>
-                      <div className="blTiny">Account</div>
+                    <div className="fieldWrap">
+                      <div className="fieldLabel">Account</div>
                       <select
-                        className="blSelect"
+                        className="select"
                         value={formAccountId}
                         onChange={(e) => setFormAccountId(e.target.value)}
                       >
                         <option value="">No account</option>
-                        {accounts.map((acct) => (
-                          <option key={acct.id} value={acct.id}>
-                            {acct.name}
+                        {accounts.map((account) => (
+                          <option key={account.id} value={account.id}>
+                            {account.name}
                           </option>
                         ))}
                       </select>
@@ -1390,212 +1462,154 @@ export default function BillsPage() {
                   </div>
 
                   {formType === "controllable" ? (
-                    <div className="blQuickGrid4">
-                      <div>
-                        <div className="blTiny">Balance</div>
-                        <input
-                          className="blField"
-                          inputMode="decimal"
-                          value={formBalance}
-                          onChange={(e) => setFormBalance(e.target.value)}
-                          placeholder="0.00"
-                        />
+                    <>
+                      <div className="fieldGrid4">
+                        <div className="fieldWrap">
+                          <div className="fieldLabel">Balance</div>
+                          <input
+                            className="field"
+                            inputMode="decimal"
+                            value={formBalance}
+                            onChange={(e) => setFormBalance(e.target.value)}
+                            placeholder="0.00"
+                          />
+                        </div>
+
+                        <div className="fieldWrap">
+                          <div className="fieldLabel">APR %</div>
+                          <input
+                            className="field"
+                            inputMode="decimal"
+                            value={formAprPct}
+                            onChange={(e) => setFormAprPct(e.target.value)}
+                            placeholder="6.25"
+                          />
+                        </div>
+
+                        <div className="fieldWrap">
+                          <div className="fieldLabel">Min Pay</div>
+                          <input
+                            className="field"
+                            inputMode="decimal"
+                            value={formMinPay}
+                            onChange={(e) => setFormMinPay(e.target.value)}
+                            placeholder="0.00"
+                          />
+                        </div>
+
+                        <div className="fieldWrap">
+                          <div className="fieldLabel">Extra Pay</div>
+                          <input
+                            className="field"
+                            inputMode="decimal"
+                            value={formExtraPay}
+                            onChange={(e) => setFormExtraPay(e.target.value)}
+                            placeholder="0.00"
+                          />
+                        </div>
                       </div>
 
-                      <div>
-                        <div className="blTiny">APR %</div>
+                      <label className="checkRow">
                         <input
-                          className="blField"
-                          inputMode="decimal"
-                          value={formAprPct}
-                          onChange={(e) => setFormAprPct(e.target.value)}
-                          placeholder="6.25"
+                          type="checkbox"
+                          checked={formAutopay}
+                          onChange={(e) => setFormAutopay(e.target.checked)}
                         />
-                      </div>
-
-                      <div>
-                        <div className="blTiny">Min Pay</div>
-                        <input
-                          className="blField"
-                          inputMode="decimal"
-                          value={formMinPay}
-                          onChange={(e) => setFormMinPay(e.target.value)}
-                          placeholder="0.00"
-                        />
-                      </div>
-
-                      <div>
-                        <div className="blTiny">Extra Pay</div>
-                        <input
-                          className="blField"
-                          inputMode="decimal"
-                          value={formExtraPay}
-                          onChange={(e) => setFormExtraPay(e.target.value)}
-                          placeholder="0.00"
-                        />
-                      </div>
-                    </div>
+                        Autopay enabled
+                      </label>
+                    </>
                   ) : null}
 
-                  {formType === "controllable" ? (
-                    <label
-                      style={{
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: 10,
-                        fontSize: 14,
-                        color: "var(--muted)",
-                        fontWeight: 700,
-                      }}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={formAutopay}
-                        onChange={(e) => setFormAutopay(e.target.checked)}
-                      />
-                      Autopay enabled
-                    </label>
-                  ) : null}
-
-                  <div>
-                    <div className="blTiny">Notes</div>
+                  <div className="fieldWrap">
+                    <div className="fieldLabel">Notes</div>
                     <textarea
-                      className="blTextarea"
+                      className="textarea"
                       value={formNotes}
                       onChange={(e) => setFormNotes(e.target.value)}
                       placeholder="Optional notes"
                     />
                   </div>
 
-                  <div className="blActionRow">
-                    <button className="blSolidBtn" type="button" onClick={addBill} disabled={saving}>
+                  <div className="buttonRow">
+                    <button className="solidBtn" type="button" onClick={addBill} disabled={saving}>
                       {saving ? "Saving..." : "Save Bill"}
                     </button>
-                    <button className="blGhostBtn" type="button" onClick={resetForm} disabled={saving}>
+                    <button className="ghostBtn" type="button" onClick={resetForm} disabled={saving}>
                       Reset
                     </button>
                   </div>
                 </div>
-              </article>
+              </SectionCard>
             </section>
 
-            <section className="blGridBottom">
-              <article className="blCard">
-                <div className="blCardHead">
-                  <div>
-                    <h2 className="blSectionTitle">Bills Board</h2>
-                    <div className="blSectionText">
-                      Your full bill mix, spread out and easier to scan.
-                    </div>
-                  </div>
-
-                  <div className="blSegment">
+            <section className="overviewGridBottom">
+              <SectionCard
+                title="Bills Board"
+                text="Your full bill mix with cleaner lanes and stronger signal colors."
+                action={
+                  <div className="typeGroup">
                     <button
                       type="button"
-                      className={`blSegmentBtn ${filter === "all" ? "active" : ""}`}
+                      className={`typeBtn ${filter === "all" ? "active" : ""}`}
                       onClick={() => setFilter("all")}
                     >
                       All
                     </button>
                     <button
                       type="button"
-                      className={`blSegmentBtn ${filter === "controllable" ? "active" : ""}`}
+                      className={`typeBtn ${filter === "controllable" ? "active" : ""}`}
                       onClick={() => setFilter("controllable")}
                     >
                       Debt
                     </button>
                     <button
                       type="button"
-                      className={`blSegmentBtn ${filter === "noncontrollable" ? "active" : ""}`}
+                      className={`typeBtn ${filter === "noncontrollable" ? "active" : ""}`}
                       onClick={() => setFilter("noncontrollable")}
                     >
                       Fixed
                     </button>
                     <button
                       type="button"
-                      className={`blSegmentBtn ${filter === "due" ? "active" : ""}`}
+                      className={`typeBtn ${filter === "due" ? "active" : ""}`}
                       onClick={() => setFilter("due")}
                     >
                       Due Soon
                     </button>
                   </div>
-                </div>
-
-                <div className="blList">
-                  {filteredBills.length === 0 ? (
-                    <div className="blEmpty">No bills match this filter.</div>
+                }
+              >
+                <div className="cardList">
+                  {!filteredBills.length ? (
+                    <div className="emptyState">No bills match this filter.</div>
                   ) : (
                     filteredBills.slice(0, 10).map((bill) => {
                       const due = daysUntil(bill.dueDate);
                       const tone = dueTone(due);
 
                       return (
-                        <div key={bill.id} className="blBill">
-                          <div className="blBillHead">
+                        <div key={bill.id} className="billItem">
+                          <div className="billItemHead">
                             <div>
-                              <div className="blBillTitle">{bill.name}</div>
-                              <div className="blSectionText">
+                              <div className="billName">{bill.name}</div>
+                              <div className="billNameSub">
                                 {bill.type === "controllable" ? "Debt / Controllable" : "Fixed Bill"} •{" "}
                                 {bill.frequency || "monthly"} • {bill.category || "No category"}
                               </div>
                             </div>
 
-                            <div className="blActionRow">
-                              <span
-                                className="blPill"
-                                style={{
-                                  color:
-                                    tone === "red"
-                                      ? "#ffd6df"
-                                      : tone === "amber"
-                                        ? "#ffe8b4"
-                                        : tone === "green"
-                                          ? "#cbffe1"
-                                          : "#d8e1ff",
-                                  background:
-                                    tone === "red"
-                                      ? "rgba(255,107,127,.12)"
-                                      : tone === "amber"
-                                        ? "rgba(245,158,11,.12)"
-                                        : tone === "green"
-                                          ? "rgba(74,222,128,.12)"
-                                          : "rgba(148,163,184,.12)",
-                                  border:
-                                    tone === "red"
-                                      ? "1px solid rgba(255,107,127,.22)"
-                                      : tone === "amber"
-                                        ? "1px solid rgba(245,158,11,.24)"
-                                        : tone === "green"
-                                          ? "1px solid rgba(74,222,128,.24)"
-                                          : "1px solid rgba(148,163,184,.22)",
-                                }}
-                              >
-                                {dueLabel(due)}
-                              </span>
-
-                              <span
-                                className="blPill"
-                                style={{
-                                  color: bill.active ? "#cbffe1" : "#d8e1ff",
-                                  background: bill.active
-                                    ? "rgba(74,222,128,.12)"
-                                    : "rgba(148,163,184,.12)",
-                                  border: bill.active
-                                    ? "1px solid rgba(74,222,128,.24)"
-                                    : "1px solid rgba(148,163,184,.22)",
-                                }}
-                              >
-                                {bill.active ? "ACTIVE" : "PAUSED"}
-                              </span>
+                            <div className="billActionRow">
+                              <TonePill tone={tone}>{dueLabel(due)}</TonePill>
+                              <TonePill tone={bill.active ? "green" : "neutral"}>
+                                {bill.active ? "Active" : "Paused"}
+                              </TonePill>
                             </div>
                           </div>
 
-                          <div className="blMetaGrid">
+                          <div className="metaGrid" style={{ marginTop: 12 }}>
                             <div>
-                              <div className="blTiny">
-                                {bill.type === "controllable" ? "Monthly Pay" : "Amount"}
-                              </div>
-                              <div style={{ fontWeight: 900 }}>
+                              <div className="fieldLabel">{bill.type === "controllable" ? "Monthly Pay" : "Amount"}</div>
+                              <div className="miniMetaValue">
                                 {money(
                                   bill.type === "controllable"
                                     ? (Number(bill.minPay) || 0) + (Number(bill.extraPay) || 0) || bill.amount
@@ -1605,15 +1619,13 @@ export default function BillsPage() {
                             </div>
 
                             <div>
-                              <div className="blTiny">Monthly Pressure</div>
-                              <div style={{ fontWeight: 900 }}>{money(monthlyEquivalent(bill))}</div>
+                              <div className="fieldLabel">Monthly Pressure</div>
+                              <div className="miniMetaValue">{money(monthlyEquivalent(bill))}</div>
                             </div>
 
                             <div>
-                              <div className="blTiny">
-                                {bill.type === "controllable" ? "Balance" : "Last Paid"}
-                              </div>
-                              <div style={{ fontWeight: 900 }}>
+                              <div className="fieldLabel">{bill.type === "controllable" ? "Balance" : "Last Paid"}</div>
+                              <div className="miniMetaValue">
                                 {bill.type === "controllable"
                                   ? money(bill.balance)
                                   : bill.lastPaidDate
@@ -1623,106 +1635,85 @@ export default function BillsPage() {
                             </div>
                           </div>
 
-                          {bill.notes ? (
-                            <div className="blSectionText" style={{ marginTop: 12 }}>
-                              {bill.notes}
-                            </div>
-                          ) : null}
+                          {bill.notes ? <div className="billSectionText">{bill.notes}</div> : null}
                         </div>
                       );
                     })
                   )}
                 </div>
-              </article>
+              </SectionCard>
 
-              <div className="blColumnStack">
-                <article className="blCard">
-                  <div className="blCardHead">
-                    <div>
-                      <h2 className="blSectionMini">Payoff Radar</h2>
-                      <div className="blSectionText">Quick payoff pressure view for controllable balances.</div>
-                    </div>
-                  </div>
-
-                  <div className="blList">
-                    {payoffRows.length === 0 ? (
-                      <div className="blEmpty">No controllable debt added yet.</div>
+              <div className="sideStack">
+                <SectionCard
+                  title="Payoff Radar"
+                  text="Quick payoff pressure view for controllable balances."
+                  compact
+                >
+                  <div className="cardList">
+                    {!payoffRows.length ? (
+                      <div className="emptyState">No controllable debt added yet.</div>
                     ) : (
-                      payoffRows.slice(0, 6).map((bill) => {
-                        const progress =
-                          bill.balance > 0 && bill.monthlyPay > 0
-                            ? clamp((bill.monthlyPay / bill.balance) * 100 * 12, 0, 100)
-                            : 0;
-
-                        return (
-                          <div key={bill.id} className="blPayoffCard">
-                            <div className="blBillHead">
-                              <div>
-                                <div className="blBillTitle">{bill.name}</div>
-                                <div className="blSectionText">
-                                  {money(bill.balance)} at {bill.aprPct || 0}% APR
-                                </div>
-                              </div>
-
-                              <div style={{ textAlign: "right" }}>
-                                <div className={bill.payoff.impossible ? "blBad" : "blGood"}>
-                                  {bill.payoff.impossible ? "No payoff" : formatMonths(bill.payoff.months)}
-                                </div>
-                                <div className="blSectionText" style={{ marginTop: 6 }}>
-                                  {money(bill.monthlyPay)}/mo
-                                </div>
+                      payoffRows.slice(0, 6).map((bill) => (
+                        <div key={bill.id} className="payoffItem">
+                          <div className="billItemHead">
+                            <div>
+                              <div className="billName">{bill.name}</div>
+                              <div className="billNameSub">
+                                {money(bill.balance)} at {bill.aprPct || 0}% APR
                               </div>
                             </div>
 
-                            <div style={{ marginTop: 12 }}>
-                              <ProgressBar value={progress} color={bill.payoff.impossible ? "#ff6b7f" : "#4ade80"} />
-                            </div>
-
-                            <div className="blMetaGrid">
-                              <div>
-                                <div className="blTiny">Interest Cost</div>
-                                <div style={{ fontWeight: 900 }}>
-                                  {bill.payoff.impossible ? "—" : money(bill.payoff.totalInterest)}
-                                </div>
+                            <div className="miniMeta">
+                              <div className={bill.payoff.impossible ? "badText" : "goodText"}>
+                                {bill.payoff.impossible ? "No payoff" : formatMonths(bill.payoff.months)}
                               </div>
-                              <div>
-                                <div className="blTiny">Payoff Date</div>
-                                <div style={{ fontWeight: 900 }}>
-                                  {bill.payoff.impossible || !bill.payoff.payoffDate
-                                    ? "—"
-                                    : shortDate(bill.payoff.payoffDate)}
-                                </div>
-                              </div>
-                              <div>
-                                <div className="blTiny">Autopay</div>
-                                <div style={{ fontWeight: 900 }}>{bill.autopay ? "On" : "Off"}</div>
-                              </div>
+                              <div className="miniMetaSub">{money(bill.monthlyPay)}/mo</div>
                             </div>
                           </div>
-                        );
-                      })
+
+                          <div style={{ marginTop: 12 }}>
+                            <ProgressBar value={bill.progress} tone={bill.payoff.impossible ? "red" : "green"} />
+                          </div>
+
+                          <div className="metaGrid" style={{ marginTop: 12 }}>
+                            <div>
+                              <div className="fieldLabel">Interest Cost</div>
+                              <div className="miniMetaValue">
+                                {bill.payoff.impossible ? "—" : money(bill.payoff.totalInterest)}
+                              </div>
+                            </div>
+
+                            <div>
+                              <div className="fieldLabel">Payoff Date</div>
+                              <div className="miniMetaValue">
+                                {bill.payoff.impossible || !bill.payoff.payoffDate
+                                  ? "—"
+                                  : shortDate(bill.payoff.payoffDate)}
+                              </div>
+                            </div>
+
+                            <div>
+                              <div className="fieldLabel">Autopay</div>
+                              <div className="miniMetaValue">{bill.autopay ? "On" : "Off"}</div>
+                            </div>
+                          </div>
+                        </div>
+                      ))
                     )}
                   </div>
-                </article>
+                </SectionCard>
 
-                <article className="blCard">
-                  <div className="blCardHead">
-                    <div>
-                      <h2 className="blSectionMini">Next Moves</h2>
-                      <div className="blSectionText">Fast actions for staying on top of payments.</div>
-                    </div>
-                  </div>
-
-                  <div className="blList">
-                    {dueSoon.length === 0 ? (
-                      <div className="blEmpty">Nothing due in the next 7 days.</div>
+                <SectionCard title="Next Moves" text="Fast actions for staying on top of payments." compact>
+                  <div className="cardList">
+                    {!dueSoon.length ? (
+                      <div className="emptyState">Nothing due in the next 7 days.</div>
                     ) : (
                       dueSoon.slice(0, 6).map((bill) => (
-                        <div key={bill.id} className="blPayoffCard">
-                          <div className="blBillHead">
+                        <div key={bill.id} className="payoffItem">
+                          <div className="billItemHead">
                             <div>
-                              <div className="blBillTitle">{bill.name}</div>
-                              <div className="blSectionText">
+                              <div className="billName">{bill.name}</div>
+                              <div className="billNameSub">
                                 Due {bill.dueDate ? shortDate(bill.dueDate) : "—"} •{" "}
                                 {money(
                                   bill.type === "controllable"
@@ -1732,16 +1723,16 @@ export default function BillsPage() {
                               </div>
                             </div>
 
-                            <span className={daysUntil(bill.dueDate) <= 3 ? "blBad" : "blWarn"}>
+                            <span className={daysUntil(bill.dueDate) <= 3 ? "badText" : "warnText"}>
                               {dueLabel(daysUntil(bill.dueDate))}
                             </span>
                           </div>
 
-                          <div className="blActionRow" style={{ marginTop: 12 }}>
-                            <button className="blGhostBtn" type="button" onClick={() => toggleActive(bill)}>
+                          <div className="buttonRow" style={{ marginTop: 12 }}>
+                            <button className="ghostBtn" type="button" onClick={() => toggleActive(bill)}>
                               {bill.active ? "Pause" : "Activate"}
                             </button>
-                            <button className="blSolidBtn" type="button" onClick={() => markPaidToday(bill)}>
+                            <button className="solidBtn" type="button" onClick={() => markPaidToday(bill)}>
                               Mark Paid Today
                             </button>
                           </div>
@@ -1749,82 +1740,80 @@ export default function BillsPage() {
                       ))
                     )}
                   </div>
-                </article>
+                </SectionCard>
               </div>
             </section>
           </>
         ) : (
-          <section className="blManageGrid">
-            <article className="blCard">
-              <div className="blCardHead">
-                <div>
-                  <h2 className="blSectionTitle">Search and Control</h2>
-                  <div className="blSectionText">Filter, pause, mark paid, or delete from one place.</div>
+          <section className="manageGrid">
+            <SectionCard title="Search and Control" text="Filter, pause, mark paid, or delete from one place.">
+              <div className="fieldGrid2">
+                <div className="fieldWrap">
+                  <div className="fieldLabel">Search</div>
+                  <input
+                    className="field"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder="Search bills, debt, notes, category..."
+                  />
+                </div>
+
+                <div className="fieldWrap">
+                  <div className="fieldLabel">Filter</div>
+                  <select className="select" value={filter} onChange={(e) => setFilter(e.target.value)}>
+                    <option value="all">All bills</option>
+                    <option value="active">Active only</option>
+                    <option value="controllable">Debt only</option>
+                    <option value="noncontrollable">Fixed only</option>
+                    <option value="due">Due in 7 days</option>
+                  </select>
                 </div>
               </div>
 
-              <div className="blQuickGrid2" style={{ marginBottom: 16 }}>
-                <input
-                  className="blField"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Search bills, debt, notes, category..."
-                />
-
-                <select className="blSelect" value={filter} onChange={(e) => setFilter(e.target.value)}>
-                  <option value="all">All bills</option>
-                  <option value="active">Active only</option>
-                  <option value="controllable">Debt only</option>
-                  <option value="noncontrollable">Fixed only</option>
-                  <option value="due">Due in 7 days</option>
-                </select>
-              </div>
-
-              <div className="blList">
-                {filteredBills.length === 0 ? (
-                  <div className="blEmpty">No bills match this filter.</div>
+              <div className="cardList">
+                {!filteredBills.length ? (
+                  <div className="emptyState">No bills match this filter.</div>
                 ) : (
                   filteredBills.map((bill) => {
                     const due = daysUntil(bill.dueDate);
+                    const dueToneValue = dueTone(due);
 
                     return (
-                      <div key={bill.id} className="blBill">
-                        <div className="blBillHead">
+                      <div key={bill.id} className="billItem">
+                        <div className="billItemHead">
                           <div>
-                            <div className="blBillTitle">{bill.name}</div>
-                            <div className="blSectionText">
+                            <div className="billName">{bill.name}</div>
+                            <div className="billNameSub">
                               {bill.type === "controllable" ? "Debt / Controllable" : "Fixed Bill"} •{" "}
                               {bill.frequency} • {bill.category || "No category"}
                             </div>
-                            {bill.notes ? (
-                              <div className="blSectionText" style={{ marginTop: 6 }}>
-                                {bill.notes}
-                              </div>
-                            ) : null}
+                            {bill.notes ? <div className="billSectionText">{bill.notes}</div> : null}
                           </div>
 
-                          <div style={{ textAlign: "right" }}>
-                            <div style={{ fontWeight: 900 }}>
+                          <div className="miniMeta">
+                            <div className="miniMetaValue">
                               {money(
                                 bill.type === "controllable"
                                   ? (Number(bill.minPay) || 0) + (Number(bill.extraPay) || 0) || bill.amount
                                   : bill.amount
                               )}
                             </div>
-                            <div className="blSectionText" style={{ marginTop: 6 }}>
-                              {dueLabel(due)}
-                            </div>
+                            <div className="miniMetaSub">{dueLabel(due)}</div>
                           </div>
                         </div>
 
-                        <div className="blActionRow" style={{ marginTop: 12 }}>
-                          <button className="blGhostBtn" type="button" onClick={() => toggleActive(bill)}>
+                        <div className="buttonRow" style={{ marginTop: 12 }}>
+                          <TonePill tone={dueToneValue}>{dueLabel(due)}</TonePill>
+                          <TonePill tone={bill.active ? "green" : "neutral"}>
+                            {bill.active ? "Active" : "Paused"}
+                          </TonePill>
+                          <button className="ghostBtn" type="button" onClick={() => toggleActive(bill)}>
                             {bill.active ? "Pause" : "Activate"}
                           </button>
-                          <button className="blSolidBtn" type="button" onClick={() => markPaidToday(bill)}>
+                          <button className="solidBtn" type="button" onClick={() => markPaidToday(bill)}>
                             Mark Paid
                           </button>
-                          <button className="blDangerBtn" type="button" onClick={() => deleteBill(bill.id)}>
+                          <button className="dangerBtn" type="button" onClick={() => deleteBill(bill.id)}>
                             Delete
                           </button>
                         </div>
@@ -1833,32 +1822,25 @@ export default function BillsPage() {
                   })
                 )}
               </div>
-            </article>
+            </SectionCard>
 
-            <div className="blColumnStack">
-              <article className="blCard">
-                <div className="blCardHead">
-                  <div>
-                    <h2 className="blSectionMini">Debt Stack</h2>
-                    <div className="blSectionText">Fast read on your controllable balances.</div>
-                  </div>
-                </div>
-
-                <div className="blList">
-                  {payoffRows.length === 0 ? (
-                    <div className="blEmpty">No controllable debt added yet.</div>
+            <div className="sideStack">
+              <SectionCard title="Debt Stack" text="Fast read on your controllable balances." compact>
+                <div className="cardList">
+                  {!payoffRows.length ? (
+                    <div className="emptyState">No controllable debt added yet.</div>
                   ) : (
                     payoffRows.map((bill) => (
-                      <div key={bill.id} className="blPayoffCard">
-                        <div className="blBillHead">
+                      <div key={bill.id} className="payoffItem">
+                        <div className="billItemHead">
                           <div>
-                            <div className="blBillTitle">{bill.name}</div>
-                            <div className="blSectionText">
+                            <div className="billName">{bill.name}</div>
+                            <div className="billNameSub">
                               Balance {money(bill.balance)} • APR {bill.aprPct || 0}%
                             </div>
                           </div>
 
-                          <div className={bill.payoff.impossible ? "blBad" : "blGood"}>
+                          <div className={bill.payoff.impossible ? "badText" : "goodText"}>
                             {bill.payoff.impossible ? "No payoff" : formatMonths(bill.payoff.months)}
                           </div>
                         </div>
@@ -1866,37 +1848,30 @@ export default function BillsPage() {
                     ))
                   )}
                 </div>
-              </article>
+              </SectionCard>
 
-              <article className="blCard">
-                <div className="blCardHead">
-                  <div>
-                    <h2 className="blSectionMini">Fixed Bills</h2>
-                    <div className="blSectionText">Recurring bills outside the debt stack.</div>
-                  </div>
-                </div>
-
-                <div className="blList">
-                  {fixedBills.length === 0 ? (
-                    <div className="blEmpty">No fixed bills added yet.</div>
+              <SectionCard title="Fixed Bills" text="Recurring bills outside the debt stack." compact>
+                <div className="cardList">
+                  {!fixedBills.length ? (
+                    <div className="emptyState">No fixed bills added yet.</div>
                   ) : (
                     fixedBills.map((bill) => (
-                      <div key={bill.id} className="blPayoffCard">
-                        <div className="blBillHead">
+                      <div key={bill.id} className="payoffItem">
+                        <div className="billItemHead">
                           <div>
-                            <div className="blBillTitle">{bill.name}</div>
-                            <div className="blSectionText">
+                            <div className="billName">{bill.name}</div>
+                            <div className="billNameSub">
                               {money(bill.amount)} • {bill.frequency}
                             </div>
                           </div>
 
-                          <div style={{ fontWeight: 900 }}>{money(monthlyEquivalent(bill))}/mo</div>
+                          <div className="miniMetaValue">{money(monthlyEquivalent(bill))}/mo</div>
                         </div>
                       </div>
                     ))
                   )}
                 </div>
-              </article>
+              </SectionCard>
             </div>
           </section>
         )}
