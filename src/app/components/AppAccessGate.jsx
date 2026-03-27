@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { Loader2, ShieldAlert } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 
@@ -17,7 +17,6 @@ function isPublicPath(pathname = "") {
 
 export default function AppAccessGate({ children }) {
   const pathname = usePathname() || "/";
-  const searchParams = useSearchParams();
   const router = useRouter();
 
   const publicRoute = useMemo(() => isPublicPath(pathname), [pathname]);
@@ -26,12 +25,19 @@ export default function AppAccessGate({ children }) {
   const [disabledMessage, setDisabledMessage] = useState(false);
 
   useEffect(() => {
-    setDisabledMessage(
-      publicRoute &&
-        pathname === "/login" &&
-        searchParams?.get("disabled") === "1"
-    );
-  }, [publicRoute, pathname, searchParams]);
+    if (!publicRoute || pathname !== "/login") {
+      setDisabledMessage(false);
+      return;
+    }
+
+    if (typeof window === "undefined") {
+      setDisabledMessage(false);
+      return;
+    }
+
+    const params = new URLSearchParams(window.location.search);
+    setDisabledMessage(params.get("disabled") === "1");
+  }, [publicRoute, pathname]);
 
   useEffect(() => {
     let alive = true;
@@ -131,7 +137,7 @@ export default function AppAccessGate({ children }) {
       alive = false;
       authListener?.data?.subscription?.unsubscribe?.();
     };
-  }, [publicRoute, pathname, router]);
+  }, [publicRoute, router]);
 
   if (publicRoute) {
     return (
