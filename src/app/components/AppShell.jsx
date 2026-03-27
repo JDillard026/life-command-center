@@ -1,118 +1,51 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useMemo } from "react";
 import { usePathname } from "next/navigation";
 import SideNav from "./SideNav";
+import RippleProvider from "./RippleProvider";
 import AiHelpPanel from "./AiHelpPanel";
 import styles from "./AppShell.module.css";
 
-const SIDEBAR_STORAGE_KEY = "lcc-sidebar-collapsed";
+const HIDE_SHELL_ROUTES = [
+  "/login",
+  "/signup",
+  "/forgot-password",
+  "/reset-password",
+];
 
-function cx(...names) {
-  return names.filter(Boolean).join(" ");
+function shouldHideShell(pathname = "") {
+  if (!pathname) return false;
+  if (HIDE_SHELL_ROUTES.includes(pathname)) return true;
+  if (pathname.startsWith("/auth")) return true;
+  return false;
 }
 
 export default function AppShell({ children }) {
   const pathname = usePathname() || "";
-  const [mobileOpen, setMobileOpen] = useState(false);
-  const [desktopCollapsed, setDesktopCollapsed] = useState(false);
+  const hideShell = useMemo(() => shouldHideShell(pathname), [pathname]);
 
-  const hideAiHelp =
-    pathname.startsWith("/investments") || pathname.startsWith("/market");
-
-  useEffect(() => {
-    setMobileOpen(false);
-  }, [pathname]);
-
-  useEffect(() => {
-    try {
-      const saved = window.localStorage.getItem(SIDEBAR_STORAGE_KEY);
-      setDesktopCollapsed(saved === "true");
-    } catch {
-      setDesktopCollapsed(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    try {
-      window.localStorage.setItem(
-        SIDEBAR_STORAGE_KEY,
-        String(desktopCollapsed)
-      );
-    } catch {}
-  }, [desktopCollapsed]);
-
-  useEffect(() => {
-    const previousOverflow = document.body.style.overflow;
-    if (mobileOpen) document.body.style.overflow = "hidden";
-
-    return () => {
-      document.body.style.overflow = previousOverflow;
-    };
-  }, [mobileOpen]);
+  if (hideShell) {
+    return <RippleProvider>{children}</RippleProvider>;
+  }
 
   return (
-    <div
-      className={cx(styles.shell, desktopCollapsed && styles.shellCollapsed)}
-    >
-      <div className={styles.cosmos} aria-hidden="true">
-        <div className={styles.voidLayer} />
-        <div className={styles.dustLayerA} />
-        <div className={styles.dustLayerB} />
-        <div className={styles.starFieldFar} />
-        <div className={styles.starFieldMid} />
-        <div className={styles.starFieldNear} />
-        <div className={styles.vignette} />
-      </div>
-
-      <header className={styles.mobileTopbar}>
-        <button
-          type="button"
-          className={styles.mobileMenuButton}
-          aria-label="Open navigation"
-          aria-expanded={mobileOpen}
-          onClick={() => setMobileOpen(true)}
-        >
-          <span />
-          <span />
-          <span />
-        </button>
-
-        <div className={styles.mobileBrand}>
-          <div className={styles.mobileBrandMark}>LCC</div>
-          <div className={styles.mobileBrandText}>Life Command Center</div>
-        </div>
-
-        <div className={styles.mobileTopbarSpacer} />
-      </header>
-
-      <div
-        className={cx(
-          styles.mobileOverlay,
-          mobileOpen && styles.mobileOverlayOpen
-        )}
-        onClick={() => setMobileOpen(false)}
-        aria-hidden={!mobileOpen}
-      />
-
-      <div className={styles.layout}>
-        <aside
-          className={cx(styles.sidebar, mobileOpen && styles.sidebarOpen)}
-          aria-label="Primary navigation"
-        >
-          <SideNav
-            collapsed={desktopCollapsed}
-            onToggle={() => setDesktopCollapsed((v) => !v)}
-            onCloseMobile={() => setMobileOpen(false)}
-          />
+    <RippleProvider>
+      <div className={styles.shell}>
+        <aside className={styles.sidebarColumn}>
+          <div className={styles.sidebarInner}>
+            <SideNav />
+          </div>
         </aside>
 
-        <main className={styles.main}>
-          <div className={styles.page}>{children}</div>
-        </main>
-      </div>
+        <div className={styles.mainColumn}>
+          <main className={styles.mainContent}>
+            <div className={styles.pageFrame}>{children}</div>
+          </main>
+        </div>
 
-      {!hideAiHelp ? <AiHelpPanel /> : null}
-    </div>
+        <AiHelpPanel />
+      </div>
+    </RippleProvider>
   );
 }
