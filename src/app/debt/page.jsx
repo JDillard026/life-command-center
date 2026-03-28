@@ -1,24 +1,30 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { supabase } from "@/lib/supabaseClient";
-
 export const dynamic = "force-dynamic";
 
-const LS_DEBT = "lcc_debt_accounts_v3";
-const LS_DEBT_SETTINGS = "lcc_debt_settings_v3";
-
-function safeParse(str, fallback) {
-  try {
-    const v = JSON.parse(str || "");
-    return v ?? fallback;
-  } catch {
-    return fallback;
-  }
-}
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  AlertTriangle,
+  BadgeDollarSign,
+  CalendarClock,
+  Copy,
+  CreditCard,
+  Flame,
+  Landmark,
+  PauseCircle,
+  PlayCircle,
+  Plus,
+  Search,
+  Trash2,
+} from "lucide-react";
+import { supabase } from "@/lib/supabaseClient";
+import GlassPane from "../components/GlassPane";
 
 function uid() {
-  return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  return (
+    globalThis.crypto?.randomUUID?.() ??
+    `${Date.now()}-${Math.random().toString(16).slice(2)}`
+  );
 }
 
 function safeNum(n, fallback = 0) {
@@ -34,11 +40,20 @@ function parseMoneyInput(v) {
 
 function fmtMoney(n) {
   const num = Number(n);
+  if (!Number.isFinite(num)) return "$0";
+  return num.toLocaleString(undefined, {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
+  });
+}
+
+function fmtMoneyTight(n) {
+  const num = Number(n);
   if (!Number.isFinite(num)) return "$0.00";
   return num.toLocaleString(undefined, {
     style: "currency",
     currency: "USD",
-    maximumFractionDigits: 2,
   });
 }
 
@@ -49,13 +64,56 @@ function fmtPct(n) {
 }
 
 function monthLabel(months) {
-  if (!Number.isFinite(months)) return "—";
+  if (!Number.isFinite(months)) return "No payoff";
   if (months <= 0) return "Paid";
   if (months < 1) return "<1 mo";
   if (months < 12) return `${Math.ceil(months)} mo`;
   const years = Math.floor(months / 12);
   const rem = Math.ceil(months % 12);
   return rem ? `${years} yr ${rem} mo` : `${years} yr`;
+}
+
+function nextMonthDate(monthsFromNow) {
+  if (!Number.isFinite(monthsFromNow)) return "—";
+  const d = new Date();
+  d.setMonth(d.getMonth() + Math.max(0, monthsFromNow));
+  return d.toLocaleDateString(undefined, { year: "numeric", month: "short" });
+}
+
+function fmtWhen(ts) {
+  if (!ts) return "—";
+  const d = new Date(ts);
+  if (!Number.isFinite(d.getTime())) return "—";
+  return d.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function formatAgo(value) {
+  if (!value) return "—";
+  const ms = Date.now() - new Date(value).getTime();
+  const minutes = Math.round(ms / 60000);
+
+  if (!Number.isFinite(minutes)) return "—";
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes}m ago`;
+
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+
+  const days = Math.round(hours / 24);
+  return `${days}d ago`;
+}
+
+function currentMonthLabel() {
+  return new Intl.DateTimeFormat("en-US", {
+    month: "long",
+    year: "numeric",
+  }).format(new Date());
 }
 
 function payoffMonths(balance, apr, payment) {
@@ -71,15 +129,11 @@ function payoffMonths(balance, apr, payment) {
   if (monthlyRate <= 0) return balance / payment;
   if (payment <= balance * monthlyRate) return Infinity;
 
-  const months = -Math.log(1 - (balance * monthlyRate) / payment) / Math.log(1 + monthlyRate);
-  return Number.isFinite(months) ? months : Infinity;
-}
+  const months =
+    -Math.log(1 - (balance * monthlyRate) / payment) /
+    Math.log(1 + monthlyRate);
 
-function nextMonthDate(monthsFromNow) {
-  if (!Number.isFinite(monthsFromNow)) return "—";
-  const d = new Date();
-  d.setMonth(d.getMonth() + Math.max(0, monthsFromNow));
-  return d.toLocaleDateString(undefined, { year: "numeric", month: "short" });
+  return Number.isFinite(months) ? months : Infinity;
 }
 
 function debtTypeLabel(type) {
@@ -94,6 +148,16 @@ function debtTypeLabel(type) {
   return map[type] || "Debt";
 }
 
+function debtInitials(name = "") {
+  const clean = String(name).trim();
+  if (!clean) return "DT";
+  const parts = clean.split(/\s+/).slice(0, 2);
+  return parts
+    .map((p) => p[0])
+    .join("")
+    .toUpperCase();
+}
+
 function createDebt(type = "other") {
   return {
     id: uid(),
@@ -101,14 +165,14 @@ function createDebt(type = "other") {
       type === "mortgage"
         ? "Mortgage"
         : type === "auto"
-          ? "Car Loan"
-          : type === "credit_card"
-            ? "Credit Card"
-            : type === "personal_loan"
-              ? "Personal Loan"
-              : type === "student_loan"
-                ? "Student Loan"
-                : "New Debt",
+        ? "Car Loan"
+        : type === "credit_card"
+        ? "Credit Card"
+        : type === "personal_loan"
+        ? "Personal Loan"
+        : type === "student_loan"
+        ? "Student Loan"
+        : "New Debt",
     type,
     lender: "",
     balance: 0,
@@ -127,6 +191,7 @@ function createDebt(type = "other") {
     notes: "",
     isActive: true,
     createdAt: Date.now(),
+    updatedAt: new Date().toISOString(),
     termMonths: null,
     remainingMonths: null,
   };
@@ -159,7 +224,10 @@ function mapDebtRow(row) {
     promoEnds: row.promo_ends ?? "",
     notes: row.notes ?? "",
     isActive: row.is_active ?? true,
-    createdAt: row.created_at_ms ?? (row.created_at ? new Date(row.created_at).getTime() : Date.now()),
+    createdAt:
+      row.created_at_ms ??
+      (row.created_at ? new Date(row.created_at).getTime() : Date.now()),
+    updatedAt: row.updated_at || row.created_at || null,
     termMonths: row.term_months ?? null,
     remainingMonths: row.remaining_months ?? null,
   };
@@ -222,14 +290,22 @@ function getDueStatus(dueDay) {
   const now = new Date();
   const today = now.getDate();
 
-  if (day === today) return { label: "Due today", tone: "warn", sort: 0 };
+  if (day === today) return { label: "Due today", tone: "amber", sort: 0 };
   if (day > today) {
     const diff = day - today;
-    return { label: `Due in ${diff}d`, tone: diff <= 3 ? "warn" : "good", sort: diff };
+    return {
+      label: diff === 1 ? "Due tomorrow" : `Due in ${diff}d`,
+      tone: diff <= 3 ? "amber" : "green",
+      sort: diff,
+    };
   }
 
   const late = today - day;
-  return { label: `${late}d late`, tone: late >= 7 ? "bad" : "warn", sort: -late };
+  return {
+    label: `${late}d late`,
+    tone: late >= 7 ? "red" : "amber",
+    sort: -late,
+  };
 }
 
 function getUtilizationPercent(debt) {
@@ -249,7 +325,11 @@ function getPaidDownPercent(debt) {
 }
 
 function getMortgageTotal(debt) {
-  return safeNum(debt.principalPortion) + safeNum(debt.interestPortion) + safeNum(debt.escrowPortion);
+  return (
+    safeNum(debt.principalPortion) +
+    safeNum(debt.interestPortion) +
+    safeNum(debt.escrowPortion)
+  );
 }
 
 function getMonthlyShown(debt) {
@@ -282,16 +362,16 @@ function getDebtBarTone(debt) {
   const apr = safeNum(debt.apr);
   const due = getDueStatus(debt.dueDay);
 
-  if (due.tone === "bad") return "bad";
+  if (due.tone === "red") return "red";
   if (util !== null) {
-    if (util >= 90) return "bad";
-    if (util >= 50) return "warn";
-    return "good";
+    if (util >= 90) return "red";
+    if (util >= 50) return "amber";
+    return "green";
   }
 
-  if (apr >= 24) return "bad";
-  if (apr >= 12) return "warn";
-  return "good";
+  if (apr >= 24) return "red";
+  if (apr >= 12) return "amber";
+  return "green";
 }
 
 function getPromoStatus(debt) {
@@ -302,9 +382,9 @@ function getPromoStatus(debt) {
   const now = new Date();
   const diffDays = Math.ceil((end.getTime() - now.getTime()) / 86400000);
 
-  if (diffDays < 0) return { label: "Promo ended", tone: "bad" };
-  if (diffDays <= 30) return { label: `Promo ends in ${diffDays}d`, tone: "warn" };
-  return { label: `Promo ends in ${diffDays}d`, tone: "good" };
+  if (diffDays < 0) return { label: "Promo ended", tone: "red" };
+  if (diffDays <= 30) return { label: `Promo ends in ${diffDays}d`, tone: "amber" };
+  return { label: `Promo ends in ${diffDays}d`, tone: "green" };
 }
 
 function getPrincipalShare(debt) {
@@ -320,40 +400,1071 @@ function getDebtChip(debt, priority) {
   const promo = getPromoStatus(debt);
   const principalShare = getPrincipalShare(debt);
 
-  if (priority === 1) return { label: "Target #1", tone: "accent" };
-  if (promo && promo.tone !== "good") return promo;
+  if (priority === 1) return { label: "Target #1", tone: "amber" };
+  if (promo && promo.tone !== "green") return promo;
+
   if (util !== null) {
-    if (util >= 90) return { label: "Maxed pressure", tone: "bad" };
-    if (util >= 50) return { label: `${Math.round(util)}% used`, tone: "warn" };
-    return { label: `${Math.round(util)}% used`, tone: "good" };
+    if (util >= 90) return { label: "Maxed pressure", tone: "red" };
+    if (util >= 50) return { label: `${Math.round(util)}% used`, tone: "amber" };
+    return { label: `${Math.round(util)}% used`, tone: "green" };
   }
 
   if (principalShare !== null) {
-    if (principalShare < 25) return { label: "Interest heavy", tone: "warn" };
-    return { label: `${Math.round(principalShare)}% principal`, tone: "good" };
+    if (principalShare < 25) return { label: "Interest heavy", tone: "amber" };
+    return { label: `${Math.round(principalShare)}% principal`, tone: "green" };
   }
 
   const apr = safeNum(debt.apr);
-  if (apr >= 24) return { label: "APR drag", tone: "bad" };
-  if (apr >= 15) return { label: "Watch APR", tone: "warn" };
+  if (apr >= 24) return { label: "APR drag", tone: "red" };
+  if (apr >= 15) return { label: "Watch APR", tone: "amber" };
 
   const payoff = payoffMonths(debt.balance, debt.apr, getAttackPayment(debt));
-  if (Number.isFinite(payoff) && payoff <= 12) return { label: "Close win", tone: "good" };
+  if (Number.isFinite(payoff) && payoff <= 12) return { label: "Close win", tone: "green" };
 
   return { label: "On plan", tone: "neutral" };
+}
+
+function toneMeta(tone = "neutral") {
+  if (tone === "green") {
+    return {
+      text: "#97efc7",
+      border: "rgba(143, 240, 191, 0.18)",
+      glow: "rgba(110, 229, 173, 0.10)",
+      bg: "rgba(11, 22, 17, 0.66)",
+    };
+  }
+
+  if (tone === "amber") {
+    return {
+      text: "#f5cf88",
+      border: "rgba(255, 204, 112, 0.18)",
+      glow: "rgba(255, 194, 92, 0.10)",
+      bg: "rgba(22, 17, 11, 0.66)",
+    };
+  }
+
+  if (tone === "red") {
+    return {
+      text: "#ffb4c5",
+      border: "rgba(255, 132, 163, 0.18)",
+      glow: "rgba(255, 108, 145, 0.10)",
+      bg: "rgba(22, 11, 15, 0.66)",
+    };
+  }
+
+  return {
+    text: "#f7fbff",
+    border: "rgba(214, 226, 255, 0.14)",
+    glow: "rgba(140, 170, 255, 0.08)",
+    bg: "rgba(10, 15, 24, 0.66)",
+  };
+}
+
+function MiniPill({ children, tone = "neutral" }) {
+  const meta = toneMeta(tone);
+
+  return (
+    <div
+      style={{
+        minHeight: 30,
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 8,
+        padding: "0 10px",
+        borderRadius: 999,
+        border: `1px solid ${meta.border}`,
+        background:
+          "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.012))",
+        boxShadow: `inset 0 1px 0 rgba(255,255,255,0.03), 0 0 10px ${meta.glow}`,
+        color: tone === "neutral" ? "rgba(255,255,255,0.88)" : meta.text,
+        fontSize: 11,
+        fontWeight: 800,
+        whiteSpace: "nowrap",
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+function PaneHeader({ title, subcopy, right }) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "flex-start",
+        gap: 10,
+        flexWrap: "wrap",
+        marginBottom: 10,
+      }}
+    >
+      <div style={{ minWidth: 0 }}>
+        <div
+          style={{
+            fontSize: 17,
+            lineHeight: 1.08,
+            fontWeight: 850,
+            letterSpacing: "-0.035em",
+            color: "#fff",
+          }}
+        >
+          {title}
+        </div>
+
+        {subcopy ? (
+          <div
+            style={{
+              marginTop: 3,
+              fontSize: 12,
+              lineHeight: 1.45,
+              color: "rgba(255,255,255,0.60)",
+            }}
+          >
+            {subcopy}
+          </div>
+        ) : null}
+      </div>
+
+      {right || null}
+    </div>
+  );
+}
+
+function StatCard({ icon: Icon, label, value, detail, tone = "neutral" }) {
+  const meta = toneMeta(tone);
+
+  return (
+    <GlassPane tone={tone} size="card" style={{ height: "100%" }}>
+      <div
+        style={{
+          minHeight: 112,
+          display: "grid",
+          gridTemplateRows: "auto auto 1fr",
+          gap: 7,
+        }}
+      >
+        <div
+          style={{
+            width: 34,
+            height: 34,
+            borderRadius: 12,
+            display: "grid",
+            placeItems: "center",
+            border: `1px solid ${meta.border}`,
+            background: meta.bg,
+            color: tone === "neutral" ? "#fff" : meta.text,
+            boxShadow: `0 0 10px ${meta.glow}`,
+          }}
+        >
+          <Icon size={15} />
+        </div>
+
+        <div>
+          <div
+            style={{
+              fontSize: 10,
+              textTransform: "uppercase",
+              letterSpacing: ".2em",
+              fontWeight: 800,
+              color: "rgba(255,255,255,0.40)",
+            }}
+          >
+            {label}
+          </div>
+
+          <div
+            style={{
+              marginTop: 8,
+              fontSize: "clamp(18px, 2.2vw, 28px)",
+              lineHeight: 1,
+              fontWeight: 850,
+              letterSpacing: "-0.05em",
+              color: tone === "neutral" ? "#fff" : meta.text,
+            }}
+          >
+            {value}
+          </div>
+        </div>
+
+        <div
+          style={{
+            fontSize: 11.5,
+            lineHeight: 1.4,
+            color: "rgba(255,255,255,0.60)",
+          }}
+        >
+          {detail}
+        </div>
+      </div>
+    </GlassPane>
+  );
+}
+
+function ActionBtn({
+  children,
+  onClick,
+  variant = "ghost",
+  full = false,
+  type = "button",
+  disabled = false,
+}) {
+  const isPrimary = variant === "primary";
+  const isDanger = variant === "danger";
+
+  return (
+    <button
+      type={type}
+      onClick={onClick}
+      disabled={disabled}
+      className="debtActionBtn"
+      style={{
+        width: full ? "100%" : undefined,
+        border: isDanger
+          ? "1px solid rgba(255,132,163,0.18)"
+          : isPrimary
+          ? "1px solid rgba(143,177,255,0.18)"
+          : "1px solid rgba(214,226,255,0.10)",
+        background: isDanger
+          ? "linear-gradient(180deg, rgba(255,132,163,0.10), rgba(255,132,163,0.05))"
+          : isPrimary
+          ? "linear-gradient(180deg, rgba(143,177,255,0.14), rgba(143,177,255,0.06))"
+          : "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.012))",
+        color: isDanger ? "#ffd3df" : "#f7fbff",
+        opacity: disabled ? 0.55 : 1,
+        cursor: disabled ? "not-allowed" : "pointer",
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
+function ProgressBar({ fill = 0, tone = "neutral" }) {
+  const normalized = Math.max(0, Math.min(100, safeNum(fill)));
+  const toneMap = {
+    neutral: "linear-gradient(90deg, rgba(96,165,250,.95), rgba(147,197,253,.95))",
+    green: "linear-gradient(90deg, rgba(74,222,128,.95), rgba(167,243,208,.95))",
+    amber: "linear-gradient(90deg, rgba(251,191,36,.95), rgba(253,230,138,.95))",
+    red: "linear-gradient(90deg, rgba(248,113,113,.95), rgba(252,165,165,.95))",
+  };
+
+  return (
+    <div className="debtProgress">
+      <div
+        className="debtProgressFill"
+        style={{
+          width: `${normalized}%`,
+          background: toneMap[tone] || toneMap.neutral,
+        }}
+      />
+    </div>
+  );
+}
+
+function CompactDebtRow({
+  debt,
+  selected,
+  priority,
+  onSelect,
+  onDuplicate,
+  onToggle,
+  onDelete,
+}) {
+  const due = getDueStatus(debt.dueDay);
+  const tone = getDebtBarTone(debt);
+  const meta = toneMeta(tone);
+  const chip = getDebtChip(debt, priority);
+  const monthlyShown = getMonthlyShown(debt);
+
+  return (
+    <div
+      className="debtCompactRow"
+      onClick={onSelect}
+      style={{
+        borderColor: selected ? meta.border : "rgba(255,255,255,0.07)",
+        boxShadow: selected
+          ? `inset 0 1px 0 rgba(255,255,255,0.03), 0 0 0 1px rgba(255,255,255,0.01), 0 0 24px ${meta.glow}`
+          : "inset 0 1px 0 rgba(255,255,255,0.025)",
+      }}
+    >
+      <div
+        className="debtCompactAvatar"
+        style={{
+          borderColor: meta.border,
+          color: tone === "neutral" ? "#fff" : meta.text,
+          boxShadow: `0 0 12px ${meta.glow}`,
+        }}
+      >
+        {debtInitials(debt.name)}
+      </div>
+
+      <div style={{ minWidth: 0 }}>
+        <div
+          style={{
+            display: "flex",
+            gap: 8,
+            alignItems: "center",
+            flexWrap: "wrap",
+          }}
+        >
+          <div className="debtCompactTitle">{debt.name || "Untitled debt"}</div>
+          <MiniPill>{debtTypeLabel(debt.type)}</MiniPill>
+          <MiniPill tone={due.tone}>{due.label}</MiniPill>
+          <MiniPill tone={chip.tone}>{chip.label}</MiniPill>
+          {!debt.isActive ? <MiniPill>Inactive</MiniPill> : null}
+        </div>
+
+        <div className="debtCompactSub">
+          {debt.lender || "No lender"} • {fmtPct(debt.apr)} APR • Monthly{" "}
+          {fmtMoney(monthlyShown)} • Updated {formatAgo(debt.updatedAt)}
+        </div>
+
+        <div style={{ marginTop: 10 }}>
+          <ProgressBar fill={getDebtProgressPercent(debt)} tone={tone} />
+        </div>
+      </div>
+
+      <div className="debtCompactValue">{fmtMoney(debt.balance)}</div>
+
+      <div
+        className="debtCompactActions"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <button
+          type="button"
+          className="debtIconBtn"
+          onClick={onDuplicate}
+          aria-label="Duplicate debt"
+          title="Duplicate debt"
+        >
+          <Copy size={14} />
+        </button>
+        <button
+          type="button"
+          className="debtIconBtn"
+          onClick={onToggle}
+          aria-label={debt.isActive ? "Mark inactive" : "Mark active"}
+          title={debt.isActive ? "Mark inactive" : "Mark active"}
+        >
+          {debt.isActive ? <PauseCircle size={14} /> : <PlayCircle size={14} />}
+        </button>
+        <button
+          type="button"
+          className="debtIconBtn debtDangerBtn"
+          onClick={onDelete}
+          aria-label="Delete debt"
+          title="Delete debt"
+        >
+          <Trash2 size={14} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function FocusDebtCard({
+  debt,
+  priority,
+  globalExtraPool,
+  saving,
+  onDuplicate,
+  onToggle,
+  onDelete,
+}) {
+  if (!debt) {
+    return (
+      <GlassPane size="card">
+        <PaneHeader
+          title="Selected Debt"
+          subcopy="Choose one from the roster to work it here."
+        />
+        <div className="debtEmptyState" style={{ minHeight: 170 }}>
+          <div>
+            <div className="debtEmptyTitle">No debt selected</div>
+            <div className="debtEmptyText">
+              Pick one from the roster on the left.
+            </div>
+          </div>
+        </div>
+      </GlassPane>
+    );
+  }
+
+  const due = getDueStatus(debt.dueDay);
+  const tone = getDebtBarTone(debt);
+  const meta = toneMeta(tone);
+  const util = getUtilizationPercent(debt);
+  const paidDown = getPaidDownPercent(debt);
+  const principalShare = getPrincipalShare(debt);
+  const plannedAttack = getAttackPayment(debt) + (priority === 1 ? safeNum(globalExtraPool) : 0);
+  const payoff = payoffMonths(debt.balance, debt.apr, plannedAttack);
+  const chip = getDebtChip(debt, priority);
+  const promo = getPromoStatus(debt);
+
+  return (
+    <GlassPane tone={tone} size="card">
+      <PaneHeader
+        title={debt.name || "Untitled debt"}
+        subcopy="Focused controls for the debt you are actively touching."
+        right={
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <MiniPill>{debtTypeLabel(debt.type)}</MiniPill>
+            <MiniPill tone={due.tone}>{due.label}</MiniPill>
+            <MiniPill tone={chip.tone}>{chip.label}</MiniPill>
+            {!debt.isActive ? <MiniPill>Inactive</MiniPill> : null}
+            {saving ? <MiniPill tone="amber">Saving...</MiniPill> : null}
+          </div>
+        }
+      />
+
+      <div className="debtFocusBox">
+        <div className="debtTinyLabel">Current Balance</div>
+
+        <div
+          style={{
+            marginTop: 8,
+            fontSize: "clamp(30px, 4vw, 46px)",
+            lineHeight: 1,
+            fontWeight: 850,
+            letterSpacing: "-0.05em",
+            color: tone === "neutral" ? "#fff" : meta.text,
+          }}
+        >
+          {fmtMoney(debt.balance)}
+        </div>
+
+        <div
+          style={{
+            marginTop: 10,
+            fontSize: 12,
+            color: "rgba(255,255,255,0.58)",
+          }}
+        >
+          {debt.lender || "No lender"} • Updated {fmtWhen(debt.updatedAt)}
+        </div>
+
+        <div className="debtInfoGrid" style={{ marginTop: 14 }}>
+          <div className="debtInfoCell">
+            <div className="debtTinyLabel">APR</div>
+            <div className="debtInfoValue">{fmtPct(debt.apr)}</div>
+            <div className="debtInfoSub">
+              {promo ? promo.label : "Standard interest rate"}
+            </div>
+          </div>
+
+          <div className="debtInfoCell">
+            <div className="debtTinyLabel">Monthly Attack</div>
+            <div className="debtInfoValue">{fmtMoney(plannedAttack)}</div>
+            <div className="debtInfoSub">
+              Min + extra{priority === 1 && safeNum(globalExtraPool) > 0 ? " + pool" : ""}
+            </div>
+          </div>
+
+          <div className="debtInfoCell">
+            <div className="debtTinyLabel">Payoff</div>
+            <div className="debtInfoValue">{monthLabel(payoff)}</div>
+            <div className="debtInfoSub">
+              {Number.isFinite(payoff) ? nextMonthDate(Math.ceil(payoff)) : "Payment too low"}
+            </div>
+          </div>
+
+          <div className="debtInfoCell">
+            <div className="debtTinyLabel">
+              {util !== null
+                ? "Utilization"
+                : paidDown !== null
+                ? "Paid Down"
+                : principalShare !== null
+                ? "Principal Share"
+                : "Monthly"}
+            </div>
+            <div className="debtInfoValue">
+              {util !== null
+                ? `${Math.round(util)}%`
+                : paidDown !== null
+                ? `${Math.round(paidDown)}%`
+                : principalShare !== null
+                ? `${Math.round(principalShare)}%`
+                : fmtMoney(getMonthlyShown(debt))}
+            </div>
+            <div className="debtInfoSub">
+              {util !== null
+                ? "Of total credit limit"
+                : paidDown !== null
+                ? "Of original balance"
+                : principalShare !== null
+                ? "Principal in payment"
+                : "Displayed monthly payment"}
+            </div>
+          </div>
+        </div>
+
+        <div style={{ marginTop: 12 }}>
+          <ProgressBar fill={getDebtProgressPercent(debt)} tone={tone} />
+        </div>
+
+        {debt.type === "mortgage" ? (
+          <div className="debtMortgageGrid" style={{ marginTop: 12 }}>
+            <div className="debtInfoCell">
+              <div className="debtTinyLabel">Principal</div>
+              <div className="debtInfoValue">{fmtMoney(debt.principalPortion)}</div>
+            </div>
+            <div className="debtInfoCell">
+              <div className="debtTinyLabel">Interest</div>
+              <div className="debtInfoValue">{fmtMoney(debt.interestPortion)}</div>
+            </div>
+            <div className="debtInfoCell">
+              <div className="debtTinyLabel">Escrow</div>
+              <div className="debtInfoValue">{fmtMoney(debt.escrowPortion)}</div>
+            </div>
+          </div>
+        ) : null}
+
+        {debt.notes ? (
+          <div className="debtInfoCell" style={{ marginTop: 12 }}>
+            <div className="debtTinyLabel">Notes</div>
+            <div className="debtInfoSub" style={{ color: "#fff" }}>
+              {debt.notes}
+            </div>
+          </div>
+        ) : null}
+
+        <div className="debtActionGrid debtActionGridTight" style={{ marginTop: 14 }}>
+          <ActionBtn onClick={onDuplicate} full>
+            <Copy size={14} /> Duplicate
+          </ActionBtn>
+          <ActionBtn onClick={onToggle} full>
+            {debt.isActive ? <PauseCircle size={14} /> : <PlayCircle size={14} />}
+            {debt.isActive ? "Mark Inactive" : "Mark Active"}
+          </ActionBtn>
+          <ActionBtn variant="danger" onClick={onDelete} full>
+            <Trash2 size={14} /> Delete
+          </ActionBtn>
+        </div>
+      </div>
+    </GlassPane>
+  );
+}
+
+function AddDebtCard({ adding, setAdding, onAdd, saving }) {
+  return (
+    <GlassPane size="card">
+      <PaneHeader
+        title="Add Debt"
+        subcopy="Keep this fast and simple."
+        right={
+          <MiniPill>
+            <Plus size={13} /> New
+          </MiniPill>
+        }
+      />
+
+      <div className="debtFormStack">
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {[
+            ["credit_card", "Credit Card"],
+            ["auto", "Auto Loan"],
+            ["mortgage", "Mortgage"],
+            ["other", "Other"],
+          ].map(([value, label]) => (
+            <ActionBtn
+              key={value}
+              variant={adding.type === value ? "primary" : "ghost"}
+              onClick={() => setAdding((p) => ({ ...p, type: value }))}
+            >
+              {label}
+            </ActionBtn>
+          ))}
+        </div>
+
+        <div>
+          <div className="debtTinyLabel">Debt Name</div>
+          <input
+            className="debtField"
+            placeholder="Amex Gold, Mortgage, Car Loan..."
+            value={adding.name}
+            onChange={(e) => setAdding((p) => ({ ...p, name: e.target.value }))}
+          />
+        </div>
+
+        <div className="debtFormGrid2">
+          <div>
+            <div className="debtTinyLabel">Type</div>
+            <select
+              className="debtField"
+              value={adding.type}
+              onChange={(e) => setAdding((p) => ({ ...p, type: e.target.value }))}
+            >
+              <option value="mortgage">Mortgage</option>
+              <option value="auto">Auto Loan</option>
+              <option value="credit_card">Credit Card</option>
+              <option value="personal_loan">Personal Loan</option>
+              <option value="student_loan">Student Loan</option>
+              <option value="other">Other Debt</option>
+            </select>
+          </div>
+
+          <div>
+            <div className="debtTinyLabel">Lender</div>
+            <input
+              className="debtField"
+              placeholder="Bank / lender"
+              value={adding.lender}
+              onChange={(e) => setAdding((p) => ({ ...p, lender: e.target.value }))}
+            />
+          </div>
+        </div>
+
+        <div className="debtFormGrid3">
+          <div>
+            <div className="debtTinyLabel">Balance</div>
+            <input
+              className="debtField"
+              inputMode="decimal"
+              placeholder="0.00"
+              value={adding.balance}
+              onChange={(e) => setAdding((p) => ({ ...p, balance: e.target.value }))}
+            />
+          </div>
+
+          <div>
+            <div className="debtTinyLabel">APR %</div>
+            <input
+              className="debtField"
+              inputMode="decimal"
+              placeholder="24.99"
+              value={adding.apr}
+              onChange={(e) => setAdding((p) => ({ ...p, apr: e.target.value }))}
+            />
+          </div>
+
+          <div>
+            <div className="debtTinyLabel">Due Day</div>
+            <input
+              className="debtField"
+              placeholder="1-31"
+              value={adding.dueDay}
+              onChange={(e) => setAdding((p) => ({ ...p, dueDay: e.target.value }))}
+            />
+          </div>
+        </div>
+
+        <div className="debtFormGrid2">
+          <div>
+            <div className="debtTinyLabel">Minimum Payment</div>
+            <input
+              className="debtField"
+              inputMode="decimal"
+              placeholder="0.00"
+              value={adding.minimumPayment}
+              onChange={(e) =>
+                setAdding((p) => ({ ...p, minimumPayment: e.target.value }))
+              }
+            />
+          </div>
+
+          <div>
+            <div className="debtTinyLabel">Extra Payment</div>
+            <input
+              className="debtField"
+              inputMode="decimal"
+              placeholder="0.00"
+              value={adding.extraPayment}
+              onChange={(e) =>
+                setAdding((p) => ({ ...p, extraPayment: e.target.value }))
+              }
+            />
+          </div>
+        </div>
+
+        <div className="debtActionGrid">
+          <ActionBtn variant="primary" onClick={onAdd} full disabled={saving}>
+            <Plus size={14} /> {saving ? "Saving..." : "Add Debt"}
+          </ActionBtn>
+        </div>
+      </div>
+    </GlassPane>
+  );
+}
+
+function QueueItem({ debt, onFocus }) {
+  const due = getDueStatus(debt.dueDay);
+  const chip = getDebtChip(debt, debt.priority);
+
+  return (
+    <div className="debtIntelItem">
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          gap: 10,
+          alignItems: "flex-start",
+          flexWrap: "wrap",
+        }}
+      >
+        <div>
+          <div className="debtIntelTitle">{debt.name}</div>
+          <div className="debtIntelSub">
+            {debt.lender || "No lender"} • {fmtPct(debt.apr)} APR • {fmtMoneyTight(debt.balance)}
+          </div>
+        </div>
+
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          <MiniPill tone={chip.tone}>{chip.label}</MiniPill>
+          <MiniPill tone={getDueStatus(debt.dueDay).tone}>{due.label}</MiniPill>
+        </div>
+      </div>
+
+      <div style={{ marginTop: 2 }}>
+        <ProgressBar fill={getDebtProgressPercent(debt)} tone={getDebtBarTone(debt)} />
+      </div>
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+          gap: 8,
+        }}
+      >
+        <div className="debtIntelMini">
+          <div className="debtTinyLabel">Attack</div>
+          <div className="debtIntelValue">{fmtMoneyTight(debt.plannedAttack)}</div>
+        </div>
+        <div className="debtIntelMini">
+          <div className="debtTinyLabel">Payoff</div>
+          <div className="debtIntelValue">{monthLabel(debt.payoff)}</div>
+        </div>
+        <div className="debtIntelMini">
+          <div className="debtTinyLabel">Rank</div>
+          <div className="debtIntelValue">#{debt.priority}</div>
+        </div>
+      </div>
+
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <ActionBtn onClick={onFocus}>Focus</ActionBtn>
+      </div>
+    </div>
+  );
+}
+
+function DueItem({ debt, onFocus }) {
+  const due = getDueStatus(debt.dueDay);
+
+  return (
+    <div className="debtIntelItem">
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          gap: 10,
+          alignItems: "flex-start",
+          flexWrap: "wrap",
+        }}
+      >
+        <div>
+          <div className="debtIntelTitle">{debt.name}</div>
+          <div className="debtIntelSub">
+            Due day {debt.dueDay || "—"} • {fmtMoneyTight(debt.minimumPayment)}
+          </div>
+        </div>
+
+        <MiniPill tone={due.tone}>{due.label}</MiniPill>
+      </div>
+
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <ActionBtn onClick={onFocus}>Focus</ActionBtn>
+      </div>
+    </div>
+  );
+}
+
+function DebtEditorCard({ debt, saving, onPatch }) {
+  if (!debt) {
+    return (
+      <GlassPane size="card">
+        <PaneHeader
+          title="Debt Details"
+          subcopy="Select a debt to edit the deeper fields."
+        />
+        <div className="debtEmptyState" style={{ minHeight: 150 }}>
+          <div>
+            <div className="debtEmptyTitle">No debt selected</div>
+            <div className="debtEmptyText">
+              Choose one from the roster to edit it here.
+            </div>
+          </div>
+        </div>
+      </GlassPane>
+    );
+  }
+
+  return (
+    <GlassPane size="card">
+      <PaneHeader
+        title="Debt Details"
+        subcopy="This section autosaves as you type."
+        right={saving ? <MiniPill tone="amber">Saving...</MiniPill> : null}
+      />
+
+      <div className="debtFormStack">
+        <div className="debtFormGrid3">
+          <div>
+            <div className="debtTinyLabel">Debt Name</div>
+            <input
+              className="debtField"
+              value={debt.name}
+              onChange={(e) => onPatch({ name: e.target.value })}
+            />
+          </div>
+
+          <div>
+            <div className="debtTinyLabel">Debt Type</div>
+            <select
+              className="debtField"
+              value={debt.type}
+              onChange={(e) => onPatch({ type: e.target.value })}
+            >
+              <option value="mortgage">Mortgage</option>
+              <option value="auto">Auto Loan</option>
+              <option value="credit_card">Credit Card</option>
+              <option value="personal_loan">Personal Loan</option>
+              <option value="student_loan">Student Loan</option>
+              <option value="other">Other Debt</option>
+            </select>
+          </div>
+
+          <div>
+            <div className="debtTinyLabel">Lender</div>
+            <input
+              className="debtField"
+              value={debt.lender}
+              onChange={(e) => onPatch({ lender: e.target.value })}
+            />
+          </div>
+        </div>
+
+        <div className="debtFormGrid4">
+          <div>
+            <div className="debtTinyLabel">Current Balance</div>
+            <input
+              className="debtField"
+              value={String(debt.balance || "")}
+              onChange={(e) =>
+                onPatch({ balance: safeNum(parseMoneyInput(e.target.value), 0) })
+              }
+            />
+          </div>
+
+          <div>
+            <div className="debtTinyLabel">Original Balance</div>
+            <input
+              className="debtField"
+              value={String(debt.originalBalance || "")}
+              onChange={(e) =>
+                onPatch({
+                  originalBalance: safeNum(parseMoneyInput(e.target.value), 0),
+                })
+              }
+            />
+          </div>
+
+          <div>
+            <div className="debtTinyLabel">Credit Limit</div>
+            <input
+              className="debtField"
+              value={String(debt.creditLimit || "")}
+              onChange={(e) =>
+                onPatch({ creditLimit: safeNum(parseMoneyInput(e.target.value), 0) })
+              }
+            />
+          </div>
+
+          <div>
+            <div className="debtTinyLabel">APR %</div>
+            <input
+              className="debtField"
+              value={String(debt.apr || "")}
+              onChange={(e) => onPatch({ apr: safeNum(e.target.value, 0) })}
+            />
+          </div>
+
+          <div>
+            <div className="debtTinyLabel">Minimum Payment</div>
+            <input
+              className="debtField"
+              value={String(debt.minimumPayment || "")}
+              onChange={(e) =>
+                onPatch({
+                  minimumPayment: safeNum(parseMoneyInput(e.target.value), 0),
+                })
+              }
+            />
+          </div>
+
+          <div>
+            <div className="debtTinyLabel">Extra Payment</div>
+            <input
+              className="debtField"
+              value={String(debt.extraPayment || "")}
+              onChange={(e) =>
+                onPatch({
+                  extraPayment: safeNum(parseMoneyInput(e.target.value), 0),
+                })
+              }
+            />
+          </div>
+
+          <div>
+            <div className="debtTinyLabel">Monthly Payment</div>
+            <input
+              className="debtField"
+              value={String(debt.monthlyPayment || "")}
+              onChange={(e) =>
+                onPatch({
+                  monthlyPayment: safeNum(parseMoneyInput(e.target.value), 0),
+                })
+              }
+            />
+          </div>
+
+          <div>
+            <div className="debtTinyLabel">Due Day</div>
+            <input
+              className="debtField"
+              value={debt.dueDay}
+              onChange={(e) => onPatch({ dueDay: e.target.value })}
+            />
+          </div>
+
+          <div>
+            <div className="debtTinyLabel">Promo APR %</div>
+            <input
+              className="debtField"
+              value={debt.promoApr}
+              onChange={(e) => onPatch({ promoApr: e.target.value })}
+            />
+          </div>
+
+          <div>
+            <div className="debtTinyLabel">Promo Ends</div>
+            <input
+              className="debtField"
+              type="date"
+              value={debt.promoEnds || ""}
+              onChange={(e) => onPatch({ promoEnds: e.target.value })}
+            />
+          </div>
+
+          <div>
+            <div className="debtTinyLabel">Term Months</div>
+            <input
+              className="debtField"
+              value={debt.termMonths ?? ""}
+              onChange={(e) =>
+                onPatch({
+                  termMonths: e.target.value === "" ? null : safeNum(e.target.value, null),
+                })
+              }
+            />
+          </div>
+
+          <div>
+            <div className="debtTinyLabel">Remaining Months</div>
+            <input
+              className="debtField"
+              value={debt.remainingMonths ?? ""}
+              onChange={(e) =>
+                onPatch({
+                  remainingMonths:
+                    e.target.value === "" ? null : safeNum(e.target.value, null),
+                })
+              }
+            />
+          </div>
+        </div>
+
+        {debt.type === "mortgage" ? (
+          <div className="debtMortgageGrid">
+            <div>
+              <div className="debtTinyLabel">Principal Portion</div>
+              <input
+                className="debtField"
+                value={String(debt.principalPortion || "")}
+                onChange={(e) =>
+                  onPatch({
+                    principalPortion: safeNum(parseMoneyInput(e.target.value), 0),
+                  })
+                }
+              />
+            </div>
+
+            <div>
+              <div className="debtTinyLabel">Interest Portion</div>
+              <input
+                className="debtField"
+                value={String(debt.interestPortion || "")}
+                onChange={(e) =>
+                  onPatch({
+                    interestPortion: safeNum(parseMoneyInput(e.target.value), 0),
+                  })
+                }
+              />
+            </div>
+
+            <div>
+              <div className="debtTinyLabel">Escrow Portion</div>
+              <input
+                className="debtField"
+                value={String(debt.escrowPortion || "")}
+                onChange={(e) =>
+                  onPatch({
+                    escrowPortion: safeNum(parseMoneyInput(e.target.value), 0),
+                  })
+                }
+              />
+            </div>
+          </div>
+        ) : null}
+
+        <div>
+          <div className="debtTinyLabel">Notes</div>
+          <textarea
+            className="debtField"
+            rows={5}
+            value={debt.notes}
+            onChange={(e) => onPatch({ notes: e.target.value })}
+            placeholder="Rate notes, balance transfer info, refinance thoughts..."
+          />
+        </div>
+      </div>
+    </GlassPane>
+  );
 }
 
 export default function DebtPage() {
   const [debts, setDebts] = useState([]);
   const [settings, setSettings] = useState(defaultSettings);
-  const [openId, setOpenId] = useState(null);
+  const [selectedDebtId, setSelectedDebtId] = useState("");
   const [search, setSearch] = useState("");
+  const [filter, setFilter] = useState("active");
+  const [sort, setSort] = useState("priority");
   const [loading, setLoading] = useState(true);
   const [savingIds, setSavingIds] = useState({});
   const [userId, setUserId] = useState(null);
   const [settingsRowId, setSettingsRowId] = useState(null);
+  const [adding, setAdding] = useState({
+    type: "credit_card",
+    name: "",
+    lender: "",
+    balance: "",
+    apr: "",
+    minimumPayment: "",
+    extraPayment: "",
+    dueDay: "",
+  });
+  const [addingBusy, setAddingBusy] = useState(false);
 
-  const didImportRef = useRef(false);
   const settingsSaveTimer = useRef(null);
   const rowSaveTimers = useRef({});
 
@@ -378,7 +1489,7 @@ export default function DebtPage() {
       setUserId(null);
       setDebts([]);
       setSettings(defaultSettings);
-      setOpenId(null);
+      setSelectedDebtId("");
       setLoading(false);
       return;
     }
@@ -386,64 +1497,30 @@ export default function DebtPage() {
     setUserId(user.id);
 
     const [debtRes, settingsRes] = await Promise.all([
-      supabase.from("debt").select("*").order("created_at", { ascending: false }),
-      supabase.from("debt_settings").select("*").limit(1).maybeSingle(),
+      supabase
+        .from("debt")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("debt_settings")
+        .select("*")
+        .eq("user_id", user.id)
+        .maybeSingle(),
     ]);
 
     if (debtRes.error) console.error("load debt error:", debtRes.error);
     if (settingsRes.error) console.error("load debt settings error:", settingsRes.error);
 
-    let mappedDebts = (debtRes.data || []).map(mapDebtRow);
-    let mappedSettings = settingsRes.data ? mapSettingsRow(settingsRes.data) : defaultSettings;
-
-    if (settingsRes.data?.id) {
-      setSettingsRowId(settingsRes.data.id);
-    }
-
-    if (mappedDebts.length === 0 && !didImportRef.current) {
-      const localDebts = safeParse(globalThis?.localStorage?.getItem(LS_DEBT), []);
-      const localSettings = safeParse(globalThis?.localStorage?.getItem(LS_DEBT_SETTINGS), defaultSettings);
-
-      if (Array.isArray(localDebts) && localDebts.length > 0) {
-        didImportRef.current = true;
-
-        const importRows = localDebts.map((d) => mapDebtToRow(d, user.id));
-        const importResult = await supabase.from("debt").upsert(importRows, { onConflict: "id" });
-
-        if (importResult.error) {
-          console.error("debt import error:", importResult.error);
-        } else {
-          mappedDebts = localDebts;
-          try {
-            localStorage.removeItem(LS_DEBT);
-          } catch {}
-        }
-      }
-
-      if (localSettings) {
-        const upsertSettings = await supabase
-          .from("debt_settings")
-          .upsert(mapSettingsToRow({ ...defaultSettings, ...localSettings }, user.id, settingsRes.data?.id), {
-            onConflict: "user_id",
-          })
-          .select()
-          .single();
-
-        if (upsertSettings.error) {
-          console.error("settings import error:", upsertSettings.error);
-        } else {
-          mappedSettings = mapSettingsRow(upsertSettings.data);
-          setSettingsRowId(upsertSettings.data.id);
-          try {
-            localStorage.removeItem(LS_DEBT_SETTINGS);
-          } catch {}
-        }
-      }
-    }
+    const mappedDebts = (debtRes.data || []).map(mapDebtRow);
+    const mappedSettings = settingsRes.data
+      ? mapSettingsRow(settingsRes.data)
+      : defaultSettings;
 
     setDebts(mappedDebts);
     setSettings(mappedSettings);
-    setOpenId(mappedDebts[0]?.id ?? null);
+    setSettingsRowId(settingsRes.data?.id || null);
+    setSelectedDebtId((prev) => prev || mappedDebts[0]?.id || "");
     setLoading(false);
   }
 
@@ -463,14 +1540,25 @@ export default function DebtPage() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!debts.length) {
+      setSelectedDebtId("");
+      return;
+    }
+    const exists = debts.some((d) => d.id === selectedDebtId);
+    if (!exists) {
+      setSelectedDebtId(debts[0]?.id || "");
+    }
+  }, [debts, selectedDebtId]);
+
   async function persistDebt(nextDebt) {
     if (!userId) return;
 
     setSavingIds((prev) => ({ ...prev, [nextDebt.id]: true }));
 
-    const { error } = await supabase.from("debt").upsert(mapDebtToRow(nextDebt, userId), {
-      onConflict: "id",
-    });
+    const { error } = await supabase
+      .from("debt")
+      .upsert(mapDebtToRow(nextDebt, userId), { onConflict: "id" });
 
     if (error) console.error("save debt error:", error);
 
@@ -492,7 +1580,9 @@ export default function DebtPage() {
 
     const res = await supabase
       .from("debt_settings")
-      .upsert(mapSettingsToRow(nextSettings, userId, settingsRowId), { onConflict: "user_id" })
+      .upsert(mapSettingsToRow(nextSettings, userId, settingsRowId), {
+        onConflict: "user_id",
+      })
       .select()
       .single();
 
@@ -511,34 +1601,84 @@ export default function DebtPage() {
     }, 350);
   }
 
-  async function addDebt(type) {
-    if (!userId) return;
-
-    const next = createDebt(type);
-    setDebts((prev) => [next, ...prev]);
-    setOpenId(next.id);
-
-    const { error } = await supabase.from("debt").insert(mapDebtToRow(next, userId));
-    if (error) {
-      console.error("add debt error:", error);
-      await loadDebtPage();
-    }
+  function updateSettings(patch) {
+    setSettings((prev) => {
+      const next = { ...prev, ...patch };
+      scheduleSettingsSave(next);
+      return next;
+    });
   }
 
   function updateDebt(id, patch) {
     setDebts((prev) => {
-      const nextRows = prev.map((d) => (d.id === id ? { ...d, ...patch } : d));
+      const nextRows = prev.map((d) =>
+        d.id === id
+          ? { ...d, ...patch, updatedAt: new Date().toISOString() }
+          : d
+      );
       const changed = nextRows.find((d) => d.id === id);
       if (changed) scheduleDebtSave(changed);
       return nextRows;
     });
   }
 
-  async function removeDebt(id) {
-    setDebts((prev) => prev.filter((d) => d.id !== id));
-    setOpenId((prev) => (prev === id ? null : prev));
+  async function addDebtFromForm() {
+    if (!userId || addingBusy) return;
 
-    const { error } = await supabase.from("debt").delete().eq("id", id);
+    const base = createDebt(adding.type);
+    const name = adding.name.trim() || base.name;
+
+    const next = {
+      ...base,
+      name,
+      lender: adding.lender.trim(),
+      balance: safeNum(parseMoneyInput(adding.balance), 0),
+      apr: safeNum(adding.apr, 0),
+      minimumPayment: safeNum(parseMoneyInput(adding.minimumPayment), 0),
+      extraPayment: safeNum(parseMoneyInput(adding.extraPayment), 0),
+      dueDay: adding.dueDay.trim(),
+    };
+
+    setAddingBusy(true);
+    setDebts((prev) => [next, ...prev]);
+    setSelectedDebtId(next.id);
+
+    const { error } = await supabase.from("debt").insert(mapDebtToRow(next, userId));
+
+    if (error) {
+      console.error("add debt error:", error);
+      await loadDebtPage();
+    } else {
+      setAdding({
+        type: "credit_card",
+        name: "",
+        lender: "",
+        balance: "",
+        apr: "",
+        minimumPayment: "",
+        extraPayment: "",
+        dueDay: "",
+      });
+    }
+
+    setAddingBusy(false);
+  }
+
+  async function removeDebt(id) {
+    if (typeof window !== "undefined" && !window.confirm("Delete this debt?")) return;
+
+    const nextDebts = debts.filter((d) => d.id !== id);
+    setDebts(nextDebts);
+    if (selectedDebtId === id) {
+      setSelectedDebtId(nextDebts[0]?.id || "");
+    }
+
+    const { error } = await supabase
+      .from("debt")
+      .delete()
+      .eq("id", id)
+      .eq("user_id", userId);
+
     if (error) {
       console.error("delete debt error:", error);
       await loadDebtPage();
@@ -553,10 +1693,11 @@ export default function DebtPage() {
       id: uid(),
       name: `${debt.name || "Debt"} Copy`,
       createdAt: Date.now(),
+      updatedAt: new Date().toISOString(),
     };
 
     setDebts((prev) => [cloned, ...prev]);
-    setOpenId(cloned.id);
+    setSelectedDebtId(cloned.id);
 
     const { error } = await supabase.from("debt").insert(mapDebtToRow(cloned, userId));
     if (error) {
@@ -565,36 +1706,28 @@ export default function DebtPage() {
     }
   }
 
-  function updateSettings(patch) {
-    setSettings((prev) => {
-      const next = { ...prev, ...patch };
-      scheduleSettingsSave(next);
-      return next;
-    });
-  }
-
-  const visibleDebts = useMemo(() => {
-    const q = search.trim().toLowerCase();
-
-    return debts.filter((d) => {
-      if (!settings.showInactive && !d.isActive) return false;
-      if (!q) return true;
-
-      return [d.name, d.lender, d.type, d.notes, debtTypeLabel(d.type)].join(" ").toLowerCase().includes(q);
-    });
-  }, [debts, search, settings.showInactive]);
-
-  const activeDebts = useMemo(() => debts.filter((d) => d.isActive && safeNum(d.balance) > 0), [debts]);
+  const activeDebts = useMemo(
+    () => debts.filter((d) => d.isActive && safeNum(d.balance) > 0),
+    [debts]
+  );
 
   const totals = useMemo(() => {
     const totalBalance = activeDebts.reduce((sum, d) => sum + safeNum(d.balance), 0);
-    const totalMinimum = activeDebts.reduce((sum, d) => sum + safeNum(d.minimumPayment), 0);
-    const totalExtra = activeDebts.reduce((sum, d) => sum + safeNum(d.extraPayment), 0);
-    const totalMonthly = activeDebts.reduce((sum, d) => sum + getMonthlyShown(d), 0);
+    const totalMinimum = activeDebts.reduce(
+      (sum, d) => sum + safeNum(d.minimumPayment),
+      0
+    );
+    const totalExtra = activeDebts.reduce(
+      (sum, d) => sum + safeNum(d.extraPayment),
+      0
+    );
 
     const weightedApr =
       totalBalance > 0
-        ? activeDebts.reduce((sum, d) => sum + safeNum(d.balance) * safeNum(d.apr), 0) / totalBalance
+        ? activeDebts.reduce(
+            (sum, d) => sum + safeNum(d.balance) * safeNum(d.apr),
+            0
+          ) / totalBalance
         : 0;
 
     const mortgagePrincipal = activeDebts
@@ -613,7 +1746,6 @@ export default function DebtPage() {
       totalBalance,
       totalMinimum,
       totalExtra,
-      totalMonthly,
       weightedApr,
       mortgagePrincipal,
       mortgageInterest,
@@ -622,14 +1754,7 @@ export default function DebtPage() {
   }, [activeDebts]);
 
   const rankedDebts = useMemo(() => {
-    const rows = activeDebts.map((d) => {
-      const attack = getAttackPayment(d);
-      return {
-        ...d,
-        attack,
-        payoff: payoffMonths(d.balance, d.apr, attack),
-      };
-    });
+    const rows = [...activeDebts];
 
     if (settings.strategy === "snowball") {
       rows.sort((a, b) => safeNum(a.balance) - safeNum(b.balance));
@@ -641,15 +1766,34 @@ export default function DebtPage() {
       });
     }
 
-    return rows.map((d, i) => ({ ...d, priority: i + 1 }));
-  }, [activeDebts, settings.strategy]);
+    return rows.map((d, i) => {
+      const plannedAttack =
+        getAttackPayment(d) + (i === 0 ? safeNum(settings.globalExtraPool) : 0);
+      return {
+        ...d,
+        priority: i + 1,
+        plannedAttack,
+        payoff: payoffMonths(d.balance, d.apr, plannedAttack),
+      };
+    });
+  }, [activeDebts, settings.strategy, settings.globalExtraPool]);
+
+  const priorityMap = useMemo(() => {
+    const map = new Map();
+    rankedDebts.forEach((d) => map.set(d.id, d.priority));
+    return map;
+  }, [rankedDebts]);
 
   const topTarget = rankedDebts[0] || null;
 
   const quickStats = useMemo(() => {
-    const creditCards = debts.filter((d) => d.isActive && d.type === "credit_card").length;
+    const creditCards = debts.filter(
+      (d) => d.isActive && d.type === "credit_card"
+    ).length;
     const installment = debts.filter(
-      (d) => d.isActive && ["mortgage", "auto", "personal_loan", "student_loan"].includes(d.type)
+      (d) =>
+        d.isActive &&
+        ["mortgage", "auto", "personal_loan", "student_loan"].includes(d.type)
     ).length;
     const totalAccounts = debts.filter((d) => d.isActive).length;
     return { creditCards, installment, totalAccounts };
@@ -663,1362 +1807,983 @@ export default function DebtPage() {
       .slice(0, 6);
   }, [activeDebts]);
 
-  const topCardBars = useMemo(() => {
-    const monthlyAttack = totals.totalMinimum + totals.totalExtra + safeNum(settings.globalExtraPool);
-    const attackPct =
-      totals.totalMinimum > 0 ? Math.max(0, Math.min(100, (monthlyAttack / totals.totalMinimum) * 55)) : 0;
+  const monthlyAttackTotal =
+    totals.totalMinimum + totals.totalExtra + safeNum(settings.globalExtraPool);
 
-    const aprPct = Math.max(0, Math.min(100, (totals.weightedApr / 30) * 100));
+  const visibleDebts = useMemo(() => {
+    const q = search.trim().toLowerCase();
 
-    const principalTotal = totals.mortgagePrincipal + totals.mortgageInterest + totals.mortgageEscrow;
-    const principalPct =
-      principalTotal > 0 ? Math.max(0, Math.min(100, (totals.mortgagePrincipal / principalTotal) * 100)) : 0;
+    let list = debts.filter((d) => {
+      if (!settings.showInactive && !d.isActive && filter !== "all") return false;
 
-    const debtCountPct = Math.max(0, Math.min(100, quickStats.totalAccounts * 14));
-
-    return {
-      attackPct,
-      aprPct,
-      principalPct,
-      debtCountPct,
-    };
-  }, [totals, settings.globalExtraPool, quickStats.totalAccounts]);
-
-  const styles = (
-    <style jsx global>{`
-      .debtPage {
-        --text: #f7f8ff;
-        --muted: rgba(225, 232, 255, 0.72);
-        --muted2: rgba(225, 232, 255, 0.46);
-        --glass: linear-gradient(180deg, rgba(6, 12, 24, 0.42), rgba(4, 8, 16, 0.18));
-        --shadow: 0 22px 60px rgba(0, 0, 0, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.045);
-        color: var(--text);
-        color-scheme: dark;
-      }
-
-      .debtPage *,
-      .debtPage *::before,
-      .debtPage *::after {
-        box-sizing: border-box;
-      }
-
-      .debtPage .deShell {
-        width: 100%;
-        max-width: none;
-        margin: 0;
-        padding: 22px 8px 56px 0;
-      }
-
-      .debtPage .deHero,
-      .debtPage .deCard,
-      .debtPage .deMetric {
-        position: relative;
-        overflow: hidden;
-        border-radius: 30px;
-        border: 1px solid rgba(255, 255, 255, 0.075);
-        background: var(--glass);
-        box-shadow: var(--shadow);
-        backdrop-filter: blur(15px) saturate(126%);
-        -webkit-backdrop-filter: blur(15px) saturate(126%);
-      }
-
-      .debtPage .deHero::before,
-      .debtPage .deCard::before,
-      .debtPage .deMetric::before {
-        content: "";
-        position: absolute;
-        inset: 0;
-        pointer-events: none;
-        background:
-          radial-gradient(circle at top left, rgba(80, 120, 255, 0.08), transparent 28%),
-          radial-gradient(circle at top right, rgba(255, 255, 255, 0.022), transparent 18%),
-          radial-gradient(circle at bottom center, rgba(255, 107, 127, 0.03), transparent 28%);
-      }
-
-      .debtPage .deHero {
-        padding: 28px;
-        margin-bottom: 22px;
-      }
-
-      .debtPage .deHeroTop {
-        position: relative;
-        z-index: 1;
-        display: flex;
-        align-items: flex-start;
-        justify-content: space-between;
-        gap: 18px;
-        flex-wrap: wrap;
-      }
-
-      .debtPage .deEyebrow {
-        font-size: 11px;
-        text-transform: uppercase;
-        letter-spacing: 0.2em;
-        color: var(--muted2);
-        margin-bottom: 12px;
-      }
-
-      .debtPage .deTitle {
-        margin: 0;
-        font-size: clamp(34px, 4vw, 64px);
-        line-height: 0.95;
-        font-weight: 950;
-        letter-spacing: -0.045em;
-      }
-
-      .debtPage .deSub {
-        margin-top: 12px;
-        max-width: 940px;
-        color: var(--muted);
-        line-height: 1.6;
-        font-size: 15px;
-      }
-
-      .debtPage .deChipRow,
-      .debtPage .deActionRow {
-        display: flex;
-        gap: 10px;
-        flex-wrap: wrap;
-      }
-
-      .debtPage .deChip {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        min-height: 40px;
-        padding: 10px 15px;
-        border-radius: 999px;
-        border: 1px solid rgba(255, 255, 255, 0.075);
-        background: rgba(255, 255, 255, 0.038);
-        color: #f5f7ff;
-        font-size: 12px;
-        font-weight: 800;
-        letter-spacing: 0.04em;
-      }
-
-      .debtPage .deSegment {
-        display: inline-flex;
-        gap: 6px;
-        padding: 4px;
-        border-radius: 999px;
-        border: 1px solid rgba(255, 255, 255, 0.08);
-        background: rgba(255, 255, 255, 0.04);
-      }
-
-      .debtPage .deSegmentBtn,
-      .debtPage .deGhostBtn,
-      .debtPage .deSolidBtn,
-      .debtPage .deDangerBtn,
-      .debtPage .deOpenBtn {
-        min-height: 44px;
-        padding: 0 16px;
-        border-radius: 14px;
-        font-size: 13px;
-        font-weight: 800;
-        letter-spacing: 0.02em;
-        cursor: pointer;
-        transition:
-          transform 0.18s ease,
-          border-color 0.18s ease,
-          background 0.18s ease,
-          box-shadow 0.18s ease,
-          opacity 0.18s ease;
-      }
-
-      .debtPage .deSegmentBtn:hover,
-      .debtPage .deGhostBtn:hover,
-      .debtPage .deSolidBtn:hover,
-      .debtPage .deDangerBtn:hover,
-      .debtPage .deOpenBtn:hover {
-        transform: translateY(-1px);
-      }
-
-      .debtPage .deSegmentBtn,
-      .debtPage .deGhostBtn,
-      .debtPage .deOpenBtn {
-        border: 1px solid rgba(255, 255, 255, 0.09);
-        background: rgba(255, 255, 255, 0.03);
-        color: #f5f7ff;
-      }
-
-      .debtPage .deSegmentBtn.active {
-        border-color: rgba(255, 255, 255, 0.14);
-        background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(233, 237, 246, 0.92));
-        color: #08111f;
-      }
-
-      .debtPage .deSolidBtn {
-        border: 1px solid rgba(130, 170, 255, 0.24);
-        background: linear-gradient(180deg, rgba(77, 124, 255, 0.22), rgba(32, 74, 189, 0.12));
-        color: #f7f9ff;
-      }
-
-      .debtPage .deDangerBtn {
-        border: 1px solid rgba(244, 114, 182, 0.22);
-        background: rgba(244, 114, 182, 0.08);
-        color: #ffd5e5;
-      }
-
-      .debtPage .deMetricGrid {
-        display: grid;
-        grid-template-columns: repeat(4, minmax(230px, 1fr));
-        gap: 18px;
-        margin-bottom: 22px;
-      }
-
-      .debtPage .deMetric {
-        padding: 22px;
-        min-height: 166px;
-      }
-
-      .debtPage .deMetricLabel {
-        position: relative;
-        z-index: 1;
-        font-size: 11px;
-        text-transform: uppercase;
-        letter-spacing: 0.18em;
-        color: var(--muted2);
-      }
-
-      .debtPage .deMetricValue {
-        position: relative;
-        z-index: 1;
-        margin-top: 14px;
-        font-size: clamp(30px, 3vw, 48px);
-        line-height: 1;
-        font-weight: 950;
-        letter-spacing: -0.04em;
-      }
-
-      .debtPage .deMetricSub {
-        position: relative;
-        z-index: 1;
-        margin-top: 14px;
-        color: var(--muted);
-        font-size: 13px;
-        line-height: 1.5;
-      }
-
-      .debtPage .deCard {
-        padding: 24px;
-      }
-
-      .debtPage .deCardHead {
-        position: relative;
-        z-index: 1;
-        display: flex;
-        align-items: flex-start;
-        justify-content: space-between;
-        gap: 14px;
-        flex-wrap: wrap;
-        margin-bottom: 16px;
-      }
-
-      .debtPage .deSectionTitle {
-        margin: 0;
-        font-size: 34px;
-        line-height: 1;
-        font-weight: 900;
-        letter-spacing: -0.03em;
-      }
-
-      .debtPage .deSectionMini {
-        margin: 0;
-        font-size: 20px;
-        line-height: 1.1;
-        font-weight: 900;
-      }
-
-      .debtPage .deSectionText {
-        margin-top: 8px;
-        color: var(--muted);
-        font-size: 13px;
-        line-height: 1.55;
-      }
-
-      .debtPage .deTiny {
-        color: var(--muted2);
-        text-transform: uppercase;
-        letter-spacing: 0.12em;
-        font-size: 10px;
-        font-weight: 700;
-        margin-bottom: 8px;
-      }
-
-      .debtPage .deMainGrid {
-        display: grid;
-        grid-template-columns: minmax(0, 1.6fr) minmax(430px, 1fr);
-        gap: 20px;
-        align-items: start;
-      }
-
-      .debtPage .deLeftStack,
-      .debtPage .deRightStack,
-      .debtPage .deList,
-      .debtPage .deStack {
-        display: grid;
-        gap: 14px;
-      }
-
-      .debtPage .deControlGrid {
-        display: grid;
-        grid-template-columns: 1.1fr 1fr 1fr auto;
-        gap: 14px;
-        align-items: end;
-      }
-
-      .debtPage .deQuickAddGrid {
-        display: grid;
-        grid-template-columns: repeat(4, auto);
-        gap: 10px;
-        justify-content: end;
-      }
-
-      .debtPage .deField,
-      .debtPage .deSelect,
-      .debtPage .deTextarea {
-        width: 100%;
-        min-height: 50px;
-        border-radius: 16px;
-        border: 1px solid rgba(177, 196, 255, 0.14);
-        background: rgba(8, 13, 24, 0.52) !important;
-        color: #f4f7ff !important;
-        font-size: 14px;
-        font-weight: 600;
-        padding: 0 14px;
-        outline: none;
-        transition: border-color 0.18s ease, box-shadow 0.18s ease;
-      }
-
-      .debtPage .deTextarea {
-        min-height: 110px;
-        padding: 12px 14px;
-        resize: vertical;
-      }
-
-      .debtPage .deField::placeholder,
-      .debtPage .deTextarea::placeholder {
-        color: rgba(233, 238, 255, 0.44) !important;
-      }
-
-      .debtPage .deField:focus,
-      .debtPage .deSelect:focus,
-      .debtPage .deTextarea:focus {
-        border-color: rgba(121, 163, 255, 0.36);
-        box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.08);
-      }
-
-      .debtPage .deSelect option {
-        background: #08111f !important;
-        color: #f4f7ff !important;
-      }
-
-      .debtPage .deDebtCard {
-        position: relative;
-        overflow: hidden;
-        border-radius: 24px;
-        border: 1px solid rgba(255, 255, 255, 0.055);
-        background: linear-gradient(180deg, rgba(10, 16, 28, 0.38), rgba(5, 9, 17, 0.14));
-      }
-
-      .debtPage .deDebtTop {
-        padding: 18px;
-      }
-
-      .debtPage .deDebtTopGrid {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr) minmax(430px, auto);
-        gap: 14px;
-        align-items: start;
-      }
-
-      .debtPage .deMiniMetricGrid {
-        display: grid;
-        grid-template-columns: repeat(4, minmax(92px, 1fr));
-        gap: 10px;
-        min-width: 430px;
-      }
-
-      .debtPage .deMiniMetric {
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        border-radius: 14px;
-        padding: 10px 12px;
-        background: rgba(255, 255, 255, 0.03);
-      }
-
-      .debtPage .deDebtExpanded {
-        padding: 0 18px 18px;
-        border-top: 1px solid rgba(255, 255, 255, 0.1);
-      }
-
-      .debtPage .deExpandedGrid {
-        display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-        gap: 16px;
-        margin-top: 16px;
-      }
-
-      .debtPage .deMortgageCard {
-        margin-top: 16px;
-        padding: 16px;
-        border-radius: 22px;
-        border: 1px solid rgba(34, 197, 94, 0.18);
-        background: linear-gradient(180deg, rgba(34, 197, 94, 0.1), rgba(255, 255, 255, 0.04));
-      }
-
-      .debtPage .deMortgageGrid {
-        display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-        gap: 16px;
-      }
-
-      .debtPage .dePill {
-        display: inline-flex;
-        align-items: center;
-        min-height: 30px;
-        padding: 6px 10px;
-        border-radius: 999px;
-        font-size: 11px;
-        font-weight: 900;
-        letter-spacing: 0.04em;
-      }
-
-      .debtPage .deSnapshotRow {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 14px;
-        padding: 12px 14px;
-        border-radius: 14px;
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        background: rgba(255, 255, 255, 0.03);
-      }
-
-      .debtPage .deEmpty {
-        border-radius: 16px;
-        border: 1px dashed rgba(255, 255, 255, 0.18);
-        padding: 26px 18px;
-        text-align: center;
-        background: rgba(255, 255, 255, 0.02);
-      }
-
-      .debtPage .deEmptyTitle {
-        font-weight: 900;
-        font-size: 17px;
-      }
-
-      .debtPage .deEmptySub {
-        margin-top: 8px;
-        color: var(--muted);
-        font-size: 14px;
-        line-height: 1.5;
-      }
-
-      .debtPage .deProgress {
-        height: 10px;
-        width: 100%;
-        border-radius: 999px;
-        background: rgba(255, 255, 255, 0.06);
-        border: 1px solid rgba(255, 255, 255, 0.08);
-        overflow: hidden;
-      }
-
-      .debtPage .deProgressFill {
-        height: 100%;
-        border-radius: 999px;
-        transition: width 0.22s ease;
-        box-shadow: 0 0 16px rgba(255, 255, 255, 0.08);
-      }
-
-      .debtPage .deMuted {
-        color: var(--muted);
-      }
-
-      @media (max-width: 1380px) {
-        .debtPage .deMetricGrid {
-          grid-template-columns: repeat(2, minmax(0, 1fr));
-        }
-
-        .debtPage .deMainGrid {
-          grid-template-columns: 1fr;
+      if (filter === "active" && !d.isActive) return false;
+      if (filter === "inactive" && d.isActive) return false;
+      if (filter === "cards" && d.type !== "credit_card") return false;
+      if (filter === "installment") {
+        if (!["mortgage", "auto", "personal_loan", "student_loan"].includes(d.type)) {
+          return false;
         }
       }
-
-      @media (max-width: 1180px) {
-        .debtPage .deControlGrid {
-          grid-template-columns: 1fr;
-        }
-
-        .debtPage .deQuickAddGrid {
-          justify-content: start;
-          grid-template-columns: repeat(2, auto);
-        }
-
-        .debtPage .deExpandedGrid,
-        .debtPage .deMortgageGrid {
-          grid-template-columns: 1fr 1fr;
-        }
+      if (filter === "due") {
+        const due = getDueStatus(d.dueDay);
+        if (!(d.isActive && due.sort <= 7)) return false;
       }
 
-      @media (max-width: 980px) {
-        .debtPage .deDebtTopGrid {
-          grid-template-columns: 1fr;
-        }
+      if (!q) return true;
 
-        .debtPage .deMiniMetricGrid {
-          min-width: 0;
-          grid-template-columns: repeat(2, minmax(0, 1fr));
-        }
+      return [d.name, d.lender, d.type, d.notes, debtTypeLabel(d.type)]
+        .join(" ")
+        .toLowerCase()
+        .includes(q);
+    });
 
-        .debtPage .deExpandedGrid,
-        .debtPage .deMortgageGrid {
-          grid-template-columns: 1fr;
-        }
-      }
+    if (sort === "priority") {
+      list.sort((a, b) => {
+        const ar = priorityMap.get(a.id) ?? 999;
+        const br = priorityMap.get(b.id) ?? 999;
+        if (ar !== br) return ar - br;
+        return safeNum(b.balance) - safeNum(a.balance);
+      });
+      return list;
+    }
 
-      @media (max-width: 760px) {
-        .debtPage .deShell {
-          padding: 16px 6px 34px 0;
-        }
+    if (sort === "balance") {
+      list.sort((a, b) => safeNum(b.balance) - safeNum(a.balance));
+      return list;
+    }
 
-        .debtPage .deHero,
-        .debtPage .deCard,
-        .debtPage .deMetric {
-          border-radius: 22px;
-          padding: 18px;
-        }
+    if (sort === "apr") {
+      list.sort((a, b) => safeNum(b.apr) - safeNum(a.apr));
+      return list;
+    }
 
-        .debtPage .deMetricGrid {
-          grid-template-columns: 1fr;
-        }
+    if (sort === "name") {
+      list.sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")));
+      return list;
+    }
 
-        .debtPage .deTitle {
-          font-size: 36px;
-        }
+    if (sort === "updated") {
+      list.sort(
+        (a, b) =>
+          new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime()
+      );
+      return list;
+    }
 
-        .debtPage .deSectionTitle {
-          font-size: 26px;
-        }
+    list.sort((a, b) => getDueStatus(a.dueDay).sort - getDueStatus(b.dueDay).sort);
+    return list;
+  }, [debts, settings.showInactive, filter, search, sort, priorityMap]);
 
-        .debtPage .deQuickAddGrid,
-        .debtPage .deMiniMetricGrid {
-          grid-template-columns: 1fr 1fr;
-        }
-      }
-    `}</style>
-  );
+  const selectedDebt =
+    debts.find((d) => d.id === selectedDebtId) || visibleDebts[0] || null;
+
+  const selectedPriority = selectedDebt
+    ? priorityMap.get(selectedDebt.id) ?? null
+    : null;
+
+  const weightedAprTone =
+    totals.weightedApr >= 18 ? "red" : totals.weightedApr >= 10 ? "amber" : "green";
 
   if (loading) {
     return (
       <main className="debtPage">
-        {styles}
-        <div className="deShell">
-          <section className="deHero">
-            <div className="deHeroTop">
-              <div>
-                <div className="deEyebrow">DEBT CONTROL CENTER</div>
-                <h1 className="deTitle">Debt Control Center</h1>
-                <div className="deSub">Loading debt page…</div>
-              </div>
+        <div className="debtPageShell">
+          <GlassPane size="card">
+            <div style={{ fontWeight: 800, fontSize: 18, color: "#fff" }}>
+              Loading debt.
             </div>
-          </section>
+          </GlassPane>
         </div>
+        <style jsx global>{globalStyles}</style>
       </main>
     );
   }
 
   return (
-    <main className="debtPage">
-      {styles}
+    <>
+      <main className="debtPage">
+        <div className="debtPageShell">
+          <GlassPane size="card">
+            <div className="debtHeroGrid">
+              <div style={{ minWidth: 0 }}>
+                <div className="debtEyebrow">Life Command Center</div>
+                <div className="debtHeroTitle">Debt Command</div>
+                <div className="debtHeroSub">
+                  Cleaner payoff pressure, tighter controls, stronger priority logic,
+                  and a layout that fits the same premium shell as accounts and bills.
+                </div>
 
-      <div className="deShell">
-        <header className="deHero">
-          <div className="deHeroTop">
-            <div>
-              <div className="deEyebrow">DEBT CONTROL CENTER</div>
-              <h1 className="deTitle">Debt Control Center</h1>
-              <div className="deSub">
-                Premium debt tracking with payoff pressure, urgency chips, utilization bars, and cleaner mortgage
-                breakdowns.
+                <div className="debtPillRow">
+                  <MiniPill>{quickStats.totalAccounts} active debts</MiniPill>
+                  <MiniPill>{currentMonthLabel()}</MiniPill>
+                  <MiniPill>{quickStats.creditCards} cards</MiniPill>
+                  <MiniPill>{quickStats.installment} installment</MiniPill>
+                </div>
               </div>
 
-              <div className="deChipRow" style={{ marginTop: 14 }}>
-                <span className="deChip">{quickStats.totalAccounts} ACTIVE</span>
-                <span className="deChip">{quickStats.creditCards} CARDS</span>
-                <span className="deChip">{quickStats.installment} INSTALLMENT</span>
-                <span className="deChip">{dueSoon.length} DUE SOON</span>
-              </div>
-            </div>
-
-            <div className="deCard" style={{ padding: 14, minWidth: 230 }}>
-              <div className="deTiny">Focus target</div>
-              <div style={{ marginTop: 8, fontWeight: 900, fontSize: 20 }}>
-                {topTarget ? topTarget.name : "Add a debt"}
-              </div>
-              <div className="deSectionText" style={{ marginTop: 4 }}>
-                {topTarget
-                  ? settings.strategy === "avalanche"
-                    ? "Highest APR first"
-                    : "Smallest balance first"
-                  : "Nothing ranked yet"}
-              </div>
-            </div>
-          </div>
-        </header>
-
-        <section className="deMetricGrid">
-          <TopMetricCard
-            label="Total debt balance"
-            value={fmtMoney(totals.totalBalance)}
-            sub={
-              quickStats.totalAccounts
-                ? `${quickStats.totalAccounts} active debt account${quickStats.totalAccounts === 1 ? "" : "s"}`
-                : "No active debts yet"
-            }
-            fill={topCardBars.debtCountPct}
-            tone="accent"
-          />
-
-          <TopMetricCard
-            label="Monthly debt attack"
-            value={fmtMoney(totals.totalMinimum + totals.totalExtra + settings.globalExtraPool)}
-            sub="Minimums + debt-specific extra + global pool"
-            fill={topCardBars.attackPct}
-            tone="good"
-          />
-
-          <TopMetricCard
-            label="APR pressure"
-            value={fmtPct(totals.weightedApr)}
-            sub={settings.strategy === "avalanche" ? "Avalanche strategy active" : "Snowball strategy active"}
-            fill={topCardBars.aprPct}
-            tone={totals.weightedApr >= 18 ? "bad" : totals.weightedApr >= 10 ? "warn" : "good"}
-          />
-
-          <TopMetricCard
-            label="Mortgage principal share"
-            value={fmtMoney(totals.mortgagePrincipal)}
-            sub={`Interest ${fmtMoney(totals.mortgageInterest)} • Escrow ${fmtMoney(totals.mortgageEscrow)}`}
-            fill={topCardBars.principalPct}
-            tone={topCardBars.principalPct < 25 ? "warn" : "good"}
-          />
-        </section>
-
-        <section className="deCard" style={{ marginBottom: 20 }}>
-          <div className="deControlGrid">
-            <div>
-              <div className="deTiny">Payoff strategy</div>
-              <select
-                className="deSelect"
-                value={settings.strategy}
-                onChange={(e) => updateSettings({ strategy: e.target.value })}
+              <div
+                style={{
+                  display: "flex",
+                  gap: 8,
+                  flexWrap: "wrap",
+                  justifyContent: "flex-end",
+                }}
               >
-                <option value="avalanche">Avalanche (highest APR first)</option>
-                <option value="snowball">Snowball (smallest balance first)</option>
-              </select>
-            </div>
-
-            <div>
-              <div className="deTiny">Global extra pool / month</div>
-              <input
-                className="deField"
-                value={String(settings.globalExtraPool || "")}
-                onChange={(e) =>
-                  updateSettings({
-                    globalExtraPool: safeNum(parseMoneyInput(e.target.value), 0),
-                  })
-                }
-                placeholder="e.g. 300"
-              />
-            </div>
-
-            <div>
-              <div className="deTiny">Search debt</div>
-              <input
-                className="deField"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search debt..."
-              />
-            </div>
-
-            <div className="deActionRow">
-              <button
-                className="deGhostBtn"
-                type="button"
-                onClick={() => updateSettings({ showInactive: !settings.showInactive })}
-              >
-                {settings.showInactive ? "Hide inactive" : "Show inactive"}
-              </button>
-            </div>
-          </div>
-
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "1fr auto",
-              gap: 14,
-              alignItems: "center",
-              marginTop: 16,
-            }}
-          >
-            <div className="deCard" style={{ padding: 14 }}>
-              <div className="deTiny">Planned monthly attack</div>
-              <div style={{ marginTop: 8, fontWeight: 950, fontSize: 28 }}>
-                {fmtMoney(totals.totalMinimum + totals.totalExtra + settings.globalExtraPool)}
-              </div>
-              <div style={{ marginTop: 10 }}>
-                <ProgressBar fill={topCardBars.attackPct} tone="good" />
+                <MiniPill>{settings.strategy}</MiniPill>
+                <MiniPill tone="green">{fmtMoney(monthlyAttackTotal)} attack</MiniPill>
+                <MiniPill tone={dueSoon.length > 0 ? "amber" : "green"}>
+                  {dueSoon.length} due soon
+                </MiniPill>
               </div>
             </div>
+          </GlassPane>
 
-            <div className="deQuickAddGrid">
-              <button className="deGhostBtn" type="button" onClick={() => addDebt("mortgage")}>
-                + Mortgage
-              </button>
-              <button className="deGhostBtn" type="button" onClick={() => addDebt("auto")}>
-                + Auto
-              </button>
-              <button className="deGhostBtn" type="button" onClick={() => addDebt("credit_card")}>
-                + Card
-              </button>
-              <button className="deGhostBtn" type="button" onClick={() => addDebt("other")}>
-                + Other
-              </button>
-            </div>
-          </div>
-        </section>
+          <section className="debtMetricGrid">
+            <StatCard
+              icon={CreditCard}
+              label="Total Debt Balance"
+              value={fmtMoney(totals.totalBalance)}
+              detail={`${quickStats.totalAccounts} active debt account${
+                quickStats.totalAccounts === 1 ? "" : "s"
+              }.`}
+              tone="red"
+            />
+            <StatCard
+              icon={BadgeDollarSign}
+              label="Monthly Attack"
+              value={fmtMoney(monthlyAttackTotal)}
+              detail="Minimums + debt-specific extra + global pool."
+              tone="green"
+            />
+            <StatCard
+              icon={Flame}
+              label="APR Pressure"
+              value={fmtPct(totals.weightedApr)}
+              detail={
+                settings.strategy === "avalanche"
+                  ? "Avalanche strategy active."
+                  : "Snowball strategy active."
+              }
+              tone={weightedAprTone}
+            />
+            <StatCard
+              icon={CalendarClock}
+              label="Due Soon"
+              value={String(dueSoon.length)}
+              detail={topTarget ? `Top target: ${topTarget.name}` : "No target ranked yet."}
+              tone={dueSoon.length > 0 ? "amber" : "green"}
+            />
+          </section>
 
-        <section className="deMainGrid">
-          <div className="deLeftStack">
-            <div className="deCard">
-              <div className="deCardHead">
-                <div>
-                  <h2 className="deSectionTitle">Debt Accounts</h2>
-                  <div className="deSectionText">
-                    Payoff bars, urgency chips, and due pressure built into every row.
-                  </div>
+          <GlassPane size="card">
+            <PaneHeader
+              title="Debt Controls"
+              subcopy="Tune strategy, search the roster, and steer what the queue attacks first."
+            />
+
+            <div className="debtControlsGrid">
+              <div>
+                <div className="debtTinyLabel">Payoff Strategy</div>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <ActionBtn
+                    variant={settings.strategy === "avalanche" ? "primary" : "ghost"}
+                    onClick={() => updateSettings({ strategy: "avalanche" })}
+                  >
+                    Avalanche
+                  </ActionBtn>
+                  <ActionBtn
+                    variant={settings.strategy === "snowball" ? "primary" : "ghost"}
+                    onClick={() => updateSettings({ strategy: "snowball" })}
+                  >
+                    Snowball
+                  </ActionBtn>
                 </div>
               </div>
 
-              {visibleDebts.length === 0 ? (
-                <EmptyState
-                  title="No debt accounts yet"
-                  sub="Start with a credit card, car loan, mortgage, or any other balance you want tracked."
+              <div>
+                <div className="debtTinyLabel">Global Extra Pool / Month</div>
+                <input
+                  className="debtField"
+                  value={String(settings.globalExtraPool || "")}
+                  onChange={(e) =>
+                    updateSettings({
+                      globalExtraPool: safeNum(parseMoneyInput(e.target.value), 0),
+                    })
+                  }
+                  placeholder="e.g. 300"
                 />
-              ) : (
-                <div className="deList">
-                  {visibleDebts.map((debt) => {
-                    const isOpen = openId === debt.id;
-                    const monthlyShown = getMonthlyShown(debt);
-                    const payoff = payoffMonths(safeNum(debt.balance), safeNum(debt.apr), getAttackPayment(debt));
-                    const due = getDueStatus(debt.dueDay);
-                    const progressFill = getDebtProgressPercent(debt);
-                    const progressTone = getDebtBarTone(debt);
-
-                    const rankedMatch = rankedDebts.find((r) => r.id === debt.id);
-                    const priority = rankedMatch?.priority || null;
-                    const chip = getDebtChip(debt, priority);
-                    const promo = getPromoStatus(debt);
-
-                    return (
-                      <div key={debt.id} className="deDebtCard">
-                        <div className="deDebtTop">
-                          <div className="deDebtTopGrid">
-                            <div>
-                              <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
-                                <div style={{ fontWeight: 950, fontSize: 18 }}>{debt.name || "Untitled debt"}</div>
-
-                                <Tag text={debtTypeLabel(debt.type)} tone="neutral" />
-                                {!debt.isActive ? <Tag text="Inactive" tone="neutral" /> : null}
-                                {priority ? (
-                                  <Tag text={`Target #${priority}`} tone={priority === 1 ? "accent" : "neutral"} />
-                                ) : null}
-                                <Tag text={chip.label} tone={chip.tone} />
-                                {promo && promo.tone === "good" ? <Tag text={promo.label} tone="good" /> : null}
-                                {savingIds[debt.id] ? <Tag text="Saving..." tone="accent" /> : null}
-                              </div>
-
-                              <div className="deSectionText" style={{ marginTop: 8 }}>
-                                {debt.lender || "No lender yet"} • {due.label}
-                              </div>
-
-                              <div style={{ marginTop: 12 }}>
-                                <ProgressBar fill={progressFill} tone={progressTone} />
-                              </div>
-                            </div>
-
-                            <div className="deMiniMetricGrid">
-                              <MiniMetric label="Balance" value={fmtMoney(debt.balance)} />
-                              <MiniMetric label="APR" value={fmtPct(debt.apr)} />
-                              <MiniMetric label="Monthly" value={fmtMoney(monthlyShown)} />
-                              <MiniMetric label="Payoff" value={payoff === Infinity ? "Never" : monthLabel(payoff)} />
-                            </div>
-                          </div>
-
-                          <div className="deActionRow" style={{ marginTop: 14 }}>
-                            <button
-                              className="deOpenBtn"
-                              type="button"
-                              onClick={() => setOpenId((prev) => (prev === debt.id ? null : debt.id))}
-                            >
-                              {isOpen ? "Close details" : "Open details"}
-                            </button>
-                            <button className="deGhostBtn" type="button" onClick={() => duplicateDebt(debt)}>
-                              Duplicate
-                            </button>
-                            <button
-                              className="deGhostBtn"
-                              type="button"
-                              onClick={() => updateDebt(debt.id, { isActive: !debt.isActive })}
-                            >
-                              {debt.isActive ? "Mark inactive" : "Mark active"}
-                            </button>
-                            <button className="deDangerBtn" type="button" onClick={() => removeDebt(debt.id)}>
-                              Delete debt
-                            </button>
-                          </div>
-                        </div>
-
-                        {isOpen ? (
-                          <div className="deDebtExpanded">
-                            <div className="deExpandedGrid">
-                              <Field label="Debt name">
-                                <input
-                                  className="deField"
-                                  value={debt.name}
-                                  onChange={(e) => updateDebt(debt.id, { name: e.target.value })}
-                                  placeholder="Amex Gold, Mortgage, Car Loan..."
-                                />
-                              </Field>
-
-                              <Field label="Debt type">
-                                <select
-                                  className="deSelect"
-                                  value={debt.type}
-                                  onChange={(e) => updateDebt(debt.id, { type: e.target.value })}
-                                >
-                                  <option value="mortgage">Mortgage</option>
-                                  <option value="auto">Auto Loan</option>
-                                  <option value="credit_card">Credit Card</option>
-                                  <option value="personal_loan">Personal Loan</option>
-                                  <option value="student_loan">Student Loan</option>
-                                  <option value="other">Other Debt</option>
-                                </select>
-                              </Field>
-
-                              <Field label="Lender">
-                                <input
-                                  className="deField"
-                                  value={debt.lender}
-                                  onChange={(e) => updateDebt(debt.id, { lender: e.target.value })}
-                                  placeholder="Bank / lender"
-                                />
-                              </Field>
-
-                              <Field label="Current balance">
-                                <input
-                                  className="deField"
-                                  value={String(debt.balance || "")}
-                                  onChange={(e) =>
-                                    updateDebt(debt.id, { balance: safeNum(parseMoneyInput(e.target.value), 0) })
-                                  }
-                                  placeholder="e.g. 8200"
-                                />
-                              </Field>
-
-                              <Field label="Original balance">
-                                <input
-                                  className="deField"
-                                  value={String(debt.originalBalance || "")}
-                                  onChange={(e) =>
-                                    updateDebt(debt.id, {
-                                      originalBalance: safeNum(parseMoneyInput(e.target.value), 0),
-                                    })
-                                  }
-                                  placeholder="Optional"
-                                />
-                              </Field>
-
-                              <Field label="Credit limit">
-                                <input
-                                  className="deField"
-                                  value={String(debt.creditLimit || "")}
-                                  onChange={(e) =>
-                                    updateDebt(debt.id, {
-                                      creditLimit: safeNum(parseMoneyInput(e.target.value), 0),
-                                    })
-                                  }
-                                  placeholder="Cards only"
-                                />
-                              </Field>
-
-                              <Field label="APR %">
-                                <input
-                                  className="deField"
-                                  value={String(debt.apr || "")}
-                                  onChange={(e) => updateDebt(debt.id, { apr: safeNum(e.target.value, 0) })}
-                                  placeholder="e.g. 24.99"
-                                />
-                              </Field>
-
-                              <Field label="Due day">
-                                <input
-                                  className="deField"
-                                  value={debt.dueDay}
-                                  onChange={(e) => updateDebt(debt.id, { dueDay: e.target.value })}
-                                  placeholder="1-31"
-                                />
-                              </Field>
-
-                              <Field label="Minimum payment">
-                                <input
-                                  className="deField"
-                                  value={String(debt.minimumPayment || "")}
-                                  onChange={(e) =>
-                                    updateDebt(debt.id, {
-                                      minimumPayment: safeNum(parseMoneyInput(e.target.value), 0),
-                                    })
-                                  }
-                                  placeholder="e.g. 145"
-                                />
-                              </Field>
-
-                              <Field label="Extra payment">
-                                <input
-                                  className="deField"
-                                  value={String(debt.extraPayment || "")}
-                                  onChange={(e) =>
-                                    updateDebt(debt.id, {
-                                      extraPayment: safeNum(parseMoneyInput(e.target.value), 0),
-                                    })
-                                  }
-                                  placeholder="e.g. 75"
-                                />
-                              </Field>
-
-                              <Field label="Monthly payment">
-                                <input
-                                  className="deField"
-                                  value={String(debt.monthlyPayment || "")}
-                                  onChange={(e) =>
-                                    updateDebt(debt.id, {
-                                      monthlyPayment: safeNum(parseMoneyInput(e.target.value), 0),
-                                    })
-                                  }
-                                  placeholder="For fixed/installment debt"
-                                />
-                              </Field>
-
-                              <Field label="Promo APR %">
-                                <input
-                                  className="deField"
-                                  value={debt.promoApr}
-                                  onChange={(e) => updateDebt(debt.id, { promoApr: e.target.value })}
-                                  placeholder="Optional intro APR"
-                                />
-                              </Field>
-
-                              <Field label="Promo ends">
-                                <input
-                                  className="deField"
-                                  type="date"
-                                  value={debt.promoEnds || ""}
-                                  onChange={(e) => updateDebt(debt.id, { promoEnds: e.target.value })}
-                                />
-                              </Field>
-                            </div>
-
-                            {debt.type === "mortgage" ? (
-                              <div className="deMortgageCard">
-                                <div
-                                  style={{
-                                    display: "grid",
-                                    gridTemplateColumns: "1fr auto",
-                                    gap: 12,
-                                    alignItems: "start",
-                                    marginBottom: 14,
-                                  }}
-                                >
-                                  <div>
-                                    <div style={{ fontWeight: 950, fontSize: 16 }}>Mortgage Payment Breakdown</div>
-                                    <div className="deSectionText" style={{ marginTop: 4 }}>
-                                      Principal should trend up over time. Interest-heavy payments stay warmer.
-                                    </div>
-                                  </div>
-
-                                  <div className="dePill" style={tagToneStyle("good")}>
-                                    Total {fmtMoney(getMortgageTotal(debt))}
-                                  </div>
-                                </div>
-
-                                <div style={{ marginBottom: 14 }}>
-                                  <ProgressBar
-                                    fill={getPrincipalShare(debt) ?? 0}
-                                    tone={(getPrincipalShare(debt) ?? 0) < 25 ? "warn" : "good"}
-                                  />
-                                </div>
-
-                                <div className="deMortgageGrid">
-                                  <Field label="Principal portion">
-                                    <input
-                                      className="deField"
-                                      value={String(debt.principalPortion || "")}
-                                      onChange={(e) =>
-                                        updateDebt(debt.id, {
-                                          principalPortion: safeNum(parseMoneyInput(e.target.value), 0),
-                                        })
-                                      }
-                                      placeholder="e.g. 612.34"
-                                    />
-                                  </Field>
-
-                                  <Field label="Interest portion">
-                                    <input
-                                      className="deField"
-                                      value={String(debt.interestPortion || "")}
-                                      onChange={(e) =>
-                                        updateDebt(debt.id, {
-                                          interestPortion: safeNum(parseMoneyInput(e.target.value), 0),
-                                        })
-                                      }
-                                      placeholder="e.g. 1542.11"
-                                    />
-                                  </Field>
-
-                                  <Field label="Escrow / tax / insurance">
-                                    <input
-                                      className="deField"
-                                      value={String(debt.escrowPortion || "")}
-                                      onChange={(e) =>
-                                        updateDebt(debt.id, {
-                                          escrowPortion: safeNum(parseMoneyInput(e.target.value), 0),
-                                        })
-                                      }
-                                      placeholder="e.g. 649.45"
-                                    />
-                                  </Field>
-                                </div>
-                              </div>
-                            ) : null}
-
-                            <div style={{ marginTop: 16 }}>
-                              <Field label="Notes">
-                                <textarea
-                                  className="deTextarea"
-                                  value={debt.notes}
-                                  onChange={(e) => updateDebt(debt.id, { notes: e.target.value })}
-                                  placeholder="Rate notes, payoff plan, balance transfer info, refinance thoughts..."
-                                />
-                              </Field>
-                            </div>
-                          </div>
-                        ) : null}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div className="deRightStack">
-            <div className="deCard">
-              <div className="deCardHead">
-                <div>
-                  <h2 className="deSectionMini">Priority Queue</h2>
-                  <div className="deSectionText">
-                    {settings.strategy === "avalanche" ? "Highest APR first." : "Smallest balance first."}
-                  </div>
-                </div>
               </div>
 
-              <div className="deList">
-                {rankedDebts.length === 0 ? (
-                  <EmptyState
-                    title="Nothing to rank yet"
-                    sub="Add active balances and monthly payments to build a payoff order."
-                  />
-                ) : (
-                  rankedDebts.map((d) => {
-                    const chip = getDebtChip(d, d.priority);
-                    const due = getDueStatus(d.dueDay);
-
-                    return (
-                      <div className="deCard" key={d.id} style={{ padding: 14 }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
-                          <div>
-                            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                              <Tag text={`#${d.priority}`} tone={d.priority === 1 ? "accent" : "neutral"} />
-                              <span style={{ fontWeight: 900 }}>{d.name}</span>
-                              <Tag text={chip.label} tone={chip.tone} />
-                            </div>
-                            <div className="deSectionText" style={{ marginTop: 6 }}>
-                              {d.lender || "No lender"} • {fmtPct(d.apr)} APR • {due.label}
-                            </div>
-                          </div>
-
-                          <div style={{ textAlign: "right" }}>
-                            <div className="deTiny">Balance</div>
-                            <div style={{ fontWeight: 900 }}>{fmtMoney(d.balance)}</div>
-                          </div>
-                        </div>
-
-                        <div style={{ marginTop: 12 }}>
-                          <ProgressBar fill={getDebtProgressPercent(d)} tone={getDebtBarTone(d)} />
-                        </div>
-
-                        <div
-                          style={{
-                            display: "grid",
-                            gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-                            gap: 10,
-                            marginTop: 12,
-                          }}
-                        >
-                          <MiniMetric label="Min" value={fmtMoney(d.minimumPayment)} />
-                          <MiniMetric label="Extra" value={fmtMoney(d.extraPayment)} />
-                          <MiniMetric label="Payoff" value={d.payoff === Infinity ? "Never" : monthLabel(d.payoff)} />
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
+              <div>
+                <div className="debtTinyLabel">Show Inactive</div>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <ActionBtn
+                    variant={!settings.showInactive ? "primary" : "ghost"}
+                    onClick={() => updateSettings({ showInactive: false })}
+                  >
+                    Hide
+                  </ActionBtn>
+                  <ActionBtn
+                    variant={settings.showInactive ? "primary" : "ghost"}
+                    onClick={() => updateSettings({ showInactive: true })}
+                  >
+                    Show
+                  </ActionBtn>
+                </div>
               </div>
             </div>
+          </GlassPane>
 
-            <div className="deCard">
-              <div className="deCardHead">
-                <div>
-                  <h2 className="deSectionMini">Debt Snapshot</h2>
-                  <div className="deSectionText">Quick monthly picture.</div>
-                </div>
-              </div>
+          <section className="debtMainGrid">
+            <GlassPane size="card">
+              <PaneHeader
+                title="Debt Roster"
+                subcopy="Compact list on the left. Work the selected debt on the right."
+                right={<MiniPill>{visibleDebts.length} showing</MiniPill>}
+              />
 
-              <div className="deList">
-                <SnapshotRow label="Total minimums" value={fmtMoney(totals.totalMinimum)} />
-                <SnapshotRow label="Debt-specific extra" value={fmtMoney(totals.totalExtra)} />
-                <SnapshotRow label="Global extra pool" value={fmtMoney(settings.globalExtraPool)} />
-                <SnapshotRow
-                  label="Total monthly attack"
-                  value={fmtMoney(totals.totalMinimum + totals.totalExtra + settings.globalExtraPool)}
-                  strong
-                />
-                <SnapshotRow label="Credit cards" value={String(quickStats.creditCards)} />
-                <SnapshotRow label="Installment debts" value={String(quickStats.installment)} />
-              </div>
-            </div>
-
-            <div className="deCard">
-              <div className="deCardHead">
-                <div>
-                  <h2 className="deSectionMini">Projected First Win</h2>
-                  <div className="deSectionText">Based on current payment inputs only.</div>
-                </div>
-              </div>
-
-              {topTarget ? (
-                <div className="deList">
-                  <SnapshotRow label="Target" value={topTarget.name} />
-                  <SnapshotRow
-                    label="Payoff estimate"
-                    value={topTarget.payoff === Infinity ? "Never" : monthLabel(topTarget.payoff)}
+              <div className="debtRosterControls">
+                <div className="debtSearchWrap">
+                  <Search size={15} />
+                  <input
+                    className="debtField debtSearchField"
+                    placeholder="Search debt"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
                   />
-                  <SnapshotRow
-                    label="Approx payoff month"
-                    value={topTarget.payoff === Infinity ? "—" : nextMonthDate(Math.ceil(topTarget.payoff))}
-                  />
+                </div>
+
+                <select
+                  className="debtField"
+                  value={filter}
+                  onChange={(e) => setFilter(e.target.value)}
+                >
+                  <option value="active">Active only</option>
+                  <option value="all">All debts</option>
+                  <option value="inactive">Inactive</option>
+                  <option value="cards">Credit cards</option>
+                  <option value="installment">Installment</option>
+                  <option value="due">Due soon</option>
+                </select>
+
+                <select
+                  className="debtField"
+                  value={sort}
+                  onChange={(e) => setSort(e.target.value)}
+                >
+                  <option value="priority">Priority</option>
+                  <option value="due">Due first</option>
+                  <option value="balance">Balance high → low</option>
+                  <option value="apr">APR high → low</option>
+                  <option value="updated">Recently updated</option>
+                  <option value="name">Name</option>
+                </select>
+              </div>
+
+              {visibleDebts.length ? (
+                <div className="debtRosterListCompact">
+                  {visibleDebts.map((debt) => (
+                    <CompactDebtRow
+                      key={debt.id}
+                      debt={debt}
+                      selected={debt.id === selectedDebt?.id}
+                      priority={priorityMap.get(debt.id) ?? null}
+                      onSelect={() => setSelectedDebtId(debt.id)}
+                      onDuplicate={() => duplicateDebt(debt)}
+                      onToggle={() => updateDebt(debt.id, { isActive: !debt.isActive })}
+                      onDelete={() => removeDebt(debt.id)}
+                    />
+                  ))}
                 </div>
               ) : (
-                <EmptyState title="No projection yet" sub="Add a debt with balance, APR, and payment info." />
-              )}
-            </div>
-
-            <div className="deCard">
-              <div className="deCardHead">
-                <div>
-                  <h2 className="deSectionMini">Due Soon</h2>
-                  <div className="deSectionText">Fast action view for urgent payments.</div>
+                <div className="debtEmptyState">
+                  <div>
+                    <div className="debtEmptyTitle">No debts found</div>
+                    <div className="debtEmptyText">
+                      Clear filters or add a new debt account.
+                    </div>
+                  </div>
                 </div>
+              )}
+            </GlassPane>
+
+            <div className="debtRightStack">
+              <div className="debtTopRightGrid">
+                <FocusDebtCard
+                  debt={selectedDebt}
+                  priority={selectedPriority}
+                  globalExtraPool={settings.globalExtraPool}
+                  saving={selectedDebt ? !!savingIds[selectedDebt.id] : false}
+                  onDuplicate={() => selectedDebt && duplicateDebt(selectedDebt)}
+                  onToggle={() =>
+                    selectedDebt &&
+                    updateDebt(selectedDebt.id, { isActive: !selectedDebt.isActive })
+                  }
+                  onDelete={() => selectedDebt && removeDebt(selectedDebt.id)}
+                />
+
+                <AddDebtCard
+                  adding={adding}
+                  setAdding={setAdding}
+                  onAdd={addDebtFromForm}
+                  saving={addingBusy}
+                />
               </div>
 
-              <div className="deList">
-                {dueSoon.length === 0 ? (
-                  <EmptyState title="Nothing urgent right now" sub="No active debt with immediate due pressure." />
-                ) : (
-                  dueSoon.map((d) => (
-                    <div className="deCard" key={d.id} style={{ padding: 14 }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
-                        <div>
-                          <div style={{ fontWeight: 900 }}>{d.name}</div>
-                          <div className="deSectionText" style={{ marginTop: 6 }}>
-                            {d.due.label}
-                          </div>
+              <div className="debtBottomGrid">
+                <GlassPane size="card">
+                  <PaneHeader
+                    title="Priority Queue"
+                    subcopy={
+                      settings.strategy === "avalanche"
+                        ? "Highest APR first."
+                        : "Smallest balance first."
+                    }
+                    right={
+                      <MiniPill>
+                        {rankedDebts.length} item{rankedDebts.length === 1 ? "" : "s"}
+                      </MiniPill>
+                    }
+                  />
+
+                  {rankedDebts.length ? (
+                    <div className="debtIntelList">
+                      {rankedDebts.slice(0, 5).map((debt) => (
+                        <QueueItem
+                          key={debt.id}
+                          debt={debt}
+                          onFocus={() => setSelectedDebtId(debt.id)}
+                        />
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="debtEmptyState debtInlineEmpty">
+                      <div>
+                        <div className="debtEmptyTitle">Nothing to rank yet</div>
+                        <div className="debtEmptyText">
+                          Add active balances and payment info to build a payoff order.
                         </div>
-                        <Tag text={d.due.label} tone={d.due.tone === "neutral" ? "neutral" : d.due.tone} />
                       </div>
                     </div>
-                  ))
-                )}
-              </div>
-            </div>
+                  )}
+                </GlassPane>
 
-            <div className="deCard">
-              <div className="deCardHead">
-                <div>
-                  <h2 className="deSectionMini">Mortgage Insight</h2>
-                  <div className="deSectionText">Principal, interest, and escrow at a glance.</div>
-                </div>
+                <GlassPane size="card">
+                  <PaneHeader
+                    title="Due Soon"
+                    subcopy="Fast action view for urgent payments."
+                    right={
+                      <MiniPill>
+                        {dueSoon.length} item{dueSoon.length === 1 ? "" : "s"}
+                      </MiniPill>
+                    }
+                  />
+
+                  {dueSoon.length ? (
+                    <div className="debtIntelList">
+                      {dueSoon.map((debt) => (
+                        <DueItem
+                          key={debt.id}
+                          debt={debt}
+                          onFocus={() => setSelectedDebtId(debt.id)}
+                        />
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="debtEmptyState debtInlineEmpty">
+                      <div>
+                        <div className="debtEmptyTitle">Nothing urgent right now</div>
+                        <div className="debtEmptyText">
+                          No active debt has immediate due pressure.
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </GlassPane>
               </div>
 
-              <div className="deList">
-                <SnapshotRow label="Principal / month" value={fmtMoney(totals.mortgagePrincipal)} />
-                <SnapshotRow label="Interest / month" value={fmtMoney(totals.mortgageInterest)} />
-                <SnapshotRow label="Escrow / month" value={fmtMoney(totals.mortgageEscrow)} />
-              </div>
-
-              <div style={{ marginTop: 14 }}>
-                <ProgressBar
-                  fill={
-                    totals.mortgagePrincipal + totals.mortgageInterest + totals.mortgageEscrow > 0
-                      ? (totals.mortgagePrincipal /
-                          (totals.mortgagePrincipal + totals.mortgageInterest + totals.mortgageEscrow)) *
-                        100
-                      : 0
-                  }
-                  tone={
-                    totals.mortgagePrincipal + totals.mortgageInterest + totals.mortgageEscrow > 0 &&
-                    totals.mortgagePrincipal /
-                      (totals.mortgagePrincipal + totals.mortgageInterest + totals.mortgageEscrow) <
-                      0.25
-                      ? "warn"
-                      : "good"
-                  }
+              <GlassPane size="card">
+                <PaneHeader
+                  title="Debt Snapshot"
+                  subcopy="Quick monthly view of the whole debt stack."
                 />
-              </div>
+
+                <div className="debtSnapshotGrid">
+                  <div className="debtSnapshotRow">
+                    <span>Total minimums</span>
+                    <strong>{fmtMoney(totals.totalMinimum)}</strong>
+                  </div>
+                  <div className="debtSnapshotRow">
+                    <span>Debt-specific extra</span>
+                    <strong>{fmtMoney(totals.totalExtra)}</strong>
+                  </div>
+                  <div className="debtSnapshotRow">
+                    <span>Global extra pool</span>
+                    <strong>{fmtMoney(settings.globalExtraPool)}</strong>
+                  </div>
+                  <div className="debtSnapshotRow">
+                    <span>Total monthly attack</span>
+                    <strong>{fmtMoney(monthlyAttackTotal)}</strong>
+                  </div>
+                  <div className="debtSnapshotRow">
+                    <span>Mortgage principal / month</span>
+                    <strong>{fmtMoney(totals.mortgagePrincipal)}</strong>
+                  </div>
+                  <div className="debtSnapshotRow">
+                    <span>Mortgage interest / month</span>
+                    <strong>{fmtMoney(totals.mortgageInterest)}</strong>
+                  </div>
+                </div>
+
+                {topTarget ? (
+                  <div className="debtInfoCell" style={{ marginTop: 12 }}>
+                    <div className="debtTinyLabel">Projected First Win</div>
+                    <div className="debtInfoValue">{topTarget.name}</div>
+                    <div className="debtInfoSub" style={{ marginTop: 6 }}>
+                      {topTarget.payoff === Infinity
+                        ? "Current payment path does not pay this off."
+                        : `Estimated payoff ${monthLabel(
+                            topTarget.payoff
+                          )} • around ${nextMonthDate(Math.ceil(topTarget.payoff))}.`}
+                    </div>
+                  </div>
+                ) : null}
+              </GlassPane>
+
+              <DebtEditorCard
+                debt={selectedDebt}
+                saving={selectedDebt ? !!savingIds[selectedDebt.id] : false}
+                onPatch={(patch) => selectedDebt && updateDebt(selectedDebt.id, patch)}
+              />
             </div>
-          </div>
-        </section>
-      </div>
-    </main>
+          </section>
+        </div>
+      </main>
+
+      <style jsx global>{globalStyles}</style>
+    </>
   );
 }
 
-function TopMetricCard({ label, value, sub, fill, tone }) {
-  return (
-    <div className="deMetric">
-      <div className="deMetricLabel">{label}</div>
-      <div className="deMetricValue">{value}</div>
-      <div style={{ marginTop: 10 }}>
-        <ProgressBar fill={fill} tone={tone} />
-      </div>
-      <div className="deMetricSub">{sub}</div>
-    </div>
-  );
-}
+const globalStyles = `
+  .debtPage {
+    color: var(--lcc-text);
+    font-family: var(--lcc-font-sans);
+  }
 
-function Field({ label, children }) {
-  return (
-    <label style={{ display: "block" }}>
-      <div className="deTiny">{label}</div>
-      {children}
-    </label>
-  );
-}
+  .debtPageShell {
+    width: min(100%, 1320px);
+    margin: 0 auto;
+    padding: 12px 0 20px;
+    display: grid;
+    gap: 12px;
+  }
 
-function MiniMetric({ label, value }) {
-  return (
-    <div className="deMiniMetric">
-      <div className="deTiny">{label}</div>
-      <div style={{ marginTop: 6, fontWeight: 900, fontSize: 16 }}>{value}</div>
-    </div>
-  );
-}
+  .debtEyebrow {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: .22em;
+    font-weight: 800;
+    color: rgba(255,255,255,0.42);
+  }
 
-function SnapshotRow({ label, value, strong }) {
-  return (
-    <div className="deSnapshotRow">
-      <div className="deMuted" style={{ fontSize: 14 }}>
-        {label}
-      </div>
-      <div style={{ fontWeight: strong ? 950 : 850 }}>{value}</div>
-    </div>
-  );
-}
+  .debtHeroTitle {
+    margin-top: 8px;
+    font-size: clamp(24px, 3.2vw, 34px);
+    line-height: 1.02;
+    font-weight: 850;
+    letter-spacing: -0.05em;
+    color: #fff;
+  }
 
-function EmptyState({ title, sub }) {
-  return (
-    <div className="deEmpty">
-      <div className="deEmptyTitle">{title}</div>
-      <div className="deEmptySub">{sub}</div>
-    </div>
-  );
-}
+  .debtHeroSub {
+    margin-top: 8px;
+    font-size: 13px;
+    line-height: 1.55;
+    color: rgba(255,255,255,0.62);
+    max-width: 760px;
+  }
 
-function tagToneStyle(tone = "neutral") {
-  const styles = {
-    neutral: {
-      border: "1px solid rgba(255,255,255,.12)",
-      background: "rgba(255,255,255,.05)",
-      color: "rgba(255,255,255,.82)",
-    },
-    good: {
-      border: "1px solid rgba(74,222,128,.22)",
-      background: "rgba(34,197,94,.12)",
-      color: "rgba(220,252,231,.95)",
-    },
-    warn: {
-      border: "1px solid rgba(251,191,36,.24)",
-      background: "rgba(245,158,11,.12)",
-      color: "rgba(254,243,199,.95)",
-    },
-    bad: {
-      border: "1px solid rgba(248,113,113,.24)",
-      background: "rgba(239,68,68,.12)",
-      color: "rgba(254,226,226,.95)",
-    },
-    accent: {
-      border: "1px solid rgba(96,165,250,.24)",
-      background: "rgba(59,130,246,.14)",
-      color: "rgba(219,234,254,.95)",
-    },
-  };
+  .debtHeroGrid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.1fr) auto;
+    gap: 12px;
+    align-items: start;
+  }
 
-  return styles[tone] || styles.neutral;
-}
+  .debtPillRow {
+    margin-top: 12px;
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
 
-function Tag({ text, tone = "neutral" }) {
-  return (
-    <span
-      className="dePill"
-      style={{
-        ...tagToneStyle(tone),
-        whiteSpace: "nowrap",
-      }}
-    >
-      {text}
-    </span>
-  );
-}
+  .debtMetricGrid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px;
+  }
 
-function ProgressBar({ fill = 0, tone = "accent" }) {
-  const normalized = Math.max(0, Math.min(100, safeNum(fill)));
-  const toneMap = {
-    accent: "linear-gradient(90deg, rgba(96,165,250,.95), rgba(147,197,253,.95))",
-    good: "linear-gradient(90deg, rgba(74,222,128,.95), rgba(167,243,208,.95))",
-    warn: "linear-gradient(90deg, rgba(251,191,36,.95), rgba(253,230,138,.95))",
-    bad: "linear-gradient(90deg, rgba(248,113,113,.95), rgba(252,165,165,.95))",
-  };
+  .debtControlsGrid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+  }
 
-  return (
-    <div className="deProgress">
-      <div
-        className="deProgressFill"
-        style={{
-          width: `${normalized}%`,
-          background: toneMap[tone] || toneMap.accent,
-        }}
-      />
-    </div>
-  );
-}
+  .debtMainGrid {
+    display: grid;
+    grid-template-columns: minmax(390px, 0.94fr) minmax(0, 1.06fr);
+    gap: 12px;
+    align-items: start;
+  }
+
+  .debtRightStack {
+    display: grid;
+    gap: 12px;
+  }
+
+  .debtTopRightGrid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.04fr) minmax(320px, 0.8fr);
+    gap: 12px;
+    align-items: start;
+  }
+
+  .debtBottomGrid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  .debtRosterControls {
+    display: grid;
+    grid-template-columns: 1.2fr 0.8fr 0.9fr;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+
+  .debtSearchWrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 44px;
+    border-radius: 14px;
+    border: 1px solid rgba(214,226,255,0.10);
+    background:
+      linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.012)),
+      rgba(8, 12, 20, 0.76);
+    color: rgba(255,255,255,0.58);
+    padding: 0 12px;
+  }
+
+  .debtSearchField {
+    min-height: 42px !important;
+    border: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+  }
+
+  .debtRosterListCompact {
+    display: grid;
+    gap: 8px;
+    max-height: 650px;
+    overflow: auto;
+    padding-right: 2px;
+  }
+
+  .debtCompactRow {
+    display: grid;
+    grid-template-columns: 42px minmax(0, 1fr) auto auto;
+    gap: 10px;
+    align-items: center;
+    min-height: 92px;
+    padding: 10px 12px;
+    border-radius: 18px;
+    border: 1px solid rgba(255,255,255,0.07);
+    background:
+      linear-gradient(180deg, rgba(8,13,24,0.78), rgba(4,8,16,0.72));
+    cursor: pointer;
+    transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+  }
+
+  .debtCompactRow:hover {
+    transform: translateY(-1px);
+  }
+
+  .debtCompactAvatar {
+    width: 42px;
+    height: 42px;
+    border-radius: 14px;
+    display: grid;
+    place-items: center;
+    border: 1px solid rgba(255,255,255,0.08);
+    background:
+      linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.012)),
+      rgba(9, 14, 23, 0.68);
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: .05em;
+  }
+
+  .debtCompactTitle {
+    font-size: 13.5px;
+    font-weight: 800;
+    color: #fff;
+    line-height: 1.2;
+    overflow-wrap: anywhere;
+  }
+
+  .debtCompactSub {
+    margin-top: 4px;
+    font-size: 11.5px;
+    color: rgba(255,255,255,0.54);
+    line-height: 1.3;
+  }
+
+  .debtCompactValue {
+    font-size: 15px;
+    font-weight: 850;
+    color: #fff;
+    white-space: nowrap;
+  }
+
+  .debtCompactActions {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+  }
+
+  .debtIconBtn {
+    width: 34px;
+    height: 34px;
+    border-radius: 12px;
+    border: 1px solid rgba(214,226,255,0.10);
+    background:
+      linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.012));
+    color: rgba(247,251,255,0.88);
+    display: grid;
+    place-items: center;
+    cursor: pointer;
+  }
+
+  .debtDangerBtn {
+    border-color: rgba(255,132,163,0.18);
+    color: #ffd3df;
+  }
+
+  .debtFocusBox {
+    border-radius: 22px;
+    border: 1px solid rgba(214,226,255,0.12);
+    background:
+      linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01));
+    padding: 15px;
+  }
+
+  .debtInfoGrid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .debtMortgageGrid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .debtInfoCell {
+    border-radius: 18px;
+    border: 1px solid rgba(255,255,255,0.05);
+    background: rgba(255,255,255,0.025);
+    padding: 11px;
+  }
+
+  .debtInfoValue {
+    font-size: 0.96rem;
+    font-weight: 900;
+    line-height: 1.15;
+    color: #fff;
+  }
+
+  .debtInfoSub {
+    margin-top: 5px;
+    color: rgba(255,255,255,0.62);
+    font-size: 0.79rem;
+    line-height: 1.4;
+  }
+
+  .debtProgress {
+    height: 8px;
+    border-radius: 999px;
+    overflow: hidden;
+    background: rgba(255,255,255,0.1);
+  }
+
+  .debtProgressFill {
+    height: 100%;
+    border-radius: 999px;
+    transition: width 0.4s ease;
+  }
+
+  .debtActionGrid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .debtActionGridTight {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .debtFormStack {
+    display: grid;
+    gap: 12px;
+  }
+
+  .debtFormGrid2,
+  .debtFormGrid3,
+  .debtFormGrid4 {
+    display: grid;
+    gap: 10px;
+  }
+
+  .debtFormGrid2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .debtFormGrid3 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .debtFormGrid4 {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .debtTinyLabel {
+    display: block;
+    margin-bottom: 8px;
+    font-size: 10px;
+    color: rgba(255,255,255,0.46);
+    text-transform: uppercase;
+    letter-spacing: .16em;
+    font-weight: 800;
+  }
+
+  .debtField {
+    width: 100%;
+    min-height: 44px;
+    border-radius: 14px;
+    border: 1px solid rgba(214,226,255,0.10);
+    background:
+      linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.012)),
+      rgba(8, 12, 20, 0.76);
+    color: var(--lcc-text);
+    padding: 0 13px;
+    outline: none;
+    font: inherit;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
+    transition: border-color 160ms ease, box-shadow 160ms ease, background 160ms ease;
+  }
+
+  .debtField:focus {
+    border-color: rgba(143,177,255,0.30);
+    box-shadow:
+      0 0 0 4px rgba(79,114,255,0.08),
+      inset 0 1px 0 rgba(255,255,255,0.035);
+  }
+
+  .debtField::placeholder {
+    color: rgba(225,233,245,0.38);
+  }
+
+  .debtField option {
+    background: #08111f;
+    color: #f4f7ff;
+  }
+
+  textarea.debtField {
+    min-height: 110px;
+    resize: vertical;
+    padding: 12px 13px;
+  }
+
+  .debtActionBtn {
+    min-height: 40px;
+    padding: 10px 13px;
+    border-radius: 14px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    font-size: 13px;
+    font-weight: 800;
+    line-height: 1;
+    transition: transform 160ms ease, border-color 160ms ease, background 160ms ease, box-shadow 160ms ease;
+  }
+
+  .debtActionBtn:hover {
+    transform: translateY(-1px);
+  }
+
+  .debtIntelList {
+    display: grid;
+    gap: 10px;
+    max-height: 360px;
+    overflow: auto;
+    padding-right: 2px;
+  }
+
+  .debtIntelItem {
+    border-radius: 18px;
+    border: 1px solid rgba(255,255,255,0.07);
+    background:
+      linear-gradient(180deg, rgba(8,13,24,0.78), rgba(4,8,16,0.72));
+    padding: 12px;
+    display: grid;
+    gap: 10px;
+  }
+
+  .debtIntelTitle {
+    font-size: 13px;
+    font-weight: 800;
+    color: #fff;
+    line-height: 1.25;
+    overflow-wrap: anywhere;
+  }
+
+  .debtIntelSub {
+    margin-top: 4px;
+    font-size: 11.5px;
+    color: rgba(255,255,255,0.54);
+    line-height: 1.35;
+  }
+
+  .debtIntelValue {
+    font-size: 14px;
+    font-weight: 850;
+    color: #fff;
+  }
+
+  .debtIntelMini {
+    border-radius: 14px;
+    border: 1px solid rgba(255,255,255,0.05);
+    background: rgba(255,255,255,0.022);
+    padding: 10px;
+  }
+
+  .debtSnapshotGrid {
+    display: grid;
+    gap: 8px;
+  }
+
+  .debtSnapshotRow {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 14px;
+    border-radius: 14px;
+    border: 1px solid rgba(255,255,255,0.08);
+    background: rgba(255,255,255,0.03);
+    color: rgba(255,255,255,0.78);
+  }
+
+  .debtEmptyState {
+    min-height: 150px;
+    display: grid;
+    place-items: center;
+    text-align: center;
+    padding: 14px;
+  }
+
+  .debtInlineEmpty {
+    min-height: 260px;
+  }
+
+  .debtEmptyTitle {
+    font-size: 16px;
+    font-weight: 850;
+    color: #fff;
+  }
+
+  .debtEmptyText {
+    margin-top: 6px;
+    font-size: 13px;
+    line-height: 1.5;
+    color: rgba(255,255,255,0.60);
+    max-width: 360px;
+  }
+
+  @media (max-width: 1260px) {
+    .debtMetricGrid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .debtTopRightGrid,
+    .debtBottomGrid {
+      grid-template-columns: 1fr;
+    }
+
+    .debtFormGrid4 {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  @media (max-width: 1100px) {
+    .debtHeroGrid,
+    .debtMainGrid {
+      grid-template-columns: 1fr;
+    }
+
+    .debtControlsGrid {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  @media (max-width: 1024px) {
+    .debtRosterControls,
+    .debtInfoGrid,
+    .debtMortgageGrid,
+    .debtFormGrid2,
+    .debtFormGrid3,
+    .debtFormGrid4,
+    .debtActionGrid,
+    .debtActionGridTight {
+      grid-template-columns: 1fr;
+    }
+
+    .debtCompactRow {
+      grid-template-columns: 42px minmax(0, 1fr);
+    }
+
+    .debtCompactValue {
+      white-space: normal;
+    }
+
+    .debtCompactActions {
+      grid-column: 2;
+      justify-content: flex-start;
+    }
+  }
+
+  @media (max-width: 760px) {
+    .debtPageShell {
+      padding: 8px 0 14px;
+    }
+
+    .debtMetricGrid,
+    .debtTopRightGrid,
+    .debtBottomGrid {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  @media (max-width: 640px) {
+    .debtMetricGrid,
+    .debtActionGrid,
+    .debtActionGridTight {
+      grid-template-columns: 1fr;
+    }
+  }
+`;

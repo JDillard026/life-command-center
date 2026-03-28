@@ -2,8 +2,21 @@
 
 export const dynamic = "force-dynamic";
 
-import * as React from "react";
+import { useEffect, useMemo, useState } from "react";
+import {
+  AlertTriangle,
+  BadgeDollarSign,
+  CheckCircle2,
+  CreditCard,
+  PauseCircle,
+  PiggyBank,
+  PlayCircle,
+  Plus,
+  Search,
+  Trash2,
+} from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
+import GlassPane from "../components/GlassPane";
 
 const FREQUENCY_OPTIONS = [
   { value: "weekly", label: "Weekly" },
@@ -47,7 +60,53 @@ function shortDate(iso) {
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
+function formatStamp(value) {
+  if (!value) return "—";
+  const d = new Date(value);
+  if (!Number.isFinite(d.getTime())) return "—";
+  return d.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function formatAgo(value) {
+  if (!value) return "—";
+  const ms = Date.now() - new Date(value).getTime();
+  const minutes = Math.round(ms / 60000);
+
+  if (!Number.isFinite(minutes)) return "—";
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes}m ago`;
+
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+
+  const days = Math.round(hours / 24);
+  return `${days}d ago`;
+}
+
+function currentMonthLabel() {
+  return new Intl.DateTimeFormat("en-US", {
+    month: "long",
+    year: "numeric",
+  }).format(new Date());
+}
+
 function money(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return "$0";
+  return n.toLocaleString(undefined, {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
+  });
+}
+
+function moneyTight(value) {
   const n = Number(value);
   if (!Number.isFinite(n)) return "$0.00";
   return n.toLocaleString(undefined, {
@@ -75,25 +134,28 @@ function frequencyMultiplier(freq) {
   return 0;
 }
 
-function monthlyEquivalent(bill) {
-  if (!bill?.active) return 0;
-
+function paymentAmount(bill) {
+  if (!bill) return 0;
   if (bill.type === "controllable") {
     const minPay = Number(bill.minPay) || 0;
     const extraPay = Number(bill.extraPay) || 0;
     const fallback = Number(bill.amount) || 0;
     return minPay + extraPay > 0 ? minPay + extraPay : fallback;
   }
+  return Number(bill.amount) || 0;
+}
 
+function monthlyEquivalent(bill) {
+  if (!bill?.active) return 0;
+  if (bill.type === "controllable") return paymentAmount(bill);
   return (Number(bill.amount) || 0) * frequencyMultiplier(bill.frequency);
 }
 
 function daysUntil(iso) {
-  const d = toDate(iso);
-  if (!d) return null;
-  const now = toDate(todayISO());
-  const ms = d.getTime() - now.getTime();
-  return Math.ceil(ms / 86400000);
+  const due = toDate(iso);
+  const today = toDate(todayISO());
+  if (!due || !today) return null;
+  return Math.ceil((due.getTime() - today.getTime()) / 86400000);
 }
 
 function dueTone(days) {
@@ -110,16 +172,6 @@ function dueLabel(days) {
   if (days === 0) return "Due today";
   if (days === 1) return "Due tomorrow";
   return `${days} days left`;
-}
-
-function formatMonths(n) {
-  if (n == null) return "No payoff";
-  if (n <= 0) return "Paid";
-  const years = Math.floor(n / 12);
-  const months = n % 12;
-  if (years <= 0) return `${months} mo`;
-  if (months === 0) return `${years} yr`;
-  return `${years} yr ${months} mo`;
 }
 
 function payoffSimulation(balance, aprPct, monthlyPay) {
@@ -185,6 +237,63 @@ function payoffSimulation(balance, aprPct, monthlyPay) {
   };
 }
 
+function formatMonths(n) {
+  if (n == null) return "No payoff";
+  if (n <= 0) return "Paid";
+  const years = Math.floor(n / 12);
+  const months = n % 12;
+  if (years <= 0) return `${months} mo`;
+  if (months === 0) return `${years} yr`;
+  return `${years} yr ${months} mo`;
+}
+
+function billInitials(name) {
+  const text = String(name || "").trim();
+  if (!text) return "BL";
+  const words = text.split(/\s+/).slice(0, 2);
+  return words.map((w) => w[0]?.toUpperCase() || "").join("").slice(0, 2);
+}
+
+function typeLabel(type) {
+  return type === "controllable" ? "Debt / Controllable" : "Fixed Bill";
+}
+
+function toneMeta(tone = "neutral") {
+  if (tone === "green") {
+    return {
+      text: "#97efc7",
+      border: "rgba(143, 240, 191, 0.18)",
+      glow: "rgba(110, 229, 173, 0.10)",
+      bg: "rgba(11, 22, 17, 0.66)",
+    };
+  }
+
+  if (tone === "amber") {
+    return {
+      text: "#f5cf88",
+      border: "rgba(255, 204, 112, 0.18)",
+      glow: "rgba(255, 194, 92, 0.10)",
+      bg: "rgba(22, 17, 11, 0.66)",
+    };
+  }
+
+  if (tone === "red") {
+    return {
+      text: "#ffb4c5",
+      border: "rgba(255, 132, 163, 0.18)",
+      glow: "rgba(255, 108, 145, 0.10)",
+      bg: "rgba(22, 11, 15, 0.66)",
+    };
+  }
+
+  return {
+    text: "#f7fbff",
+    border: "rgba(214, 226, 255, 0.14)",
+    glow: "rgba(140, 170, 255, 0.08)",
+    bg: "rgba(10, 15, 24, 0.66)",
+  };
+}
+
 function mapBillRowToClient(row) {
   return {
     id: row.id,
@@ -203,7 +312,8 @@ function mapBillRowToClient(row) {
     autopay: row.autopay === true,
     category: row.category || "",
     accountId: row.account_id || "",
-    createdAt: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
+    updatedAt: row.updated_at || row.created_at || null,
+    createdAt: row.created_at || null,
   };
 }
 
@@ -230,94 +340,845 @@ function mapBillClientToRow(bill, userId) {
   };
 }
 
-function ProgressBar({ value = 0, tone = "green" }) {
-  const pct = clamp(value, 0, 100);
-  const colors = {
-    green: "#4ade80",
-    amber: "#f59e0b",
-    red: "#ff6b7f",
-    neutral: "#93a9d8",
-  };
+function sortBills(list, sort = "due") {
+  const next = [...list];
 
-  const color = colors[tone] || colors.green;
+  next.sort((a, b) => {
+    if (a.active !== b.active) return a.active ? -1 : 1;
+
+    if (sort === "name") {
+      return String(a.name || "").localeCompare(String(b.name || ""));
+    }
+
+    if (sort === "pressure") {
+      return monthlyEquivalent(b) - monthlyEquivalent(a);
+    }
+
+    if (sort === "updated") {
+      return new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime();
+    }
+
+    const ad = daysUntil(a.dueDate);
+    const bd = daysUntil(b.dueDate);
+
+    if (ad == null && bd != null) return 1;
+    if (ad != null && bd == null) return -1;
+    if (ad != null && bd != null && ad !== bd) return ad - bd;
+
+    return monthlyEquivalent(b) - monthlyEquivalent(a);
+  });
+
+  return next;
+}
+
+function MiniPill({ children, tone = "neutral" }) {
+  const meta = toneMeta(tone);
 
   return (
-    <div className="billProgress">
-      <div
-        className="billProgressFill"
-        style={{
-          width: `${pct}%`,
-          background: `linear-gradient(90deg, ${color} 0%, rgba(255,255,255,.92) 220%)`,
-          boxShadow: `0 0 18px ${color}44, 0 0 24px ${color}18`,
-        }}
-      />
+    <div
+      style={{
+        minHeight: 30,
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 8,
+        padding: "0 10px",
+        borderRadius: 999,
+        border: `1px solid ${meta.border}`,
+        background:
+          "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.012))",
+        boxShadow: `inset 0 1px 0 rgba(255,255,255,0.03), 0 0 10px ${meta.glow}`,
+        color: tone === "neutral" ? "rgba(255,255,255,0.88)" : meta.text,
+        fontSize: 11,
+        fontWeight: 800,
+        whiteSpace: "nowrap",
+      }}
+    >
+      {children}
     </div>
   );
 }
 
-function StatCard({ label, value, sub, tone = "neutral" }) {
+function PaneHeader({ title, subcopy, right }) {
   return (
-    <article className={`billStat billTone_${tone}`}>
-      <div className="billStatLabel">{label}</div>
-      <div className="billStatValue">{value}</div>
-      <div className="billStatSub">{sub}</div>
-    </article>
+    <div
+      style={{
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "flex-start",
+        gap: 10,
+        flexWrap: "wrap",
+        marginBottom: 10,
+      }}
+    >
+      <div style={{ minWidth: 0 }}>
+        <div
+          style={{
+            fontSize: 17,
+            lineHeight: 1.08,
+            fontWeight: 850,
+            letterSpacing: "-0.035em",
+            color: "#fff",
+          }}
+        >
+          {title}
+        </div>
+
+        {subcopy ? (
+          <div
+            style={{
+              marginTop: 3,
+              fontSize: 12,
+              lineHeight: 1.45,
+              color: "rgba(255,255,255,0.60)",
+            }}
+          >
+            {subcopy}
+          </div>
+        ) : null}
+      </div>
+
+      {right || null}
+    </div>
   );
 }
 
-function TonePill({ tone = "neutral", children }) {
-  return <span className={`tonePill tonePill_${tone}`}>{children}</span>;
+function StatCard({ icon: Icon, label, value, detail, tone = "neutral" }) {
+  const meta = toneMeta(tone);
+
+  return (
+    <GlassPane tone={tone} size="card" style={{ height: "100%" }}>
+      <div
+        style={{
+          minHeight: 112,
+          display: "grid",
+          gridTemplateRows: "auto auto 1fr",
+          gap: 7,
+        }}
+      >
+        <div
+          style={{
+            width: 34,
+            height: 34,
+            borderRadius: 12,
+            display: "grid",
+            placeItems: "center",
+            border: `1px solid ${meta.border}`,
+            background: meta.bg,
+            color: tone === "neutral" ? "#fff" : meta.text,
+            boxShadow: `0 0 10px ${meta.glow}`,
+          }}
+        >
+          <Icon size={15} />
+        </div>
+
+        <div>
+          <div
+            style={{
+              fontSize: 10,
+              textTransform: "uppercase",
+              letterSpacing: ".2em",
+              fontWeight: 800,
+              color: "rgba(255,255,255,0.40)",
+            }}
+          >
+            {label}
+          </div>
+
+          <div
+            style={{
+              marginTop: 8,
+              fontSize: "clamp(18px, 2.2vw, 28px)",
+              lineHeight: 1,
+              fontWeight: 850,
+              letterSpacing: "-0.05em",
+              color: tone === "neutral" ? "#fff" : meta.text,
+            }}
+          >
+            {value}
+          </div>
+        </div>
+
+        <div
+          style={{
+            fontSize: 11.5,
+            lineHeight: 1.4,
+            color: "rgba(255,255,255,0.60)",
+          }}
+        >
+          {detail}
+        </div>
+      </div>
+    </GlassPane>
+  );
 }
 
-function SectionCard({ title, text, action, children, compact = false }) {
+function ActionBtn({
+  children,
+  onClick,
+  variant = "ghost",
+  full = false,
+  type = "button",
+  disabled = false,
+}) {
+  const isPrimary = variant === "primary";
+  const isDanger = variant === "danger";
+
   return (
-    <section className={`billCard ${compact ? "billCard_compact" : ""}`}>
-      <div className="billCardHead">
-        <div>
-          <div className="billEyebrow">{compact ? "SECTION" : "BILLS"}</div>
-          <h2 className={compact ? "billSectionMini" : "billSectionTitle"}>{title}</h2>
-          {text ? <div className="billSectionText">{text}</div> : null}
-        </div>
-        {action ? <div className="billCardAction">{action}</div> : null}
-      </div>
+    <button
+      type={type}
+      onClick={onClick}
+      disabled={disabled}
+      className="billsActionBtn"
+      style={{
+        width: full ? "100%" : undefined,
+        border: isDanger
+          ? "1px solid rgba(255,132,163,0.18)"
+          : isPrimary
+          ? "1px solid rgba(143,177,255,0.18)"
+          : "1px solid rgba(214,226,255,0.10)",
+        background: isDanger
+          ? "linear-gradient(180deg, rgba(255,132,163,0.10), rgba(255,132,163,0.05))"
+          : isPrimary
+          ? "linear-gradient(180deg, rgba(143,177,255,0.14), rgba(143,177,255,0.06))"
+          : "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.012))",
+        color: isDanger ? "#ffd3df" : "#f7fbff",
+        opacity: disabled ? 0.55 : 1,
+        cursor: disabled ? "not-allowed" : "pointer",
+      }}
+    >
       {children}
-    </section>
+    </button>
+  );
+}
+
+function CompactBillRow({ bill, selected, onSelect, onMarkPaid, onToggle, onDelete }) {
+  const due = daysUntil(bill.dueDate);
+  const tone = dueTone(due);
+  const meta = toneMeta(tone);
+
+  return (
+    <div
+      className="billsCompactRow"
+      onClick={onSelect}
+      style={{
+        borderColor: selected ? meta.border : "rgba(255,255,255,0.07)",
+        boxShadow: selected
+          ? `inset 0 1px 0 rgba(255,255,255,0.03), 0 0 0 1px rgba(255,255,255,0.01), 0 0 24px ${meta.glow}`
+          : "inset 0 1px 0 rgba(255,255,255,0.025)",
+      }}
+    >
+      <div
+        className="billsCompactAvatar"
+        style={{
+          borderColor: meta.border,
+          color: tone === "neutral" ? "#fff" : meta.text,
+          boxShadow: `0 0 12px ${meta.glow}`,
+        }}
+      >
+        {billInitials(bill.name)}
+      </div>
+
+      <div style={{ minWidth: 0 }}>
+        <div
+          style={{
+            display: "flex",
+            gap: 8,
+            alignItems: "center",
+            flexWrap: "wrap",
+          }}
+        >
+          <div className="billsCompactTitle">{bill.name}</div>
+          <MiniPill tone={bill.type === "controllable" ? "red" : "neutral"}>
+            {typeLabel(bill.type)}
+          </MiniPill>
+          <MiniPill tone={tone}>{dueLabel(due)}</MiniPill>
+          <MiniPill tone={bill.active ? "green" : "neutral"}>
+            {bill.active ? "Active" : "Paused"}
+          </MiniPill>
+        </div>
+
+        <div className="billsCompactSub">
+          {bill.category || "No category"} • {bill.frequency || "monthly"} • Updated{" "}
+          {formatAgo(bill.updatedAt)}
+        </div>
+      </div>
+
+      <div className="billsCompactValue">{money(paymentAmount(bill))}</div>
+
+      <div
+        className="billsCompactActions"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <button
+          type="button"
+          className="billsIconBtn"
+          onClick={onMarkPaid}
+          aria-label="Mark paid"
+          title="Mark paid"
+        >
+          <CheckCircle2 size={14} />
+        </button>
+        <button
+          type="button"
+          className="billsIconBtn"
+          onClick={onToggle}
+          aria-label={bill.active ? "Pause bill" : "Activate bill"}
+          title={bill.active ? "Pause bill" : "Activate bill"}
+        >
+          {bill.active ? <PauseCircle size={14} /> : <PlayCircle size={14} />}
+        </button>
+        <button
+          type="button"
+          className="billsIconBtn billsDangerBtn"
+          onClick={onDelete}
+          aria-label="Delete bill"
+          title="Delete bill"
+        >
+          <Trash2 size={14} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function FocusBillCard({
+  bill,
+  linkedAccount,
+  payoffData,
+  onMarkPaid,
+  onToggle,
+  onDelete,
+}) {
+  if (!bill) {
+    return (
+      <GlassPane size="card">
+        <PaneHeader
+          title="Selected Bill"
+          subcopy="Choose one from the roster to work it here."
+        />
+        <div className="billsEmptyState" style={{ minHeight: 170 }}>
+          <div>
+            <div className="billsEmptyTitle">No bill selected</div>
+            <div className="billsEmptyText">
+              Pick one from the roster on the left.
+            </div>
+          </div>
+        </div>
+      </GlassPane>
+    );
+  }
+
+  const due = daysUntil(bill.dueDate);
+  const tone = dueTone(due);
+  const meta = toneMeta(tone);
+
+  return (
+    <GlassPane tone={tone} size="card">
+      <PaneHeader
+        title={bill.name}
+        subcopy="Focused controls for the bill you are actively touching."
+        right={
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <MiniPill tone={bill.type === "controllable" ? "red" : "neutral"}>
+              {typeLabel(bill.type)}
+            </MiniPill>
+            <MiniPill tone={bill.active ? "green" : "neutral"}>
+              {bill.active ? "Active" : "Paused"}
+            </MiniPill>
+            <MiniPill tone={tone}>{dueLabel(due)}</MiniPill>
+          </div>
+        }
+      />
+
+      <div className="billsFocusBox">
+        <div className="billsTinyLabel">
+          {bill.type === "controllable" ? "Current Payment" : "Current Amount"}
+        </div>
+
+        <div
+          style={{
+            marginTop: 8,
+            fontSize: "clamp(30px, 4vw, 46px)",
+            lineHeight: 1,
+            fontWeight: 850,
+            letterSpacing: "-0.05em",
+            color: tone === "neutral" ? "#fff" : meta.text,
+          }}
+        >
+          {money(paymentAmount(bill))}
+        </div>
+
+        <div
+          style={{
+            marginTop: 10,
+            fontSize: 12,
+            color: "rgba(255,255,255,0.58)",
+          }}
+        >
+          Updated {formatStamp(bill.updatedAt)}
+        </div>
+
+        <div className="billsInfoGrid" style={{ marginTop: 14 }}>
+          <div className="billsInfoCell">
+            <div className="billsTinyLabel">Due</div>
+            <div className="billsInfoValue">
+              {bill.dueDate ? shortDate(bill.dueDate) : "—"}
+            </div>
+            <div className="billsInfoSub">{dueLabel(due)}</div>
+          </div>
+
+          <div className="billsInfoCell">
+            <div className="billsTinyLabel">Monthly Pressure</div>
+            <div className="billsInfoValue">{money(monthlyEquivalent(bill))}</div>
+            <div className="billsInfoSub">Normalized monthly hit.</div>
+          </div>
+
+          <div className="billsInfoCell">
+            <div className="billsTinyLabel">
+              {bill.type === "controllable" ? "Balance" : "Amount"}
+            </div>
+            <div className="billsInfoValue">
+              {bill.type === "controllable" ? money(bill.balance) : money(bill.amount)}
+            </div>
+            <div className="billsInfoSub">
+              {bill.type === "controllable"
+                ? `${Number(bill.aprPct) || 0}% APR`
+                : linkedAccount
+                ? `Linked: ${linkedAccount.name}`
+                : "No linked account"}
+            </div>
+          </div>
+
+          <div className="billsInfoCell">
+            <div className="billsTinyLabel">Last Paid</div>
+            <div className="billsInfoValue">
+              {bill.lastPaidDate ? shortDate(bill.lastPaidDate) : "—"}
+            </div>
+            <div className="billsInfoSub">
+              {bill.autopay ? "Autopay enabled" : "Manual payment flow"}
+            </div>
+          </div>
+        </div>
+
+        {bill.type === "controllable" && payoffData ? (
+          <div className="billsInfoCell" style={{ marginTop: 12 }}>
+            <div className="billsTinyLabel">Payoff Forecast</div>
+
+            <div className="billsProgress" style={{ marginTop: 8 }}>
+              <div
+                className="billsProgressFill"
+                style={{
+                  width: `${payoffData.progress}%`,
+                  background: payoffData.payoff.impossible
+                    ? "linear-gradient(90deg, #ff6b7f 0%, rgba(255,255,255,.92) 220%)"
+                    : "linear-gradient(90deg, #4ade80 0%, rgba(255,255,255,.92) 220%)",
+                }}
+              />
+            </div>
+
+            <div className="billsInfoGrid" style={{ marginTop: 10 }}>
+              <div>
+                <div className="billsInfoValue">
+                  {payoffData.payoff.impossible
+                    ? "No payoff"
+                    : formatMonths(payoffData.payoff.months)}
+                </div>
+                <div className="billsInfoSub">{money(payoffData.monthlyPay)}/mo</div>
+              </div>
+              <div>
+                <div className="billsInfoValue">
+                  {payoffData.payoff.impossible
+                    ? "—"
+                    : money(payoffData.payoff.totalInterest)}
+                </div>
+                <div className="billsInfoSub">
+                  {payoffData.payoff.payoffDate
+                    ? `Payoff ${shortDate(payoffData.payoff.payoffDate)}`
+                    : "No payoff date"}
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        {bill.notes ? (
+          <div className="billsInfoCell" style={{ marginTop: 12 }}>
+            <div className="billsTinyLabel">Notes</div>
+            <div className="billsInfoSub" style={{ color: "#fff" }}>
+              {bill.notes}
+            </div>
+          </div>
+        ) : null}
+
+        <div className="billsActionGrid billsActionGridTight" style={{ marginTop: 14 }}>
+          <ActionBtn variant="primary" onClick={onMarkPaid} full>
+            <CheckCircle2 size={14} /> Mark Paid
+          </ActionBtn>
+          <ActionBtn onClick={onToggle} full>
+            {bill.active ? <PauseCircle size={14} /> : <PlayCircle size={14} />}
+            {bill.active ? "Pause" : "Activate"}
+          </ActionBtn>
+          <ActionBtn variant="danger" onClick={onDelete} full>
+            <Trash2 size={14} /> Delete
+          </ActionBtn>
+        </div>
+      </div>
+    </GlassPane>
+  );
+}
+
+function AddBillCard({
+  saving,
+  accounts,
+  formType,
+  setFormType,
+  formName,
+  setFormName,
+  formFrequency,
+  setFormFrequency,
+  formDueDate,
+  setFormDueDate,
+  formAmount,
+  setFormAmount,
+  formCategory,
+  setFormCategory,
+  formNotes,
+  setFormNotes,
+  formAccountId,
+  setFormAccountId,
+  formBalance,
+  setFormBalance,
+  formAprPct,
+  setFormAprPct,
+  formMinPay,
+  setFormMinPay,
+  formExtraPay,
+  setFormExtraPay,
+  formAutopay,
+  setFormAutopay,
+  addBill,
+  resetForm,
+}) {
+  return (
+    <GlassPane size="card">
+      <PaneHeader
+        title="Add Bill"
+        subcopy="Keep this fast and clean."
+        right={
+          <MiniPill>
+            <Plus size={13} /> New
+          </MiniPill>
+        }
+      />
+
+      <div className="billsFormStack">
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {BILL_TYPE_OPTIONS.map((option) => (
+            <ActionBtn
+              key={option.value}
+              variant={formType === option.value ? "primary" : "ghost"}
+              onClick={() => setFormType(option.value)}
+            >
+              {option.label}
+            </ActionBtn>
+          ))}
+        </div>
+
+        <div>
+          <div className="billsTinyLabel">Bill Name</div>
+          <input
+            className="billsField"
+            placeholder="Mortgage, Insurance, Chase Card..."
+            value={formName}
+            onChange={(e) => setFormName(e.target.value)}
+          />
+        </div>
+
+        <div className="billsFormGrid2">
+          <div>
+            <div className="billsTinyLabel">Type</div>
+            <select
+              className="billsField"
+              value={formType}
+              onChange={(e) => setFormType(e.target.value)}
+            >
+              {BILL_TYPE_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <div className="billsTinyLabel">Category</div>
+            <input
+              className="billsField"
+              placeholder="Housing, Utilities..."
+              value={formCategory}
+              onChange={(e) => setFormCategory(e.target.value)}
+            />
+          </div>
+        </div>
+
+        <div className="billsFormGrid3">
+          <div>
+            <div className="billsTinyLabel">
+              {formType === "controllable" ? "Current Pay" : "Amount"}
+            </div>
+            <input
+              className="billsField"
+              inputMode="decimal"
+              placeholder="0.00"
+              value={formAmount}
+              onChange={(e) => setFormAmount(e.target.value)}
+            />
+          </div>
+
+          <div>
+            <div className="billsTinyLabel">Due Date</div>
+            <input
+              className="billsField"
+              type="date"
+              value={formDueDate}
+              onChange={(e) => setFormDueDate(e.target.value)}
+            />
+          </div>
+
+          <div>
+            <div className="billsTinyLabel">Frequency</div>
+            <select
+              className="billsField"
+              value={formFrequency}
+              onChange={(e) => setFormFrequency(e.target.value)}
+            >
+              {FREQUENCY_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {formType === "controllable" ? (
+          <div className="billsFormGrid4">
+            <div>
+              <div className="billsTinyLabel">Balance</div>
+              <input
+                className="billsField"
+                inputMode="decimal"
+                placeholder="0.00"
+                value={formBalance}
+                onChange={(e) => setFormBalance(e.target.value)}
+              />
+            </div>
+
+            <div>
+              <div className="billsTinyLabel">APR %</div>
+              <input
+                className="billsField"
+                inputMode="decimal"
+                placeholder="6.25"
+                value={formAprPct}
+                onChange={(e) => setFormAprPct(e.target.value)}
+              />
+            </div>
+
+            <div>
+              <div className="billsTinyLabel">Min Pay</div>
+              <input
+                className="billsField"
+                inputMode="decimal"
+                placeholder="0.00"
+                value={formMinPay}
+                onChange={(e) => setFormMinPay(e.target.value)}
+              />
+            </div>
+
+            <div>
+              <div className="billsTinyLabel">Extra Pay</div>
+              <input
+                className="billsField"
+                inputMode="decimal"
+                placeholder="0.00"
+                value={formExtraPay}
+                onChange={(e) => setFormExtraPay(e.target.value)}
+              />
+            </div>
+          </div>
+        ) : null}
+
+        <div className="billsFormGrid2">
+          <div>
+            <div className="billsTinyLabel">Linked Account</div>
+            <select
+              className="billsField"
+              value={formAccountId}
+              onChange={(e) => setFormAccountId(e.target.value)}
+            >
+              <option value="">No account</option>
+              {accounts.map((acct) => (
+                <option key={acct.id} value={acct.id}>
+                  {acct.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {formType === "controllable" ? (
+            <label className="billsCheck" style={{ alignSelf: "end", minHeight: 44 }}>
+              <input
+                type="checkbox"
+                checked={formAutopay}
+                onChange={(e) => setFormAutopay(e.target.checked)}
+              />
+              Autopay enabled
+            </label>
+          ) : (
+            <div />
+          )}
+        </div>
+
+        <div>
+          <div className="billsTinyLabel">Notes</div>
+          <textarea
+            className="billsField"
+            rows={4}
+            placeholder="Optional notes"
+            value={formNotes}
+            onChange={(e) => setFormNotes(e.target.value)}
+          />
+        </div>
+
+        <div className="billsActionGrid">
+          <ActionBtn variant="primary" onClick={addBill} full disabled={saving}>
+            <Plus size={14} /> {saving ? "Saving..." : "Add Bill"}
+          </ActionBtn>
+          <ActionBtn onClick={resetForm} full disabled={saving}>
+            Reset
+          </ActionBtn>
+        </div>
+      </div>
+    </GlassPane>
+  );
+}
+
+function QueueItem({ bill, onFocus, onMarkPaid }) {
+  const due = daysUntil(bill.dueDate);
+  const tone = dueTone(due);
+
+  return (
+    <div className="billsIntelItem">
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          gap: 10,
+          alignItems: "flex-start",
+          flexWrap: "wrap",
+        }}
+      >
+        <div>
+          <div className="billsIntelTitle">{bill.name}</div>
+          <div className="billsIntelSub">
+            Due {bill.dueDate ? shortDate(bill.dueDate) : "—"} • {moneyTight(paymentAmount(bill))}
+          </div>
+        </div>
+
+        <MiniPill tone={tone}>{dueLabel(due)}</MiniPill>
+      </div>
+
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <ActionBtn onClick={onFocus}>Focus</ActionBtn>
+        <ActionBtn onClick={onMarkPaid}>Mark Paid</ActionBtn>
+      </div>
+    </div>
+  );
+}
+
+function PayoffItem({ row, onFocus }) {
+  return (
+    <div className="billsIntelItem">
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          gap: 10,
+          alignItems: "flex-start",
+          flexWrap: "wrap",
+        }}
+      >
+        <div>
+          <div className="billsIntelTitle">{row.name}</div>
+          <div className="billsIntelSub">
+            {moneyTight(row.balance)} at {Number(row.aprPct) || 0}% APR
+          </div>
+        </div>
+
+        <div style={{ textAlign: "right" }}>
+          <div className="billsIntelValue">
+            {row.payoff.impossible ? "No payoff" : formatMonths(row.payoff.months)}
+          </div>
+          <div className="billsIntelSub">{moneyTight(row.monthlyPay)}/mo</div>
+        </div>
+      </div>
+
+      <div className="billsProgress">
+        <div
+          className="billsProgressFill"
+          style={{
+            width: `${row.payoffProgress}%`,
+            background: row.payoff.impossible
+              ? "linear-gradient(90deg, #ff6b7f 0%, rgba(255,255,255,.92) 220%)"
+              : "linear-gradient(90deg, #4ade80 0%, rgba(255,255,255,.92) 220%)",
+          }}
+        />
+      </div>
+
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <ActionBtn onClick={onFocus}>Focus</ActionBtn>
+      </div>
+    </div>
   );
 }
 
 export default function BillsPage() {
-  const [user, setUser] = React.useState(null);
-  const [loading, setLoading] = React.useState(true);
-  const [saving, setSaving] = React.useState(false);
-  const [pageError, setPageError] = React.useState("");
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [pageError, setPageError] = useState("");
 
-  const [tab, setTab] = React.useState("overview");
-  const [filter, setFilter] = React.useState("all");
-  const [search, setSearch] = React.useState("");
+  const [bills, setBills] = useState([]);
+  const [accounts, setAccounts] = useState([]);
+  const [selectedBillId, setSelectedBillId] = useState("");
 
-  const [bills, setBills] = React.useState([]);
-  const [accounts, setAccounts] = React.useState([]);
+  const [search, setSearch] = useState("");
+  const [filter, setFilter] = useState("all");
+  const [sort, setSort] = useState("due");
 
-  const [formType, setFormType] = React.useState("noncontrollable");
-  const [formName, setFormName] = React.useState("");
-  const [formFrequency, setFormFrequency] = React.useState("monthly");
-  const [formDueDate, setFormDueDate] = React.useState("");
-  const [formAmount, setFormAmount] = React.useState("");
-  const [formCategory, setFormCategory] = React.useState("");
-  const [formNotes, setFormNotes] = React.useState("");
-  const [formAccountId, setFormAccountId] = React.useState("");
-  const [formBalance, setFormBalance] = React.useState("");
-  const [formAprPct, setFormAprPct] = React.useState("");
-  const [formMinPay, setFormMinPay] = React.useState("");
-  const [formExtraPay, setFormExtraPay] = React.useState("");
-  const [formAutopay, setFormAutopay] = React.useState(false);
+  const [formType, setFormType] = useState("noncontrollable");
+  const [formName, setFormName] = useState("");
+  const [formFrequency, setFormFrequency] = useState("monthly");
+  const [formDueDate, setFormDueDate] = useState("");
+  const [formAmount, setFormAmount] = useState("");
+  const [formCategory, setFormCategory] = useState("");
+  const [formNotes, setFormNotes] = useState("");
+  const [formAccountId, setFormAccountId] = useState("");
+  const [formBalance, setFormBalance] = useState("");
+  const [formAprPct, setFormAprPct] = useState("");
+  const [formMinPay, setFormMinPay] = useState("");
+  const [formExtraPay, setFormExtraPay] = useState("");
+  const [formAutopay, setFormAutopay] = useState(false);
 
-  React.useEffect(() => {
+  useEffect(() => {
     let mounted = true;
 
     async function loadPage() {
       try {
         setPageError("");
+
+        if (!supabase) throw new Error("Supabase is not configured.");
 
         const {
           data: { user: currentUser },
@@ -351,8 +1212,12 @@ export default function BillsPage() {
         if (billsRes.error) throw billsRes.error;
         if (!mounted) return;
 
-        setBills((billsRes.data || []).map(mapBillRowToClient));
+        const loadedBills = (billsRes.data || []).map(mapBillRowToClient);
+        const sorted = sortBills(loadedBills, "due");
+
+        setBills(loadedBills);
         setAccounts(accountsRes.error ? [] : accountsRes.data || []);
+        setSelectedBillId(sorted[0]?.id || "");
       } catch (err) {
         if (!mounted) return;
         setPageError(err?.message || "Failed to load bills page.");
@@ -368,71 +1233,89 @@ export default function BillsPage() {
     };
   }, []);
 
-  const filteredBills = React.useMemo(() => {
+  const filteredBills = useMemo(() => {
     const q = search.trim().toLowerCase();
 
-    return bills
-      .filter((bill) => {
-        if (filter === "controllable") return bill.type === "controllable";
-        if (filter === "noncontrollable") return bill.type === "noncontrollable";
-        if (filter === "active") return bill.active;
-        if (filter === "due") {
-          const d = daysUntil(bill.dueDate);
-          return d != null && d <= 7;
-        }
-        return true;
-      })
-      .filter((bill) => {
-        if (!q) return true;
-        return `${bill.name} ${bill.type} ${bill.frequency} ${bill.notes} ${bill.category}`
-          .toLowerCase()
-          .includes(q);
-      })
-      .sort((a, b) => {
-        const aDays = daysUntil(a.dueDate);
-        const bDays = daysUntil(b.dueDate);
+    const filtered = bills.filter((bill) => {
+      const due = daysUntil(bill.dueDate);
 
-        if (a.active !== b.active) return a.active ? -1 : 1;
-        if (aDays == null && bDays != null) return 1;
-        if (aDays != null && bDays == null) return -1;
-        if (aDays != null && bDays != null && aDays !== bDays) return aDays - bDays;
-        return monthlyEquivalent(b) - monthlyEquivalent(a);
-      });
-  }, [bills, filter, search]);
+      const filterPass =
+        filter === "all" ||
+        (filter === "active" && bill.active) ||
+        (filter === "paused" && !bill.active) ||
+        (filter === "controllable" && bill.type === "controllable") ||
+        (filter === "noncontrollable" && bill.type === "noncontrollable") ||
+        (filter === "due" && due != null && due <= 7);
 
-  const activeBills = React.useMemo(() => bills.filter((bill) => bill.active), [bills]);
+      if (!filterPass) return false;
+      if (!q) return true;
 
-  const controllableBills = React.useMemo(
+      return `${bill.name} ${bill.type} ${bill.frequency} ${bill.notes} ${bill.category}`
+        .toLowerCase()
+        .includes(q);
+    });
+
+    return sortBills(filtered, sort);
+  }, [bills, filter, search, sort]);
+
+  useEffect(() => {
+    if (!bills.length) {
+      setSelectedBillId("");
+      return;
+    }
+
+    const exists = bills.some((bill) => bill.id === selectedBillId);
+    if (!exists) {
+      setSelectedBillId(sortBills(bills, sort)[0]?.id || "");
+    }
+  }, [bills, selectedBillId, sort]);
+
+  const selectedBill =
+    bills.find((bill) => bill.id === selectedBillId) ||
+    filteredBills[0] ||
+    sortBills(bills, sort)[0] ||
+    null;
+
+  const linkedAccount = selectedBill
+    ? accounts.find((acct) => acct.id === selectedBill.accountId) || null
+    : null;
+
+  const activeBills = useMemo(() => bills.filter((bill) => bill.active), [bills]);
+
+  const controllableBills = useMemo(
     () => bills.filter((bill) => bill.active && bill.type === "controllable"),
     [bills]
   );
 
-  const fixedBills = React.useMemo(
+  const fixedBills = useMemo(
     () => bills.filter((bill) => bill.active && bill.type === "noncontrollable"),
     [bills]
   );
 
-  const monthlyPressure = React.useMemo(
+  const monthlyPressure = useMemo(
     () => bills.reduce((sum, bill) => sum + monthlyEquivalent(bill), 0),
     [bills]
   );
 
-  const totalDebt = React.useMemo(
+  const totalDebt = useMemo(
     () => controllableBills.reduce((sum, bill) => sum + (Number(bill.balance) || 0), 0),
     [controllableBills]
   );
 
-  const dueSoon = React.useMemo(
+  const dueSoonBills = useMemo(
     () =>
-      bills.filter((bill) => {
-        if (!bill.active) return false;
-        const d = daysUntil(bill.dueDate);
-        return d != null && d <= 7;
-      }),
+      sortBills(
+        bills.filter((bill) => {
+          if (!bill.active) return false;
+          const d = daysUntil(bill.dueDate);
+          return d != null && d <= 14;
+        }),
+        "due"
+      ),
     [bills]
   );
 
-  const overdueCount = React.useMemo(
+  const overdueCount = useMemo(
     () =>
       bills.filter((bill) => {
         if (!bill.active) return false;
@@ -442,23 +1325,22 @@ export default function BillsPage() {
     [bills]
   );
 
-  const strongestPressure = React.useMemo(() => {
+  const strongestPressure = useMemo(() => {
     if (!activeBills.length) return null;
     return [...activeBills].sort((a, b) => monthlyEquivalent(b) - monthlyEquivalent(a))[0];
   }, [activeBills]);
 
-  const payoffRows = React.useMemo(() => {
+  const payoffRows = useMemo(() => {
     return controllableBills
       .map((bill) => {
-        const monthlyPay =
-          (Number(bill.minPay) || 0) + (Number(bill.extraPay) || 0) || Number(bill.amount) || 0;
+        const monthlyPay = paymentAmount(bill);
         const payoff = payoffSimulation(bill.balance, bill.aprPct, monthlyPay);
 
         return {
           ...bill,
           monthlyPay,
           payoff,
-          progress:
+          payoffProgress:
             bill.balance > 0 && monthlyPay > 0
               ? clamp((monthlyPay / bill.balance) * 100 * 12, 0, 100)
               : 0,
@@ -470,6 +1352,22 @@ export default function BillsPage() {
         return (a.payoff.months ?? 9999) - (b.payoff.months ?? 9999);
       });
   }, [controllableBills]);
+
+  const selectedPayoff = useMemo(() => {
+    if (!selectedBill || selectedBill.type !== "controllable") return null;
+
+    const monthlyPay = paymentAmount(selectedBill);
+    const payoff = payoffSimulation(selectedBill.balance, selectedBill.aprPct, monthlyPay);
+
+    return {
+      monthlyPay,
+      payoff,
+      progress:
+        selectedBill.balance > 0 && monthlyPay > 0
+          ? clamp((monthlyPay / selectedBill.balance) * 100 * 12, 0, 100)
+          : 0,
+    };
+  }, [selectedBill]);
 
   function resetForm() {
     setFormType("noncontrollable");
@@ -488,28 +1386,27 @@ export default function BillsPage() {
     setPageError("");
   }
 
-  function validateForm() {
-    const name = formName.trim();
-    if (!name) return "Name is required.";
-
-    const amount = num(formAmount, NaN);
-    if (!Number.isFinite(amount) || amount < 0) return "Enter a valid amount.";
-
-    if (formType === "controllable") {
-      const balance = num(formBalance, NaN);
-      if (!Number.isFinite(balance) || balance < 0) return "Enter a valid balance.";
-    }
-
-    return "";
-  }
-
   async function addBill() {
     if (!user || saving) return;
 
-    const validationError = validateForm();
-    if (validationError) {
-      setPageError(validationError);
+    const name = formName.trim();
+    if (!name) {
+      setPageError("Name is required.");
       return;
+    }
+
+    const amount = num(formAmount, NaN);
+    if (!Number.isFinite(amount) || amount < 0) {
+      setPageError("Enter a valid amount.");
+      return;
+    }
+
+    if (formType === "controllable") {
+      const balance = num(formBalance, NaN);
+      if (!Number.isFinite(balance) || balance < 0) {
+        setPageError("Enter a valid balance.");
+        return;
+      }
     }
 
     setSaving(true);
@@ -518,11 +1415,11 @@ export default function BillsPage() {
     try {
       const draft = {
         id: makeId(),
-        name: formName.trim(),
+        name,
         type: formType,
         frequency: formFrequency,
         dueDate: formDueDate,
-        amount: num(formAmount, 0),
+        amount,
         active: true,
         notes: formNotes.trim(),
         balance: num(formBalance, 0),
@@ -543,7 +1440,9 @@ export default function BillsPage() {
 
       if (error) throw error;
 
-      setBills((prev) => [mapBillRowToClient(data), ...prev]);
+      const mapped = mapBillRowToClient(data);
+      setBills((prev) => [mapped, ...prev]);
+      setSelectedBillId(mapped.id);
       resetForm();
     } catch (err) {
       setPageError(err?.message || "Failed to save bill.");
@@ -552,35 +1451,25 @@ export default function BillsPage() {
     }
   }
 
-  async function deleteBill(id) {
-    if (!user) return;
-    if (typeof window !== "undefined" && !window.confirm("Delete this bill?")) return;
-
-    const previous = bills;
-    setBills((prev) => prev.filter((bill) => bill.id !== id));
-
-    try {
-      const { error } = await supabase.from("bills").delete().eq("id", id).eq("user_id", user.id);
-      if (error) throw error;
-    } catch (err) {
-      setBills(previous);
-      setPageError(err?.message || "Failed to delete bill.");
-    }
-  }
-
   async function toggleActive(bill) {
     if (!user) return;
 
     const previous = bills;
-    const next = !bill.active;
+    const nextActive = !bill.active;
 
-    setBills((prev) => prev.map((item) => (item.id === bill.id ? { ...item, active: next } : item)));
+    setBills((prev) =>
+      prev.map((item) =>
+        item.id === bill.id
+          ? { ...item, active: nextActive, updatedAt: new Date().toISOString() }
+          : item
+      )
+    );
 
     try {
       const { error } = await supabase
         .from("bills")
         .update({
-          active: next,
+          active: nextActive,
           updated_at: new Date().toISOString(),
         })
         .eq("id", bill.id)
@@ -600,7 +1489,11 @@ export default function BillsPage() {
     const nextDate = todayISO();
 
     setBills((prev) =>
-      prev.map((item) => (item.id === bill.id ? { ...item, lastPaidDate: nextDate } : item))
+      prev.map((item) =>
+        item.id === bill.id
+          ? { ...item, lastPaidDate: nextDate, updatedAt: new Date().toISOString() }
+          : item
+      )
     );
 
     try {
@@ -620,586 +1513,38 @@ export default function BillsPage() {
     }
   }
 
-  const pageStyles = (
-    <style jsx global>{`
-      .billsPage {
-        --bill-text: #f5f8ff;
-        --bill-muted: rgba(219, 231, 255, 0.72);
-        --bill-soft: rgba(219, 231, 255, 0.52);
-        --bill-line: rgba(147, 175, 255, 0.14);
-        --bill-fill: rgba(7, 11, 18, 0.66);
-        --bill-fill-2: rgba(10, 15, 26, 0.82);
-        color: var(--bill-text);
-      }
-
-      .billsPage *,
-      .billsPage *::before,
-      .billsPage *::after {
-        box-sizing: border-box;
-      }
-
-      .billsShell {
-        width: 100%;
-        padding: 14px 0 44px;
-        display: grid;
-        gap: 16px;
-      }
-
-      .billsHero,
-      .billCard,
-      .billStat {
-        position: relative;
-        overflow: hidden;
-        border-radius: 28px;
-        border: 1px solid var(--bill-line);
-        background:
-          linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.015)),
-          var(--bill-fill);
-        backdrop-filter: blur(18px);
-        box-shadow:
-          0 20px 60px rgba(0, 0, 0, 0.28),
-          inset 0 1px 0 rgba(255, 255, 255, 0.05);
-      }
-
-      .billsHero::before,
-      .billCard::before,
-      .billStat::before {
-        content: "";
-        position: absolute;
-        inset: 0;
-        pointer-events: none;
-        background:
-          radial-gradient(circle at top left, rgba(80, 120, 255, 0.08), transparent 28%),
-          radial-gradient(circle at 84% 12%, rgba(74, 222, 128, 0.05), transparent 24%),
-          radial-gradient(circle at bottom center, rgba(255, 107, 127, 0.03), transparent 28%);
-      }
-
-      .billsHero {
-        padding: 26px;
-      }
-
-      .billsHeroTop {
-        position: relative;
-        z-index: 1;
-        display: flex;
-        justify-content: space-between;
-        align-items: flex-start;
-        gap: 16px;
-        flex-wrap: wrap;
-      }
-
-      .billEyebrow {
-        color: var(--bill-soft);
-        font-size: 0.72rem;
-        font-weight: 800;
-        letter-spacing: 0.18em;
-        text-transform: uppercase;
-        margin-bottom: 10px;
-      }
-
-      .billsTitle {
-        margin: 0;
-        font-size: clamp(2rem, 4vw, 4rem);
-        line-height: 0.95;
-        letter-spacing: -0.045em;
-        font-weight: 950;
-      }
-
-      .billsSub {
-        margin-top: 12px;
-        max-width: 880px;
-        color: var(--bill-muted);
-        line-height: 1.6;
-        font-size: 0.95rem;
-      }
-
-      .chipRow,
-      .heroActions,
-      .billActionRow,
-      .buttonRow {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 10px;
-      }
-
-      .heroChip,
-      .tonePill {
-        display: inline-flex;
-        align-items: center;
-        min-height: 34px;
-        padding: 0 12px;
-        border-radius: 999px;
-        font-size: 0.78rem;
-        font-weight: 800;
-        border: 1px solid rgba(255, 255, 255, 0.08);
-      }
-
-      .heroChip {
-        color: #edf3ff;
-        background: rgba(255, 255, 255, 0.05);
-      }
-
-      .tonePill_neutral {
-        color: #dbe7ff;
-        background: rgba(147, 175, 255, 0.1);
-        border-color: rgba(147, 175, 255, 0.16);
-      }
-
-      .tonePill_green {
-        color: #bdf7cf;
-        background: rgba(74, 222, 128, 0.11);
-        border-color: rgba(74, 222, 128, 0.18);
-      }
-
-      .tonePill_amber {
-        color: #ffe2a5;
-        background: rgba(245, 158, 11, 0.12);
-        border-color: rgba(245, 158, 11, 0.18);
-      }
-
-      .tonePill_red {
-        color: #ffd0d7;
-        background: rgba(255, 107, 127, 0.11);
-        border-color: rgba(255, 107, 127, 0.18);
-      }
-
-      .tabGroup,
-      .typeGroup {
-        display: inline-flex;
-        gap: 6px;
-        padding: 4px;
-        border-radius: 999px;
-        background: rgba(255, 255, 255, 0.04);
-        border: 1px solid rgba(255, 255, 255, 0.08);
-      }
-
-      .tabBtn,
-      .typeBtn,
-      .ghostBtn,
-      .solidBtn,
-      .dangerBtn {
-        min-height: 42px;
-        padding: 0 15px;
-        border-radius: 14px;
-        font-size: 0.84rem;
-        font-weight: 800;
-        letter-spacing: 0.01em;
-        cursor: pointer;
-        transition:
-          transform 0.18s ease,
-          background 0.18s ease,
-          border-color 0.18s ease,
-          opacity 0.18s ease;
-      }
-
-      .tabBtn:hover,
-      .typeBtn:hover,
-      .ghostBtn:hover,
-      .solidBtn:hover,
-      .dangerBtn:hover {
-        transform: translateY(-1px);
-      }
-
-      .tabBtn,
-      .typeBtn,
-      .ghostBtn {
-        color: #eef4ff;
-        border: 1px solid rgba(255, 255, 255, 0.08);
-        background: rgba(255, 255, 255, 0.03);
-      }
-
-      .tabBtn.active,
-      .typeBtn.active {
-        color: #08111f;
-        background: linear-gradient(180deg, rgba(255,255,255,0.98), rgba(233,237,246,0.92));
-        border-color: rgba(255, 255, 255, 0.14);
-      }
-
-      .solidBtn {
-        color: #f7f9ff;
-        border: 1px solid rgba(130, 170, 255, 0.24);
-        background: linear-gradient(180deg, rgba(77, 124, 255, 0.22), rgba(32, 74, 189, 0.12));
-      }
-
-      .dangerBtn {
-        color: #ffd3dd;
-        border: 1px solid rgba(255, 107, 127, 0.22);
-        background: rgba(255, 107, 127, 0.08);
-      }
-
-      .metricGrid {
-        display: grid;
-        grid-template-columns: repeat(4, minmax(0, 1fr));
-        gap: 14px;
-      }
-
-      .billStat {
-        padding: 20px;
-        min-height: 160px;
-      }
-
-      .billStatLabel {
-        position: relative;
-        z-index: 1;
-        color: var(--bill-soft);
-        font-size: 0.72rem;
-        font-weight: 800;
-        letter-spacing: 0.16em;
-        text-transform: uppercase;
-      }
-
-      .billStatValue {
-        position: relative;
-        z-index: 1;
-        margin-top: 14px;
-        font-size: clamp(1.8rem, 3vw, 3rem);
-        line-height: 1;
-        letter-spacing: -0.04em;
-        font-weight: 950;
-      }
-
-      .billStatSub {
-        position: relative;
-        z-index: 1;
-        margin-top: 12px;
-        color: var(--bill-muted);
-        line-height: 1.55;
-        font-size: 0.88rem;
-      }
-
-      .billTone_green .billStatValue {
-        color: #bdf7cf;
-      }
-
-      .billTone_amber .billStatValue {
-        color: #ffe2a5;
-      }
-
-      .billTone_red .billStatValue {
-        color: #ffd0d7;
-      }
-
-      .overviewGridTop,
-      .overviewGridBottom,
-      .manageGrid {
-        display: grid;
-        gap: 16px;
-      }
-
-      .overviewGridTop {
-        grid-template-columns: minmax(0, 1.35fr) minmax(380px, 0.95fr);
-      }
-
-      .overviewGridBottom,
-      .manageGrid {
-        grid-template-columns: minmax(0, 1.3fr) minmax(340px, 0.9fr);
-      }
-
-      .billCard {
-        padding: 20px;
-        display: grid;
-        gap: 14px;
-      }
-
-      .billCard_compact {
-        gap: 12px;
-      }
-
-      .billCardHead {
-        position: relative;
-        z-index: 1;
-        display: flex;
-        align-items: flex-start;
-        justify-content: space-between;
-        gap: 14px;
-        flex-wrap: wrap;
-      }
-
-      .billCardAction {
-        flex: 0 0 auto;
-      }
-
-      .billSectionTitle,
-      .billSectionMini {
-        margin: 0;
-        line-height: 1;
-        letter-spacing: -0.03em;
-        font-weight: 900;
-      }
-
-      .billSectionTitle {
-        font-size: 2rem;
-      }
-
-      .billSectionMini {
-        font-size: 1.2rem;
-      }
-
-      .billSectionText {
-        margin-top: 8px;
-        color: var(--bill-muted);
-        line-height: 1.55;
-        font-size: 0.88rem;
-      }
-
-      .errorBar {
-        padding: 14px 16px;
-        border-radius: 18px;
-        border: 1px solid rgba(255, 107, 127, 0.24);
-        background: rgba(83, 24, 24, 0.72);
-        color: #ffd5d5;
-        font-weight: 700;
-      }
-
-      .fieldGrid2,
-      .fieldGrid4,
-      .metaGrid,
-      .sideStack,
-      .cardList,
-      .formStack {
-        display: grid;
-        gap: 12px;
-      }
-
-      .fieldGrid2 {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-      }
-
-      .fieldGrid4 {
-        grid-template-columns: repeat(4, minmax(0, 1fr));
-      }
-
-      .metaGrid {
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-      }
-
-      .sideStack,
-      .cardList,
-      .formStack {
-        grid-template-columns: 1fr;
-      }
-
-      .fieldWrap {
-        min-width: 0;
-      }
-
-      .fieldLabel {
-        color: var(--bill-soft);
-        text-transform: uppercase;
-        letter-spacing: 0.12em;
-        font-size: 0.66rem;
-        font-weight: 800;
-        margin-bottom: 8px;
-      }
-
-      .field,
-      .select,
-      .textarea {
-        width: 100%;
-        min-height: 48px;
-        border-radius: 16px;
-        border: 1px solid rgba(177, 196, 255, 0.14);
-        background: rgba(8, 13, 24, 0.54) !important;
-        color: #f4f7ff !important;
-        font-size: 0.92rem;
-        font-weight: 600;
-        padding: 0 14px;
-        outline: none;
-        transition: border-color 0.18s ease, box-shadow 0.18s ease;
-      }
-
-      .textarea {
-        min-height: 108px;
-        padding: 12px 14px;
-        resize: vertical;
-      }
-
-      .field::placeholder,
-      .textarea::placeholder {
-        color: rgba(233, 238, 255, 0.44) !important;
-      }
-
-      .field:focus,
-      .select:focus,
-      .textarea:focus {
-        border-color: rgba(121, 163, 255, 0.36);
-        box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.08);
-      }
-
-      .select option {
-        background: #08111f;
-        color: #f4f7ff;
-      }
-
-      .checkRow {
-        display: inline-flex;
-        align-items: center;
-        gap: 10px;
-        color: var(--bill-muted);
-        font-size: 0.92rem;
-        font-weight: 700;
-      }
-
-      .billItem,
-      .payoffItem {
-        position: relative;
-        overflow: hidden;
-        border-radius: 22px;
-        border: 1px solid rgba(255, 255, 255, 0.055);
-        background: linear-gradient(180deg, rgba(10, 16, 28, 0.38), rgba(5, 9, 17, 0.14));
-        padding: 16px;
-      }
-
-      .billItemHead {
-        display: flex;
-        justify-content: space-between;
-        align-items: flex-start;
-        gap: 12px;
-        flex-wrap: wrap;
-      }
-
-      .billName {
-        font-size: 1.02rem;
-        font-weight: 900;
-        line-height: 1.15;
-      }
-
-      .billNameSub {
-        margin-top: 5px;
-        color: var(--bill-muted);
-        font-size: 0.86rem;
-        line-height: 1.45;
-      }
-
-      .miniMeta {
-        text-align: right;
-      }
-
-      .miniMetaValue {
-        font-weight: 900;
-      }
-
-      .miniMetaSub {
-        margin-top: 6px;
-        color: var(--bill-muted);
-        font-size: 0.84rem;
-      }
-
-      .billProgress {
-        height: 10px;
-        overflow: hidden;
-        border-radius: 999px;
-        background: rgba(255, 255, 255, 0.1);
-      }
-
-      .billProgressFill {
-        height: 100%;
-        border-radius: 999px;
-        transition: width 0.45s ease;
-      }
-
-      .emptyState {
-        border-radius: 18px;
-        border: 1px dashed rgba(255, 255, 255, 0.1);
-        padding: 16px;
-        color: var(--bill-muted);
-        background: rgba(255, 255, 255, 0.018);
-      }
-
-      .goodText {
-        color: #bdf7cf;
-        font-weight: 900;
-      }
-
-      .badText {
-        color: #ffd0d7;
-        font-weight: 900;
-      }
-
-      .warnText {
-        color: #ffe2a5;
-        font-weight: 900;
-      }
-
-      @media (max-width: 1260px) {
-        .metricGrid {
-          grid-template-columns: repeat(2, minmax(0, 1fr));
-        }
-
-        .overviewGridTop,
-        .overviewGridBottom,
-        .manageGrid {
-          grid-template-columns: 1fr;
-        }
-      }
-
-      @media (max-width: 900px) {
-        .fieldGrid2,
-        .fieldGrid4,
-        .metaGrid {
-          grid-template-columns: 1fr;
-        }
-      }
-
-      @media (max-width: 680px) {
-        .billsHero,
-        .billCard,
-        .billStat {
-          border-radius: 22px;
-        }
-
-        .billsHero,
-        .billCard,
-        .billStat {
-          padding: 16px;
-        }
-
-        .metricGrid {
-          grid-template-columns: 1fr;
-        }
-
-        .billsTitle {
-          font-size: 2.2rem;
-        }
-
-        .billSectionTitle {
-          font-size: 1.55rem;
-        }
-
-        .billCardHead {
-          flex-direction: column;
-          align-items: stretch;
-        }
-
-        .tabGroup,
-        .typeGroup {
-          width: 100%;
-          overflow-x: auto;
-        }
-
-        .tabBtn,
-        .typeBtn {
-          white-space: nowrap;
-        }
-      }
-    `}</style>
-  );
+  async function deleteBill(id) {
+    if (!user) return;
+    if (typeof window !== "undefined" && !window.confirm("Delete this bill?")) return;
+
+    const previous = bills;
+    setBills((prev) => prev.filter((bill) => bill.id !== id));
+
+    try {
+      const { error } = await supabase
+        .from("bills")
+        .delete()
+        .eq("id", id)
+        .eq("user_id", user.id);
+
+      if (error) throw error;
+    } catch (err) {
+      setBills(previous);
+      setPageError(err?.message || "Failed to delete bill.");
+    }
+  }
 
   if (loading) {
     return (
       <main className="billsPage">
-        {pageStyles}
-        <div className="billsShell">
-          <header className="billsHero">
-            <div className="billsHeroTop">
-              <div>
-                <div className="billEyebrow">Debt + Bills Control</div>
-                <h1 className="billsTitle">Bills Center</h1>
-                <div className="billsSub">Loading your bill pressure, debt stack, and due dates.</div>
-              </div>
+        <div className="billsPageShell">
+          <GlassPane size="card">
+            <div style={{ fontWeight: 800, fontSize: 18, color: "#fff" }}>
+              Loading bills.
             </div>
-          </header>
+          </GlassPane>
         </div>
+        <style jsx global>{globalStyles}</style>
       </main>
     );
   }
@@ -1207,675 +1552,812 @@ export default function BillsPage() {
   if (!user) {
     return (
       <main className="billsPage">
-        {pageStyles}
-        <div className="billsShell">
-          <header className="billsHero">
-            <div className="billsHeroTop">
-              <div>
-                <div className="billEyebrow">Debt + Bills Control</div>
-                <h1 className="billsTitle">Bills Center</h1>
-                <div className="billsSub">This page needs an authenticated user.</div>
-              </div>
+        <div className="billsPageShell">
+          <GlassPane size="card">
+            <div style={{ fontWeight: 800, fontSize: 18, color: "#fff" }}>
+              Please log in
             </div>
-          </header>
+          </GlassPane>
         </div>
+        <style jsx global>{globalStyles}</style>
       </main>
     );
   }
 
   return (
-    <main className="billsPage">
-      {pageStyles}
+    <>
+      <main className="billsPage">
+        <div className="billsPageShell">
+          {pageError ? (
+            <GlassPane tone="red" size="card">
+              <div style={{ fontWeight: 800, fontSize: 16, color: "#fff" }}>
+                Bills error
+              </div>
+              <div
+                style={{
+                  marginTop: 6,
+                  fontSize: 13,
+                  color: "rgba(255,255,255,0.74)",
+                }}
+              >
+                {pageError}
+              </div>
+            </GlassPane>
+          ) : null}
 
-      <div className="billsShell">
-        <header className="billsHero">
-          <div className="billsHeroTop">
-            <div>
-              <div className="billEyebrow">Debt + Bills Control</div>
-              <h1 className="billsTitle">Bills Center</h1>
-              <div className="billsSub">
-                Premium dark glass, stronger signal colors, wider scanning lanes, and mobile-first layout that still
-                feels like a real finance product.
+          <GlassPane size="card">
+            <div className="billsHeroGrid">
+              <div style={{ minWidth: 0 }}>
+                <div className="billsEyebrow">Life Command Center</div>
+                <div className="billsHeroTitle">Bills Command</div>
+                <div className="billsHeroSub">
+                  Cleaner bill pressure, tighter controls, and a roster layout that runs
+                  much closer to the accounts page.
+                </div>
+
+                <div className="billsPillRow">
+                  <MiniPill>{bills.length} bills</MiniPill>
+                  <MiniPill>{currentMonthLabel()}</MiniPill>
+                  <MiniPill>{controllableBills.length} debt accounts</MiniPill>
+                  <MiniPill>{fixedBills.length} fixed bills</MiniPill>
+                </div>
               </div>
 
-              <div className="chipRow" style={{ marginTop: 14 }}>
-                <span className="heroChip">{bills.length} total</span>
-                <span className="heroChip">{controllableBills.length} debts</span>
-                <span className="heroChip">{fixedBills.length} fixed</span>
-                <span className="heroChip">{dueSoon.length} due soon</span>
+              <div
+                style={{
+                  display: "flex",
+                  gap: 8,
+                  flexWrap: "wrap",
+                  justifyContent: "flex-end",
+                }}
+              >
+                <MiniPill>{todayISO()}</MiniPill>
+                <MiniPill tone="green">{money(monthlyPressure)} monthly</MiniPill>
+                <MiniPill tone={overdueCount > 0 ? "red" : "amber"}>
+                  {dueSoonBills.length} due soon
+                </MiniPill>
               </div>
             </div>
+          </GlassPane>
 
-            <div className="tabGroup">
-              <button
-                type="button"
-                className={`tabBtn ${tab === "overview" ? "active" : ""}`}
-                onClick={() => setTab("overview")}
-              >
-                Overview
-              </button>
-              <button
-                type="button"
-                className={`tabBtn ${tab === "manage" ? "active" : ""}`}
-                onClick={() => setTab("manage")}
-              >
-                Manage
-              </button>
-            </div>
-          </div>
-        </header>
+          <section className="billsMetricGrid">
+            <StatCard
+              icon={BadgeDollarSign}
+              label="Monthly Pressure"
+              value={money(monthlyPressure)}
+              detail="Normalized monthly hit from active bills and debt payments."
+              tone="neutral"
+            />
+            <StatCard
+              icon={CreditCard}
+              label="Total Debt"
+              value={money(totalDebt)}
+              detail="Active controllable balances only."
+              tone={totalDebt > 0 ? "red" : "green"}
+            />
+            <StatCard
+              icon={AlertTriangle}
+              label="Due Soon"
+              value={String(dueSoonBills.length)}
+              detail={
+                overdueCount > 0
+                  ? `${overdueCount} overdue right now.`
+                  : "Nothing overdue right now."
+              }
+              tone={overdueCount > 0 ? "red" : "amber"}
+            />
+            <StatCard
+              icon={PiggyBank}
+              label="Highest Pressure"
+              value={strongestPressure ? money(monthlyEquivalent(strongestPressure)) : "$0"}
+              detail={strongestPressure ? strongestPressure.name : "No active bills yet."}
+              tone="green"
+            />
+          </section>
 
-        {pageError ? <div className="errorBar">{pageError}</div> : null}
+          <section className="billsMainGrid">
+            <GlassPane size="card">
+              <PaneHeader
+                title="Bill Roster"
+                subcopy="Compact list on the left. Work the selected bill on the right."
+                right={<MiniPill>{filteredBills.length} showing</MiniPill>}
+              />
 
-        <section className="metricGrid">
-          <StatCard
-            label="Monthly Pressure"
-            value={money(monthlyPressure)}
-            sub="Normalized monthly hit from fixed bills and debt payments."
-            tone="neutral"
-          />
-          <StatCard
-            label="Total Debt"
-            value={money(totalDebt)}
-            sub="Active controllable balance across your debt accounts."
-            tone="red"
-          />
-          <StatCard
-            label="Due Soon"
-            value={dueSoon.length}
-            sub={overdueCount > 0 ? `${overdueCount} overdue right now.` : "Nothing overdue right now."}
-            tone={overdueCount > 0 ? "red" : "amber"}
-          />
-          <StatCard
-            label="Highest Pressure"
-            value={strongestPressure ? money(monthlyEquivalent(strongestPressure)) : "$0.00"}
-            sub={strongestPressure ? strongestPressure.name : "No active bills yet."}
-            tone="green"
-          />
-        </section>
-
-        {tab === "overview" ? (
-          <>
-            <section className="overviewGridTop">
-              <SectionCard
-                title="Pressure Board"
-                text="See what is due first and what is hitting the hardest."
-                action={<span className="heroChip">Active first</span>}
-              >
-                <div className="cardList">
-                  {!activeBills.length ? (
-                    <div className="emptyState">No active bills yet.</div>
-                  ) : (
-                    [...activeBills]
-                      .sort((a, b) => {
-                        const ad = daysUntil(a.dueDate);
-                        const bd = daysUntil(b.dueDate);
-                        if (ad == null && bd != null) return 1;
-                        if (ad != null && bd == null) return -1;
-                        if (ad != null && bd != null && ad !== bd) return ad - bd;
-                        return monthlyEquivalent(b) - monthlyEquivalent(a);
-                      })
-                      .slice(0, 8)
-                      .map((bill) => {
-                        const due = daysUntil(bill.dueDate);
-                        const tone = dueTone(due);
-                        const pressure = monthlyPressure > 0 ? (monthlyEquivalent(bill) / monthlyPressure) * 100 : 0;
-
-                        return (
-                          <div key={bill.id} className="billItem">
-                            <div className="billItemHead">
-                              <div>
-                                <div className="billName">{bill.name}</div>
-                                <div className="billNameSub">
-                                  {bill.type === "controllable" ? "Debt / Controllable" : "Fixed Bill"} •{" "}
-                                  {bill.frequency || "monthly"} • Due {bill.dueDate ? shortDate(bill.dueDate) : "—"}
-                                </div>
-                              </div>
-
-                              <TonePill tone={tone}>{dueLabel(due)}</TonePill>
-                            </div>
-
-                            <div style={{ marginTop: 12 }}>
-                              <ProgressBar value={pressure} tone={tone} />
-                            </div>
-
-                            <div className="metaGrid" style={{ marginTop: 12 }}>
-                              <div>
-                                <div className="fieldLabel">Monthly Hit</div>
-                                <div className="miniMetaValue">{money(monthlyEquivalent(bill))}</div>
-                              </div>
-
-                              <div>
-                                <div className="fieldLabel">{bill.type === "controllable" ? "Balance" : "Amount"}</div>
-                                <div className="miniMetaValue">
-                                  {bill.type === "controllable" ? money(bill.balance) : money(bill.amount)}
-                                </div>
-                              </div>
-
-                              <div>
-                                <div className="fieldLabel">Last Paid</div>
-                                <div className="miniMetaValue">
-                                  {bill.lastPaidDate ? shortDate(bill.lastPaidDate) : "—"}
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })
-                  )}
-                </div>
-              </SectionCard>
-
-              <SectionCard
-                title="Quick Add"
-                text="Add a fixed bill or debt account without making the page feel cramped."
-                action={
-                  <div className="typeGroup">
-                    {BILL_TYPE_OPTIONS.map((option) => (
-                      <button
-                        key={option.value}
-                        type="button"
-                        className={`typeBtn ${formType === option.value ? "active" : ""}`}
-                        onClick={() => setFormType(option.value)}
-                      >
-                        {option.label}
-                      </button>
-                    ))}
-                  </div>
-                }
-              >
-                <div className="formStack">
-                  <div className="fieldGrid2">
-                    <div className="fieldWrap">
-                      <div className="fieldLabel">Name</div>
-                      <input
-                        className="field"
-                        value={formName}
-                        onChange={(e) => setFormName(e.target.value)}
-                        placeholder="Chase Card, Rent, Insurance..."
-                      />
-                    </div>
-
-                    <div className="fieldWrap">
-                      <div className="fieldLabel">Category</div>
-                      <input
-                        className="field"
-                        value={formCategory}
-                        onChange={(e) => setFormCategory(e.target.value)}
-                        placeholder="Housing, Credit Card, Utilities..."
-                      />
-                    </div>
-                  </div>
-
-                  <div className="fieldGrid4">
-                    <div className="fieldWrap">
-                      <div className="fieldLabel">{formType === "controllable" ? "Current Pay" : "Amount"}</div>
-                      <input
-                        className="field"
-                        inputMode="decimal"
-                        value={formAmount}
-                        onChange={(e) => setFormAmount(e.target.value)}
-                        placeholder="0.00"
-                      />
-                    </div>
-
-                    <div className="fieldWrap">
-                      <div className="fieldLabel">Frequency</div>
-                      <select
-                        className="select"
-                        value={formFrequency}
-                        onChange={(e) => setFormFrequency(e.target.value)}
-                      >
-                        {FREQUENCY_OPTIONS.map((option) => (
-                          <option key={option.value} value={option.value}>
-                            {option.label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div className="fieldWrap">
-                      <div className="fieldLabel">Due Date</div>
-                      <input
-                        className="field"
-                        type="date"
-                        value={formDueDate}
-                        onChange={(e) => setFormDueDate(e.target.value)}
-                      />
-                    </div>
-
-                    <div className="fieldWrap">
-                      <div className="fieldLabel">Account</div>
-                      <select
-                        className="select"
-                        value={formAccountId}
-                        onChange={(e) => setFormAccountId(e.target.value)}
-                      >
-                        <option value="">No account</option>
-                        {accounts.map((account) => (
-                          <option key={account.id} value={account.id}>
-                            {account.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-
-                  {formType === "controllable" ? (
-                    <>
-                      <div className="fieldGrid4">
-                        <div className="fieldWrap">
-                          <div className="fieldLabel">Balance</div>
-                          <input
-                            className="field"
-                            inputMode="decimal"
-                            value={formBalance}
-                            onChange={(e) => setFormBalance(e.target.value)}
-                            placeholder="0.00"
-                          />
-                        </div>
-
-                        <div className="fieldWrap">
-                          <div className="fieldLabel">APR %</div>
-                          <input
-                            className="field"
-                            inputMode="decimal"
-                            value={formAprPct}
-                            onChange={(e) => setFormAprPct(e.target.value)}
-                            placeholder="6.25"
-                          />
-                        </div>
-
-                        <div className="fieldWrap">
-                          <div className="fieldLabel">Min Pay</div>
-                          <input
-                            className="field"
-                            inputMode="decimal"
-                            value={formMinPay}
-                            onChange={(e) => setFormMinPay(e.target.value)}
-                            placeholder="0.00"
-                          />
-                        </div>
-
-                        <div className="fieldWrap">
-                          <div className="fieldLabel">Extra Pay</div>
-                          <input
-                            className="field"
-                            inputMode="decimal"
-                            value={formExtraPay}
-                            onChange={(e) => setFormExtraPay(e.target.value)}
-                            placeholder="0.00"
-                          />
-                        </div>
-                      </div>
-
-                      <label className="checkRow">
-                        <input
-                          type="checkbox"
-                          checked={formAutopay}
-                          onChange={(e) => setFormAutopay(e.target.checked)}
-                        />
-                        Autopay enabled
-                      </label>
-                    </>
-                  ) : null}
-
-                  <div className="fieldWrap">
-                    <div className="fieldLabel">Notes</div>
-                    <textarea
-                      className="textarea"
-                      value={formNotes}
-                      onChange={(e) => setFormNotes(e.target.value)}
-                      placeholder="Optional notes"
-                    />
-                  </div>
-
-                  <div className="buttonRow">
-                    <button className="solidBtn" type="button" onClick={addBill} disabled={saving}>
-                      {saving ? "Saving..." : "Save Bill"}
-                    </button>
-                    <button className="ghostBtn" type="button" onClick={resetForm} disabled={saving}>
-                      Reset
-                    </button>
-                  </div>
-                </div>
-              </SectionCard>
-            </section>
-
-            <section className="overviewGridBottom">
-              <SectionCard
-                title="Bills Board"
-                text="Your full bill mix with cleaner lanes and stronger signal colors."
-                action={
-                  <div className="typeGroup">
-                    <button
-                      type="button"
-                      className={`typeBtn ${filter === "all" ? "active" : ""}`}
-                      onClick={() => setFilter("all")}
-                    >
-                      All
-                    </button>
-                    <button
-                      type="button"
-                      className={`typeBtn ${filter === "controllable" ? "active" : ""}`}
-                      onClick={() => setFilter("controllable")}
-                    >
-                      Debt
-                    </button>
-                    <button
-                      type="button"
-                      className={`typeBtn ${filter === "noncontrollable" ? "active" : ""}`}
-                      onClick={() => setFilter("noncontrollable")}
-                    >
-                      Fixed
-                    </button>
-                    <button
-                      type="button"
-                      className={`typeBtn ${filter === "due" ? "active" : ""}`}
-                      onClick={() => setFilter("due")}
-                    >
-                      Due Soon
-                    </button>
-                  </div>
-                }
-              >
-                <div className="cardList">
-                  {!filteredBills.length ? (
-                    <div className="emptyState">No bills match this filter.</div>
-                  ) : (
-                    filteredBills.slice(0, 10).map((bill) => {
-                      const due = daysUntil(bill.dueDate);
-                      const tone = dueTone(due);
-
-                      return (
-                        <div key={bill.id} className="billItem">
-                          <div className="billItemHead">
-                            <div>
-                              <div className="billName">{bill.name}</div>
-                              <div className="billNameSub">
-                                {bill.type === "controllable" ? "Debt / Controllable" : "Fixed Bill"} •{" "}
-                                {bill.frequency || "monthly"} • {bill.category || "No category"}
-                              </div>
-                            </div>
-
-                            <div className="billActionRow">
-                              <TonePill tone={tone}>{dueLabel(due)}</TonePill>
-                              <TonePill tone={bill.active ? "green" : "neutral"}>
-                                {bill.active ? "Active" : "Paused"}
-                              </TonePill>
-                            </div>
-                          </div>
-
-                          <div className="metaGrid" style={{ marginTop: 12 }}>
-                            <div>
-                              <div className="fieldLabel">{bill.type === "controllable" ? "Monthly Pay" : "Amount"}</div>
-                              <div className="miniMetaValue">
-                                {money(
-                                  bill.type === "controllable"
-                                    ? (Number(bill.minPay) || 0) + (Number(bill.extraPay) || 0) || bill.amount
-                                    : bill.amount
-                                )}
-                              </div>
-                            </div>
-
-                            <div>
-                              <div className="fieldLabel">Monthly Pressure</div>
-                              <div className="miniMetaValue">{money(monthlyEquivalent(bill))}</div>
-                            </div>
-
-                            <div>
-                              <div className="fieldLabel">{bill.type === "controllable" ? "Balance" : "Last Paid"}</div>
-                              <div className="miniMetaValue">
-                                {bill.type === "controllable"
-                                  ? money(bill.balance)
-                                  : bill.lastPaidDate
-                                    ? shortDate(bill.lastPaidDate)
-                                    : "—"}
-                              </div>
-                            </div>
-                          </div>
-
-                          {bill.notes ? <div className="billSectionText">{bill.notes}</div> : null}
-                        </div>
-                      );
-                    })
-                  )}
-                </div>
-              </SectionCard>
-
-              <div className="sideStack">
-                <SectionCard
-                  title="Payoff Radar"
-                  text="Quick payoff pressure view for controllable balances."
-                  compact
-                >
-                  <div className="cardList">
-                    {!payoffRows.length ? (
-                      <div className="emptyState">No controllable debt added yet.</div>
-                    ) : (
-                      payoffRows.slice(0, 6).map((bill) => (
-                        <div key={bill.id} className="payoffItem">
-                          <div className="billItemHead">
-                            <div>
-                              <div className="billName">{bill.name}</div>
-                              <div className="billNameSub">
-                                {money(bill.balance)} at {bill.aprPct || 0}% APR
-                              </div>
-                            </div>
-
-                            <div className="miniMeta">
-                              <div className={bill.payoff.impossible ? "badText" : "goodText"}>
-                                {bill.payoff.impossible ? "No payoff" : formatMonths(bill.payoff.months)}
-                              </div>
-                              <div className="miniMetaSub">{money(bill.monthlyPay)}/mo</div>
-                            </div>
-                          </div>
-
-                          <div style={{ marginTop: 12 }}>
-                            <ProgressBar value={bill.progress} tone={bill.payoff.impossible ? "red" : "green"} />
-                          </div>
-
-                          <div className="metaGrid" style={{ marginTop: 12 }}>
-                            <div>
-                              <div className="fieldLabel">Interest Cost</div>
-                              <div className="miniMetaValue">
-                                {bill.payoff.impossible ? "—" : money(bill.payoff.totalInterest)}
-                              </div>
-                            </div>
-
-                            <div>
-                              <div className="fieldLabel">Payoff Date</div>
-                              <div className="miniMetaValue">
-                                {bill.payoff.impossible || !bill.payoff.payoffDate
-                                  ? "—"
-                                  : shortDate(bill.payoff.payoffDate)}
-                              </div>
-                            </div>
-
-                            <div>
-                              <div className="fieldLabel">Autopay</div>
-                              <div className="miniMetaValue">{bill.autopay ? "On" : "Off"}</div>
-                            </div>
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </SectionCard>
-
-                <SectionCard title="Next Moves" text="Fast actions for staying on top of payments." compact>
-                  <div className="cardList">
-                    {!dueSoon.length ? (
-                      <div className="emptyState">Nothing due in the next 7 days.</div>
-                    ) : (
-                      dueSoon.slice(0, 6).map((bill) => (
-                        <div key={bill.id} className="payoffItem">
-                          <div className="billItemHead">
-                            <div>
-                              <div className="billName">{bill.name}</div>
-                              <div className="billNameSub">
-                                Due {bill.dueDate ? shortDate(bill.dueDate) : "—"} •{" "}
-                                {money(
-                                  bill.type === "controllable"
-                                    ? (Number(bill.minPay) || 0) + (Number(bill.extraPay) || 0) || bill.amount
-                                    : bill.amount
-                                )}
-                              </div>
-                            </div>
-
-                            <span className={daysUntil(bill.dueDate) <= 3 ? "badText" : "warnText"}>
-                              {dueLabel(daysUntil(bill.dueDate))}
-                            </span>
-                          </div>
-
-                          <div className="buttonRow" style={{ marginTop: 12 }}>
-                            <button className="ghostBtn" type="button" onClick={() => toggleActive(bill)}>
-                              {bill.active ? "Pause" : "Activate"}
-                            </button>
-                            <button className="solidBtn" type="button" onClick={() => markPaidToday(bill)}>
-                              Mark Paid Today
-                            </button>
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </SectionCard>
-              </div>
-            </section>
-          </>
-        ) : (
-          <section className="manageGrid">
-            <SectionCard title="Search and Control" text="Filter, pause, mark paid, or delete from one place.">
-              <div className="fieldGrid2">
-                <div className="fieldWrap">
-                  <div className="fieldLabel">Search</div>
+              <div className="billsRosterControls">
+                <div className="billsSearchWrap">
+                  <Search size={15} />
                   <input
-                    className="field"
+                    className="billsField billsSearchField"
+                    placeholder="Search bills"
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
-                    placeholder="Search bills, debt, notes, category..."
                   />
                 </div>
 
-                <div className="fieldWrap">
-                  <div className="fieldLabel">Filter</div>
-                  <select className="select" value={filter} onChange={(e) => setFilter(e.target.value)}>
-                    <option value="all">All bills</option>
-                    <option value="active">Active only</option>
-                    <option value="controllable">Debt only</option>
-                    <option value="noncontrollable">Fixed only</option>
-                    <option value="due">Due in 7 days</option>
-                  </select>
-                </div>
+                <select
+                  className="billsField"
+                  value={filter}
+                  onChange={(e) => setFilter(e.target.value)}
+                >
+                  <option value="all">All bills</option>
+                  <option value="active">Active only</option>
+                  <option value="paused">Paused</option>
+                  <option value="controllable">Debt only</option>
+                  <option value="noncontrollable">Fixed only</option>
+                  <option value="due">Due in 7 days</option>
+                </select>
+
+                <select
+                  className="billsField"
+                  value={sort}
+                  onChange={(e) => setSort(e.target.value)}
+                >
+                  <option value="due">Due first</option>
+                  <option value="pressure">Highest pressure</option>
+                  <option value="updated">Recently updated</option>
+                  <option value="name">Name</option>
+                </select>
               </div>
 
-              <div className="cardList">
-                {!filteredBills.length ? (
-                  <div className="emptyState">No bills match this filter.</div>
-                ) : (
-                  filteredBills.map((bill) => {
-                    const due = daysUntil(bill.dueDate);
-                    const dueToneValue = dueTone(due);
+              {filteredBills.length ? (
+                <div className="billsRosterListCompact">
+                  {filteredBills.map((bill) => (
+                    <CompactBillRow
+                      key={bill.id}
+                      bill={bill}
+                      selected={bill.id === selectedBill?.id}
+                      onSelect={() => setSelectedBillId(bill.id)}
+                      onMarkPaid={() => markPaidToday(bill)}
+                      onToggle={() => toggleActive(bill)}
+                      onDelete={() => deleteBill(bill.id)}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <div className="billsEmptyState">
+                  <div>
+                    <div className="billsEmptyTitle">No bills found</div>
+                    <div className="billsEmptyText">
+                      Clear filters or add another bill.
+                    </div>
+                  </div>
+                </div>
+              )}
+            </GlassPane>
 
-                    return (
-                      <div key={bill.id} className="billItem">
-                        <div className="billItemHead">
-                          <div>
-                            <div className="billName">{bill.name}</div>
-                            <div className="billNameSub">
-                              {bill.type === "controllable" ? "Debt / Controllable" : "Fixed Bill"} •{" "}
-                              {bill.frequency} • {bill.category || "No category"}
-                            </div>
-                            {bill.notes ? <div className="billSectionText">{bill.notes}</div> : null}
-                          </div>
+            <div className="billsRightStack">
+              <div className="billsTopRightGrid">
+                <FocusBillCard
+                  bill={selectedBill}
+                  linkedAccount={linkedAccount}
+                  payoffData={selectedPayoff}
+                  onMarkPaid={() => selectedBill && markPaidToday(selectedBill)}
+                  onToggle={() => selectedBill && toggleActive(selectedBill)}
+                  onDelete={() => selectedBill && deleteBill(selectedBill.id)}
+                />
 
-                          <div className="miniMeta">
-                            <div className="miniMetaValue">
-                              {money(
-                                bill.type === "controllable"
-                                  ? (Number(bill.minPay) || 0) + (Number(bill.extraPay) || 0) || bill.amount
-                                  : bill.amount
-                              )}
-                            </div>
-                            <div className="miniMetaSub">{dueLabel(due)}</div>
-                          </div>
-                        </div>
-
-                        <div className="buttonRow" style={{ marginTop: 12 }}>
-                          <TonePill tone={dueToneValue}>{dueLabel(due)}</TonePill>
-                          <TonePill tone={bill.active ? "green" : "neutral"}>
-                            {bill.active ? "Active" : "Paused"}
-                          </TonePill>
-                          <button className="ghostBtn" type="button" onClick={() => toggleActive(bill)}>
-                            {bill.active ? "Pause" : "Activate"}
-                          </button>
-                          <button className="solidBtn" type="button" onClick={() => markPaidToday(bill)}>
-                            Mark Paid
-                          </button>
-                          <button className="dangerBtn" type="button" onClick={() => deleteBill(bill.id)}>
-                            Delete
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
+                <AddBillCard
+                  saving={saving}
+                  accounts={accounts}
+                  formType={formType}
+                  setFormType={setFormType}
+                  formName={formName}
+                  setFormName={setFormName}
+                  formFrequency={formFrequency}
+                  setFormFrequency={setFormFrequency}
+                  formDueDate={formDueDate}
+                  setFormDueDate={setFormDueDate}
+                  formAmount={formAmount}
+                  setFormAmount={setFormAmount}
+                  formCategory={formCategory}
+                  setFormCategory={setFormCategory}
+                  formNotes={formNotes}
+                  setFormNotes={setFormNotes}
+                  formAccountId={formAccountId}
+                  setFormAccountId={setFormAccountId}
+                  formBalance={formBalance}
+                  setFormBalance={setFormBalance}
+                  formAprPct={formAprPct}
+                  setFormAprPct={setFormAprPct}
+                  formMinPay={formMinPay}
+                  setFormMinPay={setFormMinPay}
+                  formExtraPay={formExtraPay}
+                  setFormExtraPay={setFormExtraPay}
+                  formAutopay={formAutopay}
+                  setFormAutopay={setFormAutopay}
+                  addBill={addBill}
+                  resetForm={resetForm}
+                />
               </div>
-            </SectionCard>
 
-            <div className="sideStack">
-              <SectionCard title="Debt Stack" text="Fast read on your controllable balances." compact>
-                <div className="cardList">
-                  {!payoffRows.length ? (
-                    <div className="emptyState">No controllable debt added yet.</div>
-                  ) : (
-                    payoffRows.map((bill) => (
-                      <div key={bill.id} className="payoffItem">
-                        <div className="billItemHead">
-                          <div>
-                            <div className="billName">{bill.name}</div>
-                            <div className="billNameSub">
-                              Balance {money(bill.balance)} • APR {bill.aprPct || 0}%
-                            </div>
-                          </div>
+              <GlassPane size="card">
+                <PaneHeader
+                  title="Bills Intel"
+                  subcopy="Upcoming actions and controllable payoff view in one tighter block."
+                />
 
-                          <div className={bill.payoff.impossible ? "badText" : "goodText"}>
-                            {bill.payoff.impossible ? "No payoff" : formatMonths(bill.payoff.months)}
+                <div className="billsIntelGrid">
+                  <div className="billsIntelPanel">
+                    <PaneHeader
+                      title="Action Queue"
+                      subcopy="What needs touching next."
+                      right={
+                        <MiniPill>
+                          {dueSoonBills.length} item{dueSoonBills.length === 1 ? "" : "s"}
+                        </MiniPill>
+                      }
+                    />
+
+                    {dueSoonBills.length ? (
+                      <div className="billsIntelList">
+                        {dueSoonBills.slice(0, 5).map((bill) => (
+                          <QueueItem
+                            key={bill.id}
+                            bill={bill}
+                            onFocus={() => setSelectedBillId(bill.id)}
+                            onMarkPaid={() => markPaidToday(bill)}
+                          />
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="billsEmptyState billsInlineEmpty">
+                        <div>
+                          <div className="billsEmptyTitle">Nothing due soon</div>
+                          <div className="billsEmptyText">
+                            No active bills are due in the next 14 days.
                           </div>
                         </div>
                       </div>
-                    ))
-                  )}
-                </div>
-              </SectionCard>
+                    )}
+                  </div>
 
-              <SectionCard title="Fixed Bills" text="Recurring bills outside the debt stack." compact>
-                <div className="cardList">
-                  {!fixedBills.length ? (
-                    <div className="emptyState">No fixed bills added yet.</div>
-                  ) : (
-                    fixedBills.map((bill) => (
-                      <div key={bill.id} className="payoffItem">
-                        <div className="billItemHead">
-                          <div>
-                            <div className="billName">{bill.name}</div>
-                            <div className="billNameSub">
-                              {money(bill.amount)} • {bill.frequency}
-                            </div>
+                  <div className="billsIntelPanel">
+                    <PaneHeader
+                      title="Debt Forecast"
+                      subcopy="Compact payoff stack for controllable balances."
+                      right={
+                        <MiniPill>
+                          {payoffRows.length} item{payoffRows.length === 1 ? "" : "s"}
+                        </MiniPill>
+                      }
+                    />
+
+                    {payoffRows.length ? (
+                      <div className="billsIntelList">
+                        {payoffRows.slice(0, 5).map((row) => (
+                          <PayoffItem
+                            key={row.id}
+                            row={row}
+                            onFocus={() => setSelectedBillId(row.id)}
+                          />
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="billsEmptyState billsInlineEmpty billsForecastEmpty">
+                        <div>
+                          <div className="billsEmptyTitle">No debt forecast yet</div>
+                          <div className="billsEmptyText">
+                            Add a controllable bill on the right and payoff timing will show here.
                           </div>
-
-                          <div className="miniMetaValue">{money(monthlyEquivalent(bill))}/mo</div>
+                          <div style={{ marginTop: 10, display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
+                            <MiniPill>0 controllable bills</MiniPill>
+                            <MiniPill tone="amber">Waiting on debt data</MiniPill>
+                          </div>
                         </div>
                       </div>
-                    ))
-                  )}
+                    )}
+                  </div>
                 </div>
-              </SectionCard>
+              </GlassPane>
             </div>
           </section>
-        )}
-      </div>
-    </main>
+        </div>
+      </main>
+
+      <style jsx global>{globalStyles}</style>
+    </>
   );
 }
+
+const globalStyles = `
+  .billsPage {
+    color: var(--lcc-text);
+    font-family: var(--lcc-font-sans);
+  }
+
+  .billsPageShell {
+    width: min(100%, 1320px);
+    margin: 0 auto;
+    padding: 12px 0 20px;
+    display: grid;
+    gap: 12px;
+  }
+
+  .billsEyebrow {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: .22em;
+    font-weight: 800;
+    color: rgba(255,255,255,0.42);
+  }
+
+  .billsHeroTitle {
+    margin-top: 8px;
+    font-size: clamp(24px, 3.2vw, 34px);
+    line-height: 1.02;
+    font-weight: 850;
+    letter-spacing: -0.05em;
+    color: #fff;
+  }
+
+  .billsHeroSub {
+    margin-top: 8px;
+    font-size: 13px;
+    line-height: 1.55;
+    color: rgba(255,255,255,0.62);
+    max-width: 760px;
+  }
+
+  .billsHeroGrid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.1fr) auto;
+    gap: 12px;
+    align-items: start;
+  }
+
+  .billsPillRow {
+    margin-top: 12px;
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .billsMetricGrid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  .billsMainGrid {
+    display: grid;
+    grid-template-columns: minmax(390px, 0.94fr) minmax(0, 1.06fr);
+    gap: 12px;
+    align-items: start;
+  }
+
+  .billsRightStack {
+    display: grid;
+    gap: 12px;
+  }
+
+  .billsTopRightGrid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.04fr) minmax(320px, 0.8fr);
+    gap: 12px;
+    align-items: start;
+  }
+
+  .billsRosterControls {
+    display: grid;
+    grid-template-columns: 1.2fr 0.8fr 0.9fr;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+
+  .billsSearchWrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 44px;
+    border-radius: 14px;
+    border: 1px solid rgba(214,226,255,0.10);
+    background:
+      linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.012)),
+      rgba(8, 12, 20, 0.76);
+    color: rgba(255,255,255,0.58);
+    padding: 0 12px;
+  }
+
+  .billsSearchField {
+    min-height: 42px !important;
+    border: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+  }
+
+  .billsRosterListCompact {
+    display: grid;
+    gap: 8px;
+    max-height: 650px;
+    overflow: auto;
+    padding-right: 2px;
+  }
+
+  .billsCompactRow {
+    display: grid;
+    grid-template-columns: 42px minmax(0, 1fr) auto auto;
+    gap: 10px;
+    align-items: center;
+    min-height: 84px;
+    padding: 10px 12px;
+    border-radius: 18px;
+    border: 1px solid rgba(255,255,255,0.07);
+    background:
+      linear-gradient(180deg, rgba(8,13,24,0.78), rgba(4,8,16,0.72));
+    cursor: pointer;
+    transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+  }
+
+  .billsCompactRow:hover {
+    transform: translateY(-1px);
+  }
+
+  .billsCompactAvatar {
+    width: 42px;
+    height: 42px;
+    border-radius: 14px;
+    display: grid;
+    place-items: center;
+    border: 1px solid rgba(255,255,255,0.08);
+    background:
+      linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.012)),
+      rgba(9, 14, 23, 0.68);
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: .05em;
+  }
+
+  .billsCompactTitle {
+    font-size: 13.5px;
+    font-weight: 800;
+    color: #fff;
+    line-height: 1.2;
+    overflow-wrap: anywhere;
+  }
+
+  .billsCompactSub {
+    margin-top: 4px;
+    font-size: 11.5px;
+    color: rgba(255,255,255,0.54);
+    line-height: 1.3;
+  }
+
+  .billsCompactValue {
+    font-size: 15px;
+    font-weight: 850;
+    color: #fff;
+    white-space: nowrap;
+  }
+
+  .billsCompactActions {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+  }
+
+  .billsIconBtn {
+    width: 34px;
+    height: 34px;
+    border-radius: 12px;
+    border: 1px solid rgba(214,226,255,0.10);
+    background:
+      linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.012));
+    color: rgba(247,251,255,0.88);
+    display: grid;
+    place-items: center;
+    cursor: pointer;
+  }
+
+  .billsDangerBtn {
+    border-color: rgba(255,132,163,0.18);
+    color: #ffd3df;
+  }
+
+  .billsFocusBox {
+    border-radius: 22px;
+    border: 1px solid rgba(214,226,255,0.12);
+    background:
+      linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01));
+    padding: 15px;
+  }
+
+  .billsInfoGrid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .billsInfoCell {
+    border-radius: 18px;
+    border: 1px solid rgba(255,255,255,0.05);
+    background: rgba(255,255,255,0.025);
+    padding: 11px;
+  }
+
+  .billsInfoValue {
+    font-size: 0.96rem;
+    font-weight: 900;
+    line-height: 1.15;
+    color: #fff;
+  }
+
+  .billsInfoSub {
+    margin-top: 5px;
+    color: rgba(255,255,255,0.62);
+    font-size: 0.79rem;
+    line-height: 1.4;
+  }
+
+  .billsProgress {
+    height: 8px;
+    border-radius: 999px;
+    overflow: hidden;
+    background: rgba(255,255,255,0.1);
+  }
+
+  .billsProgressFill {
+    height: 100%;
+    border-radius: 999px;
+    transition: width 0.4s ease;
+  }
+
+  .billsActionGrid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .billsActionGridTight {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .billsFormStack {
+    display: grid;
+    gap: 12px;
+  }
+
+  .billsFormGrid2,
+  .billsFormGrid3,
+  .billsFormGrid4 {
+    display: grid;
+    gap: 10px;
+  }
+
+  .billsFormGrid2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .billsFormGrid3 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .billsFormGrid4 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .billsTinyLabel {
+    display: block;
+    margin-bottom: 8px;
+    font-size: 10px;
+    color: rgba(255,255,255,0.46);
+    text-transform: uppercase;
+    letter-spacing: .16em;
+    font-weight: 800;
+  }
+
+  .billsField {
+    width: 100%;
+    min-height: 44px;
+    border-radius: 14px;
+    border: 1px solid rgba(214,226,255,0.10);
+    background:
+      linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.012)),
+      rgba(8, 12, 20, 0.76);
+    color: var(--lcc-text);
+    padding: 0 13px;
+    outline: none;
+    font: inherit;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
+    transition: border-color 160ms ease, box-shadow 160ms ease, background 160ms ease;
+  }
+
+  .billsField:focus {
+    border-color: rgba(143,177,255,0.30);
+    box-shadow:
+      0 0 0 4px rgba(79,114,255,0.08),
+      inset 0 1px 0 rgba(255,255,255,0.035);
+  }
+
+  .billsField::placeholder {
+    color: rgba(225,233,245,0.38);
+  }
+
+  .billsField option {
+    background: #08111f;
+    color: #f4f7ff;
+  }
+
+  textarea.billsField {
+    min-height: 96px;
+    resize: vertical;
+    padding: 12px 13px;
+  }
+
+  .billsCheck {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    color: rgba(255,255,255,0.72);
+    font-size: 0.86rem;
+    font-weight: 700;
+  }
+
+  .billsActionBtn {
+    min-height: 40px;
+    padding: 10px 13px;
+    border-radius: 14px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    font-size: 13px;
+    font-weight: 800;
+    line-height: 1;
+    transition: transform 160ms ease, border-color 160ms ease, background 160ms ease, box-shadow 160ms ease;
+  }
+
+  .billsActionBtn:hover {
+    transform: translateY(-1px);
+  }
+
+  .billsIntelGrid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  .billsIntelPanel {
+    border-radius: 20px;
+    border: 1px solid rgba(255,255,255,0.06);
+    background:
+      linear-gradient(180deg, rgba(8,13,24,0.58), rgba(4,8,16,0.42));
+    padding: 12px;
+    min-height: 100%;
+  }
+
+  .billsIntelList {
+    display: grid;
+    gap: 10px;
+    max-height: 360px;
+    overflow: auto;
+    padding-right: 2px;
+  }
+
+  .billsIntelItem {
+    border-radius: 18px;
+    border: 1px solid rgba(255,255,255,0.07);
+    background:
+      linear-gradient(180deg, rgba(8,13,24,0.78), rgba(4,8,16,0.72));
+    padding: 12px;
+    display: grid;
+    gap: 10px;
+  }
+
+  .billsIntelTitle {
+    font-size: 13px;
+    font-weight: 800;
+    color: #fff;
+    line-height: 1.25;
+    overflow-wrap: anywhere;
+  }
+
+  .billsIntelSub {
+    margin-top: 4px;
+    font-size: 11.5px;
+    color: rgba(255,255,255,0.54);
+    line-height: 1.35;
+  }
+
+  .billsIntelValue {
+    font-size: 14px;
+    font-weight: 850;
+    color: #fff;
+  }
+
+  .billsEmptyState {
+    min-height: 150px;
+    display: grid;
+    place-items: center;
+    text-align: center;
+    padding: 14px;
+  }
+
+  .billsInlineEmpty {
+    min-height: 260px;
+  }
+
+  .billsForecastEmpty {
+    border-radius: 18px;
+    border: 1px dashed rgba(214,226,255,0.12);
+    background: rgba(255,255,255,0.02);
+  }
+
+  .billsEmptyTitle {
+    font-size: 16px;
+    font-weight: 850;
+    color: #fff;
+  }
+
+  .billsEmptyText {
+    margin-top: 6px;
+    font-size: 13px;
+    line-height: 1.5;
+    color: rgba(255,255,255,0.60);
+    max-width: 360px;
+  }
+
+  @media (max-width: 1260px) {
+    .billsMetricGrid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .billsTopRightGrid,
+    .billsIntelGrid {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  @media (max-width: 1100px) {
+    .billsHeroGrid,
+    .billsMainGrid {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  @media (max-width: 1024px) {
+    .billsRosterControls,
+    .billsInfoGrid,
+    .billsFormGrid2,
+    .billsFormGrid3,
+    .billsFormGrid4,
+    .billsActionGrid,
+    .billsActionGridTight {
+      grid-template-columns: 1fr;
+    }
+
+    .billsCompactRow {
+      grid-template-columns: 42px minmax(0, 1fr);
+    }
+
+    .billsCompactValue {
+      white-space: normal;
+    }
+
+    .billsCompactActions {
+      grid-column: 2;
+      justify-content: flex-start;
+    }
+  }
+
+  @media (max-width: 760px) {
+    .billsPageShell {
+      padding: 8px 0 14px;
+    }
+
+    .billsMetricGrid,
+    .billsTopRightGrid,
+    .billsIntelGrid {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  @media (max-width: 640px) {
+    .billsMetricGrid,
+    .billsActionGrid,
+    .billsActionGridTight {
+      grid-template-columns: 1fr;
+    }
+  }
+`;
