@@ -6,12 +6,14 @@ import { useEffect, useMemo, useState } from "react";
 import {
   ArrowLeft,
   ArrowRight,
-  BarChart3,
   BadgeDollarSign,
   ExternalLink,
   Layers3,
+  Newspaper,
+  Plus,
   TrendingDown,
   TrendingUp,
+  Wallet,
 } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import GlassPane from "../../components/GlassPane";
@@ -36,6 +38,19 @@ function money(n) {
   });
 }
 
+function signedMoney(n) {
+  const num = Number(n);
+  if (!Number.isFinite(num)) return "—";
+  const abs = Math.abs(num).toLocaleString(undefined, {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 2,
+  });
+  if (num > 0) return `+${abs}`;
+  if (num < 0) return `-${abs}`;
+  return abs;
+}
+
 function fmtNumber(n, digits = 4) {
   const num = Number(n);
   if (!Number.isFinite(num)) return "—";
@@ -58,6 +73,18 @@ function shortDate(value) {
     month: "short",
     day: "numeric",
     year: "numeric",
+  });
+}
+
+function fullDateTime(value) {
+  if (!value) return "—";
+  const d = new Date(value);
+  if (!Number.isFinite(d.getTime())) return String(value);
+  return d.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
   });
 }
 
@@ -126,6 +153,46 @@ function mutedStyle() {
     fontSize: 13,
     lineHeight: 1.5,
     color: "rgba(255,255,255,0.64)",
+  };
+}
+
+function inputStyle() {
+  return {
+    height: 46,
+    borderRadius: 14,
+    border: "1px solid rgba(214,226,255,0.10)",
+    background:
+      "linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.012)), rgba(8,12,20,0.76)",
+    color: "#f7fbff",
+    padding: "0 12px",
+    outline: "none",
+    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.035)",
+    width: "100%",
+  };
+}
+
+function buttonStyle({ primary = false, disabled = false } = {}) {
+  return {
+    minHeight: 46,
+    padding: "0 14px",
+    borderRadius: 14,
+    border: primary
+      ? "1px solid rgba(255,255,255,0.18)"
+      : "1px solid rgba(214,226,255,0.10)",
+    background: disabled
+      ? "rgba(255,255,255,0.04)"
+      : primary
+      ? "linear-gradient(180deg, rgba(255,255,255,0.95), rgba(233,239,248,0.88))"
+      : "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.012))",
+    color: disabled ? "rgba(255,255,255,0.42)" : primary ? "#0b1220" : "#f7fbff",
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    fontWeight: 800,
+    fontSize: 13,
+    cursor: disabled ? "not-allowed" : "pointer",
+    textDecoration: "none",
   };
 }
 
@@ -208,7 +275,6 @@ function PaneHeader({ title, subcopy, right }) {
         >
           {title}
         </div>
-
         {subcopy ? <div style={{ ...mutedStyle(), marginTop: 4 }}>{subcopy}</div> : null}
       </div>
 
@@ -266,6 +332,188 @@ function MetricCard({ icon: Icon, label, value, detail, tone = "neutral" }) {
         <div style={mutedStyle()}>{detail}</div>
       </div>
     </GlassPane>
+  );
+}
+
+function MiniMetric({ title, value, tone = "neutral" }) {
+  const meta = toneMeta(tone);
+
+  return (
+    <div
+      style={{
+        minHeight: 78,
+        borderRadius: 16,
+        border: `1px solid ${meta.border}`,
+        background:
+          "linear-gradient(180deg, rgba(255,255,255,0.032), rgba(255,255,255,0.01))",
+        padding: 13,
+      }}
+    >
+      <div style={overlineStyle()}>{title}</div>
+      <div
+        style={{
+          marginTop: 7,
+          fontSize: 18,
+          fontWeight: 850,
+          letterSpacing: "-0.04em",
+          color: tone === "neutral" ? "#fff" : meta.text,
+          overflowWrap: "anywhere",
+        }}
+      >
+        {value}
+      </div>
+    </div>
+  );
+}
+
+function SnapshotRow({ label, value }) {
+  return (
+    <div
+      style={{
+        minHeight: 56,
+        display: "grid",
+        gridTemplateColumns: "minmax(0, 1fr) auto",
+        gap: 10,
+        alignItems: "center",
+        padding: "10px 12px",
+        borderRadius: 16,
+        border: "1px solid rgba(214,226,255,0.10)",
+        background:
+          "linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01))",
+      }}
+    >
+      <div style={{ ...overlineStyle(), color: "rgba(255,255,255,0.52)" }}>{label}</div>
+      <div
+        style={{
+          fontSize: 13,
+          fontWeight: 800,
+          color: "#fff",
+          textAlign: "right",
+          overflowWrap: "anywhere",
+        }}
+      >
+        {value}
+      </div>
+    </div>
+  );
+}
+
+function EmptyState({ title, detail }) {
+  return (
+    <div
+      style={{
+        minHeight: 140,
+        display: "grid",
+        placeItems: "center",
+      }}
+    >
+      <div style={{ width: "100%", maxWidth: 360 }}>
+        <div
+          style={{
+            fontSize: 17,
+            fontWeight: 800,
+            color: "#fff",
+            textAlign: "center",
+          }}
+        >
+          {title}
+        </div>
+        <div
+          style={{
+            marginTop: 8,
+            fontSize: 13,
+            lineHeight: 1.55,
+            color: "rgba(255,255,255,0.64)",
+            textAlign: "center",
+          }}
+        >
+          {detail}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Field({ label, children }) {
+  return (
+    <label style={{ display: "grid", gap: 6 }}>
+      <div style={overlineStyle()}>{label}</div>
+      {children}
+    </label>
+  );
+}
+
+function HeadlineRow({ item }) {
+  return (
+    <a
+      href={item.url || "#"}
+      target="_blank"
+      rel="noreferrer"
+      style={{ textDecoration: "none" }}
+    >
+      <div
+        style={{
+          minHeight: 90,
+          display: "grid",
+          gridTemplateColumns: "40px minmax(0, 1fr) auto",
+          gap: 12,
+          alignItems: "start",
+          padding: "12px 13px",
+          borderRadius: 18,
+          border: "1px solid rgba(214,226,255,0.10)",
+          background:
+            "linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01))",
+        }}
+      >
+        <div
+          style={{
+            width: 40,
+            height: 40,
+            borderRadius: 12,
+            display: "grid",
+            placeItems: "center",
+            border: "1px solid rgba(214,226,255,0.10)",
+            background: "rgba(10,14,21,0.46)",
+            color: "#f7fbff",
+          }}
+        >
+          <Newspaper size={16} />
+        </div>
+
+        <div style={{ minWidth: 0 }}>
+          <div
+            style={{
+              fontSize: 14,
+              fontWeight: 800,
+              color: "#fff",
+              lineHeight: 1.35,
+              overflowWrap: "anywhere",
+            }}
+          >
+            {item.title || "Untitled headline"}
+          </div>
+          <div style={{ marginTop: 5, ...mutedStyle() }}>
+            {item.text || item.site || "Market story"}
+          </div>
+          <div
+            style={{
+              marginTop: 6,
+              fontSize: 11,
+              fontWeight: 800,
+              color: "rgba(255,255,255,0.44)",
+              textTransform: "uppercase",
+              letterSpacing: ".14em",
+            }}
+          >
+            {(item.site || "Source") + " • " + fullDateTime(item.publishedDate)}
+          </div>
+        </div>
+
+        <div style={{ color: "rgba(255,255,255,0.52)" }}>
+          <ExternalLink size={14} />
+        </div>
+      </div>
+    </a>
   );
 }
 
@@ -352,19 +600,6 @@ function TradeRow({ txn, avgCostBefore, realizedOnTxn, basisRemoved }) {
   );
 }
 
-function signedMoney(n) {
-  const num = Number(n);
-  if (!Number.isFinite(num)) return "—";
-  const abs = Math.abs(num).toLocaleString(undefined, {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 2,
-  });
-  if (num > 0) return `+${abs}`;
-  if (num < 0) return `-${abs}`;
-  return abs;
-}
-
 export default function InvestmentAssetPage() {
   const params = useParams();
   const assetId = params?.id;
@@ -372,9 +607,16 @@ export default function InvestmentAssetPage() {
   const [asset, setAsset] = useState(null);
   const [txns, setTxns] = useState([]);
   const [livePrice, setLivePrice] = useState(null);
+  const [news, setNews] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadingPrice, setLoadingPrice] = useState(false);
+  const [status, setStatus] = useState("");
   const [error, setError] = useState("");
+
+  const [tradeType, setTradeType] = useState("BUY");
+  const [tradeQty, setTradeQty] = useState("");
+  const [tradePrice, setTradePrice] = useState("");
+  const [tradeDate, setTradeDate] = useState(new Date().toISOString().slice(0, 10));
 
   useEffect(() => {
     async function load() {
@@ -460,6 +702,30 @@ export default function InvestmentAssetPage() {
     if (asset?.symbol) loadPrice();
   }, [asset]);
 
+  useEffect(() => {
+    async function loadNews() {
+      const symbol = String(asset?.symbol || "").toUpperCase().trim();
+      if (!symbol) {
+        setNews([]);
+        return;
+      }
+
+      try {
+        const res = await fetch(
+          `/api/stock-news?symbols=${encodeURIComponent(symbol)}&limit=8`,
+          { cache: "no-store" }
+        );
+        const data = await res.json();
+        setNews(res.ok && Array.isArray(data?.articles) ? data.articles : []);
+      } catch (err) {
+        console.error("news fetch failed", err);
+        setNews([]);
+      }
+    }
+
+    if (asset?.symbol) loadNews();
+  }, [asset]);
+
   const breakdown = useMemo(() => {
     const ordered = [...txns].sort((a, b) => {
       const ad = new Date(a.txn_date || 0).getTime();
@@ -527,8 +793,7 @@ export default function InvestmentAssetPage() {
     const avgCostRemaining =
       remainingShares > 0 ? remainingBasis / remainingShares : 0;
 
-    const unrealizedPnl =
-      currentValue != null ? currentValue - remainingBasis : null;
+    const unrealizedPnl = currentValue != null ? currentValue - remainingBasis : null;
 
     const unrealizedPct =
       currentValue != null && remainingBasis > 0
@@ -555,13 +820,69 @@ export default function InvestmentAssetPage() {
   const assetTone =
     breakdown.unrealizedPnl == null ? "neutral" : toneByValue(breakdown.unrealizedPnl);
 
+  async function logTrade() {
+    setStatus("");
+    setError("");
+
+    const qty = toNum(tradeQty, NaN);
+    const price = toNum(tradePrice, NaN);
+
+    if (!Number.isFinite(qty) || qty <= 0) {
+      setError("Enter a valid quantity.");
+      return;
+    }
+
+    if (!Number.isFinite(price) || price <= 0) {
+      setError("Enter a valid price.");
+      return;
+    }
+
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) {
+        setError("You must be logged in.");
+        return;
+      }
+
+      const { data, error: insertError } = await supabase
+        .from("investment_transactions")
+        .insert({
+          user_id: user.id,
+          asset_id: assetId,
+          txn_type: tradeType,
+          qty,
+          price,
+          txn_date: tradeDate,
+        })
+        .select()
+        .single();
+
+      if (insertError) {
+        console.error(insertError);
+        setError("Could not save trade.");
+        return;
+      }
+
+      setTxns((prev) => [...prev, data]);
+      setTradeQty("");
+      setTradePrice("");
+      setStatus(`${tradeType} saved to ledger.`);
+    } catch (err) {
+      console.error(err);
+      setError("Failed saving trade.");
+    }
+  }
+
   if (loading) {
     return (
       <main style={{ padding: "18px 0 28px", fontFamily: FONT_STACK }}>
-        <div style={{ width: "min(100%, 1320px)", margin: "0 auto" }}>
+        <div style={{ width: "min(100%, 1380px)", margin: "0 auto" }}>
           <GlassPane size="card">
             <div style={{ fontWeight: 800, fontSize: 18, color: "#fff" }}>
-              Loading asset.
+              Loading position.
             </div>
           </GlassPane>
         </div>
@@ -572,7 +893,7 @@ export default function InvestmentAssetPage() {
   if (error || !asset) {
     return (
       <main style={{ padding: "18px 0 28px", fontFamily: FONT_STACK }}>
-        <div style={{ width: "min(100%, 1320px)", margin: "0 auto" }}>
+        <div style={{ width: "min(100%, 1380px)", margin: "0 auto" }}>
           <GlassPane tone="red" size="card">
             <div style={{ fontWeight: 800, fontSize: 18, color: "#fff" }}>
               {error || "Could not load asset."}
@@ -590,24 +911,24 @@ export default function InvestmentAssetPage() {
           <GlassPane size="card">
             <div className="assetHeroGrid">
               <div style={{ minWidth: 0 }}>
-                <div style={overlineStyle()}>Position Detail</div>
+                <div style={overlineStyle()}>Position Command</div>
 
                 <div
                   style={{
                     marginTop: 8,
-                    fontSize: "clamp(24px, 3.2vw, 34px)",
-                    lineHeight: 1.02,
-                    fontWeight: 850,
-                    letterSpacing: "-0.05em",
+                    fontSize: "clamp(28px, 3.4vw, 40px)",
+                    lineHeight: 0.98,
+                    fontWeight: 900,
+                    letterSpacing: "-0.06em",
                     color: "#fff",
                   }}
                 >
-                  {asset.symbol || "Unknown"} Breakdown
+                  {String(asset.symbol || "—").toUpperCase()} position view
                 </div>
 
                 <div style={{ marginTop: 10, ...mutedStyle(), maxWidth: 760 }}>
-                  This page shows the actual math behind the position so you can see why the
-                  asset is up or down.
+                  This page should feel like a real position screen, not just math cards.
+                  Live value, ledger activity, research headlines, and a trade ticket are all here.
                 </div>
               </div>
 
@@ -632,6 +953,14 @@ export default function InvestmentAssetPage() {
             </div>
           </GlassPane>
 
+          {(status || error) && (
+            <GlassPane tone={error ? "red" : "green"} size="card">
+              <div style={{ fontWeight: 800, fontSize: 14, color: "#fff" }}>
+                {error || status}
+              </div>
+            </GlassPane>
+          )}
+
           <section className="assetMetrics">
             <MetricCard
               icon={Wallet}
@@ -647,7 +976,7 @@ export default function InvestmentAssetPage() {
               detail={
                 breakdown.unrealizedPct != null
                   ? `${pct(breakdown.unrealizedPct)} on remaining basis.`
-                  : "Needs live price to calculate."
+                  : "Needs live quote to calculate."
               }
               tone={assetTone}
             />
@@ -655,14 +984,14 @@ export default function InvestmentAssetPage() {
               icon={Layers3}
               label="Remaining Shares"
               value={fmtNumber(breakdown.remainingShares)}
-              detail={`Avg remaining cost: ${money(breakdown.avgCostRemaining)}`}
+              detail={`Avg remaining cost ${money(breakdown.avgCostRemaining)}`}
               tone="neutral"
             />
             <MetricCard
               icon={BadgeDollarSign}
               label="Realized P/L"
               value={signedMoney(breakdown.realizedPnl)}
-              detail="Closed result from completed sell activity."
+              detail="Closed result from completed sells."
               tone={toneByValue(breakdown.realizedPnl)}
             />
           </section>
@@ -671,8 +1000,8 @@ export default function InvestmentAssetPage() {
             <div className="assetLeftCol">
               <GlassPane tone={assetTone} size="card">
                 <PaneHeader
-                  title="Position Pulse"
-                  subcopy="The exact stack behind your remaining position."
+                  title="Position stack"
+                  subcopy="The actual structure of the position sitting in this account."
                   right={<MiniPill tone={assetTone}>{asset.asset_type || "asset"}</MiniPill>}
                 />
 
@@ -694,16 +1023,38 @@ export default function InvestmentAssetPage() {
 
               <GlassPane size="card">
                 <PaneHeader
-                  title="Transaction Ledger"
-                  subcopy="The exact trades feeding the math above."
+                  title="Research headlines"
+                  subcopy="Live symbol news for this name."
+                  right={<MiniPill>{news.length} stories</MiniPill>}
+                />
+
+                <div style={{ display: "grid", gap: 8 }}>
+                  {news.length === 0 ? (
+                    <EmptyState
+                      title="No headlines returned"
+                      detail="Once the news route is live, this rail fills with live symbol coverage."
+                    />
+                  ) : (
+                    news.map((item, index) => (
+                      <HeadlineRow key={`${item.url}-${index}`} item={item} />
+                    ))
+                  )}
+                </div>
+              </GlassPane>
+
+              <GlassPane size="card">
+                <PaneHeader
+                  title="Transaction ledger"
+                  subcopy="Every fill feeding the position math."
                   right={<MiniPill>{txns.length} trades</MiniPill>}
                 />
 
                 <div style={{ display: "grid", gap: 8 }}>
                   {breakdown.rows.length === 0 ? (
-                    <div style={{ ...mutedStyle(), padding: "6px 2px" }}>
-                      No trades logged for this asset yet.
-                    </div>
+                    <EmptyState
+                      title="No trades logged"
+                      detail="Use the ticket on the right to start building the ledger."
+                    />
                   ) : (
                     breakdown.rows
                       .slice()
@@ -726,7 +1077,7 @@ export default function InvestmentAssetPage() {
               <GlassPane size="card">
                 <PaneHeader
                   title="Snapshot"
-                  subcopy="Fast readout of the live position state."
+                  subcopy="Fast position readout."
                 />
 
                 <div style={{ display: "grid", gap: 8 }}>
@@ -734,14 +1085,8 @@ export default function InvestmentAssetPage() {
                     label="Symbol"
                     value={String(asset.symbol || "—").toUpperCase()}
                   />
-                  <SnapshotRow
-                    label="Account"
-                    value={asset.account || "—"}
-                  />
-                  <SnapshotRow
-                    label="Asset Type"
-                    value={asset.asset_type || "—"}
-                  />
+                  <SnapshotRow label="Account" value={asset.account || "Brokerage"} />
+                  <SnapshotRow label="Asset Type" value={asset.asset_type || "—"} />
                   <SnapshotRow
                     label="Live Price"
                     value={loadingPrice ? "Loading..." : livePrice ? money(livePrice) : "—"}
@@ -761,8 +1106,77 @@ export default function InvestmentAssetPage() {
 
               <GlassPane size="card">
                 <PaneHeader
-                  title="Next Moves"
-                  subcopy="Fast paths back into the rest of the investments workflow."
+                  title="Trade ticket"
+                  subcopy="Looks like a real trading ticket, but writes to your portfolio ledger."
+                  right={<MiniPill tone="amber">Ledger route</MiniPill>}
+                />
+
+                <div style={{ display: "grid", gap: 10 }}>
+                  <Field label="Side">
+                    <select
+                      value={tradeType}
+                      onChange={(e) => setTradeType(e.target.value)}
+                      style={inputStyle()}
+                    >
+                      <option value="BUY">BUY</option>
+                      <option value="SELL">SELL</option>
+                    </select>
+                  </Field>
+
+                  <Field label="Trade date">
+                    <input
+                      type="date"
+                      value={tradeDate}
+                      onChange={(e) => setTradeDate(e.target.value)}
+                      style={inputStyle()}
+                    />
+                  </Field>
+
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                      gap: 8,
+                    }}
+                  >
+                    <Field label="Quantity">
+                      <input
+                        type="number"
+                        step="0.0001"
+                        value={tradeQty}
+                        onChange={(e) => setTradeQty(e.target.value)}
+                        placeholder="0.0000"
+                        style={inputStyle()}
+                      />
+                    </Field>
+
+                    <Field label="Price">
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={tradePrice}
+                        onChange={(e) => setTradePrice(e.target.value)}
+                        placeholder="0.00"
+                        style={inputStyle()}
+                      />
+                    </Field>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={logTrade}
+                    style={buttonStyle({ primary: true })}
+                  >
+                    <Plus size={14} />
+                    Save Trade
+                  </button>
+                </div>
+              </GlassPane>
+
+              <GlassPane size="card">
+                <PaneHeader
+                  title="Next moves"
+                  subcopy="Fast paths through the investments flow."
                 />
 
                 <div style={{ display: "grid", gap: 8 }}>
@@ -770,7 +1184,7 @@ export default function InvestmentAssetPage() {
                     Back to Investments <ArrowRight size={14} />
                   </ActionLink>
                   <ActionLink href="/investments/discover">
-                    Discover Assets <ArrowRight size={14} />
+                    Open Research Desk <ArrowRight size={14} />
                   </ActionLink>
                   <ActionLink href={`/market/${encodeURIComponent(asset.symbol || "")}`}>
                     Open Market View <ArrowRight size={14} />
@@ -791,7 +1205,7 @@ export default function InvestmentAssetPage() {
         }
 
         .assetInner {
-          width: min(100%, 1320px);
+          width: min(100%, 1380px);
           margin: 0 auto;
           display: grid;
           gap: 14px;
@@ -812,7 +1226,7 @@ export default function InvestmentAssetPage() {
 
         .assetMain {
           display: grid;
-          grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.85fr);
+          grid-template-columns: minmax(0, 1.35fr) minmax(340px, 0.84fr);
           gap: 14px;
           align-items: start;
         }
@@ -854,66 +1268,5 @@ export default function InvestmentAssetPage() {
         }
       `}</style>
     </>
-  );
-}
-
-function MiniMetric({ title, value }) {
-  return (
-    <div
-      style={{
-        minHeight: 78,
-        borderRadius: 16,
-        border: "1px solid rgba(214,226,255,0.10)",
-        background:
-          "linear-gradient(180deg, rgba(255,255,255,0.032), rgba(255,255,255,0.01))",
-        padding: 13,
-      }}
-    >
-      <div style={overlineStyle()}>{title}</div>
-      <div
-        style={{
-          marginTop: 7,
-          fontSize: 18,
-          fontWeight: 850,
-          letterSpacing: "-0.04em",
-          color: "#fff",
-          overflowWrap: "anywhere",
-        }}
-      >
-        {value}
-      </div>
-    </div>
-  );
-}
-
-function SnapshotRow({ label, value }) {
-  return (
-    <div
-      style={{
-        minHeight: 56,
-        display: "grid",
-        gridTemplateColumns: "minmax(0, 1fr) auto",
-        gap: 10,
-        alignItems: "center",
-        padding: "10px 12px",
-        borderRadius: 16,
-        border: "1px solid rgba(214,226,255,0.10)",
-        background:
-          "linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01))",
-      }}
-    >
-      <div style={{ ...overlineStyle(), color: "rgba(255,255,255,0.52)" }}>{label}</div>
-      <div
-        style={{
-          fontSize: 13,
-          fontWeight: 800,
-          color: "#fff",
-          textAlign: "right",
-          overflowWrap: "anywhere",
-        }}
-      >
-        {value}
-      </div>
-    </div>
   );
 }

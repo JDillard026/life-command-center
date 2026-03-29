@@ -11,16 +11,18 @@ export async function getCurrentUserRole() {
   }
 
   const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser();
+    data: { session },
+    error: sessionError,
+  } = await supabase.auth.getSession();
 
-  if (userError || !user) {
+  const user = session?.user ?? null;
+
+  if (sessionError || !user) {
     return {
       user: null,
       role: null,
       isDisabled: false,
-      error: userError?.message || "No authenticated user",
+      error: sessionError?.message || "No authenticated user",
     };
   }
 

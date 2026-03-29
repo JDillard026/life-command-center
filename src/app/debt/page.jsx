@@ -4,13 +4,11 @@ export const dynamic = "force-dynamic";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  AlertTriangle,
   BadgeDollarSign,
   CalendarClock,
   Copy,
   CreditCard,
   Flame,
-  Landmark,
   PauseCircle,
   PlayCircle,
   Plus,
@@ -246,7 +244,10 @@ function mapDebtToRow(debt, userId) {
     interest_rate: safeNum(debt.apr, 0),
     minimum_payment: safeNum(debt.minimumPayment, 0),
     extra_payment: safeNum(debt.extraPayment, 0),
-    due_day: debt.dueDay === "" ? null : safeNum(debt.dueDay, null),
+    due_day:
+      debt.dueDay === "" || debt.dueDay == null
+        ? null
+        : safeNum(debt.dueDay, null),
     monthly_payment: safeNum(debt.monthlyPayment, 0),
     principal_portion: safeNum(debt.principalPortion, 0),
     interest_portion: safeNum(debt.interestPortion, 0),
@@ -282,7 +283,7 @@ function mapSettingsToRow(settings, userId, existingId) {
 }
 
 function getDueStatus(dueDay) {
-  const day = safeNum(dueDay, NaN);
+  const day = Number(dueDay);
   if (!Number.isFinite(day) || day < 1 || day > 31) {
     return { label: "No due day", tone: "neutral", sort: 999 };
   }
@@ -291,6 +292,7 @@ function getDueStatus(dueDay) {
   const today = now.getDate();
 
   if (day === today) return { label: "Due today", tone: "amber", sort: 0 };
+
   if (day > today) {
     const diff = day - today;
     return {
@@ -727,10 +729,7 @@ function CompactDebtRow({
 
       <div className="debtCompactValue">{fmtMoney(debt.balance)}</div>
 
-      <div
-        className="debtCompactActions"
-        onClick={(e) => e.stopPropagation()}
-      >
+      <div className="debtCompactActions" onClick={(e) => e.stopPropagation()}>
         <button
           type="button"
           className="debtIconBtn"
@@ -797,13 +796,14 @@ function FocusDebtCard({
   const util = getUtilizationPercent(debt);
   const paidDown = getPaidDownPercent(debt);
   const principalShare = getPrincipalShare(debt);
-  const plannedAttack = getAttackPayment(debt) + (priority === 1 ? safeNum(globalExtraPool) : 0);
+  const plannedAttack =
+    getAttackPayment(debt) + (priority === 1 ? safeNum(globalExtraPool) : 0);
   const payoff = payoffMonths(debt.balance, debt.apr, plannedAttack);
   const chip = getDebtChip(debt, priority);
   const promo = getPromoStatus(debt);
 
   return (
-    <GlassPane tone={tone} size="card">
+    <GlassPane tone={tone} size="card" style={{ height: "100%" }}>
       <PaneHeader
         title={debt.name || "Untitled debt"}
         subcopy="Focused controls for the debt you are actively touching."
@@ -857,7 +857,8 @@ function FocusDebtCard({
             <div className="debtTinyLabel">Monthly Attack</div>
             <div className="debtInfoValue">{fmtMoney(plannedAttack)}</div>
             <div className="debtInfoSub">
-              Min + extra{priority === 1 && safeNum(globalExtraPool) > 0 ? " + pool" : ""}
+              Min + extra
+              {priority === 1 && safeNum(globalExtraPool) > 0 ? " + pool" : ""}
             </div>
           </div>
 
@@ -865,7 +866,9 @@ function FocusDebtCard({
             <div className="debtTinyLabel">Payoff</div>
             <div className="debtInfoValue">{monthLabel(payoff)}</div>
             <div className="debtInfoSub">
-              {Number.isFinite(payoff) ? nextMonthDate(Math.ceil(payoff)) : "Payment too low"}
+              {Number.isFinite(payoff)
+                ? nextMonthDate(Math.ceil(payoff))
+                : "Payment too low"}
             </div>
           </div>
 
@@ -949,7 +952,7 @@ function FocusDebtCard({
 
 function AddDebtCard({ adding, setAdding, onAdd, saving }) {
   return (
-    <GlassPane size="card">
+    <GlassPane size="card" style={{ height: "100%" }}>
       <PaneHeader
         title="Add Debt"
         subcopy="Keep this fast and simple."
@@ -1106,27 +1109,25 @@ function QueueItem({ debt, onFocus }) {
         <div>
           <div className="debtIntelTitle">{debt.name}</div>
           <div className="debtIntelSub">
-            {debt.lender || "No lender"} • {fmtPct(debt.apr)} APR • {fmtMoneyTight(debt.balance)}
+            {debt.lender || "No lender"} • {fmtPct(debt.apr)} APR •{" "}
+            {fmtMoneyTight(debt.balance)}
           </div>
         </div>
 
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
           <MiniPill tone={chip.tone}>{chip.label}</MiniPill>
-          <MiniPill tone={getDueStatus(debt.dueDay).tone}>{due.label}</MiniPill>
+          <MiniPill tone={due.tone}>{due.label}</MiniPill>
         </div>
       </div>
 
       <div style={{ marginTop: 2 }}>
-        <ProgressBar fill={getDebtProgressPercent(debt)} tone={getDebtBarTone(debt)} />
+        <ProgressBar
+          fill={getDebtProgressPercent(debt)}
+          tone={getDebtBarTone(debt)}
+        />
       </div>
 
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-          gap: 8,
-        }}
-      >
+      <div className="debtIntelMiniGrid">
         <div className="debtIntelMini">
           <div className="debtTinyLabel">Attack</div>
           <div className="debtIntelValue">{fmtMoneyTight(debt.plannedAttack)}</div>
@@ -1275,7 +1276,9 @@ function DebtEditorCard({ debt, saving, onPatch }) {
               className="debtField"
               value={String(debt.creditLimit || "")}
               onChange={(e) =>
-                onPatch({ creditLimit: safeNum(parseMoneyInput(e.target.value), 0) })
+                onPatch({
+                  creditLimit: safeNum(parseMoneyInput(e.target.value), 0),
+                })
               }
             />
           </div>
@@ -1363,7 +1366,8 @@ function DebtEditorCard({ debt, saving, onPatch }) {
               value={debt.termMonths ?? ""}
               onChange={(e) =>
                 onPatch({
-                  termMonths: e.target.value === "" ? null : safeNum(e.target.value, null),
+                  termMonths:
+                    e.target.value === "" ? null : safeNum(e.target.value, null),
                 })
               }
             />
@@ -1469,6 +1473,8 @@ export default function DebtPage() {
   const rowSaveTimers = useRef({});
 
   async function getCurrentUser() {
+    if (!supabase) return null;
+
     const {
       data: { user },
       error,
@@ -1478,10 +1484,16 @@ export default function DebtPage() {
       console.error("getUser error:", error);
       return null;
     }
+
     return user ?? null;
   }
 
   async function loadDebtPage() {
+    if (!supabase) {
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
 
     const user = await getCurrentUser();
@@ -1527,6 +1539,8 @@ export default function DebtPage() {
   useEffect(() => {
     loadDebtPage();
 
+    if (!supabase) return;
+
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(() => {
@@ -1536,7 +1550,7 @@ export default function DebtPage() {
     return () => {
       subscription?.unsubscribe?.();
       if (settingsSaveTimer.current) clearTimeout(settingsSaveTimer.current);
-      Object.values(rowSaveTimers.current).forEach((t) => clearTimeout(t));
+      Object.values(rowSaveTimers.current).forEach((timer) => clearTimeout(timer));
     };
   }, []);
 
@@ -1545,6 +1559,7 @@ export default function DebtPage() {
       setSelectedDebtId("");
       return;
     }
+
     const exists = debts.some((d) => d.id === selectedDebtId);
     if (!exists) {
       setSelectedDebtId(debts[0]?.id || "");
@@ -1552,7 +1567,7 @@ export default function DebtPage() {
   }, [debts, selectedDebtId]);
 
   async function persistDebt(nextDebt) {
-    if (!userId) return;
+    if (!supabase || !userId) return;
 
     setSavingIds((prev) => ({ ...prev, [nextDebt.id]: true }));
 
@@ -1576,7 +1591,7 @@ export default function DebtPage() {
   }
 
   async function persistSettings(nextSettings) {
-    if (!userId) return;
+    if (!supabase || !userId) return;
 
     const res = await supabase
       .from("debt_settings")
@@ -1623,7 +1638,7 @@ export default function DebtPage() {
   }
 
   async function addDebtFromForm() {
-    if (!userId || addingBusy) return;
+    if (!supabase || !userId || addingBusy) return;
 
     const base = createDebt(adding.type);
     const name = adding.name.trim() || base.name;
@@ -1665,6 +1680,7 @@ export default function DebtPage() {
   }
 
   async function removeDebt(id) {
+    if (!supabase || !userId) return;
     if (typeof window !== "undefined" && !window.confirm("Delete this debt?")) return;
 
     const nextDebts = debts.filter((d) => d.id !== id);
@@ -1686,7 +1702,7 @@ export default function DebtPage() {
   }
 
   async function duplicateDebt(debt) {
-    if (!userId) return;
+    if (!supabase || !userId) return;
 
     const cloned = {
       ...debt,
@@ -1738,10 +1754,6 @@ export default function DebtPage() {
       .filter((d) => d.type === "mortgage")
       .reduce((sum, d) => sum + safeNum(d.interestPortion), 0);
 
-    const mortgageEscrow = activeDebts
-      .filter((d) => d.type === "mortgage")
-      .reduce((sum, d) => sum + safeNum(d.escrowPortion), 0);
-
     return {
       totalBalance,
       totalMinimum,
@@ -1749,7 +1761,6 @@ export default function DebtPage() {
       weightedApr,
       mortgagePrincipal,
       mortgageInterest,
-      mortgageEscrow,
     };
   }, [activeDebts]);
 
@@ -1769,6 +1780,7 @@ export default function DebtPage() {
     return rows.map((d, i) => {
       const plannedAttack =
         getAttackPayment(d) + (i === 0 ? safeNum(settings.globalExtraPool) : 0);
+
       return {
         ...d,
         priority: i + 1,
@@ -1790,12 +1802,15 @@ export default function DebtPage() {
     const creditCards = debts.filter(
       (d) => d.isActive && d.type === "credit_card"
     ).length;
+
     const installment = debts.filter(
       (d) =>
         d.isActive &&
         ["mortgage", "auto", "personal_loan", "student_loan"].includes(d.type)
     ).length;
+
     const totalAccounts = debts.filter((d) => d.isActive).length;
+
     return { creditCards, installment, totalAccounts };
   }, [debts]);
 
@@ -1814,19 +1829,28 @@ export default function DebtPage() {
     const q = search.trim().toLowerCase();
 
     let list = debts.filter((d) => {
-      if (!settings.showInactive && !d.isActive && filter !== "all") return false;
-
       if (filter === "active" && !d.isActive) return false;
       if (filter === "inactive" && d.isActive) return false;
       if (filter === "cards" && d.type !== "credit_card") return false;
+
       if (filter === "installment") {
         if (!["mortgage", "auto", "personal_loan", "student_loan"].includes(d.type)) {
           return false;
         }
       }
+
       if (filter === "due") {
         const due = getDueStatus(d.dueDay);
         if (!(d.isActive && due.sort <= 7)) return false;
+      }
+
+      if (
+        !settings.showInactive &&
+        filter !== "inactive" &&
+        filter !== "all" &&
+        !d.isActive
+      ) {
+        return false;
       }
 
       if (!q) return true;
@@ -1910,7 +1934,7 @@ export default function DebtPage() {
                 <div className="debtHeroTitle">Debt Command</div>
                 <div className="debtHeroSub">
                   Cleaner payoff pressure, tighter controls, stronger priority logic,
-                  and a layout that fits the same premium shell as accounts and bills.
+                  and a layout that actually fills the page instead of leaving dead space.
                 </div>
 
                 <div className="debtPillRow">
@@ -1921,14 +1945,7 @@ export default function DebtPage() {
                 </div>
               </div>
 
-              <div
-                style={{
-                  display: "flex",
-                  gap: 8,
-                  flexWrap: "wrap",
-                  justifyContent: "flex-end",
-                }}
-              >
+              <div className="debtHeroSide">
                 <MiniPill>{settings.strategy}</MiniPill>
                 <MiniPill tone="green">{fmtMoney(monthlyAttackTotal)} attack</MiniPill>
                 <MiniPill tone={dueSoon.length > 0 ? "amber" : "green"}>
@@ -2034,11 +2051,11 @@ export default function DebtPage() {
             </div>
           </GlassPane>
 
-          <section className="debtMainGrid">
-            <GlassPane size="card">
+          <section className="debtWorkspaceGrid">
+            <GlassPane size="card" style={{ height: "100%" }}>
               <PaneHeader
                 title="Debt Roster"
-                subcopy="Compact list on the left. Work the selected debt on the right."
+                subcopy="Main roster fills the page now instead of shrinking into the left and leaving dead space."
                 right={<MiniPill>{visibleDebts.length} showing</MiniPill>}
               />
 
@@ -2107,155 +2124,153 @@ export default function DebtPage() {
               )}
             </GlassPane>
 
-            <div className="debtRightStack">
-              <div className="debtTopRightGrid">
-                <FocusDebtCard
-                  debt={selectedDebt}
-                  priority={selectedPriority}
-                  globalExtraPool={settings.globalExtraPool}
-                  saving={selectedDebt ? !!savingIds[selectedDebt.id] : false}
-                  onDuplicate={() => selectedDebt && duplicateDebt(selectedDebt)}
-                  onToggle={() =>
-                    selectedDebt &&
-                    updateDebt(selectedDebt.id, { isActive: !selectedDebt.isActive })
-                  }
-                  onDelete={() => selectedDebt && removeDebt(selectedDebt.id)}
-                />
+            <FocusDebtCard
+              debt={selectedDebt}
+              priority={selectedPriority}
+              globalExtraPool={settings.globalExtraPool}
+              saving={selectedDebt ? !!savingIds[selectedDebt.id] : false}
+              onDuplicate={() => selectedDebt && duplicateDebt(selectedDebt)}
+              onToggle={() =>
+                selectedDebt &&
+                updateDebt(selectedDebt.id, { isActive: !selectedDebt.isActive })
+              }
+              onDelete={() => selectedDebt && removeDebt(selectedDebt.id)}
+            />
 
-                <AddDebtCard
-                  adding={adding}
-                  setAdding={setAdding}
-                  onAdd={addDebtFromForm}
-                  saving={addingBusy}
-                />
-              </div>
+            <AddDebtCard
+              adding={adding}
+              setAdding={setAdding}
+              onAdd={addDebtFromForm}
+              saving={addingBusy}
+            />
+          </section>
 
-              <div className="debtBottomGrid">
-                <GlassPane size="card">
-                  <PaneHeader
-                    title="Priority Queue"
-                    subcopy={
-                      settings.strategy === "avalanche"
-                        ? "Highest APR first."
-                        : "Smallest balance first."
-                    }
-                    right={
-                      <MiniPill>
-                        {rankedDebts.length} item{rankedDebts.length === 1 ? "" : "s"}
-                      </MiniPill>
-                    }
-                  />
+          <section className="debtSectionGrid">
+            <GlassPane size="card" style={{ height: "100%" }}>
+              <PaneHeader
+                title="Priority Queue"
+                subcopy={
+                  settings.strategy === "avalanche"
+                    ? "Highest APR first."
+                    : "Smallest balance first."
+                }
+                right={
+                  <MiniPill>
+                    {rankedDebts.length} item{rankedDebts.length === 1 ? "" : "s"}
+                  </MiniPill>
+                }
+              />
 
-                  {rankedDebts.length ? (
-                    <div className="debtIntelList">
-                      {rankedDebts.slice(0, 5).map((debt) => (
-                        <QueueItem
-                          key={debt.id}
-                          debt={debt}
-                          onFocus={() => setSelectedDebtId(debt.id)}
-                        />
-                      ))}
+              {rankedDebts.length ? (
+                <div className="debtIntelList">
+                  {rankedDebts.slice(0, 5).map((debt) => (
+                    <QueueItem
+                      key={debt.id}
+                      debt={debt}
+                      onFocus={() => setSelectedDebtId(debt.id)}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <div className="debtEmptyState debtInlineEmpty">
+                  <div>
+                    <div className="debtEmptyTitle">Nothing to rank yet</div>
+                    <div className="debtEmptyText">
+                      Add active balances and payment info to build a payoff order.
                     </div>
-                  ) : (
-                    <div className="debtEmptyState debtInlineEmpty">
-                      <div>
-                        <div className="debtEmptyTitle">Nothing to rank yet</div>
-                        <div className="debtEmptyText">
-                          Add active balances and payment info to build a payoff order.
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </GlassPane>
-
-                <GlassPane size="card">
-                  <PaneHeader
-                    title="Due Soon"
-                    subcopy="Fast action view for urgent payments."
-                    right={
-                      <MiniPill>
-                        {dueSoon.length} item{dueSoon.length === 1 ? "" : "s"}
-                      </MiniPill>
-                    }
-                  />
-
-                  {dueSoon.length ? (
-                    <div className="debtIntelList">
-                      {dueSoon.map((debt) => (
-                        <DueItem
-                          key={debt.id}
-                          debt={debt}
-                          onFocus={() => setSelectedDebtId(debt.id)}
-                        />
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="debtEmptyState debtInlineEmpty">
-                      <div>
-                        <div className="debtEmptyTitle">Nothing urgent right now</div>
-                        <div className="debtEmptyText">
-                          No active debt has immediate due pressure.
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </GlassPane>
-              </div>
-
-              <GlassPane size="card">
-                <PaneHeader
-                  title="Debt Snapshot"
-                  subcopy="Quick monthly view of the whole debt stack."
-                />
-
-                <div className="debtSnapshotGrid">
-                  <div className="debtSnapshotRow">
-                    <span>Total minimums</span>
-                    <strong>{fmtMoney(totals.totalMinimum)}</strong>
-                  </div>
-                  <div className="debtSnapshotRow">
-                    <span>Debt-specific extra</span>
-                    <strong>{fmtMoney(totals.totalExtra)}</strong>
-                  </div>
-                  <div className="debtSnapshotRow">
-                    <span>Global extra pool</span>
-                    <strong>{fmtMoney(settings.globalExtraPool)}</strong>
-                  </div>
-                  <div className="debtSnapshotRow">
-                    <span>Total monthly attack</span>
-                    <strong>{fmtMoney(monthlyAttackTotal)}</strong>
-                  </div>
-                  <div className="debtSnapshotRow">
-                    <span>Mortgage principal / month</span>
-                    <strong>{fmtMoney(totals.mortgagePrincipal)}</strong>
-                  </div>
-                  <div className="debtSnapshotRow">
-                    <span>Mortgage interest / month</span>
-                    <strong>{fmtMoney(totals.mortgageInterest)}</strong>
                   </div>
                 </div>
+              )}
+            </GlassPane>
 
-                {topTarget ? (
-                  <div className="debtInfoCell" style={{ marginTop: 12 }}>
-                    <div className="debtTinyLabel">Projected First Win</div>
-                    <div className="debtInfoValue">{topTarget.name}</div>
-                    <div className="debtInfoSub" style={{ marginTop: 6 }}>
-                      {topTarget.payoff === Infinity
-                        ? "Current payment path does not pay this off."
-                        : `Estimated payoff ${monthLabel(
-                            topTarget.payoff
-                          )} • around ${nextMonthDate(Math.ceil(topTarget.payoff))}.`}
+            <GlassPane size="card" style={{ height: "100%" }}>
+              <PaneHeader
+                title="Due Soon"
+                subcopy="Fast action view for urgent payments."
+                right={
+                  <MiniPill>
+                    {dueSoon.length} item{dueSoon.length === 1 ? "" : "s"}
+                  </MiniPill>
+                }
+              />
+
+              {dueSoon.length ? (
+                <div className="debtIntelList">
+                  {dueSoon.map((debt) => (
+                    <DueItem
+                      key={debt.id}
+                      debt={debt}
+                      onFocus={() => setSelectedDebtId(debt.id)}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <div className="debtEmptyState debtInlineEmpty">
+                  <div>
+                    <div className="debtEmptyTitle">Nothing urgent right now</div>
+                    <div className="debtEmptyText">
+                      No active debt has immediate due pressure.
                     </div>
                   </div>
-                ) : null}
-              </GlassPane>
+                </div>
+              )}
+            </GlassPane>
+          </section>
 
-              <DebtEditorCard
-                debt={selectedDebt}
-                saving={selectedDebt ? !!savingIds[selectedDebt.id] : false}
-                onPatch={(patch) => selectedDebt && updateDebt(selectedDebt.id, patch)}
+          <section className="debtLowerGrid">
+            <GlassPane size="card" style={{ height: "100%" }}>
+              <PaneHeader
+                title="Debt Snapshot"
+                subcopy="Quick monthly view of the whole debt stack."
               />
-            </div>
+
+              <div className="debtSnapshotGrid">
+                <div className="debtSnapshotRow">
+                  <span>Total minimums</span>
+                  <strong>{fmtMoney(totals.totalMinimum)}</strong>
+                </div>
+                <div className="debtSnapshotRow">
+                  <span>Debt-specific extra</span>
+                  <strong>{fmtMoney(totals.totalExtra)}</strong>
+                </div>
+                <div className="debtSnapshotRow">
+                  <span>Global extra pool</span>
+                  <strong>{fmtMoney(settings.globalExtraPool)}</strong>
+                </div>
+                <div className="debtSnapshotRow">
+                  <span>Total monthly attack</span>
+                  <strong>{fmtMoney(monthlyAttackTotal)}</strong>
+                </div>
+                <div className="debtSnapshotRow">
+                  <span>Mortgage principal / month</span>
+                  <strong>{fmtMoney(totals.mortgagePrincipal)}</strong>
+                </div>
+                <div className="debtSnapshotRow">
+                  <span>Mortgage interest / month</span>
+                  <strong>{fmtMoney(totals.mortgageInterest)}</strong>
+                </div>
+              </div>
+
+              {topTarget ? (
+                <div className="debtInfoCell" style={{ marginTop: 12 }}>
+                  <div className="debtTinyLabel">Projected First Win</div>
+                  <div className="debtInfoValue">{topTarget.name}</div>
+                  <div className="debtInfoSub" style={{ marginTop: 6 }}>
+                    {topTarget.payoff === Infinity
+                      ? "Current payment path does not pay this off."
+                      : `Estimated payoff ${monthLabel(
+                          topTarget.payoff
+                        )} • around ${nextMonthDate(Math.ceil(topTarget.payoff))}.`}
+                  </div>
+                </div>
+              ) : null}
+            </GlassPane>
+
+            <DebtEditorCard
+              debt={selectedDebt}
+              saving={selectedDebt ? !!savingIds[selectedDebt.id] : false}
+              onPatch={(patch) => selectedDebt && updateDebt(selectedDebt.id, patch)}
+            />
           </section>
         </div>
       </main>
@@ -2267,16 +2282,19 @@ export default function DebtPage() {
 
 const globalStyles = `
   .debtPage {
+    width: 100%;
+    min-width: 0;
     color: var(--lcc-text);
     font-family: var(--lcc-font-sans);
   }
 
   .debtPageShell {
-    width: min(100%, 1320px);
-    margin: 0 auto;
+    width: 100%;
+    max-width: none;
+    margin: 0;
     padding: 12px 0 20px;
     display: grid;
-    gap: 12px;
+    gap: 14px;
   }
 
   .debtEyebrow {
@@ -2301,14 +2319,22 @@ const globalStyles = `
     font-size: 13px;
     line-height: 1.55;
     color: rgba(255,255,255,0.62);
-    max-width: 760px;
+    max-width: 840px;
   }
 
   .debtHeroGrid {
     display: grid;
-    grid-template-columns: minmax(0, 1.1fr) auto;
-    gap: 12px;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 14px;
     align-items: start;
+  }
+
+  .debtHeroSide {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    align-content: flex-start;
   }
 
   .debtPillRow {
@@ -2321,43 +2347,54 @@ const globalStyles = `
   .debtMetricGrid {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 12px;
+    gap: 14px;
   }
 
   .debtControlsGrid {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 12px;
+    grid-template-columns: minmax(0, 1.02fr) minmax(0, 1.1fr) minmax(250px, 0.42fr);
+    gap: 14px;
+    align-items: end;
   }
 
-  .debtMainGrid {
+  .debtWorkspaceGrid {
     display: grid;
-    grid-template-columns: minmax(390px, 0.94fr) minmax(0, 1.06fr);
-    gap: 12px;
+    grid-template-columns: minmax(500px, 1.45fr) minmax(420px, 1.18fr) minmax(360px, 1fr);
+    gap: 14px;
+    align-items: stretch;
+  }
+
+  .debtWorkspaceGrid > * {
+    min-width: 0;
+    height: 100%;
+  }
+
+  .debtSectionGrid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+    gap: 14px;
+    align-items: stretch;
+  }
+
+  .debtSectionGrid > * {
+    min-width: 0;
+    height: 100%;
+  }
+
+  .debtLowerGrid {
+    display: grid;
+    grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr);
+    gap: 14px;
     align-items: start;
   }
 
-  .debtRightStack {
-    display: grid;
-    gap: 12px;
-  }
-
-  .debtTopRightGrid {
-    display: grid;
-    grid-template-columns: minmax(0, 1.04fr) minmax(320px, 0.8fr);
-    gap: 12px;
-    align-items: start;
-  }
-
-  .debtBottomGrid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 12px;
+  .debtLowerGrid > * {
+    min-width: 0;
   }
 
   .debtRosterControls {
     display: grid;
-    grid-template-columns: 1.2fr 0.8fr 0.9fr;
+    grid-template-columns: 1.32fr 0.84fr 0.88fr;
     gap: 10px;
     margin-bottom: 10px;
   }
@@ -2387,8 +2424,9 @@ const globalStyles = `
 
   .debtRosterListCompact {
     display: grid;
-    gap: 8px;
-    max-height: 650px;
+    gap: 10px;
+    min-height: 720px;
+    max-height: 720px;
     overflow: auto;
     padding-right: 2px;
   }
@@ -2398,8 +2436,8 @@ const globalStyles = `
     grid-template-columns: 42px minmax(0, 1fr) auto auto;
     gap: 10px;
     align-items: center;
-    min-height: 92px;
-    padding: 10px 12px;
+    min-height: 118px;
+    padding: 12px 14px;
     border-radius: 18px;
     border: 1px solid rgba(255,255,255,0.07);
     background:
@@ -2439,7 +2477,7 @@ const globalStyles = `
     margin-top: 4px;
     font-size: 11.5px;
     color: rgba(255,255,255,0.54);
-    line-height: 1.3;
+    line-height: 1.35;
   }
 
   .debtCompactValue {
@@ -2479,6 +2517,7 @@ const globalStyles = `
     background:
       linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01));
     padding: 15px;
+    min-height: 100%;
   }
 
   .debtInfoGrid {
@@ -2630,6 +2669,7 @@ const globalStyles = `
   .debtIntelList {
     display: grid;
     gap: 10px;
+    min-height: 360px;
     max-height: 360px;
     overflow: auto;
     padding-right: 2px;
@@ -2666,6 +2706,12 @@ const globalStyles = `
     color: #fff;
   }
 
+  .debtIntelMiniGrid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+
   .debtIntelMini {
     border-radius: 14px;
     border: 1px solid rgba(255,255,255,0.05);
@@ -2698,7 +2744,7 @@ const globalStyles = `
   }
 
   .debtInlineEmpty {
-    min-height: 260px;
+    min-height: 360px;
   }
 
   .debtEmptyTitle {
@@ -2715,29 +2761,57 @@ const globalStyles = `
     max-width: 360px;
   }
 
+  @media (max-width: 1560px) {
+    .debtWorkspaceGrid {
+      grid-template-columns: minmax(440px, 1.22fr) minmax(390px, 1fr) minmax(320px, 0.9fr);
+    }
+  }
+
+  @media (max-width: 1420px) {
+    .debtControlsGrid {
+      grid-template-columns: 1fr;
+    }
+
+    .debtWorkspaceGrid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .debtWorkspaceGrid > :nth-child(3) {
+      grid-column: 1 / -1;
+    }
+
+    .debtLowerGrid {
+      grid-template-columns: 1fr;
+    }
+  }
+
   @media (max-width: 1260px) {
     .debtMetricGrid {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
-    .debtTopRightGrid,
-    .debtBottomGrid {
+    .debtSectionGrid {
       grid-template-columns: 1fr;
     }
 
     .debtFormGrid4 {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
+
+    .debtRosterListCompact {
+      min-height: 580px;
+      max-height: 580px;
+    }
   }
 
   @media (max-width: 1100px) {
     .debtHeroGrid,
-    .debtMainGrid {
+    .debtWorkspaceGrid {
       grid-template-columns: 1fr;
     }
 
-    .debtControlsGrid {
-      grid-template-columns: 1fr;
+    .debtHeroSide {
+      justify-content: flex-start;
     }
   }
 
@@ -2749,7 +2823,8 @@ const globalStyles = `
     .debtFormGrid3,
     .debtFormGrid4,
     .debtActionGrid,
-    .debtActionGridTight {
+    .debtActionGridTight,
+    .debtIntelMiniGrid {
       grid-template-columns: 1fr;
     }
 
@@ -2765,6 +2840,12 @@ const globalStyles = `
       grid-column: 2;
       justify-content: flex-start;
     }
+
+    .debtRosterListCompact,
+    .debtIntelList {
+      min-height: 0;
+      max-height: none;
+    }
   }
 
   @media (max-width: 760px) {
@@ -2773,8 +2854,8 @@ const globalStyles = `
     }
 
     .debtMetricGrid,
-    .debtTopRightGrid,
-    .debtBottomGrid {
+    .debtSectionGrid,
+    .debtLowerGrid {
       grid-template-columns: 1fr;
     }
   }

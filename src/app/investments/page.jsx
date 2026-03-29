@@ -3,10 +3,11 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import {
+  Activity,
   ArrowRight,
-  BadgeDollarSign,
-  BarChart3,
-  Clock3,
+  BookOpenText,
+  ExternalLink,
+  Newspaper,
   Plus,
   Star,
   TrendingDown,
@@ -20,6 +21,36 @@ export const dynamic = "force-dynamic";
 
 const FONT_STACK =
   'Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+
+const BOARD_SYMBOLS = [
+  { symbol: "SPY", label: "S&P 500" },
+  { symbol: "QQQ", label: "Nasdaq 100" },
+  { symbol: "DIA", label: "Dow 30" },
+  { symbol: "IWM", label: "Russell 2000" },
+];
+
+const NEWS_TTL_MS = 1000 * 60 * 5;
+const newsResponseCache = new Map();
+const newsInFlightKeys = new Set();
+
+function getCachedNews(key) {
+  const hit = newsResponseCache.get(key);
+  if (!hit) return null;
+
+  if (Date.now() - hit.ts > NEWS_TTL_MS) {
+    newsResponseCache.delete(key);
+    return null;
+  }
+
+  return hit.data;
+}
+
+function setCachedNews(key, data) {
+  newsResponseCache.set(key, {
+    ts: Date.now(),
+    data,
+  });
+}
 
 function toNum(v, fallback = 0) {
   const n = Number(v);
@@ -65,6 +96,18 @@ function shortDate(value) {
   });
 }
 
+function fullDateTime(value) {
+  if (!value) return "—";
+  const d = new Date(value);
+  if (!Number.isFinite(d.getTime())) return String(value);
+  return d.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
 function monthLabel() {
   return new Date().toLocaleDateString(undefined, {
     month: "long",
@@ -81,24 +124,6 @@ function initials(label = "") {
     .map((x) => x[0])
     .join("")
     .toUpperCase();
-}
-
-function overlineStyle() {
-  return {
-    fontSize: 10,
-    textTransform: "uppercase",
-    letterSpacing: ".22em",
-    fontWeight: 800,
-    color: "rgba(255,255,255,0.42)",
-  };
-}
-
-function mutedStyle() {
-  return {
-    fontSize: 13,
-    lineHeight: 1.5,
-    color: "rgba(255,255,255,0.64)",
-  };
 }
 
 function toneMeta(tone = "neutral") {
@@ -151,486 +176,63 @@ function toneByValue(value) {
   return n > 0 ? "green" : "red";
 }
 
-function MiniPill({ children, tone = "neutral" }) {
-  const meta = toneMeta(tone);
-
-  return (
-    <div
-      style={{
-        minHeight: 32,
-        display: "inline-flex",
-        alignItems: "center",
-        gap: 8,
-        padding: "0 11px",
-        borderRadius: 999,
-        border: `1px solid ${meta.border}`,
-        background:
-          "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01))",
-        boxShadow: `inset 0 1px 0 rgba(255,255,255,0.035), 0 0 10px ${meta.glow}`,
-        color: tone === "neutral" ? "rgba(255,255,255,0.88)" : meta.text,
-        fontSize: 11,
-        fontWeight: 800,
-        whiteSpace: "nowrap",
-      }}
-    >
-      {children}
-    </div>
-  );
+function overlineStyle() {
+  return {
+    fontSize: 10,
+    textTransform: "uppercase",
+    letterSpacing: ".22em",
+    fontWeight: 800,
+    color: "rgba(255,255,255,0.42)",
+  };
 }
 
-function PaneHeader({ title, subcopy, right }) {
-  return (
-    <div
-      style={{
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "flex-start",
-        gap: 12,
-        flexWrap: "wrap",
-        marginBottom: 12,
-      }}
-    >
-      <div style={{ minWidth: 0 }}>
-        <div
-          style={{
-            fontSize: 18,
-            lineHeight: 1.1,
-            fontWeight: 800,
-            letterSpacing: "-0.03em",
-            color: "#fff",
-          }}
-        >
-          {title}
-        </div>
-
-        {subcopy ? <div style={{ ...mutedStyle(), marginTop: 4 }}>{subcopy}</div> : null}
-      </div>
-
-      {right || null}
-    </div>
-  );
+function mutedStyle() {
+  return {
+    fontSize: 13,
+    lineHeight: 1.5,
+    color: "rgba(255,255,255,0.64)",
+  };
 }
 
-function ActionLink({ href, children, full = false }) {
-  return (
-    <Link
-      href={href}
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        justifyContent: "center",
-        gap: 8,
-        width: full ? "100%" : undefined,
-        minHeight: 40,
-        padding: "10px 13px",
-        borderRadius: 14,
-        border: "1px solid rgba(214,226,255,0.10)",
-        background:
-          "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.012))",
-        color: "#f7fbff",
-        textDecoration: "none",
-        fontWeight: 800,
-        fontSize: 13,
-        boxShadow:
-          "inset 0 1px 0 rgba(255,255,255,0.04), 0 10px 18px rgba(0,0,0,0.12)",
-      }}
-    >
-      {children}
-    </Link>
-  );
+function inputStyle() {
+  return {
+    height: 46,
+    borderRadius: 14,
+    border: "1px solid rgba(214,226,255,0.10)",
+    background:
+      "linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.012)), rgba(8,12,20,0.76)",
+    color: "#f7fbff",
+    padding: "0 12px",
+    outline: "none",
+    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.035)",
+    width: "100%",
+  };
 }
 
-function StatusDot({ tone = "neutral", size = 8 }) {
-  const meta = toneMeta(tone);
-
-  return (
-    <span
-      style={{
-        width: size,
-        height: size,
-        borderRadius: 999,
-        background: meta.dot,
-        boxShadow: `0 0 10px ${meta.glow}`,
-        flexShrink: 0,
-      }}
-    />
-  );
-}
-
-function MetricCard({ icon: Icon, label, value, detail, tone = "neutral", badge = "" }) {
-  const meta = toneMeta(tone);
-
-  return (
-    <GlassPane tone={tone} size="card" style={{ height: "100%" }}>
-      <div
-        style={{
-          minHeight: 138,
-          display: "grid",
-          gridTemplateRows: "auto auto auto 1fr",
-          gap: 8,
-        }}
-      >
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: 10,
-          }}
-        >
-          <div
-            style={{
-              width: 38,
-              height: 38,
-              borderRadius: 13,
-              display: "grid",
-              placeItems: "center",
-              border: `1px solid ${meta.border}`,
-              background: meta.iconBg,
-              color: tone === "neutral" ? "#fff" : meta.text,
-              boxShadow: `0 0 12px ${meta.glow}`,
-            }}
-          >
-            <Icon size={16} />
-          </div>
-
-          <StatusDot tone={tone} />
-        </div>
-
-        <div style={{ minWidth: 0 }}>
-          <div style={overlineStyle()}>{label}</div>
-
-          {badge ? (
-            <div style={{ marginTop: 7 }}>
-              <div
-                style={{
-                  minHeight: 22,
-                  display: "inline-flex",
-                  alignItems: "center",
-                  padding: "0 8px",
-                  borderRadius: 999,
-                  fontSize: 10,
-                  fontWeight: 800,
-                  letterSpacing: ".1em",
-                  textTransform: "uppercase",
-                  border: `1px solid ${meta.border}`,
-                  color: tone === "neutral" ? "rgba(255,255,255,0.82)" : meta.text,
-                  background: meta.pillBg,
-                  whiteSpace: "normal",
-                  lineHeight: 1.2,
-                }}
-              >
-                {badge}
-              </div>
-            </div>
-          ) : null}
-        </div>
-
-        <div
-          style={{
-            fontSize: "clamp(22px, 2.8vw, 34px)",
-            lineHeight: 1,
-            fontWeight: 850,
-            letterSpacing: "-0.05em",
-            color: tone === "neutral" ? "#fff" : meta.text,
-            overflowWrap: "anywhere",
-          }}
-        >
-          {value}
-        </div>
-
-        <div style={{ ...mutedStyle(), overflowWrap: "anywhere" }}>{detail}</div>
-      </div>
-    </GlassPane>
-  );
-}
-
-function EmptyState({ title, detail, linkHref, linkLabel }) {
-  return (
-    <div
-      style={{
-        minHeight: 140,
-        display: "grid",
-        placeItems: "center",
-      }}
-    >
-      <div style={{ width: "100%", maxWidth: 360 }}>
-        <div
-          style={{
-            fontSize: 17,
-            fontWeight: 800,
-            color: "#fff",
-            textAlign: "center",
-          }}
-        >
-          {title}
-        </div>
-
-        <div
-          style={{
-            marginTop: 8,
-            fontSize: 13,
-            lineHeight: 1.55,
-            color: "rgba(255,255,255,0.64)",
-            textAlign: "center",
-          }}
-        >
-          {detail}
-        </div>
-
-        {linkHref && linkLabel ? (
-          <div style={{ marginTop: 14, display: "flex", justifyContent: "center" }}>
-            <ActionLink href={linkHref}>
-              {linkLabel} <ArrowRight size={14} />
-            </ActionLink>
-          </div>
-        ) : null}
-      </div>
-    </div>
-  );
-}
-
-function HoldingRow({ item }) {
-  const tone = item.hasLivePrice ? toneByValue(item.pnl) : "amber";
-  const meta = toneMeta(tone);
-
-  return (
-    <Link
-      href={`/investments/${item.id}`}
-      style={{
-        display: "grid",
-        gridTemplateColumns: "48px minmax(0, 1fr) auto",
-        gap: 12,
-        alignItems: "center",
-        minHeight: 74,
-        padding: "12px 14px",
-        borderRadius: 18,
-        textDecoration: "none",
-        border: `1px solid ${meta.border}`,
-        background:
-          "linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01))",
-        boxShadow: `inset 0 1px 0 rgba(255,255,255,0.035), 0 0 12px ${meta.glow}`,
-      }}
-    >
-      <div
-        style={{
-          width: 48,
-          height: 48,
-          borderRadius: 14,
-          display: "grid",
-          placeItems: "center",
-          border: `1px solid ${meta.border}`,
-          background:
-            "linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.012))",
-          color: tone === "neutral" ? "#fff" : meta.text,
-          fontWeight: 800,
-          fontSize: 13,
-          letterSpacing: ".06em",
-        }}
-      >
-        {initials(item.symbol)}
-      </div>
-
-      <div style={{ minWidth: 0 }}>
-        <div
-          style={{
-            fontSize: 14,
-            fontWeight: 800,
-            color: "#fff",
-            lineHeight: 1.25,
-            overflowWrap: "anywhere",
-          }}
-        >
-          {item.symbol}
-        </div>
-
-        <div
-          style={{
-            marginTop: 3,
-            fontSize: 12,
-            color: "rgba(255,255,255,0.58)",
-            lineHeight: 1.35,
-            overflowWrap: "anywhere",
-          }}
-        >
-          {item.shares.toLocaleString(undefined, { maximumFractionDigits: 4 })} shares •{" "}
-          {item.hasLivePrice ? money(item.livePrice) : "No live price"}
-        </div>
-      </div>
-
-      <div style={{ textAlign: "right" }}>
-        <div
-          style={{
-            fontSize: 14,
-            fontWeight: 800,
-            color: "#fff",
-            whiteSpace: "nowrap",
-          }}
-        >
-          {money(item.value)}
-        </div>
-        <div
-          style={{
-            marginTop: 3,
-            fontSize: 12,
-            fontWeight: 700,
-            color: item.hasLivePrice ? meta.text : "rgba(255,255,255,0.58)",
-            whiteSpace: "nowrap",
-          }}
-        >
-          {item.hasLivePrice ? signedMoney(item.pnl) : "Pending"}
-        </div>
-      </div>
-    </Link>
-  );
-}
-
-function TradeRow({ txn, assetMap }) {
-  const type = String(txn.txn_type || "").toUpperCase();
-  const tone = type === "SELL" ? "green" : "neutral";
-  const meta = toneMeta(tone);
-  const sym = assetMap.get(txn.asset_id)?.symbol || "—";
-
-  return (
-    <div
-      style={{
-        minHeight: 68,
-        display: "grid",
-        gridTemplateColumns: "42px minmax(0, 1fr) auto",
-        gap: 12,
-        alignItems: "center",
-        padding: "10px 12px",
-        borderRadius: 16,
-        border: `1px solid ${meta.border}`,
-        background:
-          "linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01))",
-      }}
-    >
-      <div
-        style={{
-          width: 42,
-          height: 42,
-          borderRadius: 13,
-          display: "grid",
-          placeItems: "center",
-          border: `1px solid ${meta.border}`,
-          background:
-            "linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.012))",
-          color: type === "SELL" ? "#8ef4bb" : "#f7fbff",
-          fontWeight: 900,
-          fontSize: 12,
-        }}
-      >
-        {type === "SELL" ? "S" : "B"}
-      </div>
-
-      <div style={{ minWidth: 0 }}>
-        <div
-          style={{
-            fontSize: 14,
-            fontWeight: 800,
-            color: "#fff",
-            lineHeight: 1.25,
-          }}
-        >
-          {sym} {type}
-        </div>
-        <div style={{ marginTop: 3, ...mutedStyle() }}>
-          {toNum(txn.qty).toLocaleString(undefined, { maximumFractionDigits: 4 })} @{" "}
-          {money(txn.price)} • {shortDate(txn.txn_date)}
-        </div>
-      </div>
-
-      <div
-        style={{
-          fontSize: 14,
-          fontWeight: 800,
-          color: type === "SELL" ? "#97efc7" : "#fff",
-          whiteSpace: "nowrap",
-        }}
-      >
-        {money(toNum(txn.qty) * toNum(txn.price))}
-      </div>
-    </div>
-  );
-}
-
-function buildFlowPoints(txns) {
-  const sorted = [...txns].sort((a, b) => {
-    const ad = new Date(a.txn_date || 0).getTime();
-    const bd = new Date(b.txn_date || 0).getTime();
-    return ad - bd;
-  });
-
-  const grouped = {};
-  let running = 0;
-
-  for (const t of sorted) {
-    const qty = toNum(t.qty);
-    const price = toNum(t.price);
-    const type = String(t.txn_type || "").toUpperCase();
-    const notional = qty * price;
-    const signed = type === "SELL" ? -notional : notional;
-    const key = t.txn_date || "Start";
-    running += signed;
-    grouped[key] = running;
-  }
-
-  let points = Object.entries(grouped).map(([date, value]) => ({
-    label: date === "Start" ? "Start" : shortDate(date),
-    value,
-  }));
-
-  if (!points.length) {
-    points = [
-      { label: "Start", value: 0 },
-      { label: "W1", value: 0 },
-      { label: "W2", value: 0 },
-      { label: "W3", value: 0 },
-      { label: "W4", value: 0 },
-      { label: "Now", value: 0 },
-    ];
-  }
-
-  if (points.length > 6) points = points.slice(-6);
-
-  while (points.length < 6) {
-    points.unshift({
-      label: points[0]?.label || "Start",
-      value: points[0]?.value || 0,
-    });
-  }
-
-  return points;
-}
-
-function buildPath(points, width, height, padX, padY) {
-  if (!points.length) return "";
-  const values = points.map((p) => toNum(p.value));
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const range = max - min || 1;
-
-  return points
-    .map((point, index) => {
-      const x = padX + (index * (width - padX * 2)) / Math.max(1, points.length - 1);
-      const y = height - padY - (toNum(point.value) - min) * ((height - padY * 2) / range);
-      return `${index === 0 ? "M" : "L"} ${x} ${y}`;
-    })
-    .join(" ");
-}
-
-function pointCoords(points, width, height, padX, padY) {
-  const values = points.map((p) => toNum(p.value));
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const range = max - min || 1;
-
-  return points.map((point, index) => {
-    const x = padX + (index * (width - padX * 2)) / Math.max(1, points.length - 1);
-    const y = height - padY - (toNum(point.value) - min) * ((height - padY * 2) / range);
-    return { ...point, x, y };
-  });
+function buttonStyle({ primary = false, disabled = false } = {}) {
+  return {
+    minHeight: 46,
+    padding: "0 14px",
+    borderRadius: 14,
+    border: primary
+      ? "1px solid rgba(255,255,255,0.18)"
+      : "1px solid rgba(214,226,255,0.10)",
+    background: disabled
+      ? "rgba(255,255,255,0.04)"
+      : primary
+      ? "linear-gradient(180deg, rgba(255,255,255,0.96), rgba(229,236,248,0.88))"
+      : "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.012))",
+    color: disabled ? "rgba(255,255,255,0.42)" : primary ? "#0b1220" : "#f7fbff",
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    fontWeight: 800,
+    fontSize: 13,
+    cursor: disabled ? "not-allowed" : "pointer",
+    textDecoration: "none",
+    boxShadow: primary ? "0 10px 22px rgba(255,255,255,0.08)" : undefined,
+  };
 }
 
 function parseBatchPrices(json) {
@@ -642,7 +244,7 @@ function parseBatchPrices(json) {
 
     if (typeof raw === "number") {
       out[sym] = {
-        price: toNum(raw, null),
+        price: Number.isFinite(raw) ? raw : null,
         change: null,
         changesPercentage: null,
       };
@@ -651,20 +253,19 @@ function parseBatchPrices(json) {
 
     if (raw && typeof raw === "object") {
       out[sym] = {
-        price: toNum(raw.price, null),
-        change: toNum(raw.change, null),
-        changesPercentage: toNum(
-          raw.changesPercentage ?? raw.changePercent ?? raw.percent_change,
-          null
-        ),
+        price: Number.isFinite(Number(raw.price)) ? Number(raw.price) : null,
+        change: Number.isFinite(Number(raw.change)) ? Number(raw.change) : null,
+        changesPercentage: Number.isFinite(
+          Number(raw.changesPercentage ?? raw.changePercent ?? raw.percent_change)
+        )
+          ? Number(raw.changesPercentage ?? raw.changePercent ?? raw.percent_change)
+          : null,
       };
     }
   }
 
   if (Array.isArray(json)) {
-    json.forEach((row) => {
-      assign(row?.symbol ?? row?.ticker, row);
-    });
+    json.forEach((row) => assign(row?.symbol ?? row?.ticker, row));
   }
 
   if (Array.isArray(json?.quotes)) {
@@ -688,11 +289,26 @@ function parseBatchPrices(json) {
   return out;
 }
 
+function sameNewsArticles(a, b) {
+  if (!Array.isArray(a) || !Array.isArray(b)) return false;
+  if (a.length !== b.length) return false;
+
+  for (let i = 0; i < a.length; i += 1) {
+    const aKey = `${a[i]?.url || ""}__${a[i]?.publishedDate || ""}__${a[i]?.title || ""}`;
+    const bKey = `${b[i]?.url || ""}__${b[i]?.publishedDate || ""}__${b[i]?.title || ""}`;
+    if (aKey !== bKey) return false;
+  }
+
+  return true;
+}
+
 export default function InvestmentsPage() {
   const [assets, setAssets] = useState([]);
   const [txns, setTxns] = useState([]);
   const [favorites, setFavorites] = useState([]);
   const [prices, setPrices] = useState({});
+  const [news, setNews] = useState([]);
+  const [newsError, setNewsError] = useState("");
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
@@ -746,27 +362,34 @@ export default function InvestmentsPage() {
         return;
       }
 
-      setAssets(assetRes.data || []);
+      const assetRows = assetRes.data || [];
+      setAssets(assetRows);
       setTxns(txnRes.data || []);
       setFavorites(favoriteRes.data || []);
+      setTradeAssetId(assetRows[0]?.id || "");
       setLoading(false);
     }
 
     load();
   }, []);
 
-  useEffect(() => {
-    async function loadPrices() {
-      const symbolsToLoad = [
-        ...new Set(
-          [
-            ...assets.map((a) => String(a.symbol || "").toUpperCase().trim()),
-            ...favorites.map((f) => String(f.symbol || "").toUpperCase().trim()),
-          ].filter(Boolean)
-        ),
-      ];
+  const watchSymbols = useMemo(() => {
+    return [
+      ...new Set(
+        [
+          ...assets.map((a) => String(a.symbol || "").toUpperCase().trim()),
+          ...favorites.map((f) => String(f.symbol || "").toUpperCase().trim()),
+          ...BOARD_SYMBOLS.map((x) => x.symbol),
+        ].filter(Boolean)
+      ),
+    ];
+  }, [assets, favorites]);
 
-      if (!symbolsToLoad.length) {
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadPrices() {
+      if (!watchSymbols.length) {
         setPrices({});
         return;
       }
@@ -775,19 +398,22 @@ export default function InvestmentsPage() {
 
       try {
         const batchRes = await fetch(
-          `/api/prices-batch?symbols=${encodeURIComponent(symbolsToLoad.join(","))}`,
+          `/api/prices-batch?symbols=${encodeURIComponent(watchSymbols.join(","))}`,
           { cache: "no-store" }
         );
         const batchData = await batchRes.json();
+
+        if (cancelled) return;
 
         if (batchRes.ok) {
           Object.assign(nextPrices, parseBatchPrices(batchData));
         }
       } catch (err) {
+        if (cancelled) return;
         console.error("batch price fetch failed", err);
       }
 
-      const missing = symbolsToLoad.filter((sym) => {
+      const missing = watchSymbols.filter((sym) => {
         const row = nextPrices[sym];
         return !row || !Number.isFinite(Number(row.price)) || Number(row.price) <= 0;
       });
@@ -801,28 +427,38 @@ export default function InvestmentsPage() {
               });
               const data = await res.json();
 
-              if (res.ok) {
+              if (!cancelled && res.ok && !data?.error) {
                 nextPrices[sym] = {
-                  price: toNum(data?.price, null),
-                  change: toNum(data?.change, null),
-                  changesPercentage: toNum(
-                    data?.changesPercentage ?? data?.changePercent ?? data?.percent_change,
-                    null
-                  ),
+                  price: Number.isFinite(Number(data?.price)) ? Number(data.price) : null,
+                  change: Number.isFinite(Number(data?.change)) ? Number(data.change) : null,
+                  changesPercentage: Number.isFinite(
+                    Number(data?.changesPercentage ?? data?.changePercent ?? data?.percent_change)
+                  )
+                    ? Number(
+                        data?.changesPercentage ?? data?.changePercent ?? data?.percent_change
+                      )
+                    : null,
                 };
               }
             } catch (err) {
+              if (cancelled) return;
               console.error(`single price fetch failed for ${sym}`, err);
             }
           })
         );
       }
 
-      setPrices(nextPrices);
+      if (!cancelled) {
+        setPrices(nextPrices);
+      }
     }
 
     loadPrices();
-  }, [assets, favorites]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [watchSymbols]);
 
   const portfolio = useMemo(() => {
     const txnsByAsset = {};
@@ -835,6 +471,7 @@ export default function InvestmentsPage() {
     let totalValue = 0;
     let totalCost = 0;
     let totalRealizedPnl = 0;
+    let totalDayMove = 0;
 
     const holdings = assets.map((asset) => {
       const ledger = [...(txnsByAsset[asset.id] || [])].sort((a, b) => {
@@ -867,18 +504,26 @@ export default function InvestmentsPage() {
         }
       }
 
-      const symbol = String(asset.symbol || "").toUpperCase().trim();
-      const quote = prices[symbol] || null;
-      const livePrice = toNum(quote?.price, null);
+      const sym = String(asset.symbol || "").toUpperCase().trim();
+      const quote = prices[sym] || null;
+      const livePrice = Number.isFinite(Number(quote?.price)) ? Number(quote.price) : null;
+      const dayChange = Number.isFinite(Number(quote?.change)) ? Number(quote.change) : null;
+      const dayPct = Number.isFinite(Number(quote?.changesPercentage))
+        ? Number(quote.changesPercentage)
+        : null;
+
       const hasLivePrice = Number.isFinite(livePrice) && livePrice > 0;
       const value = hasLivePrice ? shares * livePrice : 0;
       const pnl = hasLivePrice ? value - remainingBasis : null;
       const pnlPct =
         hasLivePrice && remainingBasis > 0 ? ((value - remainingBasis) / remainingBasis) * 100 : null;
+      const positionDayMove =
+        hasLivePrice && Number.isFinite(dayChange) ? shares * dayChange : 0;
 
       if (hasLivePrice) totalValue += value;
       totalCost += remainingBasis;
       totalRealizedPnl += realizedPnl;
+      totalDayMove += positionDayMove;
 
       return {
         ...asset,
@@ -890,39 +535,120 @@ export default function InvestmentsPage() {
         pnl,
         pnlPct,
         txCount: ledger.length,
+        dayChange,
+        dayPct,
+        positionDayMove,
       };
     });
 
-    const sorted = [...holdings].sort((a, b) => toNum(b.value) - toNum(a.value));
-
     return {
-      holdings: sorted,
+      holdings: [...holdings].sort((a, b) => toNum(b.value) - toNum(a.value)),
       totalValue,
       totalCost,
       totalRealizedPnl,
       totalPnl: totalValue - totalCost,
+      totalDayMove,
+      totalDayPct:
+        totalValue - totalDayMove > 0 ? (totalDayMove / (totalValue - totalDayMove)) * 100 : null,
     };
   }, [assets, txns, prices]);
 
-  const openPositions = portfolio.holdings.filter((h) => toNum(h.shares) > 0);
-  const alerts = openPositions.filter((h) => !h.hasLivePrice || toNum(h.pnl) < 0);
-  const heroTone = toneByValue(portfolio.totalPnl);
+  const openPositions = useMemo(() => {
+    return portfolio.holdings.filter((h) => toNum(h.shares) > 0);
+  }, [portfolio.holdings]);
 
-  const flowPoints = useMemo(() => buildFlowPoints(txns), [txns]);
-  const chartWidth = 960;
-  const chartHeight = 320;
-  const chartPadX = 30;
-  const chartPadY = 34;
-  const path = buildPath(flowPoints, chartWidth, chartHeight, chartPadX, chartPadY);
-  const coords = pointCoords(flowPoints, chartWidth, chartHeight, chartPadX, chartPadY);
+  const alerts = useMemo(() => {
+    return openPositions.filter((h) => !h.hasLivePrice || toNum(h.pnl) < 0);
+  }, [openPositions]);
 
-  const recentTxns = [...txns]
-    .sort((a, b) => {
-      const ad = new Date(a.txn_date || 0).getTime();
-      const bd = new Date(b.txn_date || 0).getTime();
-      return bd - ad;
-    })
-    .slice(0, 6);
+  const heroTone = useMemo(() => {
+    return toneByValue(portfolio.totalPnl);
+  }, [portfolio.totalPnl]);
+
+  const newsSymbols = useMemo(() => {
+    const topOwned = openPositions.slice(0, 4).map((h) => String(h.symbol || "").toUpperCase());
+    const watch = favorites.slice(0, 3).map((f) => String(f.symbol || "").toUpperCase());
+    return [...new Set([...topOwned, ...watch, "SPY"])].filter(Boolean).slice(0, 6);
+  }, [openPositions, favorites]);
+
+  const newsSymbolsKey = useMemo(() => {
+    return newsSymbols.join(",");
+  }, [newsSymbols]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadNews() {
+      if (!newsSymbolsKey) return;
+
+      const cached = getCachedNews(newsSymbolsKey);
+      if (cached) {
+        if (!cancelled) {
+          if (Array.isArray(cached.articles) && cached.articles.length > 0) {
+            setNews((prev) => (sameNewsArticles(prev, cached.articles) ? prev : cached.articles));
+          }
+          setNewsError(cached.error || "");
+        }
+        return;
+      }
+
+      if (newsInFlightKeys.has(newsSymbolsKey)) return;
+      newsInFlightKeys.add(newsSymbolsKey);
+      setNewsError("");
+
+      try {
+        const res = await fetch(
+          `/api/stock-news?symbols=${encodeURIComponent(newsSymbolsKey)}&limit=10`,
+          { cache: "no-store" }
+        );
+        const data = await res.json();
+
+        if (cancelled) return;
+
+        const payload = {
+          articles: Array.isArray(data?.articles) ? data.articles : [],
+          error: data?.error || "",
+        };
+
+        setCachedNews(newsSymbolsKey, payload);
+
+        if (payload.articles.length > 0) {
+          setNews((prev) => (sameNewsArticles(prev, payload.articles) ? prev : payload.articles));
+        }
+
+        setNewsError(payload.error);
+      } catch (err) {
+        if (cancelled) return;
+        console.error("news fetch failed", err);
+
+        const payload = {
+          articles: [],
+          error: "Research headlines temporarily unavailable.",
+        };
+
+        setCachedNews(newsSymbolsKey, payload);
+        setNewsError(payload.error);
+      } finally {
+        newsInFlightKeys.delete(newsSymbolsKey);
+      }
+    }
+
+    loadNews();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [newsSymbolsKey]);
+
+  const recentTxns = useMemo(() => {
+    return [...txns]
+      .sort((a, b) => {
+        const ad = new Date(a.txn_date || 0).getTime();
+        const bd = new Date(b.txn_date || 0).getTime();
+        return bd - ad;
+      })
+      .slice(0, 6);
+  }, [txns]);
 
   const assetMap = useMemo(() => {
     const map = new Map();
@@ -959,7 +685,7 @@ export default function InvestmentsPage() {
           user_id: user.id,
           symbol: clean,
           asset_type: "stock",
-          account: "Main",
+          account: "Brokerage",
         })
         .select()
         .single();
@@ -971,9 +697,9 @@ export default function InvestmentsPage() {
       }
 
       setAssets((prev) => [data, ...prev]);
-      setTradeAssetId((prev) => prev || data.id);
+      setTradeAssetId(data.id);
       setSymbol("");
-      setStatus(`${clean} added to investments.`);
+      setStatus(`${clean} added to the board.`);
     } catch (err) {
       console.error(err);
       setError("Failed adding the asset.");
@@ -1032,7 +758,7 @@ export default function InvestmentsPage() {
       setTxns((prev) => [data, ...prev]);
       setTradeQty("");
       setTradePrice("");
-      setStatus(`${tradeType} saved.`);
+      setStatus(`${tradeType} saved to portfolio ledger.`);
     } catch (err) {
       console.error(err);
       setError("Failed saving trade.");
@@ -1042,10 +768,10 @@ export default function InvestmentsPage() {
   if (loading) {
     return (
       <main style={{ padding: "18px 0 28px", fontFamily: FONT_STACK }}>
-        <div style={{ width: "min(100%, 1320px)", margin: "0 auto" }}>
+        <div style={{ width: "min(100%, 1380px)", margin: "0 auto" }}>
           <GlassPane size="card">
             <div style={{ fontWeight: 800, fontSize: 18, color: "#fff" }}>
-              Loading investments.
+              Loading investments desk.
             </div>
           </GlassPane>
         </div>
@@ -1060,28 +786,40 @@ export default function InvestmentsPage() {
           <GlassPane size="card">
             <div className="investHeroGrid">
               <div style={{ minWidth: 0 }}>
-                <div style={overlineStyle()}>Investments Board</div>
+                <div style={overlineStyle()}>Investments Desk</div>
 
                 <div
                   style={{
                     marginTop: 8,
-                    fontSize: "clamp(24px, 3.2vw, 34px)",
-                    lineHeight: 1.02,
-                    fontWeight: 850,
-                    letterSpacing: "-0.05em",
+                    fontSize: "clamp(28px, 3.5vw, 40px)",
+                    lineHeight: 0.98,
+                    fontWeight: 900,
+                    letterSpacing: "-0.06em",
                     color: "#fff",
                   }}
                 >
-                  Investments Command
+                  Brokerage-grade board
                 </div>
 
-                <div style={{ marginTop: 10, display: "flex", gap: 10, alignItems: "center" }}>
-                  <StatusDot tone={heroTone} />
-                  <div style={{ ...mutedStyle(), whiteSpace: "normal", overflowWrap: "anywhere" }}>
-                    {alerts.length
-                      ? `${alerts.length} holding${alerts.length === 1 ? "" : "s"} need review right now.`
-                      : "No immediate investment alerts."}
-                  </div>
+                <div
+                  style={{
+                    marginTop: 12,
+                    display: "flex",
+                    gap: 10,
+                    alignItems: "center",
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <MiniPill>{monthLabel()}</MiniPill>
+                  <MiniPill tone={heroTone}>{openPositions.length} open positions</MiniPill>
+                  <MiniPill tone={alerts.length ? "amber" : "green"}>
+                    {alerts.length ? `${alerts.length} signals` : "Desk clear"}
+                  </MiniPill>
+                </div>
+
+                <div style={{ marginTop: 12, ...mutedStyle(), maxWidth: 820 }}>
+                  Real portfolio tracking, live quotes, watchlist flow, and a research/news rail
+                  that stays up instead of acting flaky.
                 </div>
               </div>
 
@@ -1093,10 +831,15 @@ export default function InvestmentsPage() {
                   justifyContent: "flex-end",
                 }}
               >
-                <MiniPill>{monthLabel()}</MiniPill>
-                <MiniPill tone={heroTone}>{openPositions.length} open positions</MiniPill>
                 <ActionLink href="/investments/discover">
-                  Discover <ArrowRight size={14} />
+                  Research Desk <ArrowRight size={14} />
+                </ActionLink>
+                <ActionLink
+                  href={
+                    openPositions[0] ? `/market/${openPositions[0].symbol}` : "/investments/discover"
+                  }
+                >
+                  Open Market <ExternalLink size={14} />
                 </ActionLink>
               </div>
             </div>
@@ -1104,13 +847,7 @@ export default function InvestmentsPage() {
 
           {(status || error) && (
             <GlassPane tone={error ? "red" : "green"} size="card">
-              <div
-                style={{
-                  fontWeight: 800,
-                  fontSize: 14,
-                  color: "#fff",
-                }}
-              >
+              <div style={{ fontWeight: 800, fontSize: 14, color: "#fff" }}>
                 {error || status}
               </div>
             </GlassPane>
@@ -1121,8 +858,19 @@ export default function InvestmentsPage() {
               icon={Wallet}
               label="Portfolio Value"
               value={money(portfolio.totalValue)}
-              detail="Live-priced current value across open positions."
+              detail="Live value across open positions on the desk."
               tone="neutral"
+            />
+            <MetricCard
+              icon={Activity}
+              label="Day Move"
+              value={signedMoney(portfolio.totalDayMove)}
+              detail={
+                portfolio.totalDayPct != null
+                  ? `${pct(portfolio.totalDayPct)} across live-priced positions.`
+                  : "Waiting on live quotes."
+              }
+              tone={toneByValue(portfolio.totalDayMove)}
             />
             <MetricCard
               icon={TrendingUp}
@@ -1132,18 +880,11 @@ export default function InvestmentsPage() {
               tone={toneByValue(portfolio.totalPnl)}
             />
             <MetricCard
-              icon={BadgeDollarSign}
-              label="Remaining Basis"
-              value={money(portfolio.totalCost)}
-              detail="Unrealized capital still sitting in open positions."
+              icon={Star}
+              label="Watchlist"
+              value={String(favorites.length)}
+              detail="Saved names ready for research and routing."
               tone="neutral"
-            />
-            <MetricCard
-              icon={BarChart3}
-              label="Realized P/L"
-              value={signedMoney(portfolio.totalRealizedPnl)}
-              detail="Closed-result math from completed sells."
-              tone={toneByValue(portfolio.totalRealizedPnl)}
             />
           </section>
 
@@ -1151,178 +892,110 @@ export default function InvestmentsPage() {
             <div className="investLeftCol">
               <GlassPane size="card">
                 <PaneHeader
-                  title="Trade Flow"
-                  subcopy="Capital flow across your recent buy and sell history."
-                  right={
-                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                      <MiniPill>{flowPoints.length} points</MiniPill>
-                    </div>
-                  }
+                  title="Market board"
+                  subcopy="Fast index read without leaving the portfolio screen."
+                  right={<MiniPill>Live quote strip</MiniPill>}
                 />
 
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
-                    gap: 8,
-                    marginBottom: 12,
-                  }}
-                >
-                  <SummaryMini title="Open Positions" value={String(openPositions.length)} />
-                  <SummaryMini title="Favorites" value={String(favorites.length)} />
-                  <SummaryMini title="Alerts" value={String(alerts.length)} tone={alerts.length ? "amber" : "green"} />
-                  <SummaryMini title="Trades" value={String(txns.length)} />
-                </div>
-
-                <div
-                  style={{
-                    position: "relative",
-                    minHeight: "clamp(220px, 28vw, 320px)",
-                  }}
-                >
-                  <svg
-                    viewBox={`0 0 ${chartWidth} ${chartHeight}`}
-                    style={{ width: "100%", display: "block" }}
-                    aria-hidden="true"
-                  >
-                    <defs>
-                      <linearGradient id="invest-flow-area" x1="0" x2="0" y1="0" y2="1">
-                        <stop offset="0%" stopColor="rgba(136,170,255,0.10)" />
-                        <stop offset="55%" stopColor="rgba(117,122,255,0.03)" />
-                        <stop offset="100%" stopColor="rgba(255,255,255,0)" />
-                      </linearGradient>
-
-                      <linearGradient id="invest-flow-line" x1="0" x2="1" y1="0" y2="0">
-                        <stop offset="0%" stopColor="rgba(196,220,255,0.9)" />
-                        <stop offset="60%" stopColor="rgba(181,198,255,0.92)" />
-                        <stop offset="100%" stopColor="rgba(196,177,255,0.92)" />
-                      </linearGradient>
-
-                      <filter id="invest-flow-glow">
-                        <feGaussianBlur stdDeviation="3.25" result="blur" />
-                        <feMerge>
-                          <feMergeNode in="blur" />
-                          <feMergeNode in="SourceGraphic" />
-                        </feMerge>
-                      </filter>
-                    </defs>
-
-                    <path
-                      d={`${path} L ${chartWidth - chartPadX} ${chartHeight - chartPadY} L ${chartPadX} ${
-                        chartHeight - chartPadY
-                      } Z`}
-                      fill="url(#invest-flow-area)"
-                    />
-
-                    <path
-                      d={path}
-                      fill="none"
-                      stroke="url(#invest-flow-line)"
-                      strokeWidth="3"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      filter="url(#invest-flow-glow)"
-                    />
-
-                    {coords.map((point, idx) => (
-                      <g key={`${point.label}-${idx}`}>
-                        <circle
-                          cx={point.x}
-                          cy={point.y}
-                          r="5.4"
-                          fill="rgba(8,10,14,0.9)"
-                          stroke="rgba(245,248,255,0.92)"
-                          strokeWidth="2"
-                        />
-                        <circle cx={point.x} cy={point.y} r="1.8" fill="rgba(255,255,255,0.98)" />
-                      </g>
-                    ))}
-
-                    {coords.map((point, idx) => (
-                      <text
-                        key={`label-${idx}`}
-                        x={point.x}
-                        y={chartHeight - 10}
-                        fill="rgba(255,255,255,0.42)"
-                        fontSize="11"
-                        fontWeight="700"
-                        textAnchor="middle"
-                      >
-                        {point.label}
-                      </text>
-                    ))}
-                  </svg>
-
-                  <div
-                    style={{
-                      position: "absolute",
-                      right: 14,
-                      top: 20,
-                    }}
-                  >
-                    <MiniPill tone={toneByValue(flowPoints[flowPoints.length - 1]?.value || 0)}>
-                      {money(flowPoints[flowPoints.length - 1]?.value || 0)}
-                    </MiniPill>
-                  </div>
+                <div className="marketBoardGrid">
+                  {BOARD_SYMBOLS.map((item) => {
+                    const quote = prices[item.symbol] || {};
+                    const tone = toneByValue(quote?.changesPercentage ?? quote?.change);
+                    return (
+                      <MarketBoardCard
+                        key={item.symbol}
+                        symbol={item.symbol}
+                        label={item.label}
+                        quote={quote}
+                        tone={tone}
+                      />
+                    );
+                  })}
                 </div>
               </GlassPane>
 
               <GlassPane size="card">
                 <PaneHeader
-                  title="Top Holdings"
-                  subcopy="Largest live positions sitting on the board right now."
+                  title="Open positions"
+                  subcopy="Your biggest live holdings with serious brokerage-style presentation."
                   right={<MiniPill>{openPositions.length} active</MiniPill>}
                 />
 
                 <div style={{ display: "grid", gap: 8 }}>
                   {openPositions.length === 0 ? (
                     <EmptyState
-                      title="No open positions"
-                      detail="Add assets and log buys to start seeing live holdings here."
+                      title="No open positions yet"
+                      detail="Add a symbol and log your first fill so the desk has something real to track."
                       linkHref="/investments/discover"
-                      linkLabel="Open Discover"
+                      linkLabel="Open research desk"
                     />
                   ) : (
-                    portfolio.holdings
-                      .filter((h) => toNum(h.shares) > 0)
-                      .slice(0, 6)
+                    openPositions
+                      .slice(0, 8)
                       .map((item) => <HoldingRow key={item.id} item={item} />)
                   )}
                 </div>
+              </GlassPane>
+
+              <GlassPane size="card">
+                <PaneHeader
+                  title="Research headlines"
+                  subcopy="Live stock-news feed for the names sitting closest to your book."
+                  right={<MiniPill>{news.length} stories</MiniPill>}
+                />
+
+                <div style={{ display: "grid", gap: 8 }}>
+                  {news.length === 0 ? (
+                    <EmptyState
+                      title="No headlines returned"
+                      detail={newsError || "Research headlines temporarily unavailable."}
+                    />
+                  ) : (
+                    news.map((item, index) => (
+                      <HeadlineRow key={`${item.url}-${index}`} item={item} />
+                    ))
+                  )}
+                </div>
+
+                {newsError && news.length > 0 ? (
+                  <div style={{ marginTop: 10, ...mutedStyle() }}>{newsError}</div>
+                ) : null}
               </GlassPane>
             </div>
 
             <div className="investRightCol">
               <GlassPane tone={alerts.length ? "amber" : "green"} size="card">
                 <PaneHeader
-                  title="Portfolio Signals"
-                  subcopy="Fast pressure checks without turning this into an alert board."
-                  right={<MiniPill tone={alerts.length ? "amber" : "green"}>{alerts.length} signals</MiniPill>}
+                  title="Signals"
+                  subcopy="Fast pressure checks, not a loud toy dashboard."
+                  right={
+                    <MiniPill tone={alerts.length ? "amber" : "green"}>
+                      {alerts.length ? `${alerts.length} live` : "Clean"}
+                    </MiniPill>
+                  }
                 />
 
                 <div style={{ display: "grid", gap: 8 }}>
                   {alerts.length === 0 ? (
-                    <GlassPane tone="green" size="compact">
-                      <div style={{ fontSize: 15, fontWeight: 800, color: "#fff" }}>
-                        Portfolio looks clean
-                      </div>
-                      <div style={{ marginTop: 5, ...mutedStyle() }}>
-                        All open positions are live priced and none are sitting negative right now.
-                      </div>
-                    </GlassPane>
+                    <SignalRow
+                      tone="green"
+                      title="Portfolio looks stable"
+                      detail="All open positions are live priced and none are red right now."
+                      value="Clear"
+                    />
                   ) : (
                     alerts.slice(0, 4).map((item) => (
                       <SignalRow
                         key={item.id}
+                        tone={!item.hasLivePrice ? "amber" : "red"}
                         title={item.symbol}
                         detail={
                           !item.hasLivePrice
                             ? "No live quote returned for this holding."
-                            : `${signedMoney(item.pnl)} unrealized on ${item.shares.toLocaleString(undefined, {
+                            : `${signedMoney(item.pnl)} unrealized • ${item.shares.toLocaleString(undefined, {
                                 maximumFractionDigits: 4,
-                              })} shares.`
+                              })} shares`
                         }
-                        tone={!item.hasLivePrice ? "amber" : "red"}
                         value={!item.hasLivePrice ? "Pending" : signedMoney(item.pnl)}
                       />
                     ))
@@ -1332,26 +1005,33 @@ export default function InvestmentsPage() {
 
               <GlassPane size="card">
                 <PaneHeader
-                  title="Quick Trade"
-                  subcopy="Add a symbol or log a buy/sell without leaving the page."
+                  title="Order ticket"
+                  subcopy="Professional ticket layout now. It logs to your portfolio ledger until you swap in a live broker route."
+                  right={<MiniPill tone="amber">Portfolio route</MiniPill>}
                 />
 
                 <div style={{ display: "grid", gap: 10 }}>
-                  <Field label="Add Symbol">
-                    <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto", gap: 8 }}>
+                  <Field label="Quick add symbol">
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "minmax(0, 1fr) auto",
+                        gap: 8,
+                      }}
+                    >
                       <input
                         value={symbol}
                         onChange={(e) => setSymbol(e.target.value)}
                         placeholder="AAPL"
                         style={inputStyle()}
                       />
-                      <button type="button" onClick={addAsset} style={buttonStyle(false)}>
+                      <button type="button" onClick={addAsset} style={buttonStyle()}>
                         <Plus size={14} /> Add
                       </button>
                     </div>
                   </Field>
 
-                  <Field label="Trade Asset">
+                  <Field label="Asset">
                     <select
                       value={tradeAssetId}
                       onChange={(e) => setTradeAssetId(e.target.value)}
@@ -1366,8 +1046,14 @@ export default function InvestmentsPage() {
                     </select>
                   </Field>
 
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8 }}>
-                    <Field label="Type">
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                      gap: 8,
+                    }}
+                  >
+                    <Field label="Side">
                       <select
                         value={tradeType}
                         onChange={(e) => setTradeType(e.target.value)}
@@ -1378,7 +1064,7 @@ export default function InvestmentsPage() {
                       </select>
                     </Field>
 
-                    <Field label="Date">
+                    <Field label="Trade date">
                       <input
                         type="date"
                         value={tradeDate}
@@ -1388,14 +1074,20 @@ export default function InvestmentsPage() {
                     </Field>
                   </div>
 
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8 }}>
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                      gap: 8,
+                    }}
+                  >
                     <Field label="Quantity">
                       <input
                         type="number"
                         step="0.0001"
                         value={tradeQty}
                         onChange={(e) => setTradeQty(e.target.value)}
-                        placeholder="0.00"
+                        placeholder="0.0000"
                         style={inputStyle()}
                       />
                     </Field>
@@ -1412,27 +1104,62 @@ export default function InvestmentsPage() {
                     </Field>
                   </div>
 
-                  <button type="button" onClick={logTrade} style={buttonStyle(true)}>
-                    Save Trade <ArrowRight size={14} />
+                  <button
+                    type="button"
+                    onClick={logTrade}
+                    style={buttonStyle({ primary: true })}
+                  >
+                    Route fill to ledger <ArrowRight size={14} />
                   </button>
                 </div>
               </GlassPane>
 
               <GlassPane size="card">
                 <PaneHeader
-                  title="Recent Trades"
-                  subcopy="Latest transaction flow hitting the ledger."
+                  title="Watchlist"
+                  subcopy="Saved names with fast market access."
+                  right={<MiniPill>{favorites.length} saved</MiniPill>}
+                />
+
+                <div style={{ display: "grid", gap: 8 }}>
+                  {favorites.length === 0 ? (
+                    <EmptyState
+                      title="No saved names"
+                      detail="Use the research desk to start building a serious watchlist."
+                      linkHref="/investments/discover"
+                      linkLabel="Go discover"
+                    />
+                  ) : (
+                    favorites
+                      .slice(0, 6)
+                      .map((item) => (
+                        <FavoriteRow
+                          key={item.id}
+                          item={item}
+                          quote={prices[String(item.symbol).toUpperCase()] || null}
+                        />
+                      ))
+                  )}
+                </div>
+              </GlassPane>
+
+              <GlassPane size="card">
+                <PaneHeader
+                  title="Recent fills"
+                  subcopy="Latest activity landing in your portfolio ledger."
                   right={<MiniPill>{recentTxns.length} shown</MiniPill>}
                 />
 
                 <div style={{ display: "grid", gap: 8 }}>
                   {recentTxns.length === 0 ? (
                     <EmptyState
-                      title="No trades yet"
-                      detail="Log your first buy or sell and this panel will light up."
+                      title="No fills yet"
+                      detail="Your fills will show here once you start logging trades."
                     />
                   ) : (
-                    recentTxns.map((txn) => <TradeRow key={txn.id} txn={txn} assetMap={assetMap} />)
+                    recentTxns.map((txn) => (
+                      <TradeRow key={txn.id} txn={txn} assetMap={assetMap} />
+                    ))
                   )}
                 </div>
               </GlassPane>
@@ -1450,7 +1177,7 @@ export default function InvestmentsPage() {
         }
 
         .investInner {
-          width: min(100%, 1320px);
+          width: min(100%, 1380px);
           margin: 0 auto;
           display: grid;
           gap: 14px;
@@ -1471,7 +1198,7 @@ export default function InvestmentsPage() {
 
         .investMain {
           display: grid;
-          grid-template-columns: minmax(0, 1.38fr) minmax(360px, 0.88fr);
+          grid-template-columns: minmax(0, 1.42fr) minmax(360px, 0.88fr);
           gap: 14px;
           align-items: start;
         }
@@ -1483,8 +1210,15 @@ export default function InvestmentsPage() {
           min-width: 0;
         }
 
+        .marketBoardGrid {
+          display: grid;
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+          gap: 10px;
+        }
+
         @media (max-width: 1260px) {
-          .investMetrics {
+          .investMetrics,
+          .marketBoardGrid {
             grid-template-columns: repeat(2, minmax(0, 1fr));
           }
 
@@ -1502,13 +1236,10 @@ export default function InvestmentsPage() {
             gap: 12px;
           }
 
-          .investHeroGrid {
+          .investHeroGrid,
+          .investMetrics,
+          .marketBoardGrid {
             grid-template-columns: 1fr;
-          }
-
-          .investMetrics {
-            grid-template-columns: 1fr;
-            gap: 10px;
           }
         }
       `}</style>
@@ -1516,34 +1247,404 @@ export default function InvestmentsPage() {
   );
 }
 
-function SummaryMini({ title, value, tone = "neutral" }) {
+function MiniPill({ children, tone = "neutral" }) {
   const meta = toneMeta(tone);
 
   return (
     <div
       style={{
-        minHeight: 78,
-        borderRadius: 16,
+        minHeight: 32,
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 8,
+        padding: "0 11px",
+        borderRadius: 999,
         border: `1px solid ${meta.border}`,
         background:
-          "linear-gradient(180deg, rgba(255,255,255,0.032), rgba(255,255,255,0.01))",
-        padding: 13,
+          "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01))",
+        boxShadow: `inset 0 1px 0 rgba(255,255,255,0.035), 0 0 10px ${meta.glow}`,
+        color: tone === "neutral" ? "rgba(255,255,255,0.88)" : meta.text,
+        fontSize: 11,
+        fontWeight: 800,
+        whiteSpace: "nowrap",
       }}
     >
-      <div style={overlineStyle()}>{title}</div>
+      {children}
+    </div>
+  );
+}
+
+function ActionLink({ href, children }) {
+  return (
+    <Link
+      href={href}
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 8,
+        minHeight: 40,
+        padding: "10px 13px",
+        borderRadius: 14,
+        border: "1px solid rgba(214,226,255,0.10)",
+        background:
+          "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.012))",
+        color: "#f7fbff",
+        textDecoration: "none",
+        fontWeight: 800,
+        fontSize: 13,
+        boxShadow:
+          "inset 0 1px 0 rgba(255,255,255,0.04), 0 10px 18px rgba(0,0,0,0.12)",
+      }}
+    >
+      {children}
+    </Link>
+  );
+}
+
+function PaneHeader({ title, subcopy, right }) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "flex-start",
+        gap: 12,
+        flexWrap: "wrap",
+        marginBottom: 12,
+      }}
+    >
+      <div style={{ minWidth: 0 }}>
+        <div
+          style={{
+            fontSize: 18,
+            lineHeight: 1.1,
+            fontWeight: 800,
+            letterSpacing: "-0.03em",
+            color: "#fff",
+          }}
+        >
+          {title}
+        </div>
+        {subcopy ? <div style={{ ...mutedStyle(), marginTop: 4 }}>{subcopy}</div> : null}
+      </div>
+      {right || null}
+    </div>
+  );
+}
+
+function MetricCard({ icon: Icon, label, value, detail, tone = "neutral" }) {
+  const meta = toneMeta(tone);
+
+  return (
+    <GlassPane tone={tone} size="card" style={{ height: "100%" }}>
       <div
         style={{
-          marginTop: 7,
-          fontSize: 19,
-          fontWeight: 850,
-          letterSpacing: "-0.04em",
-          color: tone === "neutral" ? "#fff" : meta.text,
-          overflowWrap: "anywhere",
+          minHeight: 138,
+          display: "grid",
+          gridTemplateRows: "auto auto 1fr",
+          gap: 8,
         }}
       >
-        {value}
+        <div
+          style={{
+            width: 40,
+            height: 40,
+            borderRadius: 14,
+            display: "grid",
+            placeItems: "center",
+            border: `1px solid ${meta.border}`,
+            background: meta.iconBg,
+            color: tone === "neutral" ? "#fff" : meta.text,
+            boxShadow: `0 0 12px ${meta.glow}`,
+          }}
+        >
+          <Icon size={17} />
+        </div>
+
+        <div>
+          <div style={overlineStyle()}>{label}</div>
+          <div
+            style={{
+              marginTop: 8,
+              fontSize: "clamp(22px, 2.8vw, 34px)",
+              lineHeight: 1,
+              fontWeight: 850,
+              letterSpacing: "-0.05em",
+              color: tone === "neutral" ? "#fff" : meta.text,
+              overflowWrap: "anywhere",
+            }}
+          >
+            {value}
+          </div>
+        </div>
+
+        <div style={mutedStyle()}>{detail}</div>
       </div>
-    </div>
+    </GlassPane>
+  );
+}
+
+function MarketBoardCard({ symbol, label, quote, tone }) {
+  const meta = toneMeta(tone);
+  const price = Number.isFinite(Number(quote?.price)) ? Number(quote.price) : null;
+  const change = Number.isFinite(Number(quote?.change)) ? Number(quote.change) : null;
+  const changePct = Number.isFinite(Number(quote?.changesPercentage))
+    ? Number(quote.changesPercentage)
+    : null;
+
+  return (
+    <Link
+      href={`/market/${encodeURIComponent(symbol)}`}
+      style={{
+        textDecoration: "none",
+      }}
+    >
+      <div
+        style={{
+          minHeight: 122,
+          padding: 14,
+          borderRadius: 18,
+          border: `1px solid ${meta.border}`,
+          background:
+            "linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01))",
+          boxShadow: `inset 0 1px 0 rgba(255,255,255,0.035), 0 0 12px ${meta.glow}`,
+          display: "grid",
+          gap: 8,
+        }}
+      >
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+          <div style={{ minWidth: 0 }}>
+            <div style={overlineStyle()}>{label}</div>
+            <div
+              style={{
+                marginTop: 6,
+                fontSize: 18,
+                fontWeight: 850,
+                letterSpacing: "-0.03em",
+                color: "#fff",
+              }}
+            >
+              {symbol}
+            </div>
+          </div>
+
+          <div
+            style={{
+              width: 30,
+              height: 30,
+              borderRadius: 10,
+              display: "grid",
+              placeItems: "center",
+              border: `1px solid ${meta.border}`,
+              background: meta.iconBg,
+              color: tone === "neutral" ? "#fff" : meta.text,
+            }}
+          >
+            {tone === "red" ? <TrendingDown size={14} /> : <TrendingUp size={14} />}
+          </div>
+        </div>
+
+        <div
+          style={{
+            fontSize: 22,
+            lineHeight: 1,
+            fontWeight: 900,
+            letterSpacing: "-0.05em",
+            color: tone === "neutral" ? "#fff" : meta.text,
+          }}
+        >
+          {price != null ? money(price) : "—"}
+        </div>
+
+        <div
+          style={{
+            fontSize: 12,
+            fontWeight: 800,
+            color: tone === "neutral" ? "rgba(255,255,255,0.62)" : meta.text,
+          }}
+        >
+          {change != null ? signedMoney(change) : "Waiting"}{" "}
+          {changePct != null ? `• ${pct(changePct)}` : ""}
+        </div>
+      </div>
+    </Link>
+  );
+}
+
+function HoldingRow({ item }) {
+  const tone = item.hasLivePrice ? toneByValue(item.pnl) : "amber";
+  const meta = toneMeta(tone);
+
+  return (
+    <Link
+      href={`/investments/${item.id}`}
+      style={{
+        display: "grid",
+        gridTemplateColumns: "52px minmax(0, 1fr) auto",
+        gap: 12,
+        alignItems: "center",
+        minHeight: 82,
+        padding: "12px 14px",
+        borderRadius: 18,
+        textDecoration: "none",
+        border: `1px solid ${meta.border}`,
+        background:
+          "linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01))",
+        boxShadow: `inset 0 1px 0 rgba(255,255,255,0.035), 0 0 12px ${meta.glow}`,
+      }}
+    >
+      <div
+        style={{
+          width: 52,
+          height: 52,
+          borderRadius: 15,
+          display: "grid",
+          placeItems: "center",
+          border: `1px solid ${meta.border}`,
+          background:
+            "linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.012))",
+          color: tone === "neutral" ? "#fff" : meta.text,
+          fontWeight: 900,
+          fontSize: 13,
+          letterSpacing: ".06em",
+        }}
+      >
+        {initials(item.symbol)}
+      </div>
+
+      <div style={{ minWidth: 0 }}>
+        <div
+          style={{
+            fontSize: 15,
+            fontWeight: 850,
+            color: "#fff",
+            lineHeight: 1.2,
+            overflowWrap: "anywhere",
+          }}
+        >
+          {item.symbol}
+        </div>
+
+        <div style={{ marginTop: 4, ...mutedStyle() }}>
+          {item.shares.toLocaleString(undefined, { maximumFractionDigits: 4 })} shares •{" "}
+          {item.hasLivePrice ? money(item.livePrice) : "No live price"}
+        </div>
+
+        <div style={{ marginTop: 4, fontSize: 12, color: "rgba(255,255,255,0.54)" }}>
+          Basis {money(item.remainingBasis)} • Day {signedMoney(item.positionDayMove)}
+        </div>
+      </div>
+
+      <div style={{ textAlign: "right" }}>
+        <div
+          style={{
+            fontSize: 15,
+            fontWeight: 850,
+            color: "#fff",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {money(item.value)}
+        </div>
+
+        <div
+          style={{
+            marginTop: 3,
+            fontSize: 12,
+            fontWeight: 800,
+            color: item.hasLivePrice ? meta.text : "rgba(255,255,255,0.58)",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {item.hasLivePrice ? `${signedMoney(item.pnl)} • ${pct(item.pnlPct)}` : "Pending"}
+        </div>
+      </div>
+    </Link>
+  );
+}
+
+function HeadlineRow({ item }) {
+  const symbol =
+    Array.isArray(item.symbols) && item.symbols.length ? item.symbols[0] : item.symbol || "";
+
+  return (
+    <a
+      href={item.url || "#"}
+      target="_blank"
+      rel="noreferrer"
+      style={{
+        textDecoration: "none",
+      }}
+    >
+      <div
+        style={{
+          minHeight: 92,
+          display: "grid",
+          gridTemplateColumns: "40px minmax(0, 1fr) auto",
+          gap: 12,
+          alignItems: "start",
+          padding: "12px 13px",
+          borderRadius: 18,
+          border: "1px solid rgba(214,226,255,0.10)",
+          background:
+            "linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01))",
+        }}
+      >
+        <div
+          style={{
+            width: 40,
+            height: 40,
+            borderRadius: 12,
+            display: "grid",
+            placeItems: "center",
+            border: "1px solid rgba(214,226,255,0.10)",
+            background: "rgba(10,14,21,0.46)",
+            color: "#f7fbff",
+          }}
+        >
+          <Newspaper size={16} />
+        </div>
+
+        <div style={{ minWidth: 0 }}>
+          <div
+            style={{
+              fontSize: 14,
+              fontWeight: 800,
+              color: "#fff",
+              lineHeight: 1.35,
+              overflowWrap: "anywhere",
+            }}
+          >
+            {item.title || "Untitled headline"}
+          </div>
+
+          <div style={{ marginTop: 5, ...mutedStyle() }}>
+            {item.text || item.site || "Market story"}
+          </div>
+
+          <div
+            style={{
+              marginTop: 6,
+              fontSize: 11,
+              fontWeight: 800,
+              color: "rgba(255,255,255,0.44)",
+              textTransform: "uppercase",
+              letterSpacing: ".14em",
+            }}
+          >
+            {(item.site || "Source") + " • " + fullDateTime(item.publishedDate)}
+          </div>
+        </div>
+
+        <div style={{ display: "grid", gap: 6, justifyItems: "end" }}>
+          {symbol ? <MiniPill>{String(symbol).toUpperCase()}</MiniPill> : null}
+          <div style={{ color: "rgba(255,255,255,0.52)" }}>
+            <ExternalLink size={14} />
+          </div>
+        </div>
+      </div>
+    </a>
   );
 }
 
@@ -1553,7 +1654,7 @@ function SignalRow({ title, detail, tone = "neutral", value }) {
   return (
     <div
       style={{
-        minHeight: 58,
+        minHeight: 62,
         display: "grid",
         gridTemplateColumns: "minmax(0, 1fr) auto",
         gap: 10,
@@ -1583,7 +1684,6 @@ function SignalRow({ title, detail, tone = "neutral", value }) {
             fontSize: 12,
             color: "rgba(255,255,255,0.58)",
             lineHeight: 1.35,
-            overflowWrap: "anywhere",
           }}
         >
           {detail}
@@ -1604,6 +1704,133 @@ function SignalRow({ title, detail, tone = "neutral", value }) {
   );
 }
 
+function FavoriteRow({ item, quote }) {
+  const sym = String(item.symbol || "").toUpperCase();
+  const tone = toneByValue(quote?.changesPercentage ?? quote?.change ?? 0);
+  const meta = toneMeta(tone);
+
+  return (
+    <Link
+      href={`/market/${encodeURIComponent(sym)}`}
+      style={{
+        textDecoration: "none",
+      }}
+    >
+      <div
+        style={{
+          minHeight: 64,
+          display: "grid",
+          gridTemplateColumns: "38px minmax(0, 1fr) auto",
+          gap: 10,
+          alignItems: "center",
+          padding: "10px 12px",
+          borderRadius: 16,
+          border: `1px solid ${meta.border}`,
+          background:
+            "linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01))",
+        }}
+      >
+        <div
+          style={{
+            width: 38,
+            height: 38,
+            borderRadius: 12,
+            display: "grid",
+            placeItems: "center",
+            border: `1px solid ${meta.border}`,
+            background: meta.iconBg,
+            color: tone === "neutral" ? "#fff" : meta.text,
+          }}
+        >
+          <BookOpenText size={15} />
+        </div>
+
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: 13, fontWeight: 850, color: "#fff" }}>{sym}</div>
+          <div style={{ marginTop: 3, fontSize: 12, color: "rgba(255,255,255,0.58)" }}>
+            {item.name || item.asset_type || "Watchlist name"}
+          </div>
+        </div>
+
+        <div
+          style={{
+            textAlign: "right",
+            fontSize: 12,
+            fontWeight: 800,
+            color: tone === "neutral" ? "rgba(255,255,255,0.76)" : meta.text,
+            whiteSpace: "nowrap",
+          }}
+        >
+          {Number.isFinite(Number(quote?.price)) ? money(quote.price) : "—"}
+        </div>
+      </div>
+    </Link>
+  );
+}
+
+function TradeRow({ txn, assetMap }) {
+  const type = String(txn.txn_type || "").toUpperCase();
+  const tone = type === "SELL" ? "green" : "neutral";
+  const meta = toneMeta(tone);
+  const sym = assetMap.get(txn.asset_id)?.symbol || "—";
+
+  return (
+    <div
+      style={{
+        minHeight: 68,
+        display: "grid",
+        gridTemplateColumns: "42px minmax(0, 1fr) auto",
+        gap: 12,
+        alignItems: "center",
+        padding: "10px 12px",
+        borderRadius: 16,
+        border: `1px solid ${meta.border}`,
+        background:
+          "linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01))",
+      }}
+    >
+      <div
+        style={{
+          width: 42,
+          height: 42,
+          borderRadius: 13,
+          display: "grid",
+          placeItems: "center",
+          border: `1px solid ${meta.border}`,
+          background:
+            "linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.012))",
+          color: type === "SELL" ? "#8ef4bb" : "#f7fbff",
+          fontWeight: 900,
+          fontSize: 12,
+        }}
+      >
+        {type === "SELL" ? "S" : "B"}
+      </div>
+
+      <div style={{ minWidth: 0 }}>
+        <div style={{ fontSize: 14, fontWeight: 800, color: "#fff", lineHeight: 1.25 }}>
+          {sym} {type}
+        </div>
+        <div style={{ marginTop: 3, ...mutedStyle() }}>
+          {toNum(txn.qty).toLocaleString(undefined, { maximumFractionDigits: 4 })} @{" "}
+          {money(txn.price)} • {shortDate(txn.txn_date)}
+        </div>
+      </div>
+
+      <div
+        style={{
+          fontSize: 14,
+          fontWeight: 800,
+          color: type === "SELL" ? "#97efc7" : "#fff",
+          whiteSpace: "nowrap",
+        }}
+      >
+        {money(toNum(txn.qty) * toNum(txn.price))}
+      </div>
+    </div>
+  );
+}
+
 function Field({ label, children }) {
   return (
     <label style={{ display: "grid", gap: 6 }}>
@@ -1613,40 +1840,40 @@ function Field({ label, children }) {
   );
 }
 
-function inputStyle() {
-  return {
-    height: 46,
-    borderRadius: 14,
-    border: "1px solid rgba(214,226,255,0.10)",
-    background:
-      "linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.012)), rgba(8,12,20,0.76)",
-    color: "#f7fbff",
-    padding: "0 12px",
-    outline: "none",
-    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.035)",
-    width: "100%",
-  };
-}
+function EmptyState({ title, detail, linkHref, linkLabel }) {
+  return (
+    <div
+      style={{
+        minHeight: 150,
+        display: "grid",
+        placeItems: "center",
+      }}
+    >
+      <div style={{ width: "100%", maxWidth: 380 }}>
+        <div style={{ fontSize: 17, fontWeight: 800, color: "#fff", textAlign: "center" }}>
+          {title}
+        </div>
 
-function buttonStyle(primary = false) {
-  return {
-    minHeight: 46,
-    padding: "0 14px",
-    borderRadius: 14,
-    border: primary
-      ? "1px solid rgba(255,255,255,0.18)"
-      : "1px solid rgba(214,226,255,0.10)",
-    background: primary
-      ? "linear-gradient(180deg, rgba(255,255,255,0.95), rgba(233,239,248,0.88))"
-      : "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.012))",
-    color: primary ? "#0b1220" : "#f7fbff",
-    display: "inline-flex",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    fontWeight: 800,
-    fontSize: 13,
-    cursor: "pointer",
-    boxShadow: primary ? "0 10px 22px rgba(255,255,255,0.08)" : undefined,
-  };
+        <div
+          style={{
+            marginTop: 8,
+            fontSize: 13,
+            lineHeight: 1.55,
+            color: "rgba(255,255,255,0.64)",
+            textAlign: "center",
+          }}
+        >
+          {detail}
+        </div>
+
+        {linkHref && linkLabel ? (
+          <div style={{ marginTop: 14, display: "flex", justifyContent: "center" }}>
+            <ActionLink href={linkHref}>
+              {linkLabel} <ArrowRight size={14} />
+            </ActionLink>
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
 }

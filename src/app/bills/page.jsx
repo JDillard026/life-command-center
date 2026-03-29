@@ -4,14 +4,15 @@ export const dynamic = "force-dynamic";
 
 import { useEffect, useMemo, useState } from "react";
 import {
-  AlertTriangle,
+  ArrowUpRight,
   BadgeDollarSign,
-  CheckCircle2,
+  CalendarClock,
+  Copy,
   CreditCard,
-  PauseCircle,
-  PiggyBank,
-  PlayCircle,
+  Landmark,
   Plus,
+  Receipt,
+  Save,
   Search,
   Trash2,
 } from "lucide-react";
@@ -27,44 +28,59 @@ const FREQUENCY_OPTIONS = [
   { value: "one_time", label: "One Time" },
 ];
 
-const BILL_TYPE_OPTIONS = [
-  { value: "noncontrollable", label: "Fixed Bill" },
-  { value: "controllable", label: "Debt / Controllable" },
-];
-
-function makeId() {
-  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-    return crypto.randomUUID();
-  }
-  return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+function uid() {
+  return (
+    globalThis.crypto?.randomUUID?.() ??
+    `${Date.now()}-${Math.random().toString(16).slice(2)}`
+  );
 }
 
-function pad2(n) {
-  return String(n).padStart(2, "0");
+function safeNum(n, fallback = 0) {
+  const x = Number(n);
+  return Number.isFinite(x) ? x : fallback;
 }
 
-function todayISO() {
-  const d = new Date();
-  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+function round2(n) {
+  return Math.round((safeNum(n, 0) + Number.EPSILON) * 100) / 100;
 }
 
-function toDate(iso) {
-  if (!iso) return null;
-  const d = new Date(`${iso}T00:00:00`);
-  return Number.isFinite(d.getTime()) ? d : null;
+function parseMoneyInput(v) {
+  const cleaned = String(v ?? "").replace(/[^0-9.-]/g, "");
+  const num = Number(cleaned);
+  return Number.isFinite(num) ? num : NaN;
 }
 
-function shortDate(iso) {
-  const d = toDate(iso);
-  if (!d) return "—";
-  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+function isoDate(d = new Date()) {
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
 }
 
-function formatStamp(value) {
-  if (!value) return "—";
-  const d = new Date(value);
+function money(n) {
+  const num = Number(n);
+  if (!Number.isFinite(num)) return "$0";
+  return num.toLocaleString(undefined, {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
+  });
+}
+
+function moneyTight(n) {
+  const num = Number(n);
+  if (!Number.isFinite(num)) return "$0.00";
+  return num.toLocaleString(undefined, {
+    style: "currency",
+    currency: "USD",
+  });
+}
+
+function fmtWhen(ts) {
+  if (!ts) return "—";
+  const d = new Date(ts);
   if (!Number.isFinite(d.getTime())) return "—";
-  return d.toLocaleDateString(undefined, {
+  return d.toLocaleString(undefined, {
     month: "short",
     day: "numeric",
     year: "numeric",
@@ -73,19 +89,16 @@ function formatStamp(value) {
   });
 }
 
-function formatAgo(value) {
-  if (!value) return "—";
-  const ms = Date.now() - new Date(value).getTime();
-  const minutes = Math.round(ms / 60000);
-
-  if (!Number.isFinite(minutes)) return "—";
-  if (minutes < 1) return "just now";
-  if (minutes < 60) return `${minutes}m ago`;
-
-  const hours = Math.round(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-
-  const days = Math.round(hours / 24);
+function fmtAgo(ts) {
+  if (!ts) return "—";
+  const ms = Date.now() - new Date(ts).getTime();
+  const mins = Math.round(ms / 60000);
+  if (!Number.isFinite(mins)) return "—";
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.round(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.round(hrs / 24);
   return `${days}d ago`;
 }
 
@@ -96,166 +109,133 @@ function currentMonthLabel() {
   }).format(new Date());
 }
 
-function money(value) {
-  const n = Number(value);
-  if (!Number.isFinite(n)) return "$0";
-  return n.toLocaleString(undefined, {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 0,
+function shortDate(dateValue) {
+  if (!dateValue) return "—";
+  const d = new Date(`${dateValue}T12:00:00`);
+  if (!Number.isFinite(d.getTime())) return "—";
+  return d.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
   });
 }
 
-function moneyTight(value) {
-  const n = Number(value);
-  if (!Number.isFinite(n)) return "$0.00";
-  return n.toLocaleString(undefined, {
-    style: "currency",
-    currency: "USD",
+function monthKeyOf(dateValue) {
+  return String(dateValue || "").slice(0, 7);
+}
+
+function prettyMonth(monthKey) {
+  if (!monthKey) return "—";
+  const [y, m] = String(monthKey).split("-").map(Number);
+  if (!Number.isFinite(y) || !Number.isFinite(m)) return monthKey;
+  return new Date(y, m - 1, 1).toLocaleDateString(undefined, {
+    month: "long",
+    year: "numeric",
   });
 }
 
-function num(value, fallback = 0) {
-  const cleaned = String(value ?? "").replace(/[^0-9.-]/g, "");
-  const n = Number(cleaned);
-  return Number.isFinite(n) ? n : fallback;
+function addDays(iso, daysToAdd) {
+  if (!iso) return "";
+  const [y, m, d] = String(iso).split("-").map(Number);
+  if (![y, m, d].every(Number.isFinite)) return "";
+  const dt = new Date(y, m - 1, d);
+  dt.setDate(dt.getDate() + Number(daysToAdd || 0));
+  return isoDate(dt);
 }
 
-function clamp(n, min, max) {
-  return Math.max(min, Math.min(max, n));
+function addMonths(iso, monthsToAdd) {
+  if (!iso) return "";
+  const [y, m, d] = String(iso).split("-").map(Number);
+  if (![y, m, d].every(Number.isFinite)) return "";
+  const dt = new Date(y, m - 1, d);
+  dt.setMonth(dt.getMonth() + Number(monthsToAdd || 0));
+  return isoDate(dt);
 }
 
-function frequencyMultiplier(freq) {
-  if (freq === "weekly") return 4.333;
-  if (freq === "biweekly") return 2.167;
-  if (freq === "monthly") return 1;
-  if (freq === "quarterly") return 1 / 3;
-  if (freq === "yearly") return 1 / 12;
-  return 0;
-}
-
-function paymentAmount(bill) {
-  if (!bill) return 0;
-  if (bill.type === "controllable") {
-    const minPay = Number(bill.minPay) || 0;
-    const extraPay = Number(bill.extraPay) || 0;
-    const fallback = Number(bill.amount) || 0;
-    return minPay + extraPay > 0 ? minPay + extraPay : fallback;
+function nextDueDateFromFrequency(currentISO, frequency) {
+  const base = currentISO || isoDate();
+  switch (String(frequency || "").toLowerCase()) {
+    case "weekly":
+      return addDays(base, 7);
+    case "biweekly":
+      return addDays(base, 14);
+    case "quarterly":
+      return addMonths(base, 3);
+    case "yearly":
+      return addMonths(base, 12);
+    case "one_time":
+      return base;
+    case "monthly":
+    default:
+      return addMonths(base, 1);
   }
-  return Number(bill.amount) || 0;
-}
-
-function monthlyEquivalent(bill) {
-  if (!bill?.active) return 0;
-  if (bill.type === "controllable") return paymentAmount(bill);
-  return (Number(bill.amount) || 0) * frequencyMultiplier(bill.frequency);
 }
 
 function daysUntil(iso) {
-  const due = toDate(iso);
-  const today = toDate(todayISO());
-  if (!due || !today) return null;
-  return Math.ceil((due.getTime() - today.getTime()) / 86400000);
+  if (!iso) return null;
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const due = new Date(`${iso}T00:00:00`).getTime();
+  if (!Number.isFinite(due)) return null;
+  return Math.round((due - today) / 86400000);
 }
 
-function dueTone(days) {
-  if (days == null) return "neutral";
-  if (days < 0) return "red";
-  if (days <= 3) return "red";
-  if (days <= 7) return "amber";
-  return "green";
+function freqToMonthlyMult(freq) {
+  switch (String(freq || "").toLowerCase()) {
+    case "weekly":
+      return 4.333;
+    case "biweekly":
+      return 2.167;
+    case "quarterly":
+      return 1 / 3;
+    case "yearly":
+      return 1 / 12;
+    case "one_time":
+      return 0;
+    case "monthly":
+    default:
+      return 1;
+  }
 }
 
-function dueLabel(days) {
-  if (days == null) return "No due date";
-  if (days < 0) return `${Math.abs(days)} day${Math.abs(days) === 1 ? "" : "s"} late`;
-  if (days === 0) return "Due today";
-  if (days === 1) return "Due tomorrow";
-  return `${days} days left`;
+function monthlyWeight(amount, frequency) {
+  return safeNum(amount, 0) * freqToMonthlyMult(frequency);
 }
 
-function payoffSimulation(balance, aprPct, monthlyPay) {
-  let current = Number(balance) || 0;
-  const apr = Number(aprPct) || 0;
-  const pay = Number(monthlyPay) || 0;
+function accountTypeLabel(t) {
+  const v = String(t || "other").toLowerCase();
+  if (v === "checking") return "Checking";
+  if (v === "savings") return "Savings";
+  if (v === "cash") return "Cash";
+  if (v === "credit") return "Credit Card";
+  if (v === "investment") return "Investment";
+  return "Other";
+}
 
-  if (current <= 0) {
+function dueMeta(days) {
+  if (!Number.isFinite(days)) {
+    return { label: "No due date", tone: "neutral", percent: 0 };
+  }
+  if (days < 0) {
     return {
-      months: 0,
-      totalInterest: 0,
-      payoffDate: todayISO(),
-      impossible: false,
+      label: `${Math.abs(days)} day${Math.abs(days) === 1 ? "" : "s"} late`,
+      tone: "red",
+      percent: 100,
     };
   }
-
-  if (pay <= 0) {
-    return {
-      months: null,
-      totalInterest: null,
-      payoffDate: null,
-      impossible: true,
-    };
+  if (days === 0) {
+    return { label: "Due today", tone: "red", percent: 100 };
   }
-
-  const monthlyRate = apr / 100 / 12;
-  let months = 0;
-  let totalInterest = 0;
-
-  while (current > 0.01 && months < 600) {
-    const interest = current * monthlyRate;
-    totalInterest += interest;
-    current = current + interest - pay;
-    months += 1;
-
-    if (monthlyRate > 0 && pay <= interest) {
-      return {
-        months: null,
-        totalInterest: null,
-        payoffDate: null,
-        impossible: true,
-      };
-    }
+  if (days <= 3) {
+    return { label: `Due in ${days} day${days === 1 ? "" : "s"}`, tone: "red", percent: 92 };
   }
-
-  if (months >= 600) {
-    return {
-      months: null,
-      totalInterest: null,
-      payoffDate: null,
-      impossible: true,
-    };
+  if (days <= 7) {
+    return { label: `Due in ${days} days`, tone: "amber", percent: 72 };
   }
-
-  const d = new Date();
-  d.setMonth(d.getMonth() + months);
-
-  return {
-    months,
-    totalInterest,
-    payoffDate: `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`,
-    impossible: false,
-  };
-}
-
-function formatMonths(n) {
-  if (n == null) return "No payoff";
-  if (n <= 0) return "Paid";
-  const years = Math.floor(n / 12);
-  const months = n % 12;
-  if (years <= 0) return `${months} mo`;
-  if (months === 0) return `${years} yr`;
-  return `${years} yr ${months} mo`;
-}
-
-function billInitials(name) {
-  const text = String(name || "").trim();
-  if (!text) return "BL";
-  const words = text.split(/\s+/).slice(0, 2);
-  return words.map((w) => w[0]?.toUpperCase() || "").join("").slice(0, 2);
-}
-
-function typeLabel(type) {
-  return type === "controllable" ? "Debt / Controllable" : "Fixed Bill";
+  if (days <= 14) {
+    return { label: `Due in ${days} days`, tone: "amber", percent: 48 };
+  }
+  return { label: `Due in ${days} days`, tone: "green", percent: 18 };
 }
 
 function toneMeta(tone = "neutral") {
@@ -292,83 +272,6 @@ function toneMeta(tone = "neutral") {
     glow: "rgba(140, 170, 255, 0.08)",
     bg: "rgba(10, 15, 24, 0.66)",
   };
-}
-
-function mapBillRowToClient(row) {
-  return {
-    id: row.id,
-    name: row.name || "",
-    type: row.type || "noncontrollable",
-    frequency: row.frequency || "monthly",
-    dueDate: row.due_date || "",
-    amount: Number(row.amount) || 0,
-    active: row.active !== false,
-    notes: row.notes || "",
-    balance: Number(row.balance) || 0,
-    aprPct: Number(row.apr_pct) || 0,
-    minPay: Number(row.min_pay) || 0,
-    extraPay: Number(row.extra_pay) || 0,
-    lastPaidDate: row.last_paid_date || "",
-    autopay: row.autopay === true,
-    category: row.category || "",
-    accountId: row.account_id || "",
-    updatedAt: row.updated_at || row.created_at || null,
-    createdAt: row.created_at || null,
-  };
-}
-
-function mapBillClientToRow(bill, userId) {
-  return {
-    id: bill.id,
-    user_id: userId,
-    name: bill.name,
-    type: bill.type,
-    frequency: bill.frequency,
-    due_date: bill.dueDate || null,
-    amount: Number(bill.amount) || 0,
-    active: bill.active !== false,
-    notes: bill.notes || "",
-    balance: bill.type === "controllable" ? Number(bill.balance) || 0 : null,
-    apr_pct: bill.type === "controllable" ? Number(bill.aprPct) || 0 : null,
-    min_pay: bill.type === "controllable" ? Number(bill.minPay) || 0 : null,
-    extra_pay: bill.type === "controllable" ? Number(bill.extraPay) || 0 : null,
-    last_paid_date: bill.lastPaidDate || null,
-    autopay: bill.type === "controllable" ? bill.autopay === true : false,
-    category: bill.category || null,
-    account_id: bill.accountId || null,
-    updated_at: new Date().toISOString(),
-  };
-}
-
-function sortBills(list, sort = "due") {
-  const next = [...list];
-
-  next.sort((a, b) => {
-    if (a.active !== b.active) return a.active ? -1 : 1;
-
-    if (sort === "name") {
-      return String(a.name || "").localeCompare(String(b.name || ""));
-    }
-
-    if (sort === "pressure") {
-      return monthlyEquivalent(b) - monthlyEquivalent(a);
-    }
-
-    if (sort === "updated") {
-      return new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime();
-    }
-
-    const ad = daysUntil(a.dueDate);
-    const bd = daysUntil(b.dueDate);
-
-    if (ad == null && bd != null) return 1;
-    if (ad != null && bd == null) return -1;
-    if (ad != null && bd != null && ad !== bd) return ad - bd;
-
-    return monthlyEquivalent(b) - monthlyEquivalent(a);
-  });
-
-  return next;
 }
 
 function MiniPill({ children, tone = "neutral" }) {
@@ -528,7 +431,7 @@ function ActionBtn({
       type={type}
       onClick={onClick}
       disabled={disabled}
-      className="billsActionBtn"
+      className="billActionBtn"
       style={{
         width: full ? "100%" : undefined,
         border: isDanger
@@ -551,14 +454,138 @@ function ActionBtn({
   );
 }
 
-function CompactBillRow({ bill, selected, onSelect, onMarkPaid, onToggle, onDelete }) {
-  const due = daysUntil(bill.dueDate);
-  const tone = dueTone(due);
+function ProgressBar({ fill = 0, tone = "neutral" }) {
+  const normalized = Math.max(0, Math.min(100, safeNum(fill)));
+  const toneMap = {
+    neutral: "linear-gradient(90deg, rgba(96,165,250,.95), rgba(147,197,253,.95))",
+    green: "linear-gradient(90deg, rgba(74,222,128,.95), rgba(167,243,208,.95))",
+    amber: "linear-gradient(90deg, rgba(251,191,36,.95), rgba(253,230,138,.95))",
+    red: "linear-gradient(90deg, rgba(248,113,113,.95), rgba(252,165,165,.95))",
+  };
+
+  return (
+    <div className="billProgress">
+      <div
+        className="billProgressFill"
+        style={{
+          width: `${normalized}%`,
+          background: toneMap[tone] || toneMap.neutral,
+        }}
+      />
+    </div>
+  );
+}
+
+function emptyBill(defaultAccountId = "") {
+  return {
+    id: uid(),
+    name: "",
+    type: "noncontrollable",
+    frequency: "monthly",
+    dueDate: isoDate(),
+    amount: 0,
+    active: true,
+    balance: 0,
+    minPay: 0,
+    extraPay: 0,
+    aprPct: 0,
+    autopay: false,
+    category: "",
+    notes: "",
+    accountId: defaultAccountId || "",
+    lastPaidDate: "",
+    createdAt: Date.now(),
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+function mapBillRowToClient(row) {
+  return {
+    id: row.id,
+    name: row.name || "Bill",
+    type: row.type === "controllable" ? "controllable" : "noncontrollable",
+    frequency: row.frequency || "monthly",
+    dueDate: row.due_date || "",
+    amount: safeNum(row.amount, 0),
+    active: row.active !== false,
+    balance: safeNum(row.balance, 0),
+    minPay: safeNum(row.min_pay, 0),
+    extraPay: safeNum(row.extra_pay, 0),
+    aprPct: safeNum(row.apr_pct, 0),
+    autopay: row.autopay === true,
+    category: row.category || "",
+    notes: row.notes || "",
+    accountId: row.account_id || "",
+    lastPaidDate: row.last_paid_date || "",
+    createdAt: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
+    updatedAt: row.updated_at || row.created_at || new Date().toISOString(),
+  };
+}
+
+function mapBillToRow(bill, userId) {
+  return {
+    id: bill.id,
+    user_id: userId,
+    name: bill.name || "",
+    type: "noncontrollable",
+    frequency: bill.frequency || "monthly",
+    due_date: bill.dueDate || null,
+    amount: round2(bill.amount),
+    active: bill.active !== false,
+    balance: round2(bill.balance),
+    min_pay: round2(bill.minPay),
+    extra_pay: round2(bill.extraPay),
+    apr_pct: round2(bill.aprPct),
+    autopay: bill.autopay === true,
+    category: bill.category || "",
+    notes: bill.notes || "",
+    account_id: bill.accountId || null,
+    last_paid_date: bill.lastPaidDate || null,
+    created_at: bill.createdAt
+      ? new Date(bill.createdAt).toISOString()
+      : new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+}
+
+function mapAccountRowToClient(row) {
+  return {
+    id: row.id,
+    name: row.name || "",
+    type: row.account_type || "other",
+    balance: safeNum(row.balance, 0),
+    updatedAt: row.updated_at ? new Date(row.updated_at).getTime() : Date.now(),
+  };
+}
+
+function mapPaymentRowToClient(row) {
+  return {
+    id: row.id,
+    billId: row.bill_id,
+    amount: safeNum(row.amount, 0),
+    paymentDate: row.payment_date || "",
+    accountId: row.payment_account_id || "",
+    note: row.note || "",
+    createdAt: row.created_at || new Date().toISOString(),
+  };
+}
+
+function BillRosterRow({
+  bill,
+  selected,
+  onSelect,
+  onDuplicate,
+  onToggle,
+  onDelete,
+}) {
+  const due = dueMeta(daysUntil(bill.dueDate));
+  const tone = due.tone;
   const meta = toneMeta(tone);
+  const monthly = monthlyWeight(bill.amount, bill.frequency);
 
   return (
     <div
-      className="billsCompactRow"
+      className="billCompactRow"
       onClick={onSelect}
       style={{
         borderColor: selected ? meta.border : "rgba(255,255,255,0.07)",
@@ -568,14 +595,14 @@ function CompactBillRow({ bill, selected, onSelect, onMarkPaid, onToggle, onDele
       }}
     >
       <div
-        className="billsCompactAvatar"
+        className="billCompactAvatar"
         style={{
           borderColor: meta.border,
           color: tone === "neutral" ? "#fff" : meta.text,
           boxShadow: `0 0 12px ${meta.glow}`,
         }}
       >
-        {billInitials(bill.name)}
+        <Receipt size={15} />
       </div>
 
       <div style={{ minWidth: 0 }}>
@@ -587,49 +614,48 @@ function CompactBillRow({ bill, selected, onSelect, onMarkPaid, onToggle, onDele
             flexWrap: "wrap",
           }}
         >
-          <div className="billsCompactTitle">{bill.name}</div>
-          <MiniPill tone={bill.type === "controllable" ? "red" : "neutral"}>
-            {typeLabel(bill.type)}
-          </MiniPill>
-          <MiniPill tone={tone}>{dueLabel(due)}</MiniPill>
-          <MiniPill tone={bill.active ? "green" : "neutral"}>
-            {bill.active ? "Active" : "Paused"}
-          </MiniPill>
+          <div className="billCompactTitle">{bill.name || "Bill"}</div>
+          <MiniPill tone={due.tone}>{due.label}</MiniPill>
+          {bill.autopay ? <MiniPill tone="green">Autopay</MiniPill> : null}
+          {!bill.active ? <MiniPill>Inactive</MiniPill> : null}
         </div>
 
-        <div className="billsCompactSub">
-          {bill.category || "No category"} • {bill.frequency || "monthly"} • Updated{" "}
-          {formatAgo(bill.updatedAt)}
+        <div className="billCompactSub">
+          {bill.category || "No category"} • {bill.frequency} • Monthly pressure{" "}
+          {money(monthly)} • Updated {fmtAgo(bill.updatedAt)}
+        </div>
+
+        <div style={{ marginTop: 10 }}>
+          <ProgressBar fill={due.percent} tone={due.tone} />
         </div>
       </div>
 
-      <div className="billsCompactValue">{money(paymentAmount(bill))}</div>
+      <div className="billCompactValue">{money(bill.amount)}</div>
 
-      <div
-        className="billsCompactActions"
-        onClick={(e) => e.stopPropagation()}
-      >
+      <div className="billCompactActions" onClick={(e) => e.stopPropagation()}>
         <button
           type="button"
-          className="billsIconBtn"
-          onClick={onMarkPaid}
-          aria-label="Mark paid"
-          title="Mark paid"
+          className="billIconBtn"
+          onClick={onDuplicate}
+          aria-label="Duplicate bill"
+          title="Duplicate bill"
         >
-          <CheckCircle2 size={14} />
+          <Copy size={14} />
         </button>
+
         <button
           type="button"
-          className="billsIconBtn"
+          className="billIconBtn"
           onClick={onToggle}
-          aria-label={bill.active ? "Pause bill" : "Activate bill"}
-          title={bill.active ? "Pause bill" : "Activate bill"}
+          aria-label={bill.active ? "Archive bill" : "Activate bill"}
+          title={bill.active ? "Archive bill" : "Activate bill"}
         >
-          {bill.active ? <PauseCircle size={14} /> : <PlayCircle size={14} />}
+          {bill.active ? "↘" : "↗"}
         </button>
+
         <button
           type="button"
-          className="billsIconBtn billsDangerBtn"
+          className="billIconBtn billDangerBtn"
           onClick={onDelete}
           aria-label="Delete bill"
           title="Delete bill"
@@ -641,13 +667,71 @@ function CompactBillRow({ bill, selected, onSelect, onMarkPaid, onToggle, onDele
   );
 }
 
+function PaymentHistory({ payments, accountNameById }) {
+  if (!payments.length) {
+    return (
+      <div className="billEmptyState billInlineEmpty">
+        <div>
+          <div className="billEmptyTitle">No payment history yet</div>
+          <div className="billEmptyText">
+            Use the payment box above to log a payment on this bill.
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="billIntelList">
+      {payments.map((payment) => (
+        <div key={payment.id} className="billIntelItem">
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              gap: 10,
+              alignItems: "flex-start",
+              flexWrap: "wrap",
+            }}
+          >
+            <div>
+              <div className="billIntelTitle">{moneyTight(payment.amount)}</div>
+              <div className="billIntelSub">
+                {shortDate(payment.paymentDate)} •{" "}
+                {payment.accountId
+                  ? accountNameById.get(payment.accountId) || "Account"
+                  : "No account linked"}
+              </div>
+            </div>
+
+            <MiniPill tone="green">Paid</MiniPill>
+          </div>
+
+          {payment.note ? (
+            <div className="billIntelSub" style={{ marginTop: -2 }}>
+              {payment.note}
+            </div>
+          ) : null}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function FocusBillCard({
   bill,
-  linkedAccount,
-  payoffData,
-  onMarkPaid,
-  onToggle,
+  editor,
+  setEditor,
+  accounts,
+  payments,
+  saving,
+  paymentDraft,
+  setPaymentDraft,
+  onSave,
+  onDuplicate,
   onDelete,
+  onToggleAutopay,
+  onMakePayment,
 }) {
   if (!bill) {
     return (
@@ -656,10 +740,10 @@ function FocusBillCard({
           title="Selected Bill"
           subcopy="Choose one from the roster to work it here."
         />
-        <div className="billsEmptyState" style={{ minHeight: 170 }}>
+        <div className="billEmptyState" style={{ minHeight: 190 }}>
           <div>
-            <div className="billsEmptyTitle">No bill selected</div>
-            <div className="billsEmptyText">
+            <div className="billEmptyTitle">No bill selected</div>
+            <div className="billEmptyText">
               Pick one from the roster on the left.
             </div>
           </div>
@@ -668,32 +752,26 @@ function FocusBillCard({
     );
   }
 
-  const due = daysUntil(bill.dueDate);
-  const tone = dueTone(due);
-  const meta = toneMeta(tone);
+  const due = dueMeta(daysUntil(editor.dueDate));
+  const meta = toneMeta(due.tone);
+  const accountNameById = new Map(accounts.map((a) => [a.id, a.name]));
 
   return (
-    <GlassPane tone={tone} size="card">
+    <GlassPane tone={due.tone} size="card" style={{ height: "100%" }}>
       <PaneHeader
-        title={bill.name}
-        subcopy="Focused controls for the bill you are actively touching."
+        title={bill.name || "Bill"}
+        subcopy="Focus this bill, edit it, and log a payment right here in the center."
         right={
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <MiniPill tone={bill.type === "controllable" ? "red" : "neutral"}>
-              {typeLabel(bill.type)}
-            </MiniPill>
-            <MiniPill tone={bill.active ? "green" : "neutral"}>
-              {bill.active ? "Active" : "Paused"}
-            </MiniPill>
-            <MiniPill tone={tone}>{dueLabel(due)}</MiniPill>
+            <MiniPill tone={due.tone}>{due.label}</MiniPill>
+            {editor.autopay ? <MiniPill tone="green">Autopay</MiniPill> : null}
+            {saving ? <MiniPill tone="amber">Saving...</MiniPill> : null}
           </div>
         }
       />
 
-      <div className="billsFocusBox">
-        <div className="billsTinyLabel">
-          {bill.type === "controllable" ? "Current Payment" : "Current Amount"}
-        </div>
+      <div className="billFocusBox">
+        <div className="billTinyLabel">Current Bill Amount</div>
 
         <div
           style={{
@@ -702,10 +780,10 @@ function FocusBillCard({
             lineHeight: 1,
             fontWeight: 850,
             letterSpacing: "-0.05em",
-            color: tone === "neutral" ? "#fff" : meta.text,
+            color: due.tone === "neutral" ? "#fff" : meta.text,
           }}
         >
-          {money(paymentAmount(bill))}
+          {money(editor.amount)}
         </div>
 
         <div
@@ -715,112 +793,295 @@ function FocusBillCard({
             color: "rgba(255,255,255,0.58)",
           }}
         >
-          Updated {formatStamp(bill.updatedAt)}
+          Updated {fmtWhen(bill.updatedAt)}
         </div>
 
-        <div className="billsInfoGrid" style={{ marginTop: 14 }}>
-          <div className="billsInfoCell">
-            <div className="billsTinyLabel">Due</div>
-            <div className="billsInfoValue">
-              {bill.dueDate ? shortDate(bill.dueDate) : "—"}
-            </div>
-            <div className="billsInfoSub">{dueLabel(due)}</div>
+        <div className="billInfoGrid" style={{ marginTop: 14 }}>
+          <div className="billInfoCell">
+            <div className="billTinyLabel">Due Date</div>
+            <div className="billInfoValue">{shortDate(editor.dueDate)}</div>
+            <div className="billInfoSub">{due.label}</div>
           </div>
 
-          <div className="billsInfoCell">
-            <div className="billsTinyLabel">Monthly Pressure</div>
-            <div className="billsInfoValue">{money(monthlyEquivalent(bill))}</div>
-            <div className="billsInfoSub">Normalized monthly hit.</div>
-          </div>
-
-          <div className="billsInfoCell">
-            <div className="billsTinyLabel">
-              {bill.type === "controllable" ? "Balance" : "Amount"}
+          <div className="billInfoCell">
+            <div className="billTinyLabel">Frequency</div>
+            <div className="billInfoValue">
+              {
+                FREQUENCY_OPTIONS.find((opt) => opt.value === editor.frequency)?.label ||
+                editor.frequency
+              }
             </div>
-            <div className="billsInfoValue">
-              {bill.type === "controllable" ? money(bill.balance) : money(bill.amount)}
-            </div>
-            <div className="billsInfoSub">
-              {bill.type === "controllable"
-                ? `${Number(bill.aprPct) || 0}% APR`
-                : linkedAccount
-                ? `Linked: ${linkedAccount.name}`
-                : "No linked account"}
+            <div className="billInfoSub">
+              Monthly pressure {money(monthlyWeight(editor.amount, editor.frequency))}
             </div>
           </div>
 
-          <div className="billsInfoCell">
-            <div className="billsTinyLabel">Last Paid</div>
-            <div className="billsInfoValue">
-              {bill.lastPaidDate ? shortDate(bill.lastPaidDate) : "—"}
+          <div className="billInfoCell">
+            <div className="billTinyLabel">Linked Account</div>
+            <div className="billInfoValue">
+              {accountNameById.get(editor.accountId) || "None"}
             </div>
-            <div className="billsInfoSub">
-              {bill.autopay ? "Autopay enabled" : "Manual payment flow"}
+            <div className="billInfoSub">Used as default pay-from account</div>
+          </div>
+
+          <div className="billInfoCell">
+            <div className="billTinyLabel">Last Paid</div>
+            <div className="billInfoValue">{shortDate(editor.lastPaidDate)}</div>
+            <div className="billInfoSub">
+              {payments.length ? `${payments.length} logged payment${payments.length === 1 ? "" : "s"}` : "No payment history"}
             </div>
           </div>
         </div>
 
-        {bill.type === "controllable" && payoffData ? (
-          <div className="billsInfoCell" style={{ marginTop: 12 }}>
-            <div className="billsTinyLabel">Payoff Forecast</div>
+        <div style={{ marginTop: 12 }}>
+          <ProgressBar fill={due.percent} tone={due.tone} />
+        </div>
 
-            <div className="billsProgress" style={{ marginTop: 8 }}>
-              <div
-                className="billsProgressFill"
-                style={{
-                  width: `${payoffData.progress}%`,
-                  background: payoffData.payoff.impossible
-                    ? "linear-gradient(90deg, #ff6b7f 0%, rgba(255,255,255,.92) 220%)"
-                    : "linear-gradient(90deg, #4ade80 0%, rgba(255,255,255,.92) 220%)",
-                }}
+        <div className="billFormStack" style={{ marginTop: 14 }}>
+          <div>
+            <div className="billTinyLabel">Bill Name</div>
+            <input
+              className="billField"
+              value={editor.name}
+              onChange={(e) =>
+                setEditor((prev) => ({ ...prev, name: e.target.value }))
+              }
+              placeholder="Rent"
+            />
+          </div>
+
+          <div className="billFormGrid3">
+            <div>
+              <div className="billTinyLabel">Amount</div>
+              <input
+                className="billField"
+                inputMode="decimal"
+                value={editor.amount}
+                onChange={(e) =>
+                  setEditor((prev) => ({ ...prev, amount: e.target.value }))
+                }
+                placeholder="0.00"
               />
             </div>
 
-            <div className="billsInfoGrid" style={{ marginTop: 10 }}>
-              <div>
-                <div className="billsInfoValue">
-                  {payoffData.payoff.impossible
-                    ? "No payoff"
-                    : formatMonths(payoffData.payoff.months)}
-                </div>
-                <div className="billsInfoSub">{money(payoffData.monthlyPay)}/mo</div>
+            <div>
+              <div className="billTinyLabel">Due Date</div>
+              <input
+                type="date"
+                className="billField"
+                value={editor.dueDate}
+                onChange={(e) =>
+                  setEditor((prev) => ({ ...prev, dueDate: e.target.value }))
+                }
+              />
+            </div>
+
+            <div>
+              <div className="billTinyLabel">Frequency</div>
+              <select
+                className="billField"
+                value={editor.frequency}
+                onChange={(e) =>
+                  setEditor((prev) => ({ ...prev, frequency: e.target.value }))
+                }
+              >
+                {FREQUENCY_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="billFormGrid2">
+            <div>
+              <div className="billTinyLabel">Category</div>
+              <input
+                className="billField"
+                value={editor.category}
+                onChange={(e) =>
+                  setEditor((prev) => ({ ...prev, category: e.target.value }))
+                }
+                placeholder="Housing"
+              />
+            </div>
+
+            <div>
+              <div className="billTinyLabel">Linked Account</div>
+              <select
+                className="billField"
+                value={editor.accountId}
+                onChange={(e) =>
+                  setEditor((prev) => ({ ...prev, accountId: e.target.value }))
+                }
+              >
+                <option value="">No linked account</option>
+                {accounts.map((account) => (
+                  <option key={account.id} value={account.id}>
+                    {account.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <div className="billTinyLabel">Notes</div>
+            <textarea
+              className="billField"
+              rows={4}
+              value={editor.notes}
+              onChange={(e) =>
+                setEditor((prev) => ({ ...prev, notes: e.target.value }))
+              }
+              placeholder="Optional note..."
+            />
+          </div>
+
+          <div className="billActionGrid billActionGridQuad">
+            <ActionBtn variant="primary" onClick={onSave} full disabled={saving}>
+              <Save size={14} /> Save
+            </ActionBtn>
+
+            <ActionBtn onClick={onToggleAutopay} full disabled={saving}>
+              <CreditCard size={14} /> {editor.autopay ? "Turn Off Autopay" : "Turn On Autopay"}
+            </ActionBtn>
+
+            <ActionBtn onClick={onDuplicate} full disabled={saving}>
+              <Copy size={14} /> Duplicate
+            </ActionBtn>
+
+            <ActionBtn variant="danger" onClick={onDelete} full disabled={saving}>
+              <Trash2 size={14} /> Delete
+            </ActionBtn>
+          </div>
+        </div>
+
+        <div className="billPayBox">
+          <div className="billPayHeader">
+            <div>
+              <div className="billTinyLabel">Make Payment</div>
+              <div className="billPaySub">
+                Log a payment directly on this bill and optionally pull it from an account.
               </div>
-              <div>
-                <div className="billsInfoValue">
-                  {payoffData.payoff.impossible
-                    ? "—"
-                    : money(payoffData.payoff.totalInterest)}
-                </div>
-                <div className="billsInfoSub">
-                  {payoffData.payoff.payoffDate
-                    ? `Payoff ${shortDate(payoffData.payoff.payoffDate)}`
-                    : "No payoff date"}
-                </div>
+            </div>
+
+            <MiniPill tone="green">
+              Last paid {editor.lastPaidDate ? shortDate(editor.lastPaidDate) : "—"}
+            </MiniPill>
+          </div>
+
+          <div className="billPayGrid">
+            <div>
+              <div className="billTinyLabel">Payment Amount</div>
+              <input
+                className="billField"
+                inputMode="decimal"
+                placeholder="0.00"
+                value={paymentDraft.amount}
+                onChange={(e) =>
+                  setPaymentDraft((prev) => ({ ...prev, amount: e.target.value }))
+                }
+              />
+            </div>
+
+            <div>
+              <div className="billTinyLabel">Payment Date</div>
+              <input
+                type="date"
+                className="billField"
+                value={paymentDraft.paymentDate}
+                onChange={(e) =>
+                  setPaymentDraft((prev) => ({
+                    ...prev,
+                    paymentDate: e.target.value,
+                  }))
+                }
+              />
+            </div>
+          </div>
+
+          <div className="billPayGrid">
+            <div>
+              <div className="billTinyLabel">Pay From Account</div>
+              <select
+                className="billField"
+                value={paymentDraft.accountId}
+                onChange={(e) =>
+                  setPaymentDraft((prev) => ({
+                    ...prev,
+                    accountId: e.target.value,
+                  }))
+                }
+              >
+                <option value="">No account linked</option>
+                {accounts.map((account) => (
+                  <option key={account.id} value={account.id}>
+                    {account.name} • {money(account.balance)}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <div className="billTinyLabel">Advance Due Date</div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <ActionBtn
+                  variant={paymentDraft.advanceDue ? "primary" : "ghost"}
+                  onClick={() =>
+                    setPaymentDraft((prev) => ({ ...prev, advanceDue: true }))
+                  }
+                >
+                  Yes
+                </ActionBtn>
+                <ActionBtn
+                  variant={!paymentDraft.advanceDue ? "primary" : "ghost"}
+                  onClick={() =>
+                    setPaymentDraft((prev) => ({ ...prev, advanceDue: false }))
+                  }
+                >
+                  No
+                </ActionBtn>
               </div>
             </div>
           </div>
-        ) : null}
 
-        {bill.notes ? (
-          <div className="billsInfoCell" style={{ marginTop: 12 }}>
-            <div className="billsTinyLabel">Notes</div>
-            <div className="billsInfoSub" style={{ color: "#fff" }}>
-              {bill.notes}
-            </div>
+          <div>
+            <div className="billTinyLabel">Payment Note</div>
+            <textarea
+              className="billField"
+              rows={3}
+              placeholder="Optional payment note..."
+              value={paymentDraft.note}
+              onChange={(e) =>
+                setPaymentDraft((prev) => ({ ...prev, note: e.target.value }))
+              }
+            />
           </div>
-        ) : null}
 
-        <div className="billsActionGrid billsActionGridTight" style={{ marginTop: 14 }}>
-          <ActionBtn variant="primary" onClick={onMarkPaid} full>
-            <CheckCircle2 size={14} /> Mark Paid
-          </ActionBtn>
-          <ActionBtn onClick={onToggle} full>
-            {bill.active ? <PauseCircle size={14} /> : <PlayCircle size={14} />}
-            {bill.active ? "Pause" : "Activate"}
-          </ActionBtn>
-          <ActionBtn variant="danger" onClick={onDelete} full>
-            <Trash2 size={14} /> Delete
-          </ActionBtn>
+          <div className="billActionGrid">
+            <ActionBtn
+              variant="primary"
+              onClick={onMakePayment}
+              full
+              disabled={paymentDraft.saving}
+            >
+              <BadgeDollarSign size={14} />
+              {paymentDraft.saving ? "Saving..." : "Make Payment"}
+            </ActionBtn>
+          </div>
+        </div>
+
+        <div style={{ marginTop: 14 }}>
+          <PaneHeader
+            title="Payment History"
+            subcopy="Latest payments recorded for this bill."
+          />
+          <PaymentHistory
+            payments={payments}
+            accountNameById={accountNameById}
+          />
         </div>
       </div>
     </GlassPane>
@@ -828,42 +1089,17 @@ function FocusBillCard({
 }
 
 function AddBillCard({
-  saving,
+  form,
+  setForm,
   accounts,
-  formType,
-  setFormType,
-  formName,
-  setFormName,
-  formFrequency,
-  setFormFrequency,
-  formDueDate,
-  setFormDueDate,
-  formAmount,
-  setFormAmount,
-  formCategory,
-  setFormCategory,
-  formNotes,
-  setFormNotes,
-  formAccountId,
-  setFormAccountId,
-  formBalance,
-  setFormBalance,
-  formAprPct,
-  setFormAprPct,
-  formMinPay,
-  setFormMinPay,
-  formExtraPay,
-  setFormExtraPay,
-  formAutopay,
-  setFormAutopay,
-  addBill,
-  resetForm,
+  saving,
+  onAdd,
 }) {
   return (
-    <GlassPane size="card">
+    <GlassPane size="card" style={{ height: "100%" }}>
       <PaneHeader
         title="Add Bill"
-        subcopy="Keep this fast and clean."
+        subcopy="Create a new fixed bill."
         right={
           <MiniPill>
             <Plus size={13} /> New
@@ -871,192 +1107,107 @@ function AddBillCard({
         }
       />
 
-      <div className="billsFormStack">
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          {BILL_TYPE_OPTIONS.map((option) => (
-            <ActionBtn
-              key={option.value}
-              variant={formType === option.value ? "primary" : "ghost"}
-              onClick={() => setFormType(option.value)}
-            >
-              {option.label}
-            </ActionBtn>
-          ))}
-        </div>
-
+      <div className="billFormStack">
         <div>
-          <div className="billsTinyLabel">Bill Name</div>
+          <div className="billTinyLabel">Bill Name</div>
           <input
-            className="billsField"
-            placeholder="Mortgage, Insurance, Chase Card..."
-            value={formName}
-            onChange={(e) => setFormName(e.target.value)}
+            className="billField"
+            placeholder="Rent, Electric, Internet..."
+            value={form.name}
+            onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
           />
         </div>
 
-        <div className="billsFormGrid2">
+        <div className="billFormGrid3">
           <div>
-            <div className="billsTinyLabel">Type</div>
-            <select
-              className="billsField"
-              value={formType}
-              onChange={(e) => setFormType(e.target.value)}
-            >
-              {BILL_TYPE_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <div className="billsTinyLabel">Category</div>
+            <div className="billTinyLabel">Amount</div>
             <input
-              className="billsField"
-              placeholder="Housing, Utilities..."
-              value={formCategory}
-              onChange={(e) => setFormCategory(e.target.value)}
-            />
-          </div>
-        </div>
-
-        <div className="billsFormGrid3">
-          <div>
-            <div className="billsTinyLabel">
-              {formType === "controllable" ? "Current Pay" : "Amount"}
-            </div>
-            <input
-              className="billsField"
+              className="billField"
               inputMode="decimal"
               placeholder="0.00"
-              value={formAmount}
-              onChange={(e) => setFormAmount(e.target.value)}
+              value={form.amount}
+              onChange={(e) => setForm((prev) => ({ ...prev, amount: e.target.value }))}
             />
           </div>
 
           <div>
-            <div className="billsTinyLabel">Due Date</div>
+            <div className="billTinyLabel">Due Date</div>
             <input
-              className="billsField"
               type="date"
-              value={formDueDate}
-              onChange={(e) => setFormDueDate(e.target.value)}
+              className="billField"
+              value={form.dueDate}
+              onChange={(e) => setForm((prev) => ({ ...prev, dueDate: e.target.value }))}
             />
           </div>
 
           <div>
-            <div className="billsTinyLabel">Frequency</div>
+            <div className="billTinyLabel">Frequency</div>
             <select
-              className="billsField"
-              value={formFrequency}
-              onChange={(e) => setFormFrequency(e.target.value)}
+              className="billField"
+              value={form.frequency}
+              onChange={(e) => setForm((prev) => ({ ...prev, frequency: e.target.value }))}
             >
-              {FREQUENCY_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
+              {FREQUENCY_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
                 </option>
               ))}
             </select>
           </div>
         </div>
 
-        {formType === "controllable" ? (
-          <div className="billsFormGrid4">
-            <div>
-              <div className="billsTinyLabel">Balance</div>
-              <input
-                className="billsField"
-                inputMode="decimal"
-                placeholder="0.00"
-                value={formBalance}
-                onChange={(e) => setFormBalance(e.target.value)}
-              />
-            </div>
-
-            <div>
-              <div className="billsTinyLabel">APR %</div>
-              <input
-                className="billsField"
-                inputMode="decimal"
-                placeholder="6.25"
-                value={formAprPct}
-                onChange={(e) => setFormAprPct(e.target.value)}
-              />
-            </div>
-
-            <div>
-              <div className="billsTinyLabel">Min Pay</div>
-              <input
-                className="billsField"
-                inputMode="decimal"
-                placeholder="0.00"
-                value={formMinPay}
-                onChange={(e) => setFormMinPay(e.target.value)}
-              />
-            </div>
-
-            <div>
-              <div className="billsTinyLabel">Extra Pay</div>
-              <input
-                className="billsField"
-                inputMode="decimal"
-                placeholder="0.00"
-                value={formExtraPay}
-                onChange={(e) => setFormExtraPay(e.target.value)}
-              />
-            </div>
-          </div>
-        ) : null}
-
-        <div className="billsFormGrid2">
+        <div className="billFormGrid2">
           <div>
-            <div className="billsTinyLabel">Linked Account</div>
+            <div className="billTinyLabel">Category</div>
+            <input
+              className="billField"
+              placeholder="Housing"
+              value={form.category}
+              onChange={(e) => setForm((prev) => ({ ...prev, category: e.target.value }))}
+            />
+          </div>
+
+          <div>
+            <div className="billTinyLabel">Linked Account</div>
             <select
-              className="billsField"
-              value={formAccountId}
-              onChange={(e) => setFormAccountId(e.target.value)}
+              className="billField"
+              value={form.accountId}
+              onChange={(e) => setForm((prev) => ({ ...prev, accountId: e.target.value }))}
             >
-              <option value="">No account</option>
-              {accounts.map((acct) => (
-                <option key={acct.id} value={acct.id}>
-                  {acct.name}
+              <option value="">No linked account</option>
+              {accounts.map((account) => (
+                <option key={account.id} value={account.id}>
+                  {account.name} • {accountTypeLabel(account.type)}
                 </option>
               ))}
             </select>
           </div>
-
-          {formType === "controllable" ? (
-            <label className="billsCheck" style={{ alignSelf: "end", minHeight: 44 }}>
-              <input
-                type="checkbox"
-                checked={formAutopay}
-                onChange={(e) => setFormAutopay(e.target.checked)}
-              />
-              Autopay enabled
-            </label>
-          ) : (
-            <div />
-          )}
         </div>
 
         <div>
-          <div className="billsTinyLabel">Notes</div>
+          <div className="billTinyLabel">Notes</div>
           <textarea
-            className="billsField"
+            className="billField"
             rows={4}
-            placeholder="Optional notes"
-            value={formNotes}
-            onChange={(e) => setFormNotes(e.target.value)}
+            placeholder="Optional note..."
+            value={form.notes}
+            onChange={(e) => setForm((prev) => ({ ...prev, notes: e.target.value }))}
           />
         </div>
 
-        <div className="billsActionGrid">
-          <ActionBtn variant="primary" onClick={addBill} full disabled={saving}>
-            <Plus size={14} /> {saving ? "Saving..." : "Add Bill"}
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <ActionBtn
+            variant={form.autopay ? "primary" : "ghost"}
+            onClick={() => setForm((prev) => ({ ...prev, autopay: !prev.autopay }))}
+          >
+            <CreditCard size={14} />
+            {form.autopay ? "Autopay On" : "Autopay Off"}
           </ActionBtn>
-          <ActionBtn onClick={resetForm} full disabled={saving}>
-            Reset
+        </div>
+
+        <div className="billActionGrid">
+          <ActionBtn variant="primary" onClick={onAdd} full disabled={saving}>
+            <Plus size={14} /> {saving ? "Saving..." : "Add Bill"}
           </ActionBtn>
         </div>
       </div>
@@ -1064,480 +1215,659 @@ function AddBillCard({
   );
 }
 
-function QueueItem({ bill, onFocus, onMarkPaid }) {
-  const due = daysUntil(bill.dueDate);
-  const tone = dueTone(due);
-
-  return (
-    <div className="billsIntelItem">
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          gap: 10,
-          alignItems: "flex-start",
-          flexWrap: "wrap",
-        }}
-      >
-        <div>
-          <div className="billsIntelTitle">{bill.name}</div>
-          <div className="billsIntelSub">
-            Due {bill.dueDate ? shortDate(bill.dueDate) : "—"} • {moneyTight(paymentAmount(bill))}
-          </div>
-        </div>
-
-        <MiniPill tone={tone}>{dueLabel(due)}</MiniPill>
-      </div>
-
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-        <ActionBtn onClick={onFocus}>Focus</ActionBtn>
-        <ActionBtn onClick={onMarkPaid}>Mark Paid</ActionBtn>
-      </div>
-    </div>
-  );
-}
-
-function PayoffItem({ row, onFocus }) {
-  return (
-    <div className="billsIntelItem">
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          gap: 10,
-          alignItems: "flex-start",
-          flexWrap: "wrap",
-        }}
-      >
-        <div>
-          <div className="billsIntelTitle">{row.name}</div>
-          <div className="billsIntelSub">
-            {moneyTight(row.balance)} at {Number(row.aprPct) || 0}% APR
-          </div>
-        </div>
-
-        <div style={{ textAlign: "right" }}>
-          <div className="billsIntelValue">
-            {row.payoff.impossible ? "No payoff" : formatMonths(row.payoff.months)}
-          </div>
-          <div className="billsIntelSub">{moneyTight(row.monthlyPay)}/mo</div>
-        </div>
-      </div>
-
-      <div className="billsProgress">
-        <div
-          className="billsProgressFill"
-          style={{
-            width: `${row.payoffProgress}%`,
-            background: row.payoff.impossible
-              ? "linear-gradient(90deg, #ff6b7f 0%, rgba(255,255,255,.92) 220%)"
-              : "linear-gradient(90deg, #4ade80 0%, rgba(255,255,255,.92) 220%)",
-          }}
-        />
-      </div>
-
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-        <ActionBtn onClick={onFocus}>Focus</ActionBtn>
-      </div>
-    </div>
-  );
-}
-
 export default function BillsPage() {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [pageError, setPageError] = useState("");
-
   const [bills, setBills] = useState([]);
   const [accounts, setAccounts] = useState([]);
+  const [payments, setPayments] = useState([]);
   const [selectedBillId, setSelectedBillId] = useState("");
+  const [defaultAccountId, setDefaultAccountId] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [pageError, setPageError] = useState("");
+  const [userId, setUserId] = useState(null);
 
   const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState("all");
-  const [sort, setSort] = useState("due");
+  const [scope, setScope] = useState("active");
+  const [sortBy, setSortBy] = useState("due_asc");
 
-  const [formType, setFormType] = useState("noncontrollable");
-  const [formName, setFormName] = useState("");
-  const [formFrequency, setFormFrequency] = useState("monthly");
-  const [formDueDate, setFormDueDate] = useState("");
-  const [formAmount, setFormAmount] = useState("");
-  const [formCategory, setFormCategory] = useState("");
-  const [formNotes, setFormNotes] = useState("");
-  const [formAccountId, setFormAccountId] = useState("");
-  const [formBalance, setFormBalance] = useState("");
-  const [formAprPct, setFormAprPct] = useState("");
-  const [formMinPay, setFormMinPay] = useState("");
-  const [formExtraPay, setFormExtraPay] = useState("");
-  const [formAutopay, setFormAutopay] = useState(false);
+  const [savingSelected, setSavingSelected] = useState(false);
+  const [addingBusy, setAddingBusy] = useState(false);
 
-  useEffect(() => {
-    let mounted = true;
+  const [editor, setEditor] = useState({
+    name: "",
+    amount: "",
+    dueDate: isoDate(),
+    frequency: "monthly",
+    category: "",
+    notes: "",
+    accountId: "",
+    autopay: false,
+    lastPaidDate: "",
+  });
 
-    async function loadPage() {
-      try {
-        setPageError("");
+  const [addForm, setAddForm] = useState({
+    name: "",
+    amount: "",
+    dueDate: isoDate(),
+    frequency: "monthly",
+    category: "",
+    notes: "",
+    accountId: "",
+    autopay: false,
+  });
 
-        if (!supabase) throw new Error("Supabase is not configured.");
+  const [paymentDraft, setPaymentDraft] = useState({
+    amount: "",
+    paymentDate: isoDate(),
+    accountId: "",
+    note: "",
+    advanceDue: true,
+    saving: false,
+  });
 
-        const {
-          data: { user: currentUser },
-          error: userErr,
-        } = await supabase.auth.getUser();
-
-        if (userErr) throw userErr;
-        if (!mounted) return;
-
-        setUser(currentUser || null);
-
-        if (!currentUser) {
-          setLoading(false);
-          return;
-        }
-
-        const [billsRes, accountsRes] = await Promise.all([
-          supabase
-            .from("bills")
-            .select("*")
-            .eq("user_id", currentUser.id)
-            .order("active", { ascending: false })
-            .order("due_date", { ascending: true }),
-          supabase
-            .from("accounts")
-            .select("id,name")
-            .eq("user_id", currentUser.id)
-            .order("name", { ascending: true }),
-        ]);
-
-        if (billsRes.error) throw billsRes.error;
-        if (!mounted) return;
-
-        const loadedBills = (billsRes.data || []).map(mapBillRowToClient);
-        const sorted = sortBills(loadedBills, "due");
-
-        setBills(loadedBills);
-        setAccounts(accountsRes.error ? [] : accountsRes.data || []);
-        setSelectedBillId(sorted[0]?.id || "");
-      } catch (err) {
-        if (!mounted) return;
-        setPageError(err?.message || "Failed to load bills page.");
-      } finally {
-        if (mounted) setLoading(false);
-      }
+  async function loadPage() {
+    if (!supabase) {
+      setLoading(false);
+      return;
     }
 
+    setLoading(true);
+    setPageError("");
+
+    try {
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
+
+      if (userError) throw userError;
+
+      if (!user) {
+        setUserId(null);
+        setBills([]);
+        setAccounts([]);
+        setPayments([]);
+        setSelectedBillId("");
+        setLoading(false);
+        return;
+      }
+
+      setUserId(user.id);
+
+      const [billsRes, accountsRes, settingsRes, paymentsRes] = await Promise.all([
+        supabase
+          .from("bills")
+          .select("*")
+          .eq("user_id", user.id)
+          .eq("type", "noncontrollable")
+          .order("due_date", { ascending: true }),
+        supabase
+          .from("accounts")
+          .select("*")
+          .eq("user_id", user.id)
+          .order("name", { ascending: true }),
+        supabase
+          .from("account_settings")
+          .select("primary_account_id")
+          .eq("user_id", user.id)
+          .maybeSingle(),
+        supabase
+          .from("bill_payments")
+          .select("*")
+          .eq("user_id", user.id)
+          .order("payment_date", { ascending: false }),
+      ]);
+
+      if (billsRes.error) throw billsRes.error;
+      if (accountsRes.error) throw accountsRes.error;
+      if (settingsRes.error) throw settingsRes.error;
+
+      const loadedBills = (billsRes.data || []).map(mapBillRowToClient);
+      const loadedAccounts = (accountsRes.data || []).map(mapAccountRowToClient);
+      const primaryAccountId =
+        settingsRes.data?.primary_account_id || loadedAccounts[0]?.id || "";
+
+      setBills(loadedBills);
+      setAccounts(loadedAccounts);
+      setDefaultAccountId(primaryAccountId);
+      setPayments(paymentsRes.error ? [] : (paymentsRes.data || []).map(mapPaymentRowToClient));
+      setSelectedBillId((prev) => prev || loadedBills[0]?.id || "");
+      setAddForm((prev) => ({ ...prev, accountId: prev.accountId || primaryAccountId }));
+    } catch (err) {
+      setPageError(err?.message || "Failed to load bills.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
     loadPage();
 
-    return () => {
-      mounted = false;
-    };
+    if (!supabase) return;
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(() => {
+      loadPage();
+    });
+
+    return () => subscription?.unsubscribe?.();
   }, []);
 
-  const filteredBills = useMemo(() => {
+  const visibleBills = useMemo(() => {
     const q = search.trim().toLowerCase();
 
-    const filtered = bills.filter((bill) => {
-      const due = daysUntil(bill.dueDate);
+    let list = bills.filter((bill) => {
+      if (scope === "active" && !bill.active) return false;
+      if (scope === "inactive" && bill.active) return false;
 
-      const filterPass =
-        filter === "all" ||
-        (filter === "active" && bill.active) ||
-        (filter === "paused" && !bill.active) ||
-        (filter === "controllable" && bill.type === "controllable") ||
-        (filter === "noncontrollable" && bill.type === "noncontrollable") ||
-        (filter === "due" && due != null && due <= 7);
-
-      if (!filterPass) return false;
       if (!q) return true;
 
-      return `${bill.name} ${bill.type} ${bill.frequency} ${bill.notes} ${bill.category}`
+      return [bill.name, bill.category, bill.notes]
+        .join(" ")
         .toLowerCase()
         .includes(q);
     });
 
-    return sortBills(filtered, sort);
-  }, [bills, filter, search, sort]);
+    if (sortBy === "amount_desc") {
+      list.sort((a, b) => safeNum(b.amount) - safeNum(a.amount));
+      return list;
+    }
+
+    if (sortBy === "name_asc") {
+      list.sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")));
+      return list;
+    }
+
+    if (sortBy === "updated_desc") {
+      list.sort(
+        (a, b) =>
+          new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime()
+      );
+      return list;
+    }
+
+    list.sort((a, b) => {
+      const ad = daysUntil(a.dueDate);
+      const bd = daysUntil(b.dueDate);
+      return (Number.isFinite(ad) ? ad : 999999) - (Number.isFinite(bd) ? bd : 999999);
+    });
+    return list;
+  }, [bills, scope, search, sortBy]);
 
   useEffect(() => {
-    if (!bills.length) {
+    if (!visibleBills.length) {
       setSelectedBillId("");
       return;
     }
 
-    const exists = bills.some((bill) => bill.id === selectedBillId);
-    if (!exists) {
-      setSelectedBillId(sortBills(bills, sort)[0]?.id || "");
-    }
-  }, [bills, selectedBillId, sort]);
+    const exists = visibleBills.some((bill) => bill.id === selectedBillId);
+    if (!exists) setSelectedBillId(visibleBills[0].id);
+  }, [visibleBills, selectedBillId]);
 
   const selectedBill =
-    bills.find((bill) => bill.id === selectedBillId) ||
-    filteredBills[0] ||
-    sortBills(bills, sort)[0] ||
-    null;
+    bills.find((bill) => bill.id === selectedBillId) || visibleBills[0] || null;
 
-  const linkedAccount = selectedBill
-    ? accounts.find((acct) => acct.id === selectedBill.accountId) || null
-    : null;
-
-  const activeBills = useMemo(() => bills.filter((bill) => bill.active), [bills]);
-
-  const controllableBills = useMemo(
-    () => bills.filter((bill) => bill.active && bill.type === "controllable"),
-    [bills]
-  );
-
-  const fixedBills = useMemo(
-    () => bills.filter((bill) => bill.active && bill.type === "noncontrollable"),
-    [bills]
-  );
-
-  const monthlyPressure = useMemo(
-    () => bills.reduce((sum, bill) => sum + monthlyEquivalent(bill), 0),
-    [bills]
-  );
-
-  const totalDebt = useMemo(
-    () => controllableBills.reduce((sum, bill) => sum + (Number(bill.balance) || 0), 0),
-    [controllableBills]
-  );
-
-  const dueSoonBills = useMemo(
-    () =>
-      sortBills(
-        bills.filter((bill) => {
-          if (!bill.active) return false;
-          const d = daysUntil(bill.dueDate);
-          return d != null && d <= 14;
-        }),
-        "due"
-      ),
-    [bills]
-  );
-
-  const overdueCount = useMemo(
-    () =>
-      bills.filter((bill) => {
-        if (!bill.active) return false;
-        const d = daysUntil(bill.dueDate);
-        return d != null && d < 0;
-      }).length,
-    [bills]
-  );
-
-  const strongestPressure = useMemo(() => {
-    if (!activeBills.length) return null;
-    return [...activeBills].sort((a, b) => monthlyEquivalent(b) - monthlyEquivalent(a))[0];
-  }, [activeBills]);
-
-  const payoffRows = useMemo(() => {
-    return controllableBills
-      .map((bill) => {
-        const monthlyPay = paymentAmount(bill);
-        const payoff = payoffSimulation(bill.balance, bill.aprPct, monthlyPay);
-
-        return {
-          ...bill,
-          monthlyPay,
-          payoff,
-          payoffProgress:
-            bill.balance > 0 && monthlyPay > 0
-              ? clamp((monthlyPay / bill.balance) * 100 * 12, 0, 100)
-              : 0,
-        };
-      })
-      .sort((a, b) => {
-        if (a.payoff.impossible && !b.payoff.impossible) return 1;
-        if (!a.payoff.impossible && b.payoff.impossible) return -1;
-        return (a.payoff.months ?? 9999) - (b.payoff.months ?? 9999);
+  useEffect(() => {
+    if (!selectedBill) {
+      setEditor({
+        name: "",
+        amount: "",
+        dueDate: isoDate(),
+        frequency: "monthly",
+        category: "",
+        notes: "",
+        accountId: defaultAccountId || "",
+        autopay: false,
+        lastPaidDate: "",
       });
-  }, [controllableBills]);
+      setPaymentDraft({
+        amount: "",
+        paymentDate: isoDate(),
+        accountId: defaultAccountId || "",
+        note: "",
+        advanceDue: true,
+        saving: false,
+      });
+      return;
+    }
 
-  const selectedPayoff = useMemo(() => {
-    if (!selectedBill || selectedBill.type !== "controllable") return null;
+    setEditor({
+      name: selectedBill.name || "",
+      amount: String(selectedBill.amount ?? ""),
+      dueDate: selectedBill.dueDate || isoDate(),
+      frequency: selectedBill.frequency || "monthly",
+      category: selectedBill.category || "",
+      notes: selectedBill.notes || "",
+      accountId: selectedBill.accountId || "",
+      autopay: selectedBill.autopay === true,
+      lastPaidDate: selectedBill.lastPaidDate || "",
+    });
 
-    const monthlyPay = paymentAmount(selectedBill);
-    const payoff = payoffSimulation(selectedBill.balance, selectedBill.aprPct, monthlyPay);
+    setPaymentDraft({
+      amount: String(selectedBill.amount || ""),
+      paymentDate: isoDate(),
+      accountId: selectedBill.accountId || defaultAccountId || "",
+      note: "",
+      advanceDue: true,
+      saving: false,
+    });
+  }, [selectedBill?.id, defaultAccountId]);
+
+  const selectedBillPayments = useMemo(() => {
+    if (!selectedBill) return [];
+    return payments
+      .filter((payment) => payment.billId === selectedBill.id)
+      .sort(
+        (a, b) =>
+          new Date(b.paymentDate || b.createdAt || 0).getTime() -
+          new Date(a.paymentDate || a.createdAt || 0).getTime()
+      );
+  }, [payments, selectedBill?.id]);
+
+  const metrics = useMemo(() => {
+    const activeBills = bills.filter((bill) => bill.active);
+    const monthKey = monthKeyOf(isoDate());
+
+    const monthlyPressure = activeBills.reduce(
+      (sum, bill) => sum + monthlyWeight(bill.amount, bill.frequency),
+      0
+    );
+
+    const dueSoon = activeBills.filter((bill) => {
+      const dueIn = daysUntil(bill.dueDate);
+      return Number.isFinite(dueIn) && dueIn <= 7;
+    });
+
+    const paidThisMonth = payments
+      .filter((payment) => monthKeyOf(payment.paymentDate) === monthKey)
+      .reduce((sum, payment) => sum + safeNum(payment.amount), 0);
+
+    const lastPayment = [...payments].sort(
+      (a, b) =>
+        new Date(b.paymentDate || b.createdAt || 0).getTime() -
+        new Date(a.paymentDate || a.createdAt || 0).getTime()
+    )[0];
 
     return {
-      monthlyPay,
-      payoff,
-      progress:
-        selectedBill.balance > 0 && monthlyPay > 0
-          ? clamp((monthlyPay / selectedBill.balance) * 100 * 12, 0, 100)
-          : 0,
+      activeCount: activeBills.length,
+      monthlyPressure,
+      dueSoonCount: dueSoon.length,
+      paidThisMonth,
+      nextBill: [...activeBills].sort((a, b) => {
+        const ad = Number.isFinite(daysUntil(a.dueDate)) ? daysUntil(a.dueDate) : 999999;
+        const bd = Number.isFinite(daysUntil(b.dueDate)) ? daysUntil(b.dueDate) : 999999;
+        return ad - bd;
+      })[0],
+      lastPayment,
     };
-  }, [selectedBill]);
-
-  function resetForm() {
-    setFormType("noncontrollable");
-    setFormName("");
-    setFormFrequency("monthly");
-    setFormDueDate("");
-    setFormAmount("");
-    setFormCategory("");
-    setFormNotes("");
-    setFormAccountId("");
-    setFormBalance("");
-    setFormAprPct("");
-    setFormMinPay("");
-    setFormExtraPay("");
-    setFormAutopay(false);
-    setPageError("");
-  }
+  }, [bills, payments]);
 
   async function addBill() {
-    if (!user || saving) return;
+    if (!supabase || !userId || addingBusy) return;
 
-    const name = formName.trim();
+    const name = String(addForm.name || "").trim();
+    const amount = parseMoneyInput(addForm.amount);
+
     if (!name) {
-      setPageError("Name is required.");
+      window.alert("Bill name is required.");
       return;
     }
 
-    const amount = num(formAmount, NaN);
-    if (!Number.isFinite(amount) || amount < 0) {
-      setPageError("Enter a valid amount.");
+    if (!Number.isFinite(amount) || amount <= 0) {
+      window.alert("Amount must be greater than 0.");
       return;
     }
 
-    if (formType === "controllable") {
-      const balance = num(formBalance, NaN);
-      if (!Number.isFinite(balance) || balance < 0) {
-        setPageError("Enter a valid balance.");
-        return;
-      }
+    setAddingBusy(true);
+
+    const nextBill = {
+      ...emptyBill(addForm.accountId || defaultAccountId),
+      name,
+      amount: round2(amount),
+      dueDate: addForm.dueDate || isoDate(),
+      frequency: addForm.frequency || "monthly",
+      category: addForm.category || "",
+      notes: addForm.notes || "",
+      accountId: addForm.accountId || "",
+      autopay: addForm.autopay === true,
+      balance: 0,
+      lastPaidDate: "",
+    };
+
+    const res = await supabase
+      .from("bills")
+      .insert(mapBillToRow(nextBill, userId))
+      .select()
+      .single();
+
+    if (res.error) {
+      console.error("add bill error:", res.error);
+      setPageError(res.error.message || "Could not add bill.");
+      setAddingBusy(false);
+      return;
     }
 
-    setSaving(true);
-    setPageError("");
+    const saved = mapBillRowToClient(res.data);
+    setBills((prev) => [saved, ...prev]);
+    setSelectedBillId(saved.id);
 
-    try {
-      const draft = {
-        id: makeId(),
-        name,
-        type: formType,
-        frequency: formFrequency,
-        dueDate: formDueDate,
-        amount,
-        active: true,
-        notes: formNotes.trim(),
-        balance: num(formBalance, 0),
-        aprPct: num(formAprPct, 0),
-        minPay: num(formMinPay, 0),
-        extraPay: num(formExtraPay, 0),
-        lastPaidDate: "",
-        autopay: formAutopay,
-        category: formCategory.trim(),
-        accountId: formAccountId || "",
-      };
+    setAddForm({
+      name: "",
+      amount: "",
+      dueDate: isoDate(),
+      frequency: "monthly",
+      category: "",
+      notes: "",
+      accountId: defaultAccountId || "",
+      autopay: false,
+    });
 
-      const { data, error } = await supabase
-        .from("bills")
-        .insert([mapBillClientToRow(draft, user.id)])
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      const mapped = mapBillRowToClient(data);
-      setBills((prev) => [mapped, ...prev]);
-      setSelectedBillId(mapped.id);
-      resetForm();
-    } catch (err) {
-      setPageError(err?.message || "Failed to save bill.");
-    } finally {
-      setSaving(false);
-    }
+    setAddingBusy(false);
   }
 
-  async function toggleActive(bill) {
-    if (!user) return;
+  async function saveSelectedBill() {
+    if (!supabase || !userId || !selectedBill || savingSelected) return;
 
-    const previous = bills;
-    const nextActive = !bill.active;
+    const name = String(editor.name || "").trim();
+    const amount = parseMoneyInput(editor.amount);
 
-    setBills((prev) =>
-      prev.map((item) =>
-        item.id === bill.id
-          ? { ...item, active: nextActive, updatedAt: new Date().toISOString() }
-          : item
-      )
-    );
-
-    try {
-      const { error } = await supabase
-        .from("bills")
-        .update({
-          active: nextActive,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", bill.id)
-        .eq("user_id", user.id);
-
-      if (error) throw error;
-    } catch (err) {
-      setBills(previous);
-      setPageError(err?.message || "Failed to update bill.");
+    if (!name) {
+      window.alert("Bill name is required.");
+      return;
     }
+
+    if (!Number.isFinite(amount) || amount <= 0) {
+      window.alert("Amount must be greater than 0.");
+      return;
+    }
+
+    setSavingSelected(true);
+
+    const payload = {
+      ...selectedBill,
+      name,
+      amount: round2(amount),
+      dueDate: editor.dueDate || isoDate(),
+      frequency: editor.frequency || "monthly",
+      category: editor.category || "",
+      notes: editor.notes || "",
+      accountId: editor.accountId || "",
+      autopay: editor.autopay === true,
+      lastPaidDate: editor.lastPaidDate || "",
+      updatedAt: new Date().toISOString(),
+    };
+
+    const res = await supabase
+      .from("bills")
+      .update(mapBillToRow(payload, userId))
+      .eq("id", selectedBill.id)
+      .eq("user_id", userId)
+      .select()
+      .single();
+
+    if (res.error) {
+      console.error("save bill error:", res.error);
+      setPageError(res.error.message || "Could not save bill.");
+      setSavingSelected(false);
+      return;
+    }
+
+    const saved = mapBillRowToClient(res.data);
+    setBills((prev) => prev.map((bill) => (bill.id === saved.id ? saved : bill)));
+    setSavingSelected(false);
   }
 
-  async function markPaidToday(bill) {
-    if (!user) return;
+  async function duplicateBill(bill) {
+    if (!supabase || !userId) return;
 
-    const previous = bills;
-    const nextDate = todayISO();
+    const clone = {
+      ...bill,
+      id: uid(),
+      name: `${bill.name || "Bill"} Copy`,
+      createdAt: Date.now(),
+      updatedAt: new Date().toISOString(),
+      lastPaidDate: "",
+    };
 
-    setBills((prev) =>
-      prev.map((item) =>
-        item.id === bill.id
-          ? { ...item, lastPaidDate: nextDate, updatedAt: new Date().toISOString() }
-          : item
-      )
-    );
+    const res = await supabase
+      .from("bills")
+      .insert(mapBillToRow(clone, userId))
+      .select()
+      .single();
 
-    try {
-      const { error } = await supabase
-        .from("bills")
-        .update({
-          last_paid_date: nextDate,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", bill.id)
-        .eq("user_id", user.id);
-
-      if (error) throw error;
-    } catch (err) {
-      setBills(previous);
-      setPageError(err?.message || "Failed to mark bill as paid.");
+    if (res.error) {
+      console.error("duplicate bill error:", res.error);
+      setPageError(res.error.message || "Could not duplicate bill.");
+      return;
     }
+
+    const saved = mapBillRowToClient(res.data);
+    setBills((prev) => [saved, ...prev]);
+    setSelectedBillId(saved.id);
   }
 
-  async function deleteBill(id) {
-    if (!user) return;
+  async function deleteBill() {
+    if (!supabase || !userId || !selectedBill) return;
     if (typeof window !== "undefined" && !window.confirm("Delete this bill?")) return;
 
-    const previous = bills;
-    setBills((prev) => prev.filter((bill) => bill.id !== id));
+    const { error } = await supabase
+      .from("bills")
+      .delete()
+      .eq("id", selectedBill.id)
+      .eq("user_id", userId);
 
-    try {
-      const { error } = await supabase
-        .from("bills")
-        .delete()
-        .eq("id", id)
-        .eq("user_id", user.id);
-
-      if (error) throw error;
-    } catch (err) {
-      setBills(previous);
-      setPageError(err?.message || "Failed to delete bill.");
+    if (error) {
+      console.error("delete bill error:", error);
+      setPageError(error.message || "Could not delete bill.");
+      return;
     }
+
+    const nextBills = bills.filter((bill) => bill.id !== selectedBill.id);
+    setBills(nextBills);
+    setSelectedBillId(nextBills[0]?.id || "");
+  }
+
+  async function toggleBillActive(bill) {
+    if (!supabase || !userId) return;
+
+    const nextValue = !bill.active;
+
+    const res = await supabase
+      .from("bills")
+      .update({
+        active: nextValue,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", bill.id)
+      .eq("user_id", userId)
+      .select()
+      .single();
+
+    if (res.error) {
+      console.error("toggle bill active error:", res.error);
+      setPageError(res.error.message || "Could not update bill.");
+      return;
+    }
+
+    const saved = mapBillRowToClient(res.data);
+    setBills((prev) => prev.map((row) => (row.id === saved.id ? saved : row)));
+  }
+
+  async function toggleSelectedAutopay() {
+    if (!supabase || !userId || !selectedBill || savingSelected) return;
+
+    setSavingSelected(true);
+
+    const res = await supabase
+      .from("bills")
+      .update({
+        autopay: !editor.autopay,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", selectedBill.id)
+      .eq("user_id", userId)
+      .select()
+      .single();
+
+    if (res.error) {
+      console.error("toggle autopay error:", res.error);
+      setPageError(res.error.message || "Could not update autopay.");
+      setSavingSelected(false);
+      return;
+    }
+
+    const saved = mapBillRowToClient(res.data);
+    setBills((prev) => prev.map((row) => (row.id === saved.id ? saved : row)));
+    setSavingSelected(false);
+  }
+
+  async function makeBillPayment() {
+    if (!supabase || !userId || !selectedBill || paymentDraft.saving) return;
+
+    const amount = round2(parseMoneyInput(paymentDraft.amount));
+    if (!Number.isFinite(amount) || amount <= 0) {
+      window.alert("Enter a valid payment amount.");
+      return;
+    }
+
+    const paymentDate = paymentDraft.paymentDate || isoDate();
+    const payAccountId = paymentDraft.accountId || "";
+    const payNote = String(paymentDraft.note || "").trim();
+
+    setPaymentDraft((prev) => ({ ...prev, saving: true }));
+
+    if (payAccountId) {
+      const payAccount = accounts.find((account) => account.id === payAccountId);
+
+      if (!payAccount) {
+        window.alert("Selected payment account was not found.");
+        setPaymentDraft((prev) => ({ ...prev, saving: false }));
+        return;
+      }
+
+      const nextAccountBalance = round2(safeNum(payAccount.balance, 0) - amount);
+
+      const { error: accountError } = await supabase
+        .from("accounts")
+        .update({
+          balance: nextAccountBalance,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", payAccount.id)
+        .eq("user_id", userId);
+
+      if (accountError) {
+        console.error("bill payment account update error:", accountError);
+        setPageError(accountError.message || "Could not update payment account.");
+        setPaymentDraft((prev) => ({ ...prev, saving: false }));
+        return;
+      }
+
+      setAccounts((prev) =>
+        prev.map((account) =>
+          account.id === payAccount.id
+            ? {
+                ...account,
+                balance: nextAccountBalance,
+                updatedAt: Date.now(),
+              }
+            : account
+        )
+      );
+
+      await supabase.from("account_transactions").insert({
+        user_id: userId,
+        account_id: payAccount.id,
+        kind: "bill_payment",
+        amount,
+        delta: -amount,
+        resulting_balance: nextAccountBalance,
+        note: `${selectedBill.name || "Bill"} payment${payNote ? ` • ${payNote}` : ""}`,
+        related_account_id: null,
+        related_account_name: null,
+        source_type: "bill_payment",
+        source_id: selectedBill.id,
+        created_at: new Date().toISOString(),
+      });
+    }
+
+    let nextDueDate = selectedBill.dueDate || "";
+    if (paymentDraft.advanceDue && selectedBill.frequency !== "one_time" && selectedBill.dueDate) {
+      nextDueDate = nextDueDateFromFrequency(selectedBill.dueDate, selectedBill.frequency);
+    }
+
+    const nextBalance =
+      safeNum(selectedBill.balance, 0) > 0
+        ? Math.max(0, round2(safeNum(selectedBill.balance, 0) - amount))
+        : safeNum(selectedBill.balance, 0);
+
+    const { data: updatedBillRow, error: billError } = await supabase
+      .from("bills")
+      .update({
+        last_paid_date: paymentDate,
+        due_date: nextDueDate || null,
+        balance: nextBalance,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", selectedBill.id)
+      .eq("user_id", userId)
+      .select()
+      .single();
+
+    if (billError) {
+      console.error("bill payment update error:", billError);
+      setPageError(billError.message || "Could not update bill after payment.");
+      setPaymentDraft((prev) => ({ ...prev, saving: false }));
+      return;
+    }
+
+    let savedPayment = {
+      id: uid(),
+      billId: selectedBill.id,
+      amount,
+      paymentDate,
+      accountId: payAccountId,
+      note: payNote,
+      createdAt: new Date().toISOString(),
+    };
+
+    const paymentInsert = await supabase
+      .from("bill_payments")
+      .insert({
+        user_id: userId,
+        bill_id: selectedBill.id,
+        amount,
+        payment_date: paymentDate,
+        payment_account_id: payAccountId || null,
+        note: payNote || null,
+      })
+      .select()
+      .single();
+
+    if (!paymentInsert.error && paymentInsert.data) {
+      savedPayment = mapPaymentRowToClient(paymentInsert.data);
+    }
+
+    const updatedBill = mapBillRowToClient(updatedBillRow);
+    setBills((prev) =>
+      prev.map((bill) => (bill.id === updatedBill.id ? updatedBill : bill))
+    );
+    setPayments((prev) => [savedPayment, ...prev]);
+
+    setPaymentDraft({
+      amount: "",
+      paymentDate: isoDate(),
+      accountId: editor.accountId || defaultAccountId || "",
+      note: "",
+      advanceDue: true,
+      saving: false,
+    });
   }
 
   if (loading) {
     return (
-      <main className="billsPage">
-        <div className="billsPageShell">
+      <main className="billPage">
+        <div className="billPageShell">
           <GlassPane size="card">
             <div style={{ fontWeight: 800, fontSize: 18, color: "#fff" }}>
               Loading bills.
@@ -1549,307 +1879,218 @@ export default function BillsPage() {
     );
   }
 
-  if (!user) {
-    return (
-      <main className="billsPage">
-        <div className="billsPageShell">
-          <GlassPane size="card">
-            <div style={{ fontWeight: 800, fontSize: 18, color: "#fff" }}>
-              Please log in
-            </div>
-          </GlassPane>
-        </div>
-        <style jsx global>{globalStyles}</style>
-      </main>
-    );
-  }
-
   return (
     <>
-      <main className="billsPage">
-        <div className="billsPageShell">
-          {pageError ? (
-            <GlassPane tone="red" size="card">
-              <div style={{ fontWeight: 800, fontSize: 16, color: "#fff" }}>
-                Bills error
-              </div>
-              <div
-                style={{
-                  marginTop: 6,
-                  fontSize: 13,
-                  color: "rgba(255,255,255,0.74)",
-                }}
-              >
-                {pageError}
-              </div>
-            </GlassPane>
-          ) : null}
-
+      <main className="billPage">
+        <div className="billPageShell">
           <GlassPane size="card">
-            <div className="billsHeroGrid">
+            <div className="billHeroGrid">
               <div style={{ minWidth: 0 }}>
-                <div className="billsEyebrow">Life Command Center</div>
-                <div className="billsHeroTitle">Bills Command</div>
-                <div className="billsHeroSub">
-                  Cleaner bill pressure, tighter controls, and a roster layout that runs
-                  much closer to the accounts page.
+                <div className="billEyebrow">Life Command Center</div>
+                <div className="billHeroTitle">Bills Command</div>
+                <div className="billHeroSub">
+                  Fixed bills, due pressure, and direct bill payments in the center focus card.
                 </div>
 
-                <div className="billsPillRow">
-                  <MiniPill>{bills.length} bills</MiniPill>
+                <div className="billPillRow">
+                  <MiniPill>{metrics.activeCount} active bills</MiniPill>
                   <MiniPill>{currentMonthLabel()}</MiniPill>
-                  <MiniPill>{controllableBills.length} debt accounts</MiniPill>
-                  <MiniPill>{fixedBills.length} fixed bills</MiniPill>
+                  <MiniPill tone="amber">{metrics.dueSoonCount} due soon</MiniPill>
+                  <MiniPill tone="green">{money(metrics.paidThisMonth)} paid this month</MiniPill>
                 </div>
               </div>
 
-              <div
-                style={{
-                  display: "flex",
-                  gap: 8,
-                  flexWrap: "wrap",
-                  justifyContent: "flex-end",
-                }}
-              >
-                <MiniPill>{todayISO()}</MiniPill>
-                <MiniPill tone="green">{money(monthlyPressure)} monthly</MiniPill>
-                <MiniPill tone={overdueCount > 0 ? "red" : "amber"}>
-                  {dueSoonBills.length} due soon
+              <div className="billHeroSide">
+                <MiniPill>{money(metrics.monthlyPressure)} monthly</MiniPill>
+                <MiniPill tone={metrics.nextBill ? dueMeta(daysUntil(metrics.nextBill.dueDate)).tone : "neutral"}>
+                  {metrics.nextBill ? `Next: ${metrics.nextBill.name}` : "No next due"}
                 </MiniPill>
               </div>
             </div>
           </GlassPane>
 
-          <section className="billsMetricGrid">
+          {pageError ? (
+            <GlassPane tone="red" size="card">
+              <div style={{ fontWeight: 800, fontSize: 15, color: "#fff" }}>
+                {pageError}
+              </div>
+            </GlassPane>
+          ) : null}
+
+          <section className="billMetricGrid">
+            <StatCard
+              icon={Landmark}
+              label="Monthly Pressure"
+              value={money(metrics.monthlyPressure)}
+              detail="Estimated fixed bill pressure for the month."
+              tone="green"
+            />
+            <StatCard
+              icon={CalendarClock}
+              label="Due In 7 Days"
+              value={String(metrics.dueSoonCount)}
+              detail="Bills with due dates in the next 7 days."
+              tone={metrics.dueSoonCount > 0 ? "amber" : "green"}
+            />
             <StatCard
               icon={BadgeDollarSign}
-              label="Monthly Pressure"
-              value={money(monthlyPressure)}
-              detail="Normalized monthly hit from active bills and debt payments."
-              tone="neutral"
-            />
-            <StatCard
-              icon={CreditCard}
-              label="Total Debt"
-              value={money(totalDebt)}
-              detail="Active controllable balances only."
-              tone={totalDebt > 0 ? "red" : "green"}
-            />
-            <StatCard
-              icon={AlertTriangle}
-              label="Due Soon"
-              value={String(dueSoonBills.length)}
-              detail={
-                overdueCount > 0
-                  ? `${overdueCount} overdue right now.`
-                  : "Nothing overdue right now."
-              }
-              tone={overdueCount > 0 ? "red" : "amber"}
-            />
-            <StatCard
-              icon={PiggyBank}
-              label="Highest Pressure"
-              value={strongestPressure ? money(monthlyEquivalent(strongestPressure)) : "$0"}
-              detail={strongestPressure ? strongestPressure.name : "No active bills yet."}
+              label="Paid This Month"
+              value={money(metrics.paidThisMonth)}
+              detail="Logged bill payments this month."
               tone="green"
+            />
+            <StatCard
+              icon={ArrowUpRight}
+              label="Next Bill"
+              value={metrics.nextBill ? shortDate(metrics.nextBill.dueDate) : "—"}
+              detail={metrics.nextBill ? metrics.nextBill.name : "No bill due yet."}
+              tone={metrics.nextBill ? dueMeta(daysUntil(metrics.nextBill.dueDate)).tone : "neutral"}
             />
           </section>
 
-          <section className="billsMainGrid">
-            <GlassPane size="card">
-              <PaneHeader
-                title="Bill Roster"
-                subcopy="Compact list on the left. Work the selected bill on the right."
-                right={<MiniPill>{filteredBills.length} showing</MiniPill>}
-              />
+          <GlassPane size="card">
+            <PaneHeader
+              title="Bill Controls"
+              subcopy="Search the roster, filter bill status, and sort how you want."
+            />
 
-              <div className="billsRosterControls">
-                <div className="billsSearchWrap">
+            <div className="billControlsGrid">
+              <div>
+                <div className="billTinyLabel">Search</div>
+                <div className="billSearchWrap">
                   <Search size={15} />
                   <input
-                    className="billsField billsSearchField"
-                    placeholder="Search bills"
+                    className="billField billSearchField"
+                    placeholder="Search bill"
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
                   />
                 </div>
-
-                <select
-                  className="billsField"
-                  value={filter}
-                  onChange={(e) => setFilter(e.target.value)}
-                >
-                  <option value="all">All bills</option>
-                  <option value="active">Active only</option>
-                  <option value="paused">Paused</option>
-                  <option value="controllable">Debt only</option>
-                  <option value="noncontrollable">Fixed only</option>
-                  <option value="due">Due in 7 days</option>
-                </select>
-
-                <select
-                  className="billsField"
-                  value={sort}
-                  onChange={(e) => setSort(e.target.value)}
-                >
-                  <option value="due">Due first</option>
-                  <option value="pressure">Highest pressure</option>
-                  <option value="updated">Recently updated</option>
-                  <option value="name">Name</option>
-                </select>
               </div>
 
-              {filteredBills.length ? (
-                <div className="billsRosterListCompact">
-                  {filteredBills.map((bill) => (
-                    <CompactBillRow
+              <div>
+                <div className="billTinyLabel">Scope</div>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <ActionBtn
+                    variant={scope === "active" ? "primary" : "ghost"}
+                    onClick={() => setScope("active")}
+                  >
+                    Active
+                  </ActionBtn>
+                  <ActionBtn
+                    variant={scope === "all" ? "primary" : "ghost"}
+                    onClick={() => setScope("all")}
+                  >
+                    All
+                  </ActionBtn>
+                  <ActionBtn
+                    variant={scope === "inactive" ? "primary" : "ghost"}
+                    onClick={() => setScope("inactive")}
+                  >
+                    Inactive
+                  </ActionBtn>
+                </div>
+              </div>
+
+              <div>
+                <div className="billTinyLabel">Sort</div>
+                <select
+                  className="billField"
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value)}
+                >
+                  <option value="due_asc">Due first</option>
+                  <option value="amount_desc">Amount high → low</option>
+                  <option value="name_asc">Name</option>
+                  <option value="updated_desc">Recently updated</option>
+                </select>
+              </div>
+            </div>
+          </GlassPane>
+
+          <section className="billWorkspaceGrid">
+            <GlassPane size="card" style={{ height: "100%" }}>
+              <PaneHeader
+                title="Bills Roster"
+                subcopy="Main roster stays left. Work the selected bill in center."
+                right={<MiniPill>{visibleBills.length} showing</MiniPill>}
+              />
+
+              {visibleBills.length ? (
+                <div className="billRosterListCompact">
+                  {visibleBills.map((bill) => (
+                    <BillRosterRow
                       key={bill.id}
                       bill={bill}
                       selected={bill.id === selectedBill?.id}
                       onSelect={() => setSelectedBillId(bill.id)}
-                      onMarkPaid={() => markPaidToday(bill)}
-                      onToggle={() => toggleActive(bill)}
-                      onDelete={() => deleteBill(bill.id)}
+                      onDuplicate={() => duplicateBill(bill)}
+                      onToggle={() => toggleBillActive(bill)}
+                      onDelete={() => {
+                        setSelectedBillId(bill.id);
+                        setTimeout(() => {
+                          if (
+                            typeof window !== "undefined" &&
+                            window.confirm(`Delete ${bill.name}?`)
+                          ) {
+                            supabase
+                              .from("bills")
+                              .delete()
+                              .eq("id", bill.id)
+                              .eq("user_id", userId)
+                              .then(({ error }) => {
+                                if (error) {
+                                  console.error(error);
+                                  setPageError(error.message || "Could not delete bill.");
+                                  return;
+                                }
+                                const nextBills = bills.filter((row) => row.id !== bill.id);
+                                setBills(nextBills);
+                                if (selectedBillId === bill.id) {
+                                  setSelectedBillId(nextBills[0]?.id || "");
+                                }
+                              });
+                          }
+                        }, 0);
+                      }}
                     />
                   ))}
                 </div>
               ) : (
-                <div className="billsEmptyState">
+                <div className="billEmptyState">
                   <div>
-                    <div className="billsEmptyTitle">No bills found</div>
-                    <div className="billsEmptyText">
-                      Clear filters or add another bill.
+                    <div className="billEmptyTitle">No bills found</div>
+                    <div className="billEmptyText">
+                      Clear filters or add a new bill.
                     </div>
                   </div>
                 </div>
               )}
             </GlassPane>
 
-            <div className="billsRightStack">
-              <div className="billsTopRightGrid">
-                <FocusBillCard
-                  bill={selectedBill}
-                  linkedAccount={linkedAccount}
-                  payoffData={selectedPayoff}
-                  onMarkPaid={() => selectedBill && markPaidToday(selectedBill)}
-                  onToggle={() => selectedBill && toggleActive(selectedBill)}
-                  onDelete={() => selectedBill && deleteBill(selectedBill.id)}
-                />
+            <FocusBillCard
+              bill={selectedBill}
+              editor={editor}
+              setEditor={setEditor}
+              accounts={accounts}
+              payments={selectedBillPayments}
+              saving={savingSelected}
+              paymentDraft={paymentDraft}
+              setPaymentDraft={setPaymentDraft}
+              onSave={saveSelectedBill}
+              onDuplicate={() => selectedBill && duplicateBill(selectedBill)}
+              onDelete={deleteBill}
+              onToggleAutopay={toggleSelectedAutopay}
+              onMakePayment={makeBillPayment}
+            />
 
-                <AddBillCard
-                  saving={saving}
-                  accounts={accounts}
-                  formType={formType}
-                  setFormType={setFormType}
-                  formName={formName}
-                  setFormName={setFormName}
-                  formFrequency={formFrequency}
-                  setFormFrequency={setFormFrequency}
-                  formDueDate={formDueDate}
-                  setFormDueDate={setFormDueDate}
-                  formAmount={formAmount}
-                  setFormAmount={setFormAmount}
-                  formCategory={formCategory}
-                  setFormCategory={setFormCategory}
-                  formNotes={formNotes}
-                  setFormNotes={setFormNotes}
-                  formAccountId={formAccountId}
-                  setFormAccountId={setFormAccountId}
-                  formBalance={formBalance}
-                  setFormBalance={setFormBalance}
-                  formAprPct={formAprPct}
-                  setFormAprPct={setFormAprPct}
-                  formMinPay={formMinPay}
-                  setFormMinPay={setFormMinPay}
-                  formExtraPay={formExtraPay}
-                  setFormExtraPay={setFormExtraPay}
-                  formAutopay={formAutopay}
-                  setFormAutopay={setFormAutopay}
-                  addBill={addBill}
-                  resetForm={resetForm}
-                />
-              </div>
-
-              <GlassPane size="card">
-                <PaneHeader
-                  title="Bills Intel"
-                  subcopy="Upcoming actions and controllable payoff view in one tighter block."
-                />
-
-                <div className="billsIntelGrid">
-                  <div className="billsIntelPanel">
-                    <PaneHeader
-                      title="Action Queue"
-                      subcopy="What needs touching next."
-                      right={
-                        <MiniPill>
-                          {dueSoonBills.length} item{dueSoonBills.length === 1 ? "" : "s"}
-                        </MiniPill>
-                      }
-                    />
-
-                    {dueSoonBills.length ? (
-                      <div className="billsIntelList">
-                        {dueSoonBills.slice(0, 5).map((bill) => (
-                          <QueueItem
-                            key={bill.id}
-                            bill={bill}
-                            onFocus={() => setSelectedBillId(bill.id)}
-                            onMarkPaid={() => markPaidToday(bill)}
-                          />
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="billsEmptyState billsInlineEmpty">
-                        <div>
-                          <div className="billsEmptyTitle">Nothing due soon</div>
-                          <div className="billsEmptyText">
-                            No active bills are due in the next 14 days.
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="billsIntelPanel">
-                    <PaneHeader
-                      title="Debt Forecast"
-                      subcopy="Compact payoff stack for controllable balances."
-                      right={
-                        <MiniPill>
-                          {payoffRows.length} item{payoffRows.length === 1 ? "" : "s"}
-                        </MiniPill>
-                      }
-                    />
-
-                    {payoffRows.length ? (
-                      <div className="billsIntelList">
-                        {payoffRows.slice(0, 5).map((row) => (
-                          <PayoffItem
-                            key={row.id}
-                            row={row}
-                            onFocus={() => setSelectedBillId(row.id)}
-                          />
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="billsEmptyState billsInlineEmpty billsForecastEmpty">
-                        <div>
-                          <div className="billsEmptyTitle">No debt forecast yet</div>
-                          <div className="billsEmptyText">
-                            Add a controllable bill on the right and payoff timing will show here.
-                          </div>
-                          <div style={{ marginTop: 10, display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
-                            <MiniPill>0 controllable bills</MiniPill>
-                            <MiniPill tone="amber">Waiting on debt data</MiniPill>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </GlassPane>
-            </div>
+            <AddBillCard
+              form={addForm}
+              setForm={setAddForm}
+              accounts={accounts}
+              saving={addingBusy}
+              onAdd={addBill}
+            />
           </section>
         </div>
       </main>
@@ -1860,20 +2101,23 @@ export default function BillsPage() {
 }
 
 const globalStyles = `
-  .billsPage {
+  .billPage {
+    width: 100%;
+    min-width: 0;
     color: var(--lcc-text);
     font-family: var(--lcc-font-sans);
   }
 
-  .billsPageShell {
-    width: min(100%, 1320px);
-    margin: 0 auto;
+  .billPageShell {
+    width: 100%;
+    max-width: none;
+    margin: 0;
     padding: 12px 0 20px;
     display: grid;
-    gap: 12px;
+    gap: 14px;
   }
 
-  .billsEyebrow {
+  .billEyebrow {
     font-size: 10px;
     text-transform: uppercase;
     letter-spacing: .22em;
@@ -1881,7 +2125,7 @@ const globalStyles = `
     color: rgba(255,255,255,0.42);
   }
 
-  .billsHeroTitle {
+  .billHeroTitle {
     margin-top: 8px;
     font-size: clamp(24px, 3.2vw, 34px);
     line-height: 1.02;
@@ -1890,61 +2134,62 @@ const globalStyles = `
     color: #fff;
   }
 
-  .billsHeroSub {
+  .billHeroSub {
     margin-top: 8px;
     font-size: 13px;
     line-height: 1.55;
     color: rgba(255,255,255,0.62);
-    max-width: 760px;
+    max-width: 840px;
   }
 
-  .billsHeroGrid {
+  .billHeroGrid {
     display: grid;
-    grid-template-columns: minmax(0, 1.1fr) auto;
-    gap: 12px;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 14px;
     align-items: start;
   }
 
-  .billsPillRow {
+  .billHeroSide {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    align-content: flex-start;
+  }
+
+  .billPillRow {
     margin-top: 12px;
     display: flex;
     gap: 8px;
     flex-wrap: wrap;
   }
 
-  .billsMetricGrid {
+  .billMetricGrid {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 12px;
+    gap: 14px;
   }
 
-  .billsMainGrid {
+  .billControlsGrid {
     display: grid;
-    grid-template-columns: minmax(390px, 0.94fr) minmax(0, 1.06fr);
-    gap: 12px;
-    align-items: start;
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr) minmax(260px, 0.56fr);
+    gap: 14px;
+    align-items: end;
   }
 
-  .billsRightStack {
+  .billWorkspaceGrid {
     display: grid;
-    gap: 12px;
+    grid-template-columns: minmax(460px, 1.18fr) minmax(480px, 1.32fr) minmax(360px, 0.95fr);
+    gap: 14px;
+    align-items: stretch;
   }
 
-  .billsTopRightGrid {
-    display: grid;
-    grid-template-columns: minmax(0, 1.04fr) minmax(320px, 0.8fr);
-    gap: 12px;
-    align-items: start;
+  .billWorkspaceGrid > * {
+    min-width: 0;
+    height: 100%;
   }
 
-  .billsRosterControls {
-    display: grid;
-    grid-template-columns: 1.2fr 0.8fr 0.9fr;
-    gap: 10px;
-    margin-bottom: 10px;
-  }
-
-  .billsSearchWrap {
+  .billSearchWrap {
     position: relative;
     display: flex;
     align-items: center;
@@ -1959,7 +2204,7 @@ const globalStyles = `
     padding: 0 12px;
   }
 
-  .billsSearchField {
+  .billSearchField {
     min-height: 42px !important;
     border: 0 !important;
     background: transparent !important;
@@ -1967,21 +2212,22 @@ const globalStyles = `
     padding: 0 !important;
   }
 
-  .billsRosterListCompact {
+  .billRosterListCompact {
     display: grid;
-    gap: 8px;
-    max-height: 650px;
+    gap: 10px;
+    min-height: 720px;
+    max-height: 720px;
     overflow: auto;
     padding-right: 2px;
   }
 
-  .billsCompactRow {
+  .billCompactRow {
     display: grid;
     grid-template-columns: 42px minmax(0, 1fr) auto auto;
     gap: 10px;
     align-items: center;
-    min-height: 84px;
-    padding: 10px 12px;
+    min-height: 118px;
+    padding: 12px 14px;
     border-radius: 18px;
     border: 1px solid rgba(255,255,255,0.07);
     background:
@@ -1990,11 +2236,11 @@ const globalStyles = `
     transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
   }
 
-  .billsCompactRow:hover {
+  .billCompactRow:hover {
     transform: translateY(-1px);
   }
 
-  .billsCompactAvatar {
+  .billCompactAvatar {
     width: 42px;
     height: 42px;
     border-radius: 14px;
@@ -2009,7 +2255,7 @@ const globalStyles = `
     letter-spacing: .05em;
   }
 
-  .billsCompactTitle {
+  .billCompactTitle {
     font-size: 13.5px;
     font-weight: 800;
     color: #fff;
@@ -2017,27 +2263,27 @@ const globalStyles = `
     overflow-wrap: anywhere;
   }
 
-  .billsCompactSub {
+  .billCompactSub {
     margin-top: 4px;
     font-size: 11.5px;
     color: rgba(255,255,255,0.54);
-    line-height: 1.3;
+    line-height: 1.35;
   }
 
-  .billsCompactValue {
+  .billCompactValue {
     font-size: 15px;
     font-weight: 850;
     color: #fff;
     white-space: nowrap;
   }
 
-  .billsCompactActions {
+  .billCompactActions {
     display: flex;
     gap: 6px;
     align-items: center;
   }
 
-  .billsIconBtn {
+  .billIconBtn {
     width: 34px;
     height: 34px;
     border-radius: 12px;
@@ -2050,94 +2296,122 @@ const globalStyles = `
     cursor: pointer;
   }
 
-  .billsDangerBtn {
+  .billDangerBtn {
     border-color: rgba(255,132,163,0.18);
     color: #ffd3df;
   }
 
-  .billsFocusBox {
+  .billFocusBox {
     border-radius: 22px;
     border: 1px solid rgba(214,226,255,0.12);
     background:
       linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01));
     padding: 15px;
+    min-height: 100%;
   }
 
-  .billsInfoGrid {
+  .billInfoGrid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 10px;
   }
 
-  .billsInfoCell {
+  .billInfoCell {
     border-radius: 18px;
     border: 1px solid rgba(255,255,255,0.05);
     background: rgba(255,255,255,0.025);
     padding: 11px;
   }
 
-  .billsInfoValue {
+  .billInfoValue {
     font-size: 0.96rem;
     font-weight: 900;
     line-height: 1.15;
     color: #fff;
   }
 
-  .billsInfoSub {
+  .billInfoSub {
     margin-top: 5px;
     color: rgba(255,255,255,0.62);
     font-size: 0.79rem;
     line-height: 1.4;
   }
 
-  .billsProgress {
+  .billProgress {
     height: 8px;
     border-radius: 999px;
     overflow: hidden;
     background: rgba(255,255,255,0.1);
   }
 
-  .billsProgressFill {
+  .billProgressFill {
     height: 100%;
     border-radius: 999px;
     transition: width 0.4s ease;
   }
 
-  .billsActionGrid {
+  .billPayBox {
+    margin-top: 14px;
+    border-radius: 22px;
+    border: 1px solid rgba(214,226,255,0.12);
+    background:
+      linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01));
+    padding: 15px;
+    display: grid;
+    gap: 12px;
+  }
+
+  .billPayHeader {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .billPaySub {
+    margin-top: 4px;
+    font-size: 12px;
+    line-height: 1.45;
+    color: rgba(255,255,255,0.60);
+  }
+
+  .billPayGrid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .billActionGrid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 8px;
   }
 
-  .billsActionGridTight {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+  .billActionGridQuad {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .billsFormStack {
+  .billFormStack {
     display: grid;
     gap: 12px;
   }
 
-  .billsFormGrid2,
-  .billsFormGrid3,
-  .billsFormGrid4 {
+  .billFormGrid2,
+  .billFormGrid3 {
     display: grid;
     gap: 10px;
   }
 
-  .billsFormGrid2 {
+  .billFormGrid2 {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .billsFormGrid3 {
+  .billFormGrid3 {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
-  .billsFormGrid4 {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .billsTinyLabel {
+  .billTinyLabel {
     display: block;
     margin-bottom: 8px;
     font-size: 10px;
@@ -2147,7 +2421,7 @@ const globalStyles = `
     font-weight: 800;
   }
 
-  .billsField {
+  .billField {
     width: 100%;
     min-height: 44px;
     border-radius: 14px;
@@ -2163,38 +2437,29 @@ const globalStyles = `
     transition: border-color 160ms ease, box-shadow 160ms ease, background 160ms ease;
   }
 
-  .billsField:focus {
+  .billField:focus {
     border-color: rgba(143,177,255,0.30);
     box-shadow:
       0 0 0 4px rgba(79,114,255,0.08),
       inset 0 1px 0 rgba(255,255,255,0.035);
   }
 
-  .billsField::placeholder {
+  .billField::placeholder {
     color: rgba(225,233,245,0.38);
   }
 
-  .billsField option {
+  .billField option {
     background: #08111f;
     color: #f4f7ff;
   }
 
-  textarea.billsField {
-    min-height: 96px;
+  textarea.billField {
+    min-height: 110px;
     resize: vertical;
     padding: 12px 13px;
   }
 
-  .billsCheck {
-    display: inline-flex;
-    align-items: center;
-    gap: 10px;
-    color: rgba(255,255,255,0.72);
-    font-size: 0.86rem;
-    font-weight: 700;
-  }
-
-  .billsActionBtn {
+  .billActionBtn {
     min-height: 40px;
     padding: 10px 13px;
     border-radius: 14px;
@@ -2208,34 +2473,20 @@ const globalStyles = `
     transition: transform 160ms ease, border-color 160ms ease, background 160ms ease, box-shadow 160ms ease;
   }
 
-  .billsActionBtn:hover {
+  .billActionBtn:hover {
     transform: translateY(-1px);
   }
 
-  .billsIntelGrid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 12px;
-  }
-
-  .billsIntelPanel {
-    border-radius: 20px;
-    border: 1px solid rgba(255,255,255,0.06);
-    background:
-      linear-gradient(180deg, rgba(8,13,24,0.58), rgba(4,8,16,0.42));
-    padding: 12px;
-    min-height: 100%;
-  }
-
-  .billsIntelList {
+  .billIntelList {
     display: grid;
     gap: 10px;
-    max-height: 360px;
+    min-height: 240px;
+    max-height: 260px;
     overflow: auto;
     padding-right: 2px;
   }
 
-  .billsIntelItem {
+  .billIntelItem {
     border-radius: 18px;
     border: 1px solid rgba(255,255,255,0.07);
     background:
@@ -2245,7 +2496,7 @@ const globalStyles = `
     gap: 10px;
   }
 
-  .billsIntelTitle {
+  .billIntelTitle {
     font-size: 13px;
     font-weight: 800;
     color: #fff;
@@ -2253,20 +2504,14 @@ const globalStyles = `
     overflow-wrap: anywhere;
   }
 
-  .billsIntelSub {
+  .billIntelSub {
     margin-top: 4px;
     font-size: 11.5px;
     color: rgba(255,255,255,0.54);
     line-height: 1.35;
   }
 
-  .billsIntelValue {
-    font-size: 14px;
-    font-weight: 850;
-    color: #fff;
-  }
-
-  .billsEmptyState {
+  .billEmptyState {
     min-height: 150px;
     display: grid;
     place-items: center;
@@ -2274,23 +2519,17 @@ const globalStyles = `
     padding: 14px;
   }
 
-  .billsInlineEmpty {
-    min-height: 260px;
+  .billInlineEmpty {
+    min-height: 220px;
   }
 
-  .billsForecastEmpty {
-    border-radius: 18px;
-    border: 1px dashed rgba(214,226,255,0.12);
-    background: rgba(255,255,255,0.02);
-  }
-
-  .billsEmptyTitle {
+  .billEmptyTitle {
     font-size: 16px;
     font-weight: 850;
     color: #fff;
   }
 
-  .billsEmptyText {
+  .billEmptyText {
     margin-top: 6px;
     font-size: 13px;
     line-height: 1.5;
@@ -2298,65 +2537,92 @@ const globalStyles = `
     max-width: 360px;
   }
 
-  @media (max-width: 1260px) {
-    .billsMetricGrid {
+  @media (max-width: 1560px) {
+    .billWorkspaceGrid {
+      grid-template-columns: minmax(420px, 1.08fr) minmax(420px, 1.18fr) minmax(320px, 0.9fr);
+    }
+  }
+
+  @media (max-width: 1420px) {
+    .billControlsGrid {
+      grid-template-columns: 1fr;
+    }
+
+    .billWorkspaceGrid {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
-    .billsTopRightGrid,
-    .billsIntelGrid {
-      grid-template-columns: 1fr;
+    .billWorkspaceGrid > :nth-child(3) {
+      grid-column: 1 / -1;
+    }
+  }
+
+  @media (max-width: 1260px) {
+    .billMetricGrid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .billRosterListCompact {
+      min-height: 580px;
+      max-height: 580px;
     }
   }
 
   @media (max-width: 1100px) {
-    .billsHeroGrid,
-    .billsMainGrid {
-      grid-template-columns: 1fr;
-    }
-  }
-
-  @media (max-width: 1024px) {
-    .billsRosterControls,
-    .billsInfoGrid,
-    .billsFormGrid2,
-    .billsFormGrid3,
-    .billsFormGrid4,
-    .billsActionGrid,
-    .billsActionGridTight {
+    .billHeroGrid,
+    .billWorkspaceGrid {
       grid-template-columns: 1fr;
     }
 
-    .billsCompactRow {
-      grid-template-columns: 42px minmax(0, 1fr);
-    }
-
-    .billsCompactValue {
-      white-space: normal;
-    }
-
-    .billsCompactActions {
-      grid-column: 2;
+    .billHeroSide {
       justify-content: flex-start;
     }
   }
 
+  @media (max-width: 1024px) {
+    .billInfoGrid,
+    .billFormGrid2,
+    .billFormGrid3,
+    .billActionGrid,
+    .billActionGridQuad,
+    .billPayGrid {
+      grid-template-columns: 1fr;
+    }
+
+    .billCompactRow {
+      grid-template-columns: 42px minmax(0, 1fr);
+    }
+
+    .billCompactValue {
+      white-space: normal;
+    }
+
+    .billCompactActions {
+      grid-column: 2;
+      justify-content: flex-start;
+    }
+
+    .billRosterListCompact,
+    .billIntelList {
+      min-height: 0;
+      max-height: none;
+    }
+  }
+
   @media (max-width: 760px) {
-    .billsPageShell {
+    .billPageShell {
       padding: 8px 0 14px;
     }
 
-    .billsMetricGrid,
-    .billsTopRightGrid,
-    .billsIntelGrid {
+    .billMetricGrid {
       grid-template-columns: 1fr;
     }
   }
 
   @media (max-width: 640px) {
-    .billsMetricGrid,
-    .billsActionGrid,
-    .billsActionGridTight {
+    .billMetricGrid,
+    .billActionGrid,
+    .billActionGridQuad {
       grid-template-columns: 1fr;
     }
   }

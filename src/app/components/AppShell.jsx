@@ -44,7 +44,7 @@ export default function AppShell({ children }) {
           </main>
         </div>
 
-        <AiHelpPanel />
+        {/* <AiHelpPanel /> */}
       </div>
     </RippleProvider>
   );

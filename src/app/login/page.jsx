@@ -1,10 +1,9 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
-import { getCurrentUserRole } from "@/lib/getCurrentUserRole";
 
 export const dynamic = "force-dynamic";
 
@@ -208,6 +207,7 @@ function SplashIntro({ leaving }) {
 
 export default function LoginPage() {
   const router = useRouter();
+  const submitRef = useRef(false);
 
   const [mode, setMode] = useState("login");
   const [email, setEmail] = useState("");
@@ -234,19 +234,39 @@ export default function LoginPage() {
     async function checkSession() {
       if (!supabase) return;
 
-      const { user, isDisabled } = await getCurrentUserRole();
+      const {
+        data: { session },
+        error,
+      } = await supabase.auth.getSession();
+
+      if (!mounted) return;
+      if (error || !session?.user) return;
+
+      const { data: profile, error: profileError } = await supabase
+        .from("profiles")
+        .select("is_disabled, status")
+        .eq("id", session.user.id)
+        .maybeSingle();
 
       if (!mounted) return;
 
-      if (user && isDisabled) {
+      if (profileError) {
+        setStatus(profileError.message || "Failed to load user profile.", "error");
+        return;
+      }
+
+      const normalizedStatus = String(profile?.status || "active").toLowerCase();
+      const isDisabled =
+        profile?.is_disabled === true || normalizedStatus === "suspended";
+
+      if (isDisabled) {
         await supabase.auth.signOut();
+        if (!mounted) return;
         setStatus("This account has been disabled.", "error");
         return;
       }
 
-      if (user) {
-        router.replace("/");
-      }
+      router.replace("/");
     }
 
     checkSession();
@@ -271,11 +291,14 @@ export default function LoginPage() {
     e.preventDefault();
     setStatus("");
 
+    if (submitRef.current) return;
+
     if (!supabase) {
       setStatus("Missing Supabase environment variables.", "error");
       return;
     }
 
+    submitRef.current = true;
     setLoading(true);
 
     try {
@@ -295,31 +318,46 @@ export default function LoginPage() {
         );
         setMode("login");
         setPass("");
-      } else {
-        const { error } = await supabase.auth.signInWithPassword({
-          email: cleanEmail,
-          password: pass,
-        });
-
-        if (error) throw error;
-
-        const { user, isDisabled } = await getCurrentUserRole();
-
-        if (!user) {
-          throw new Error("Login succeeded but user data could not be loaded.");
-        }
-
-        if (isDisabled) {
-          await supabase.auth.signOut();
-          setStatus("This account has been disabled.", "error");
-          return;
-        }
-
-        router.replace("/");
+        return;
       }
+
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: cleanEmail,
+        password: pass,
+      });
+
+      if (error) throw error;
+
+      const signedInUser = data?.user;
+      if (!signedInUser) {
+        throw new Error("Login succeeded but no user was returned.");
+      }
+
+      const { data: profile, error: profileError } = await supabase
+        .from("profiles")
+        .select("is_disabled, status")
+        .eq("id", signedInUser.id)
+        .maybeSingle();
+
+      if (profileError) {
+        throw new Error(profileError.message || "Failed to load user profile.");
+      }
+
+      const normalizedStatus = String(profile?.status || "active").toLowerCase();
+      const isDisabled =
+        profile?.is_disabled === true || normalizedStatus === "suspended";
+
+      if (isDisabled) {
+        await supabase.auth.signOut();
+        setStatus("This account has been disabled.", "error");
+        return;
+      }
+
+      router.replace("/");
     } catch (err) {
       setStatus(niceErr(err), "error");
     } finally {
+      submitRef.current = false;
       setLoading(false);
     }
   }
@@ -331,6 +369,8 @@ export default function LoginPage() {
       setStatus("Missing Supabase environment variables.", "error");
       return;
     }
+
+    if (loading) return;
 
     setLoading(true);
 
@@ -361,6 +401,8 @@ export default function LoginPage() {
       setStatus("Missing Supabase environment variables.", "error");
       return;
     }
+
+    if (loading) return;
 
     setLoading(true);
 

@@ -2,24 +2,67 @@ import { NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
 
-function toNum(value) {
+const TTL_MS = 1000 * 30;
+const memoryCache = new Map();
+
+function toNum(value, fallback = null) {
   const n = Number(value);
-  return Number.isFinite(n) ? n : null;
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function normalizeSymbol(value) {
+  return String(value || "").trim().toUpperCase();
+}
+
+function getCached(key) {
+  const hit = memoryCache.get(key);
+  if (!hit) return null;
+
+  if (Date.now() - hit.ts > TTL_MS) {
+    memoryCache.delete(key);
+    return null;
+  }
+
+  return hit.data;
+}
+
+function setCached(key, data) {
+  memoryCache.set(key, {
+    ts: Date.now(),
+    data,
+  });
 }
 
 export async function GET(req) {
   try {
     const { searchParams } = new URL(req.url);
-    const symbol = String(searchParams.get("symbol") || "").trim().toUpperCase();
+    const symbol = normalizeSymbol(searchParams.get("symbol"));
 
     if (!symbol) {
-      return NextResponse.json({ error: "Missing symbol" }, { status: 400 });
+      return NextResponse.json(
+        { error: "Missing symbol", rateLimited: false },
+        { status: 400 }
+      );
     }
 
-    const apiKey = process.env.FMP_API_KEY;
+    const cached = getCached(symbol);
+    if (cached) {
+      return NextResponse.json({
+        ...cached,
+        cached: true,
+      });
+    }
+
+    const apiKey =
+      process.env.FMP_API_KEY ||
+      process.env.NEXT_PUBLIC_FMP_API_KEY ||
+      process.env.FINANCIAL_MODELING_PREP_API_KEY;
 
     if (!apiKey) {
-      return NextResponse.json({ error: "Missing FMP_API_KEY" }, { status: 500 });
+      return NextResponse.json(
+        { error: "Missing FMP API key", rateLimited: false },
+        { status: 500 }
+      );
     }
 
     const url =
@@ -28,14 +71,35 @@ export async function GET(req) {
       `&apikey=${encodeURIComponent(apiKey)}`;
 
     const res = await fetch(url, { cache: "no-store" });
-    const text = await res.text();
 
-    console.log("FMP STATUS:", res.status);
-    console.log("FMP RAW:", text);
+    if (res.status === 429) {
+      if (cached) {
+        return NextResponse.json({
+          ...cached,
+          error: "",
+          rateLimited: true,
+          cached: true,
+        });
+      }
+
+      return NextResponse.json(
+        {
+          error: "Live quote temporarily unavailable.",
+          rateLimited: true,
+        },
+        { status: 200 }
+      );
+    }
+
+    const text = await res.text();
 
     if (!res.ok) {
       return NextResponse.json(
-        { error: `FMP request failed: ${res.status}`, details: text },
+        {
+          error: `FMP request failed: ${res.status}`,
+          details: text,
+          rateLimited: false,
+        },
         { status: 502 }
       );
     }
@@ -45,7 +109,11 @@ export async function GET(req) {
       data = JSON.parse(text);
     } catch {
       return NextResponse.json(
-        { error: "FMP returned non-JSON", details: text },
+        {
+          error: "FMP returned non-JSON",
+          details: text,
+          rateLimited: false,
+        },
         { status: 502 }
       );
     }
@@ -73,12 +141,16 @@ export async function GET(req) {
 
     if (price === null || price <= 0) {
       return NextResponse.json(
-        { error: "Price unavailable", details: data },
+        {
+          error: "Price unavailable",
+          details: row || null,
+          rateLimited: false,
+        },
         { status: 404 }
       );
     }
 
-    return NextResponse.json({
+    const payload = {
       symbol,
       name,
       exchange,
@@ -94,12 +166,21 @@ export async function GET(req) {
       volume,
       avgVolume,
       marketCap,
-      raw: row,
-    });
+      rateLimited: false,
+      error: "",
+    };
+
+    setCached(symbol, payload);
+
+    return NextResponse.json(payload);
   } catch (err) {
-    console.error("PRICES ROUTE ERROR:", err);
+    console.error("prices route error", err);
+
     return NextResponse.json(
-      { error: err?.message || "Price fetch failed" },
+      {
+        error: err?.message || "Price fetch failed",
+        rateLimited: false,
+      },
       { status: 500 }
     );
   }

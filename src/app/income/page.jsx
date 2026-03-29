@@ -1,62 +1,38 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { supabase } from "@/lib/supabaseClient";
-
 export const dynamic = "force-dynamic";
 
-/* =========================================================
-   LIFE COMMAND CENTER — INCOME COMMAND
-   Rewritten to match the screenshot structure:
-   - hero banner
-   - 4 top stat cards
-   - big left board
-   - stacked right rail action panels
-   - keeps income logic, scheduled paydays, account routing,
-     and optional calendar event creation
-   ========================================================= */
+import { useEffect, useMemo, useState } from "react";
+import {
+  ArrowUpRight,
+  BadgeDollarSign,
+  CalendarClock,
+  Copy,
+  Landmark,
+  Plus,
+  Save,
+  Search,
+  Trash2,
+} from "lucide-react";
+import { supabase } from "@/lib/supabaseClient";
+import GlassPane from "../components/GlassPane";
 
-/* ------------------------- utils ------------------------- */
+const META_PREFIX = "__LCC_META__";
+
 function uid() {
-  return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  return (
+    globalThis.crypto?.randomUUID?.() ??
+    `${Date.now()}-${Math.random().toString(16).slice(2)}`
+  );
 }
 
-function isoDate(d = new Date()) {
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd}`;
+function round2(n) {
+  return Math.round((Number(n || 0) + Number.EPSILON) * 100) / 100;
 }
 
-function toDateOnly(value) {
-  const s = String(value || "").trim();
-  if (!s) return null;
-  const d = new Date(`${s}T00:00:00`);
-  return Number.isNaN(d.getTime()) ? null : d;
-}
-
-function monthKeyFromISO(iso) {
-  const s = String(iso || "");
-  return s.length >= 7 ? s.slice(0, 7) : "";
-}
-
-function fmtMonthLabel(ym) {
-  if (!ym || ym.length < 7) return "—";
-  const [y, m] = ym.split("-").map(Number);
-  if (!Number.isFinite(y) || !Number.isFinite(m)) return ym;
-  return new Date(y, m - 1, 1).toLocaleDateString(undefined, {
-    month: "long",
-    year: "numeric",
-  });
-}
-
-function money(n) {
-  const num = Number(n);
-  if (!Number.isFinite(num)) return "—";
-  return num.toLocaleString(undefined, {
-    style: "currency",
-    currency: "USD",
-  });
+function safeNum(n, fallback = 0) {
+  const x = Number(n);
+  return Number.isFinite(x) ? x : fallback;
 }
 
 function parseMoneyInput(v) {
@@ -65,35 +41,89 @@ function parseMoneyInput(v) {
   return Number.isFinite(num) ? num : NaN;
 }
 
-function clamp(n, min, max) {
-  return Math.max(min, Math.min(max, n));
+function fmtMoney(n) {
+  const num = Number(n);
+  if (!Number.isFinite(num)) return "$0";
+  return num.toLocaleString(undefined, {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
+  });
 }
 
-function addDays(d, days) {
-  const x = new Date(d.getTime());
-  x.setDate(x.getDate() + days);
-  return x;
+function fmtMoneyTight(n) {
+  const num = Number(n);
+  if (!Number.isFinite(num)) return "$0.00";
+  return num.toLocaleString(undefined, {
+    style: "currency",
+    currency: "USD",
+  });
 }
 
-function daysInMonth(year, monthIndex0) {
-  return new Date(year, monthIndex0 + 1, 0).getDate();
+function fmtWhen(ts) {
+  if (!ts) return "—";
+  const d = new Date(ts);
+  if (!Number.isFinite(d.getTime())) return "—";
+  return d.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
 }
 
-function startOfMonthDate(ym) {
-  const [y, m] = String(ym || "").split("-").map(Number);
-  if (!Number.isFinite(y) || !Number.isFinite(m)) return null;
-  return new Date(y, m - 1, 1);
+function formatAgo(value) {
+  if (!value) return "—";
+  const ms = Date.now() - new Date(value).getTime();
+  const minutes = Math.round(ms / 60000);
+
+  if (!Number.isFinite(minutes)) return "—";
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes}m ago`;
+
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+
+  const days = Math.round(hours / 24);
+  return `${days}d ago`;
 }
 
-function endOfMonthDate(ym) {
-  const [y, m] = String(ym || "").split("-").map(Number);
-  if (!Number.isFinite(y) || !Number.isFinite(m)) return null;
-  return new Date(y, m - 1, daysInMonth(y, m - 1));
+function currentMonthLabel() {
+  return new Intl.DateTimeFormat("en-US", {
+    month: "long",
+    year: "numeric",
+  }).format(new Date());
 }
 
-function dateLabel(iso) {
-  const d = toDateOnly(iso);
-  if (!d) return "—";
+function monthInputToday() {
+  return new Date().toISOString().slice(0, 7);
+}
+
+function dateInputToday() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function monthKeyOf(dateValue) {
+  if (!dateValue) return "";
+  return String(dateValue).slice(0, 7);
+}
+
+function prettyMonth(monthKey) {
+  if (!monthKey) return "No month";
+  const [year, month] = String(monthKey).split("-");
+  const d = new Date(Number(year), Number(month) - 1, 1);
+  if (!Number.isFinite(d.getTime())) return monthKey;
+  return d.toLocaleDateString(undefined, {
+    month: "long",
+    year: "numeric",
+  });
+}
+
+function shortDate(dateValue) {
+  if (!dateValue) return "—";
+  const d = new Date(`${dateValue}T12:00:00`);
+  if (!Number.isFinite(d.getTime())) return "—";
   return d.toLocaleDateString(undefined, {
     month: "short",
     day: "numeric",
@@ -101,193 +131,83 @@ function dateLabel(iso) {
   });
 }
 
-function pct(n, d) {
-  if (!Number.isFinite(n) || !Number.isFinite(d) || d <= 0) return 0;
-  return (n / d) * 100;
+function isFutureDate(dateValue) {
+  if (!dateValue) return false;
+  const target = new Date(`${dateValue}T12:00:00`);
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12);
+  return target.getTime() > today.getTime();
 }
 
-function niceSourceLabel(s) {
-  const raw = String(s || "").trim();
-  return raw || "Income";
+function sourceInitial(source = "") {
+  const clean = String(source).trim();
+  return clean ? clean[0].toUpperCase() : "I";
 }
 
-/* -------------------- pay schedule logic -------------------- */
-function computeProjectedPaydaysForMonth({ monthYM, schedule, anchorDateISO }) {
-  const start = startOfMonthDate(monthYM);
-  const end = endOfMonthDate(monthYM);
-  if (!start || !end) return [];
-
-  const mode = String(schedule || "BIWEEKLY").toUpperCase();
-
-  if (mode === "TWICE_MONTHLY") {
-    const [y, m] = monthYM.split("-").map(Number);
-    const d1 = new Date(y, m - 1, 1);
-    const d15 = new Date(y, m - 1, 15);
-
-    return [d1, d15]
-      .filter((d) => d >= start && d <= end)
-      .map((d) => ({ id: `proj-${isoDate(d)}`, pay_date: isoDate(d), projected: true }));
+function toneMeta(tone = "neutral") {
+  if (tone === "green") {
+    return {
+      text: "#97efc7",
+      border: "rgba(143, 240, 191, 0.18)",
+      glow: "rgba(110, 229, 173, 0.10)",
+      bg: "rgba(11, 22, 17, 0.66)",
+    };
   }
 
-  if (mode === "MONTHLY") {
-    const [y, m] = monthYM.split("-").map(Number);
-    const d1 = new Date(y, m - 1, 1);
-    return [{ id: `proj-${isoDate(d1)}`, pay_date: isoDate(d1), projected: true }].filter(
-      (x) => toDateOnly(x.pay_date) >= start && toDateOnly(x.pay_date) <= end
-    );
+  if (tone === "blue") {
+    return {
+      text: "#bcd7ff",
+      border: "rgba(143, 177, 255, 0.18)",
+      glow: "rgba(110, 163, 255, 0.10)",
+      bg: "rgba(10, 16, 28, 0.66)",
+    };
   }
 
-  const step = mode === "WEEKLY" ? 7 : 14;
-  const anchor = toDateOnly(anchorDateISO);
-  if (!anchor) return [];
-
-  let cur = new Date(anchor.getTime());
-  while (cur > end) cur = addDays(cur, -step);
-  while (addDays(cur, step) < start) cur = addDays(cur, step);
-
-  const out = [];
-  let iter = new Date(cur.getTime());
-  while (iter < start) iter = addDays(iter, step);
-
-  while (iter <= end) {
-    out.push({
-      id: `proj-${isoDate(iter)}`,
-      pay_date: isoDate(iter),
-      projected: true,
-    });
-    iter = addDays(iter, step);
+  if (tone === "amber") {
+    return {
+      text: "#f5cf88",
+      border: "rgba(255, 204, 112, 0.18)",
+      glow: "rgba(255, 194, 92, 0.10)",
+      bg: "rgba(22, 17, 11, 0.66)",
+    };
   }
 
-  return out;
-}
+  if (tone === "red") {
+    return {
+      text: "#ffb4c5",
+      border: "rgba(255, 132, 163, 0.18)",
+      glow: "rgba(255, 108, 145, 0.10)",
+      bg: "rgba(22, 11, 15, 0.66)",
+    };
+  }
 
-/* ---------------------- defaults + mapping ---------------------- */
-const DEFAULT_SETTINGS = {
-  goalMonthly: 8000,
-  schedule: "BIWEEKLY",
-  anchorDate: isoDate(),
-  paycheckAmt: 2000,
-  bonusEstimate: 0,
-  defaultAccountId: "",
-  defaultProfileId: "",
-  autoCreateCalendar: false,
-  paydayEventTime: "09:00",
-};
-
-function normalizeDeposit(raw) {
-  const x = raw || {};
   return {
-    id: String(x.id || uid()),
-    date: String(x.date || isoDate()),
-    source: String(x.source || "Income"),
-    amount: Number.isFinite(Number(x.amount)) ? Number(x.amount) : 0,
-    note: String(x.note || ""),
-    createdAt: Number.isFinite(Number(x.createdAt)) ? Number(x.createdAt) : Date.now(),
-    accountId: x.accountId ? String(x.accountId) : "",
-    accountName: x.accountName ? String(x.accountName) : "",
+    text: "#f7fbff",
+    border: "rgba(214, 226, 255, 0.14)",
+    glow: "rgba(140, 170, 255, 0.08)",
+    bg: "rgba(10, 15, 24, 0.66)",
   };
 }
 
-function mapDepositRowToClient(row) {
-  return normalizeDeposit({
-    id: row.id,
-    date: row.deposit_date,
-    source: row.source,
-    amount: row.amount,
-    note: row.note,
-    createdAt: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
-    accountId: row.account_id || "",
-    accountName: row.account_name || "",
-  });
-}
+function MiniPill({ children, tone = "neutral" }) {
+  const meta = toneMeta(tone);
 
-function mapIncomeSettingsRowToClient(row) {
-  return {
-    goalMonthly: Number.isFinite(Number(row?.goal_monthly))
-      ? Number(row.goal_monthly)
-      : DEFAULT_SETTINGS.goalMonthly,
-    schedule: row?.schedule ? String(row.schedule) : DEFAULT_SETTINGS.schedule,
-    anchorDate: row?.anchor_date ? String(row.anchor_date) : DEFAULT_SETTINGS.anchorDate,
-    paycheckAmt: Number.isFinite(Number(row?.paycheck_amt))
-      ? Number(row.paycheck_amt)
-      : DEFAULT_SETTINGS.paycheckAmt,
-    bonusEstimate: Number.isFinite(Number(row?.bonus_estimate))
-      ? Number(row.bonus_estimate)
-      : DEFAULT_SETTINGS.bonusEstimate,
-    viewMonth: row?.view_month ? String(row.view_month) : monthKeyFromISO(isoDate()),
-    defaultAccountId: row?.default_account_id ? String(row.default_account_id) : "",
-    defaultProfileId: row?.default_profile_id ? String(row.default_profile_id) : "",
-    autoCreateCalendar: Boolean(row?.auto_create_calendar),
-    paydayEventTime: row?.payday_event_time ? String(row.payday_event_time) : DEFAULT_SETTINGS.paydayEventTime,
-  };
-}
-
-function mapIncomeSettingsClientToRow(settings, userId) {
-  return {
-    user_id: userId,
-    goal_monthly: Number(settings.goalMonthly) || 0,
-    schedule: String(settings.schedule || "BIWEEKLY").toUpperCase(),
-    anchor_date: settings.anchorDate || null,
-    paycheck_amt: Number(settings.paycheckAmt) || 0,
-    bonus_estimate: Number(settings.bonusEstimate) || 0,
-    view_month: settings.viewMonth || monthKeyFromISO(isoDate()),
-    default_account_id: settings.defaultAccountId || null,
-    default_profile_id: settings.defaultProfileId || null,
-    auto_create_calendar: Boolean(settings.autoCreateCalendar),
-    payday_event_time: settings.paydayEventTime || null,
-    updated_at: new Date().toISOString(),
-  };
-}
-
-function normalizeScheduled(raw) {
-  const x = raw || {};
-  return {
-    id: String(x.id || uid()),
-    pay_date: String(x.pay_date || isoDate()),
-    expected_amount: Number.isFinite(Number(x.expected_amount)) ? Number(x.expected_amount) : 0,
-    source: String(x.source || "Paycheck"),
-    note: String(x.note || ""),
-    account_id: x.account_id ? String(x.account_id) : "",
-    account_name: x.account_name ? String(x.account_name) : "",
-    status: String(x.status || "scheduled"),
-    calendar_event_id: x.calendar_event_id ? String(x.calendar_event_id) : "",
-    created_at: x.created_at || new Date().toISOString(),
-    projected: Boolean(x.projected),
-  };
-}
-
-/* ---------------------- small ui helpers ---------------------- */
-function toneColor(tone) {
-  if (tone === "green") return "#66f0a3";
-  if (tone === "amber") return "#ffcb6b";
-  if (tone === "red") return "#ff8e8e";
-  if (tone === "blue") return "#86b7ff";
-  return "#d7e0f4";
-}
-
-function toneBg(tone) {
-  if (tone === "green") return "rgba(58, 194, 120, 0.14)";
-  if (tone === "amber") return "rgba(245, 158, 11, 0.16)";
-  if (tone === "red") return "rgba(239, 68, 68, 0.16)";
-  if (tone === "blue") return "rgba(96, 165, 250, 0.16)";
-  return "rgba(255,255,255,0.06)";
-}
-
-function TonePill({ children, tone = "default" }) {
   return (
     <div
       style={{
+        minHeight: 30,
         display: "inline-flex",
         alignItems: "center",
         gap: 8,
-        padding: "8px 12px",
+        padding: "0 10px",
         borderRadius: 999,
-        border: `1px solid ${tone === "default" ? "rgba(255,255,255,.10)" : toneColor(tone)}33`,
-        background: toneBg(tone),
-        color: toneColor(tone),
-        fontSize: 12,
+        border: `1px solid ${meta.border}`,
+        background:
+          "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.012))",
+        boxShadow: `inset 0 1px 0 rgba(255,255,255,0.03), 0 0 10px ${meta.glow}`,
+        color: tone === "neutral" ? "rgba(255,255,255,0.88)" : meta.text,
+        fontSize: 11,
         fontWeight: 800,
-        letterSpacing: ".02em",
         whiteSpace: "nowrap",
       }}
     >
@@ -296,53 +216,156 @@ function TonePill({ children, tone = "default" }) {
   );
 }
 
-function ActionButton({ children, tone = "default", ...props }) {
-  const map = {
-    default: {
-      bg: "rgba(255,255,255,.055)",
-      border: "rgba(255,255,255,.10)",
-      color: "#eef4ff",
-    },
-    blue: {
-      bg: "linear-gradient(180deg, rgba(44,92,190,.82), rgba(25,53,118,.88))",
-      border: "rgba(139,172,255,.35)",
-      color: "#ffffff",
-    },
-    green: {
-      bg: "rgba(34,197,94,.14)",
-      border: "rgba(34,197,94,.30)",
-      color: "#ddffe8",
-    },
-    red: {
-      bg: "rgba(239,68,68,.14)",
-      border: "rgba(239,68,68,.30)",
-      color: "#ffdede",
-    },
-    amber: {
-      bg: "rgba(245,158,11,.14)",
-      border: "rgba(245,158,11,.30)",
-      color: "#fff0c7",
-    },
-  };
+function PaneHeader({ title, subcopy, right }) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "flex-start",
+        gap: 10,
+        flexWrap: "wrap",
+        marginBottom: 10,
+      }}
+    >
+      <div style={{ minWidth: 0 }}>
+        <div
+          style={{
+            fontSize: 17,
+            lineHeight: 1.08,
+            fontWeight: 850,
+            letterSpacing: "-0.035em",
+            color: "#fff",
+          }}
+        >
+          {title}
+        </div>
 
-  const s = map[tone] || map.default;
+        {subcopy ? (
+          <div
+            style={{
+              marginTop: 3,
+              fontSize: 12,
+              lineHeight: 1.45,
+              color: "rgba(255,255,255,0.60)",
+            }}
+          >
+            {subcopy}
+          </div>
+        ) : null}
+      </div>
+
+      {right || null}
+    </div>
+  );
+}
+
+function StatCard({ icon: Icon, label, value, detail, tone = "neutral" }) {
+  const meta = toneMeta(tone);
+
+  return (
+    <GlassPane
+      tone={tone === "blue" ? "neutral" : tone}
+      size="card"
+      style={{ height: "100%" }}
+    >
+      <div
+        style={{
+          minHeight: 112,
+          display: "grid",
+          gridTemplateRows: "auto auto 1fr",
+          gap: 7,
+        }}
+      >
+        <div
+          style={{
+            width: 34,
+            height: 34,
+            borderRadius: 12,
+            display: "grid",
+            placeItems: "center",
+            border: `1px solid ${meta.border}`,
+            background: meta.bg,
+            color: tone === "neutral" ? "#fff" : meta.text,
+            boxShadow: `0 0 10px ${meta.glow}`,
+          }}
+        >
+          <Icon size={15} />
+        </div>
+
+        <div>
+          <div
+            style={{
+              fontSize: 10,
+              textTransform: "uppercase",
+              letterSpacing: ".2em",
+              fontWeight: 800,
+              color: "rgba(255,255,255,0.40)",
+            }}
+          >
+            {label}
+          </div>
+
+          <div
+            style={{
+              marginTop: 8,
+              fontSize: "clamp(18px, 2.2vw, 28px)",
+              lineHeight: 1,
+              fontWeight: 850,
+              letterSpacing: "-0.05em",
+              color: tone === "neutral" ? "#fff" : meta.text,
+            }}
+          >
+            {value}
+          </div>
+        </div>
+
+        <div
+          style={{
+            fontSize: 11.5,
+            lineHeight: 1.4,
+            color: "rgba(255,255,255,0.60)",
+          }}
+        >
+          {detail}
+        </div>
+      </div>
+    </GlassPane>
+  );
+}
+
+function ActionBtn({
+  children,
+  onClick,
+  variant = "ghost",
+  full = false,
+  type = "button",
+  disabled = false,
+}) {
+  const isPrimary = variant === "primary";
+  const isDanger = variant === "danger";
 
   return (
     <button
-      {...props}
+      type={type}
+      onClick={onClick}
+      disabled={disabled}
+      className="incomeActionBtn"
       style={{
-        height: 42,
-        padding: "0 15px",
-        borderRadius: 14,
-        border: `1px solid ${s.border}`,
-        background: s.bg,
-        color: s.color,
-        fontWeight: 800,
-        fontSize: 14,
-        cursor: "pointer",
-        boxShadow: tone === "blue" ? "0 10px 28px rgba(30,64,175,.35)" : "none",
-        transition: "0.18s ease",
-        ...(props.style || {}),
+        width: full ? "100%" : undefined,
+        border: isDanger
+          ? "1px solid rgba(255,132,163,0.18)"
+          : isPrimary
+          ? "1px solid rgba(143,177,255,0.18)"
+          : "1px solid rgba(214,226,255,0.10)",
+        background: isDanger
+          ? "linear-gradient(180deg, rgba(255,132,163,0.10), rgba(255,132,163,0.05))"
+          : isPrimary
+          ? "linear-gradient(180deg, rgba(143,177,255,0.14), rgba(143,177,255,0.06))"
+          : "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.012))",
+        color: isDanger ? "#ffd3df" : "#f7fbff",
+        opacity: disabled ? 0.55 : 1,
+        cursor: disabled ? "not-allowed" : "pointer",
       }}
     >
       {children}
@@ -350,2050 +373,2495 @@ function ActionButton({ children, tone = "default", ...props }) {
   );
 }
 
-function StatCard({ label, value, sub, tone = "default" }) {
+function ProgressBar({ fill = 0, tone = "neutral" }) {
+  const normalized = Math.max(0, Math.min(100, safeNum(fill)));
+  const toneMap = {
+    neutral: "linear-gradient(90deg, rgba(96,165,250,.95), rgba(147,197,253,.95))",
+    green: "linear-gradient(90deg, rgba(74,222,128,.95), rgba(167,243,208,.95))",
+    blue: "linear-gradient(90deg, rgba(96,165,250,.95), rgba(191,219,254,.95))",
+    amber: "linear-gradient(90deg, rgba(251,191,36,.95), rgba(253,230,138,.95))",
+    red: "linear-gradient(90deg, rgba(248,113,113,.95), rgba(252,165,165,.95))",
+  };
+
   return (
-    <div className="statCard">
+    <div className="incomeProgress">
       <div
-        className="statGlow"
+        className="incomeProgressFill"
         style={{
-          background:
-            tone === "green"
-              ? "radial-gradient(circle at top right, rgba(34,197,94,.16), transparent 48%)"
-              : tone === "amber"
-              ? "radial-gradient(circle at top right, rgba(245,158,11,.16), transparent 48%)"
-              : tone === "red"
-              ? "radial-gradient(circle at top right, rgba(239,68,68,.16), transparent 48%)"
-              : "radial-gradient(circle at top right, rgba(96,165,250,.16), transparent 48%)",
+          width: `${normalized}%`,
+          background: toneMap[tone] || toneMap.neutral,
         }}
       />
-      <div
-        className="statTopLine"
-        style={{
-          background:
-            tone === "green"
-              ? "#66f0a3"
-              : tone === "amber"
-              ? "#ffcb6b"
-              : tone === "red"
-              ? "#ff8e8e"
-              : "#8db8ff",
-        }}
-      />
-      <div className="eyebrow">{label}</div>
-      <div className="statValue">{value}</div>
-      <div className="subtleText">{sub}</div>
     </div>
   );
 }
 
-function DetailTile({ label, value }) {
+function emptySplitLine(defaultAccountId = "") {
+  return {
+    id: uid(),
+    accountId: defaultAccountId || "",
+    amount: "",
+  };
+}
+
+function getAccountName(accounts, accountId) {
+  return accounts.find((a) => a.id === accountId)?.name || "Account";
+}
+
+function getSplitTotal(lines) {
+  return round2(
+    lines.reduce((sum, line) => {
+      return sum + safeNum(parseMoneyInput(line.amount), 0);
+    }, 0)
+  );
+}
+
+function sanitizeMeta(meta = {}) {
+  const clean = {};
+
+  if (meta.status === "scheduled") {
+    clean.status = "scheduled";
+  }
+
+  if (Array.isArray(meta.splits) && meta.splits.length) {
+    clean.splits = meta.splits
+      .filter((split) => split?.accountId && safeNum(split.amount, 0) > 0)
+      .map((split) => ({
+        accountId: split.accountId,
+        accountName: split.accountName || "",
+        amount: round2(split.amount),
+      }));
+  }
+
+  if (meta.posted) clean.posted = true;
+  if (meta.postedAt) clean.postedAt = meta.postedAt;
+
+  return clean;
+}
+
+function encodeStoredNote(userNote, meta = {}) {
+  const cleanNote = String(userNote ?? "").trim();
+  const cleanMeta = sanitizeMeta(meta);
+
+  if (!Object.keys(cleanMeta).length) {
+    return cleanNote || null;
+  }
+
+  const payload = encodeURIComponent(JSON.stringify(cleanMeta));
+  return `${cleanNote ? `${cleanNote}\n\n` : ""}${META_PREFIX}${payload}`;
+}
+
+function extractStoredNote(rawNote) {
+  const text = String(rawNote ?? "");
+  const idx = text.indexOf(META_PREFIX);
+
+  if (idx === -1) {
+    return { userNote: text, meta: {} };
+  }
+
+  const userNote = text.slice(0, idx).trimEnd();
+  const payload = text.slice(idx + META_PREFIX.length);
+
+  try {
+    const parsed = JSON.parse(decodeURIComponent(payload));
+    return { userNote, meta: parsed || {} };
+  } catch {
+    return { userNote, meta: {} };
+  }
+}
+
+function mapIncomeRow(row) {
+  const { userNote, meta } = extractStoredNote(row.note);
+  const status =
+    meta?.status === "scheduled"
+      ? "scheduled"
+      : isFutureDate(row.deposit_date)
+      ? "scheduled"
+      : "received";
+
+  return {
+    id: row.id,
+    user_id: row.user_id,
+    source: row.source ?? "",
+    amount: safeNum(row.amount, 0),
+    note: userNote ?? "",
+    deposit_date: row.deposit_date ?? dateInputToday(),
+    created_at: row.created_at ?? null,
+    updated_at: row.updated_at ?? null,
+    status,
+    posted: !!meta?.posted,
+    postedAt: meta?.postedAt ?? null,
+    splits: Array.isArray(meta?.splits)
+      ? meta.splits.map((split) => ({
+          accountId: split.accountId,
+          accountName: split.accountName || "",
+          amount: safeNum(split.amount, 0),
+        }))
+      : [],
+  };
+}
+
+function mapIncomeToRow(item, userId) {
+  return {
+    user_id: userId,
+    source: item.source ?? "",
+    amount: safeNum(item.amount, 0),
+    note: encodeStoredNote(item.note, {
+      status: item.status,
+      posted: item.posted,
+      postedAt: item.postedAt,
+      splits: item.splits,
+    }),
+    deposit_date: item.deposit_date || dateInputToday(),
+  };
+}
+
+function isScheduledItem(item) {
+  return item?.status === "scheduled";
+}
+
+function splitSummaryText(item) {
+  if (!item?.splits?.length) return "No split plan";
+  if (item.splits.length === 1) {
+    return `${item.splits[0].accountName || "1 account"} • ${fmtMoneyTight(
+      item.splits[0].amount
+    )}`;
+  }
+  return `${item.splits.length} accounts • ${fmtMoneyTight(
+    item.splits.reduce((sum, split) => sum + safeNum(split.amount), 0)
+  )}`;
+}
+
+function CompactIncomeRow({
+  item,
+  selected,
+  maxAmount,
+  onSelect,
+  onDuplicate,
+  onDelete,
+}) {
+  const scheduled = isScheduledItem(item);
+  const posted = !!item.posted;
+  const tone = scheduled ? "blue" : "green";
+  const meta = toneMeta(tone);
+  const fill = maxAmount > 0 ? (safeNum(item.amount) / maxAmount) * 100 : 0;
+
   return (
-    <div className="detailTile">
-      <div className="detailLabel">{label}</div>
-      <div className="detailValue">{value || "—"}</div>
+    <div
+      className="incomeCompactRow"
+      onClick={onSelect}
+      style={{
+        borderColor: selected ? meta.border : "rgba(255,255,255,0.07)",
+        boxShadow: selected
+          ? `inset 0 1px 0 rgba(255,255,255,0.03), 0 0 0 1px rgba(255,255,255,0.01), 0 0 24px ${meta.glow}`
+          : "inset 0 1px 0 rgba(255,255,255,0.025)",
+      }}
+    >
+      <div
+        className="incomeCompactAvatar"
+        style={{
+          borderColor: meta.border,
+          color: tone === "neutral" ? "#fff" : meta.text,
+          boxShadow: `0 0 12px ${meta.glow}`,
+        }}
+      >
+        {sourceInitial(item.source)}
+      </div>
+
+      <div style={{ minWidth: 0 }}>
+        <div
+          style={{
+            display: "flex",
+            gap: 8,
+            alignItems: "center",
+            flexWrap: "wrap",
+          }}
+        >
+          <div className="incomeCompactTitle">{item.source || "Income"}</div>
+          <MiniPill tone={scheduled ? "blue" : "green"}>
+            {scheduled ? "Scheduled" : "Received"}
+          </MiniPill>
+          <MiniPill tone={posted ? "green" : "amber"}>
+            {posted ? "Posted" : "Unposted"}
+          </MiniPill>
+        </div>
+
+        <div className="incomeCompactSub">
+          {shortDate(item.deposit_date)} • {splitSummaryText(item)} • Updated{" "}
+          {formatAgo(item.updated_at || item.created_at)}
+        </div>
+
+        <div style={{ marginTop: 10 }}>
+          <ProgressBar fill={fill} tone={tone} />
+        </div>
+      </div>
+
+      <div className="incomeCompactValue">{fmtMoney(item.amount)}</div>
+
+      <div className="incomeCompactActions" onClick={(e) => e.stopPropagation()}>
+        <button
+          type="button"
+          className="incomeIconBtn"
+          onClick={onDuplicate}
+          aria-label="Duplicate income"
+          title="Duplicate income"
+        >
+          <Copy size={14} />
+        </button>
+        <button
+          type="button"
+          className="incomeIconBtn incomeDangerBtn"
+          onClick={onDelete}
+          aria-label="Delete income"
+          title="Delete income"
+        >
+          <Trash2 size={14} />
+        </button>
+      </div>
     </div>
   );
 }
 
-/* ------------------------ main page ------------------------ */
-export default function IncomePage() {
-  const [loading, setLoading] = useState(true);
-  const [pageError, setPageError] = useState("");
-  const [user, setUser] = useState(null);
+function SplitPlanner({
+  title = "Split Plan",
+  accounts,
+  lines,
+  setLines,
+  grossAmount,
+  locked = false,
+  defaultAccountName = "",
+}) {
+  const gross = safeNum(parseMoneyInput(grossAmount), 0);
+  const allocated = getSplitTotal(lines);
+  const remaining = round2(gross - allocated);
 
-  const [deposits, setDeposits] = useState([]);
-  const [scheduled, setScheduled] = useState([]);
-  const [accounts, setAccounts] = useState([]);
-  const [profiles, setProfiles] = useState([]);
+  function patchLine(id, patch) {
+    setLines((prev) => prev.map((line) => (line.id === id ? { ...line, ...patch } : line)));
+  }
 
-  const [status, setStatus] = useState("");
-  const [warning, setWarning] = useState("");
+  function addLine() {
+    setLines((prev) => [...prev, emptySplitLine()]);
+  }
 
-  const [viewMonth, setViewMonth] = useState(monthKeyFromISO(isoDate()));
-  const [pageMode, setPageMode] = useState("overview");
+  function removeLine(id) {
+    setLines((prev) => {
+      const next = prev.filter((line) => line.id !== id);
+      return next.length ? next : [emptySplitLine()];
+    });
+  }
 
-  /* settings */
-  const [goalMonthly, setGoalMonthly] = useState(String(DEFAULT_SETTINGS.goalMonthly));
-  const [schedule, setSchedule] = useState(DEFAULT_SETTINGS.schedule);
-  const [anchorDate, setAnchorDate] = useState(DEFAULT_SETTINGS.anchorDate);
-  const [paycheckAmt, setPaycheckAmt] = useState(String(DEFAULT_SETTINGS.paycheckAmt));
-  const [bonusEstimate, setBonusEstimate] = useState(String(DEFAULT_SETTINGS.bonusEstimate));
-  const [defaultAccountId, setDefaultAccountId] = useState(DEFAULT_SETTINGS.defaultAccountId);
-  const [defaultProfileId, setDefaultProfileId] = useState(DEFAULT_SETTINGS.defaultProfileId);
-  const [autoCreateCalendar, setAutoCreateCalendar] = useState(DEFAULT_SETTINGS.autoCreateCalendar);
-  const [paydayEventTime, setPaydayEventTime] = useState(DEFAULT_SETTINGS.paydayEventTime);
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  return (
+    <div className="incomeSplitWrap">
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          gap: 10,
+          alignItems: "flex-start",
+          flexWrap: "wrap",
+        }}
+      >
+        <div>
+          <div className="incomeTinyLabel">{title}</div>
+          <div className="incomeInfoSub" style={{ marginTop: 0 }}>
+            Split one paycheck across accounts by exact dollar amount.
+          </div>
+        </div>
 
-  /* quick add */
-  const [entryMode, setEntryMode] = useState("received"); // received | scheduled
-  const [date, setDate] = useState(isoDate());
-  const [source, setSource] = useState("Paycheck");
-  const [amount, setAmount] = useState("");
-  const [note, setNote] = useState("");
-  const [destinationAccountId, setDestinationAccountId] = useState("");
-  const [createCalendarEvent, setCreateCalendarEvent] = useState(false);
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <MiniPill tone="blue">{fmtMoneyTight(allocated)} allocated</MiniPill>
+          <MiniPill tone={remaining === 0 ? "green" : "amber"}>
+            {fmtMoneyTight(remaining)} remaining
+          </MiniPill>
+        </div>
+      </div>
 
-  /* edit deposit */
-  const [editId, setEditId] = useState("");
-  const [eDate, setEDate] = useState(isoDate());
-  const [eSource, setESource] = useState("");
-  const [eAmount, setEAmount] = useState("");
-  const [eNote, setENote] = useState("");
+      {accounts.length ? (
+        <div className="incomeSplitList">
+          {lines.map((line, index) => (
+            <div key={line.id} className="incomeSplitRow">
+              <select
+                className="incomeField"
+                value={line.accountId}
+                disabled={locked}
+                onChange={(e) => patchLine(line.id, { accountId: e.target.value })}
+              >
+                <option value="">Select account</option>
+                {accounts.map((account) => (
+                  <option key={account.id} value={account.id}>
+                    {account.name}
+                  </option>
+                ))}
+              </select>
 
-  useEffect(() => {
-    let mounted = true;
+              <input
+                className="incomeField"
+                inputMode="decimal"
+                placeholder="0.00"
+                value={line.amount}
+                disabled={locked}
+                onChange={(e) => patchLine(line.id, { amount: e.target.value })}
+              />
 
-    async function load() {
-      try {
-        if (!supabase) throw new Error("Supabase is not configured.");
+              <button
+                type="button"
+                className="incomeIconBtn"
+                disabled={locked || lines.length === 1}
+                onClick={() => removeLine(line.id)}
+                aria-label={`Remove split ${index + 1}`}
+                title="Remove split"
+              >
+                <Trash2 size={14} />
+              </button>
+            </div>
+          ))}
 
-        const {
-          data: { user: currentUser },
-          error: userErr,
-        } = await supabase.auth.getUser();
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <ActionBtn onClick={addLine} disabled={locked}>
+              <Plus size={14} /> Add Split
+            </ActionBtn>
+          </div>
+        </div>
+      ) : (
+        <div className="incomeInfoCell">
+          <div className="incomeTinyLabel">No accounts loaded</div>
+          <div className="incomeInfoSub">
+            Add accounts first if you want paycheck splits. Default account:{" "}
+            {defaultAccountName || "not set"}.
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
-        if (userErr) throw userErr;
-        if (!mounted) return;
+function FocusIncomeCard({
+  item,
+  editor,
+  setEditor,
+  accounts,
+  defaultAccountName,
+  saving,
+  onSave,
+  onDuplicate,
+  onDelete,
+  onPostToAccounts,
+}) {
+  if (!item) {
+    return (
+      <GlassPane size="card">
+        <PaneHeader
+          title="Selected Income"
+          subcopy="Choose one from the roster to work it here."
+        />
+        <div className="incomeEmptyState" style={{ minHeight: 170 }}>
+          <div>
+            <div className="incomeEmptyTitle">No income selected</div>
+            <div className="incomeEmptyText">
+              Pick one from the roster on the left.
+            </div>
+          </div>
+        </div>
+      </GlassPane>
+    );
+  }
 
-        setUser(currentUser || null);
+  const scheduled = editor.status === "scheduled";
+  const tone = scheduled ? "blue" : "green";
+  const meta = toneMeta(tone);
+  const posted = !!editor.posted;
 
-        if (!currentUser) {
-          setLoading(false);
-          return;
+  return (
+    <GlassPane
+      tone={tone === "blue" ? "neutral" : tone}
+      size="card"
+      style={{ height: "100%" }}
+    >
+      <PaneHeader
+        title={item.source || "Income"}
+        subcopy="Focused controls for the income entry you are actively touching."
+        right={
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <MiniPill tone={scheduled ? "blue" : "green"}>
+              {scheduled ? "Scheduled" : "Received"}
+            </MiniPill>
+            <MiniPill tone={posted ? "green" : "amber"}>
+              {posted ? "Posted" : "Unposted"}
+            </MiniPill>
+            {saving ? <MiniPill tone="amber">Saving...</MiniPill> : null}
+          </div>
         }
+      />
 
-        const [depositsRes, settingsRes, accountsRes, scheduledRes, profilesRes] = await Promise.all([
-          supabase
-            .from("income_deposits")
-            .select("*")
-            .eq("user_id", currentUser.id)
-            .order("deposit_date", { ascending: false })
-            .order("created_at", { ascending: false }),
+      <div className="incomeFocusBox">
+        <div className="incomeTinyLabel">Current Amount</div>
 
-          supabase.from("income_settings").select("*").eq("user_id", currentUser.id).maybeSingle(),
+        <div
+          style={{
+            marginTop: 8,
+            fontSize: "clamp(30px, 4vw, 46px)",
+            lineHeight: 1,
+            fontWeight: 850,
+            letterSpacing: "-0.05em",
+            color: tone === "neutral" ? "#fff" : meta.text,
+          }}
+        >
+          {fmtMoney(editor.amount)}
+        </div>
 
-          supabase.from("accounts").select("*").eq("user_id", currentUser.id).order("name", { ascending: true }),
+        <div
+          style={{
+            marginTop: 10,
+            fontSize: 12,
+            color: "rgba(255,255,255,0.58)",
+          }}
+        >
+          Updated {fmtWhen(item.updated_at || item.created_at)}
+        </div>
 
-          supabase
-            .from("scheduled_paydays")
-            .select("*")
-            .eq("user_id", currentUser.id)
-            .neq("status", "received")
-            .order("pay_date", { ascending: true }),
+        <div className="incomeInfoGrid" style={{ marginTop: 14 }}>
+          <div className="incomeInfoCell">
+            <div className="incomeTinyLabel">Date</div>
+            <div className="incomeInfoValue">{shortDate(editor.deposit_date)}</div>
+            <div className="incomeInfoSub">Deposit date on record</div>
+          </div>
 
-          supabase
-            .from("calendar_profiles")
-            .select("*")
-            .eq("user_id", currentUser.id)
-            .order("is_default", { ascending: false })
-            .order("created_at", { ascending: true }),
-        ]);
+          <div className="incomeInfoCell">
+            <div className="incomeTinyLabel">Split Total</div>
+            <div className="incomeInfoValue">
+              {fmtMoneyTight(getSplitTotal(editor.splits))}
+            </div>
+            <div className="incomeInfoSub">{splitSummaryText(editor)}</div>
+          </div>
+        </div>
 
-        if (depositsRes.error) throw depositsRes.error;
-        if (settingsRes.error) throw settingsRes.error;
+        {posted ? (
+          <div className="incomeInfoCell" style={{ marginTop: 12 }}>
+            <div className="incomeTinyLabel">Posted To Accounts</div>
+            <div className="incomeInfoValue">
+              {editor.postedAt ? fmtWhen(editor.postedAt) : "Yes"}
+            </div>
+            <div className="incomeInfoSub">
+              This paycheck has already been posted to account balances. Split rows are locked
+              so you do not double-post money.
+            </div>
+          </div>
+        ) : null}
 
-        const loadedDeposits = (depositsRes.data || []).map(mapDepositRowToClient);
-        const s = mapIncomeSettingsRowToClient(settingsRes.data);
+        <div className="incomeFormStack" style={{ marginTop: 14 }}>
+          <div>
+            <div className="incomeTinyLabel">Status</div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <ActionBtn
+                variant={editor.status === "received" ? "primary" : "ghost"}
+                onClick={() =>
+                  setEditor((prev) => ({ ...prev, status: "received" }))
+                }
+                disabled={posted}
+              >
+                Received
+              </ActionBtn>
+              <ActionBtn
+                variant={editor.status === "scheduled" ? "primary" : "ghost"}
+                onClick={() =>
+                  setEditor((prev) => ({ ...prev, status: "scheduled" }))
+                }
+                disabled={posted}
+              >
+                Scheduled
+              </ActionBtn>
+            </div>
+          </div>
 
-        if (!mounted) return;
+          <div>
+            <div className="incomeTinyLabel">Source</div>
+            <input
+              className="incomeField"
+              value={editor.source}
+              onChange={(e) =>
+                setEditor((prev) => ({ ...prev, source: e.target.value }))
+              }
+              placeholder="Paycheck"
+            />
+          </div>
 
-        setDeposits(loadedDeposits);
-        setGoalMonthly(String(s.goalMonthly));
-        setSchedule(String(s.schedule));
-        setAnchorDate(String(s.anchorDate));
-        setPaycheckAmt(String(s.paycheckAmt));
-        setBonusEstimate(String(s.bonusEstimate));
-        setViewMonth(String(s.viewMonth || monthKeyFromISO(isoDate())));
-        setDefaultAccountId(String(s.defaultAccountId || ""));
-        setDefaultProfileId(String(s.defaultProfileId || ""));
-        setAutoCreateCalendar(Boolean(s.autoCreateCalendar));
-        setPaydayEventTime(String(s.paydayEventTime || DEFAULT_SETTINGS.paydayEventTime));
-        setDestinationAccountId(String(s.defaultAccountId || ""));
+          <div className="incomeFormGrid2">
+            <div>
+              <div className="incomeTinyLabel">Amount</div>
+              <input
+                className="incomeField"
+                inputMode="decimal"
+                value={editor.amount}
+                onChange={(e) =>
+                  setEditor((prev) => ({ ...prev, amount: e.target.value }))
+                }
+                placeholder="0.00"
+              />
+            </div>
 
-        if (!accountsRes.error && Array.isArray(accountsRes.data)) {
-          setAccounts(
-            accountsRes.data.map((row) => ({
-              id: String(row.id),
-              name: String(row.name || row.account_name || "Account"),
-              balance: Number(row.balance ?? 0) || 0,
-              accountType: String(row.account_type || ""),
+            <div>
+              <div className="incomeTinyLabel">Deposit Date</div>
+              <input
+                type="date"
+                className="incomeField"
+                value={editor.deposit_date}
+                onChange={(e) =>
+                  setEditor((prev) => ({
+                    ...prev,
+                    deposit_date: e.target.value,
+                  }))
+                }
+              />
+            </div>
+          </div>
+
+          <div>
+            <div className="incomeTinyLabel">Notes</div>
+            <textarea
+              className="incomeField"
+              rows={5}
+              value={editor.note}
+              onChange={(e) =>
+                setEditor((prev) => ({ ...prev, note: e.target.value }))
+              }
+              placeholder="Optional deposit note..."
+            />
+          </div>
+
+          <SplitPlanner
+            title="Split Planner"
+            accounts={accounts}
+            lines={editor.splits}
+            setLines={(updater) =>
+              setEditor((prev) => ({
+                ...prev,
+                splits: typeof updater === "function" ? updater(prev.splits) : updater,
+              }))
+            }
+            grossAmount={editor.amount}
+            locked={posted}
+            defaultAccountName={defaultAccountName}
+          />
+
+          <div className="incomeActionGrid incomeActionGridQuad">
+            <ActionBtn variant="primary" onClick={onSave} full disabled={saving}>
+              <Save size={14} /> Save
+            </ActionBtn>
+
+            <ActionBtn
+              onClick={onPostToAccounts}
+              full
+              disabled={saving || posted}
+            >
+              <Landmark size={14} />
+              {editor.status === "scheduled" ? "Mark Received + Post" : "Post To Accounts"}
+            </ActionBtn>
+
+            <ActionBtn onClick={onDuplicate} full disabled={saving}>
+              <Copy size={14} /> Duplicate
+            </ActionBtn>
+
+            <ActionBtn variant="danger" onClick={onDelete} full disabled={saving}>
+              <Trash2 size={14} /> Delete
+            </ActionBtn>
+          </div>
+        </div>
+      </div>
+    </GlassPane>
+  );
+}
+
+function AddIncomeCard({
+  form,
+  setForm,
+  accounts,
+  defaultAccountName,
+  accountCount,
+  saving,
+  onAdd,
+}) {
+  return (
+    <GlassPane size="card" style={{ height: "100%" }}>
+      <PaneHeader
+        title="Add Income"
+        subcopy="Add a paycheck, choose scheduled or received, and split it exactly."
+        right={
+          <MiniPill>
+            <Plus size={13} /> New
+          </MiniPill>
+        }
+      />
+
+      <div className="incomeFormStack">
+        <div>
+          <div className="incomeTinyLabel">Status</div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <ActionBtn
+              variant={form.status === "received" ? "primary" : "ghost"}
+              onClick={() => setForm((prev) => ({ ...prev, status: "received" }))}
+            >
+              Received
+            </ActionBtn>
+            <ActionBtn
+              variant={form.status === "scheduled" ? "primary" : "ghost"}
+              onClick={() => setForm((prev) => ({ ...prev, status: "scheduled" }))}
+            >
+              Scheduled
+            </ActionBtn>
+          </div>
+        </div>
+
+        <div>
+          <div className="incomeTinyLabel">Source</div>
+          <input
+            className="incomeField"
+            placeholder="Paycheck, Bonus, Side Work..."
+            value={form.source}
+            onChange={(e) => setForm((prev) => ({ ...prev, source: e.target.value }))}
+          />
+        </div>
+
+        <div className="incomeFormGrid2">
+          <div>
+            <div className="incomeTinyLabel">Amount</div>
+            <input
+              className="incomeField"
+              inputMode="decimal"
+              placeholder="0.00"
+              value={form.amount}
+              onChange={(e) => setForm((prev) => ({ ...prev, amount: e.target.value }))}
+            />
+          </div>
+
+          <div>
+            <div className="incomeTinyLabel">Date</div>
+            <input
+              type="date"
+              className="incomeField"
+              value={form.deposit_date}
+              onChange={(e) =>
+                setForm((prev) => ({ ...prev, deposit_date: e.target.value }))
+              }
+            />
+          </div>
+        </div>
+
+        <div>
+          <div className="incomeTinyLabel">Notes</div>
+          <textarea
+            className="incomeField"
+            rows={5}
+            placeholder="Optional note..."
+            value={form.note}
+            onChange={(e) => setForm((prev) => ({ ...prev, note: e.target.value }))}
+          />
+        </div>
+
+        <SplitPlanner
+          title="Split Planner"
+          accounts={accounts}
+          lines={form.splits}
+          setLines={(updater) =>
+            setForm((prev) => ({
+              ...prev,
+              splits: typeof updater === "function" ? updater(prev.splits) : updater,
             }))
-          );
-        } else {
-          setAccounts([]);
-        }
-
-        if (!scheduledRes.error && Array.isArray(scheduledRes.data)) {
-          setScheduled(scheduledRes.data.map(normalizeScheduled));
-        } else {
-          setScheduled([]);
-        }
-
-        if (!profilesRes.error && Array.isArray(profilesRes.data)) {
-          const loadedProfiles = profilesRes.data.map((row) => ({
-            id: String(row.id),
-            name: String(row.name || "Default"),
-            isDefault: Boolean(row.is_default),
-          }));
-          setProfiles(loadedProfiles);
-
-          if (!s.defaultProfileId && loadedProfiles.length) {
-            const picked = loadedProfiles.find((p) => p.isDefault)?.id || loadedProfiles[0].id;
-            setDefaultProfileId(picked);
           }
-        } else {
-          setProfiles([]);
-        }
+          grossAmount={form.amount}
+          defaultAccountName={defaultAccountName}
+        />
 
-        setStatus("Income loaded");
-      } catch (err) {
-        if (!mounted) return;
-        setPageError(err?.message || "Failed to load income page.");
-      } finally {
-        if (mounted) setLoading(false);
+        <div className="incomeInfoCell">
+          <div className="incomeTinyLabel">Default Deposit Account</div>
+          <div className="incomeInfoValue">
+            {defaultAccountName || "No default account"}
+          </div>
+          <div className="incomeInfoSub">
+            {accountCount} account{accountCount === 1 ? "" : "s"} loaded
+          </div>
+        </div>
+
+        <div className="incomeActionGrid">
+          <ActionBtn variant="primary" onClick={onAdd} full disabled={saving}>
+            <Plus size={14} /> {saving ? "Saving..." : "Add Income"}
+          </ActionBtn>
+        </div>
+      </div>
+    </GlassPane>
+  );
+}
+
+function IntelItem({ title, subcopy, right, tone = "neutral", onClick }) {
+  return (
+    <div className="incomeIntelItem">
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          gap: 10,
+          alignItems: "flex-start",
+          flexWrap: "wrap",
+        }}
+      >
+        <div>
+          <div className="incomeIntelTitle">{title}</div>
+          <div className="incomeIntelSub">{subcopy}</div>
+        </div>
+
+        {right ? <MiniPill tone={tone}>{right}</MiniPill> : null}
+      </div>
+
+      {onClick ? (
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <ActionBtn onClick={onClick}>Focus</ActionBtn>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+export default function IncomePage() {
+  const [items, setItems] = useState([]);
+  const [accounts, setAccounts] = useState([]);
+  const [defaultAccountId, setDefaultAccountId] = useState("");
+  const [defaultAccountName, setDefaultAccountName] = useState("");
+  const [selectedIncomeId, setSelectedIncomeId] = useState("");
+  const [search, setSearch] = useState("");
+  const [filter, setFilter] = useState("all");
+  const [sort, setSort] = useState("recent");
+  const [view, setView] = useState("overview");
+  const [monthValue, setMonthValue] = useState(monthInputToday());
+  const [loading, setLoading] = useState(true);
+  const [savingSelected, setSavingSelected] = useState(false);
+  const [addingBusy, setAddingBusy] = useState(false);
+  const [userId, setUserId] = useState(null);
+
+  const [editor, setEditor] = useState({
+    source: "",
+    amount: "",
+    deposit_date: dateInputToday(),
+    note: "",
+    status: "received",
+    posted: false,
+    postedAt: null,
+    splits: [emptySplitLine()],
+  });
+
+  const [form, setForm] = useState({
+    source: "Paycheck",
+    amount: "",
+    deposit_date: dateInputToday(),
+    note: "",
+    status: "received",
+    splits: [emptySplitLine()],
+  });
+
+  function makeFallbackSplit(totalAmount) {
+    if (!defaultAccountId || totalAmount <= 0) return [];
+    return [
+      {
+        accountId: defaultAccountId,
+        accountName: defaultAccountName || getAccountName(accounts, defaultAccountId),
+        amount: round2(totalAmount),
+      },
+    ];
+  }
+
+  function validateAndPrepareSplits(totalAmount, splitLines) {
+    const target = round2(totalAmount);
+    const rawTouched = splitLines.filter(
+      (line) => String(line.accountId || "").trim() || String(line.amount || "").trim()
+    );
+
+    if (!rawTouched.length) {
+      return {
+        splits: makeFallbackSplit(target),
+        error: null,
+      };
+    }
+
+    const merged = new Map();
+
+    for (const line of rawTouched) {
+      const accountId = String(line.accountId || "").trim();
+      const amount = round2(parseMoneyInput(line.amount));
+
+      if (!accountId) {
+        return { splits: [], error: "Every split needs an account." };
+      }
+
+      if (!Number.isFinite(amount) || amount <= 0) {
+        return { splits: [], error: "Every split amount must be more than 0." };
+      }
+
+      const account = accounts.find((a) => a.id === accountId);
+      if (!account) {
+        return { splits: [], error: "One of the selected accounts is missing." };
+      }
+
+      const existing = merged.get(accountId);
+      if (existing) {
+        existing.amount = round2(existing.amount + amount);
+      } else {
+        merged.set(accountId, {
+          accountId,
+          accountName: account.name || "Account",
+          amount,
+        });
       }
     }
 
-    load();
+    const splits = [...merged.values()];
+    const allocated = round2(
+      splits.reduce((sum, split) => sum + safeNum(split.amount, 0), 0)
+    );
+
+    if (Math.abs(allocated - target) > 0.009) {
+      return {
+        splits: [],
+        error: `Split total must match the paycheck amount exactly. Difference: ${fmtMoneyTight(
+          target - allocated
+        )}`,
+      };
+    }
+
+    return { splits, error: null };
+  }
+
+  async function loadIncomePage() {
+    if (!supabase) {
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+
+    const {
+      data: { session },
+      error: sessionError,
+    } = await supabase.auth.getSession();
+
+    if (sessionError || !session?.user) {
+      setUserId(null);
+      setItems([]);
+      setAccounts([]);
+      setDefaultAccountId("");
+      setDefaultAccountName("");
+      setSelectedIncomeId("");
+      setLoading(false);
+      return;
+    }
+
+    setUserId(session.user.id);
+
+    const [incomeRes, accountsRes, settingsRes] = await Promise.all([
+      supabase
+        .from("income_deposits")
+        .select("id, user_id, source, amount, note, deposit_date, created_at, updated_at")
+        .eq("user_id", session.user.id)
+        .order("deposit_date", { ascending: false })
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("accounts")
+        .select("id, name, account_type, balance, updated_at")
+        .eq("user_id", session.user.id)
+        .order("name", { ascending: true }),
+      supabase
+        .from("account_settings")
+        .select("primary_account_id")
+        .eq("user_id", session.user.id)
+        .maybeSingle(),
+    ]);
+
+    if (incomeRes.error) console.error("load income error:", incomeRes.error);
+    if (accountsRes.error) console.error("load accounts error:", accountsRes.error);
+    if (settingsRes.error) console.error("load account settings error:", settingsRes.error);
+
+    const loadedItems = (incomeRes.data || []).map(mapIncomeRow);
+    const loadedAccounts = accountsRes.data || [];
+    const primaryAccountId = settingsRes.data?.primary_account_id || "";
+    const primaryAccount =
+      loadedAccounts.find((account) => account.id === primaryAccountId) || null;
+
+    setItems(loadedItems);
+    setAccounts(loadedAccounts);
+    setDefaultAccountId(primaryAccountId || "");
+    setDefaultAccountName(primaryAccount?.name || "");
+    setSelectedIncomeId((prev) => prev || loadedItems[0]?.id || "");
+    setLoading(false);
+  }
+
+  useEffect(() => {
+    loadIncomePage();
+
+    if (!supabase) return;
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(() => {
+      loadIncomePage();
+    });
 
     return () => {
-      mounted = false;
+      subscription?.unsubscribe?.();
     };
   }, []);
 
-  function resetQuickAdd() {
-    setDate(isoDate());
-    setSource("Paycheck");
-    setAmount("");
-    setNote("");
-    setDestinationAccountId(defaultAccountId || "");
-    setCreateCalendarEvent(false);
-    setEntryMode("received");
-  }
+  const monthItems = useMemo(() => {
+    return items.filter((item) => monthKeyOf(item.deposit_date) === monthValue);
+  }, [items, monthValue]);
 
-  async function saveSettings() {
-    try {
-      if (!user || !supabase) return;
+  const receivedItems = useMemo(() => {
+    return monthItems.filter((item) => !isScheduledItem(item));
+  }, [monthItems]);
 
-      setPageError("");
-      setStatus("");
-      setWarning("");
+  const scheduledItems = useMemo(() => {
+    return monthItems.filter((item) => isScheduledItem(item));
+  }, [monthItems]);
 
-      const payload = mapIncomeSettingsClientToRow(
-        {
-          goalMonthly: Number.isFinite(parseMoneyInput(goalMonthly)) ? parseMoneyInput(goalMonthly) : 0,
-          schedule,
-          anchorDate,
-          paycheckAmt: Number.isFinite(parseMoneyInput(paycheckAmt)) ? parseMoneyInput(paycheckAmt) : 0,
-          bonusEstimate: Number.isFinite(parseMoneyInput(bonusEstimate)) ? parseMoneyInput(bonusEstimate) : 0,
-          viewMonth,
-          defaultAccountId,
-          defaultProfileId,
-          autoCreateCalendar,
-          paydayEventTime,
-        },
-        user.id
-      );
-
-      const { error } = await supabase.from("income_settings").upsert(payload, { onConflict: "user_id" });
-      if (error) throw error;
-
-      setStatus("Income settings saved");
-      setSettingsOpen(false);
-      setDestinationAccountId(defaultAccountId || "");
-    } catch (err) {
-      setPageError(err?.message || "Failed to save income settings.");
-    }
-  }
-
-  async function createCalendarPaydayEvent({
-    title,
-    payDate,
-    amountValue,
-    noteText,
-    profileIdOverride,
-    sourceId,
-  }) {
-    if (!user || !supabase) return { ok: false, eventId: "", message: "Not logged in." };
-
-    const chosenProfileId =
-      String(profileIdOverride || "").trim() ||
-      String(defaultProfileId || "").trim() ||
-      profiles.find((p) => p.isDefault)?.id ||
-      profiles[0]?.id ||
-      "";
-
-    if (!chosenProfileId) {
-      return {
-        ok: false,
-        eventId: "",
-        message: "No calendar profile found for payday event.",
-      };
-    }
-
-    const payload = {
-      id: uid(),
-      user_id: user.id,
-      profile_id: chosenProfileId,
-      title: title || "Payday",
-      event_date: payDate,
-      event_time: paydayEventTime || null,
-      end_time: null,
-      category: "Payday",
-      flow: "income",
-      amount: Number(amountValue) || 0,
-      note: noteText || "",
-      status: "scheduled",
-      color: "#22c55e",
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      source_type: "income",
-      source_id: sourceId || null,
-    };
-
-    try {
-      const { data, error } = await supabase.from("calendar_events").insert([payload]).select("id").single();
-
-      if (error) {
-        return {
-          ok: false,
-          eventId: "",
-          message: "Payday saved, but calendar event was not created.",
-        };
-      }
-
-      return {
-        ok: true,
-        eventId: String(data?.id || ""),
-        message: "Payday event created.",
-      };
-    } catch {
-      return {
-        ok: false,
-        eventId: "",
-        message: "Payday saved, but calendar event helper needs adjustment.",
-      };
-    }
-  }
-
-  async function applyDepositToAccount({
-    accountId,
-    amountValue,
-    sourceId,
-    noteText,
-  }) {
-    if (!user || !supabase) return { ok: false, message: "Not logged in." };
-    if (!accountId || !Number.isFinite(Number(amountValue)) || Number(amountValue) <= 0) {
-      return { ok: false, message: "No account chosen." };
-    }
-
-    const account = accounts.find((a) => String(a.id) === String(accountId));
-    if (!account) return { ok: false, message: "Account not found." };
-
-    const currentBalance = Number(account.balance || 0);
-    const nextBalance = currentBalance + Number(amountValue);
-
-    try {
-      const { error: accountErr } = await supabase
-        .from("accounts")
-        .update({
-          balance: nextBalance,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", accountId)
-        .eq("user_id", user.id);
-
-      if (accountErr) {
-        return {
-          ok: false,
-          message: "Deposit saved, but account balance did not update.",
-        };
-      }
-
-      const txnPayload = {
-        id: uid(),
-        user_id: user.id,
-        account_id: accountId,
-        kind: "deposit",
-        amount: Number(amountValue) || 0,
-        delta: Number(amountValue) || 0,
-        resulting_balance: nextBalance,
-        note: noteText || "",
-        related_account_id: null,
-        related_account_name: null,
-        source_type: "income",
-        source_id: sourceId || null,
-        created_at: new Date().toISOString(),
-      };
-
-      const { error: txnErr } = await supabase.from("account_transactions").insert([txnPayload]);
-
-      if (txnErr) {
-        return {
-          ok: false,
-          message: "Balance updated, but account transaction ledger failed.",
-        };
-      }
-
-      setAccounts((prev) =>
-        prev.map((a) => (String(a.id) === String(accountId) ? { ...a, balance: nextBalance } : a))
-      );
-
-      return {
-        ok: true,
-        message: `Posted to ${account.name}.`,
-      };
-    } catch {
-      return {
-        ok: false,
-        message: "Deposit saved, but account posting helper failed.",
-      };
-    }
-  }
-
-  async function createScheduledPayday({
-    payDate,
-    expectedAmount,
-    src,
-    accountId,
-    noteText,
-    createCalendar,
-  }) {
-    if (!user || !supabase) return { ok: false, message: "Not logged in." };
-
-    const account = accounts.find((a) => String(a.id) === String(accountId));
-    const scheduledId = uid();
-
-    const payload = {
-      id: scheduledId,
-      user_id: user.id,
-      pay_date: payDate,
-      expected_amount: Number(expectedAmount) || 0,
-      source: src || "Paycheck",
-      note: noteText || "",
-      account_id: accountId || null,
-      account_name: account?.name || null,
-      status: "scheduled",
-      calendar_event_id: null,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    };
-
-    try {
-      const { data, error } = await supabase.from("scheduled_paydays").insert([payload]).select().single();
-
-      if (error) {
-        return {
-          ok: false,
-          message: "Scheduled payday table is not fully wired yet.",
-        };
-      }
-
-      let calendarMsg = "";
-      let calendarEventId = "";
-
-      if (createCalendar) {
-        const cal = await createCalendarPaydayEvent({
-          title: src || "Payday",
-          payDate,
-          amountValue: expectedAmount,
-          noteText,
-          sourceId: scheduledId,
-        });
-
-        if (cal.ok && cal.eventId) {
-          calendarEventId = cal.eventId;
-          calendarMsg = " Calendar event created.";
-
-          await supabase
-            .from("scheduled_paydays")
-            .update({
-              calendar_event_id: cal.eventId,
-              updated_at: new Date().toISOString(),
-            })
-            .eq("id", scheduledId)
-            .eq("user_id", user.id);
-        } else if (cal.message) {
-          setWarning(cal.message);
-        }
-      }
-
-      const saved = normalizeScheduled({
-        ...data,
-        calendar_event_id: calendarEventId || data?.calendar_event_id || "",
-      });
-
-      setScheduled((prev) =>
-        [...prev.filter((x) => x.status !== "received"), saved].sort((a, b) => a.pay_date.localeCompare(b.pay_date))
-      );
-
-      return {
-        ok: true,
-        message: `Payday scheduled.${calendarMsg}`,
-      };
-    } catch {
-      return {
-        ok: false,
-        message: "Scheduled payday helper needs adjustment.",
-      };
-    }
-  }
-
-  async function addIncome(e) {
-    e.preventDefault();
-    setPageError("");
-    setStatus("");
-    setWarning("");
-
-    if (!user || !supabase) {
-      setPageError("You must be logged in.");
-      return;
-    }
-
-    const dt = String(date || "").trim();
-    const src = String(source || "").trim();
-    const amt = parseMoneyInput(amount);
-    const nt = String(note || "").trim();
-    const accountId = String(destinationAccountId || "").trim();
-
-    if (!dt) return setPageError("Date is required.");
-    if (!src) return setPageError("Source is required.");
-    if (!Number.isFinite(amt) || amt <= 0) return setPageError("Amount must be greater than 0.");
-
-    if (entryMode === "scheduled") {
-      const scheduledResult = await createScheduledPayday({
-        payDate: dt,
-        expectedAmount: amt,
-        src,
-        accountId,
-        noteText: nt,
-        createCalendar: createCalendarEvent || autoCreateCalendar,
-      });
-
-      if (scheduledResult.ok) {
-        setStatus(scheduledResult.message);
-        resetQuickAdd();
-      } else {
-        setWarning(scheduledResult.message);
-      }
-      return;
-    }
-
-    const account = accounts.find((a) => String(a.id) === String(accountId));
-    const depositId = uid();
-
-    const deposit = normalizeDeposit({
-      id: depositId,
-      date: dt,
-      source: src,
-      amount: amt,
-      note: nt,
-      createdAt: Date.now(),
-      accountId,
-      accountName: account?.name || "",
-    });
-
-    const row = {
-      id: deposit.id,
-      user_id: user.id,
-      deposit_date: deposit.date,
-      source: deposit.source,
-      amount: deposit.amount,
-      note: deposit.note || "",
-      account_id: deposit.accountId || null,
-      account_name: deposit.accountName || null,
-      created_at: new Date(deposit.createdAt).toISOString(),
-      updated_at: new Date().toISOString(),
-    };
-
-    const { data, error } = await supabase.from("income_deposits").insert([row]).select().single();
-
-    if (error) {
-      setPageError(error.message || "Failed to save income deposit.");
-      return;
-    }
-
-    const savedDeposit = normalizeDeposit(mapDepositRowToClient(data));
-
-    setDeposits((prev) =>
-      [savedDeposit, ...prev].sort((a, b) => {
-        if (a.date !== b.date) return b.date.localeCompare(a.date);
-        return Number(b.createdAt || 0) - Number(a.createdAt || 0);
-      })
+  const totals = useMemo(() => {
+    const received = receivedItems.reduce(
+      (sum, item) => sum + safeNum(item.amount),
+      0
     );
-
-    let accountMsg = "";
-    if (accountId) {
-      const routed = await applyDepositToAccount({
-        accountId,
-        amountValue: amt,
-        sourceId: deposit.id,
-        noteText: nt,
-      });
-
-      if (!routed.ok) {
-        setWarning(routed.message);
-      } else {
-        accountMsg = ` ${routed.message}`;
-      }
-    }
-
-    if (createCalendarEvent || autoCreateCalendar) {
-      const cal = await createCalendarPaydayEvent({
-        title: src || "Payday",
-        payDate: dt,
-        amountValue: amt,
-        noteText: nt,
-        sourceId: deposit.id,
-      });
-
-      if (!cal.ok && cal.message) {
-        setWarning((prev) => prev || cal.message);
-      }
-    }
-
-    setStatus(`Income logged.${accountMsg}`);
-    setAmount("");
-    setNote("");
-  }
-
-  function openEdit(d) {
-    setEditId(d.id);
-    setEDate(d.date);
-    setESource(d.source);
-    setEAmount(String(d.amount ?? ""));
-    setENote(d.note || "");
-  }
-
-  function cancelEdit() {
-    setEditId("");
-    setEDate(isoDate());
-    setESource("");
-    setEAmount("");
-    setENote("");
-  }
-
-  async function saveEdit() {
-    if (!user || !supabase || !editId) return;
-
-    const dt = String(eDate || "").trim();
-    const src = String(eSource || "").trim();
-    const amt = parseMoneyInput(eAmount);
-    const nt = String(eNote || "").trim();
-
-    if (!dt || !src || !Number.isFinite(amt) || amt <= 0) {
-      setPageError("Need valid date, source, and amount.");
-      return;
-    }
-
-    const { data, error } = await supabase
-      .from("income_deposits")
-      .update({
-        deposit_date: dt,
-        source: src,
-        amount: amt,
-        note: nt,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", editId)
-      .eq("user_id", user.id)
-      .select()
-      .single();
-
-    if (error) {
-      setPageError(error.message || "Failed to update deposit.");
-      return;
-    }
-
-    const saved = mapDepositRowToClient(data);
-    setDeposits((prev) => prev.map((x) => (x.id === editId ? saved : x)));
-    setStatus("Deposit updated.");
-    cancelEdit();
-  }
-
-  async function deleteDeposit(id) {
-    if (!user || !supabase) return;
-    if (!globalThis.confirm?.("Delete this deposit?")) return;
-
-    const prev = deposits;
-    setDeposits((list) => list.filter((x) => x.id !== id));
-
-    const { error } = await supabase.from("income_deposits").delete().eq("id", id).eq("user_id", user.id);
-
-    if (error) {
-      setDeposits(prev);
-      setPageError(error.message || "Failed to delete deposit.");
-      return;
-    }
-
-    setStatus("Deposit deleted.");
-  }
-
-  async function deleteScheduled(id) {
-    if (!user || !supabase) return;
-    if (!globalThis.confirm?.("Delete this scheduled payday?")) return;
-
-    const prev = scheduled;
-    setScheduled((list) => list.filter((x) => x.id !== id));
-
-    const { error } = await supabase.from("scheduled_paydays").delete().eq("id", id).eq("user_id", user.id);
-
-    if (error) {
-      setScheduled(prev);
-      setWarning("Could not delete scheduled payday.");
-      return;
-    }
-
-    setStatus("Scheduled payday deleted.");
-  }
-
-  async function markScheduledReceived(item) {
-    if (!user || !supabase) return;
-
-    setPageError("");
-    setStatus("");
-    setWarning("");
-
-    const depositId = uid();
-    const deposit = normalizeDeposit({
-      id: depositId,
-      date: item.pay_date,
-      source: item.source || "Paycheck",
-      amount: item.expected_amount,
-      note: item.note || "",
-      createdAt: Date.now(),
-      accountId: item.account_id || "",
-      accountName: item.account_name || "",
-    });
-
-    const row = {
-      id: deposit.id,
-      user_id: user.id,
-      deposit_date: deposit.date,
-      source: deposit.source,
-      amount: deposit.amount,
-      note: deposit.note || "",
-      account_id: deposit.accountId || null,
-      account_name: deposit.accountName || null,
-      created_at: new Date(deposit.createdAt).toISOString(),
-      updated_at: new Date().toISOString(),
-    };
-
-    const { data, error } = await supabase.from("income_deposits").insert([row]).select().single();
-
-    if (error) {
-      setPageError(error.message || "Failed to convert payday into deposit.");
-      return;
-    }
-
-    const savedDeposit = normalizeDeposit(mapDepositRowToClient(data));
-    setDeposits((prev) =>
-      [savedDeposit, ...prev].sort((a, b) => {
-        if (a.date !== b.date) return b.date.localeCompare(a.date);
-        return Number(b.createdAt || 0) - Number(a.createdAt || 0);
-      })
+    const scheduled = scheduledItems.reduce(
+      (sum, item) => sum + safeNum(item.amount),
+      0
     );
-
-    const updateScheduled = await supabase
-      .from("scheduled_paydays")
-      .update({
-        status: "received",
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", item.id)
-      .eq("user_id", user.id);
-
-    if (updateScheduled.error) {
-      setWarning("Deposit logged, but scheduled payday status did not update cleanly.");
-    } else {
-      setScheduled((prev) => prev.filter((x) => x.id !== item.id));
-    }
-
-    if (item.account_id) {
-      const routed = await applyDepositToAccount({
-        accountId: item.account_id,
-        amountValue: item.expected_amount,
-        sourceId: deposit.id,
-        noteText: item.note || "",
-      });
-
-      if (!routed.ok) setWarning(routed.message);
-    }
-
-    if (item.calendar_event_id) {
-      await supabase
-        .from("calendar_events")
-        .update({
-          status: "done",
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", item.calendar_event_id)
-        .eq("user_id", user.id);
-    }
-
-    setStatus("Scheduled payday marked received.");
-  }
-
-  const computed = useMemo(() => {
-    const todayIso = isoDate();
-    const today = toDateOnly(todayIso) || new Date();
-    const targetMonth = viewMonth || monthKeyFromISO(todayIso);
-
-    const monthDeposits = deposits.filter((d) => monthKeyFromISO(d.date) === targetMonth);
-    const monthScheduled = scheduled.filter((x) => monthKeyFromISO(x.pay_date) === targetMonth && x.status === "scheduled");
-
-    const monthTotal = monthDeposits.reduce((sum, d) => sum + (Number(d.amount) || 0), 0);
-    const scheduledMonthTotal = monthScheduled.reduce((sum, d) => sum + (Number(d.expected_amount) || 0), 0);
-
-    const start = startOfMonthDate(targetMonth);
-    const dim = start ? daysInMonth(start.getFullYear(), start.getMonth()) : 30;
-    const dayNum = start ? clamp(today.getDate(), 1, dim) : 1;
-    const daysLeft = Math.max(1, dim - dayNum + 1);
-
-    const goal = parseMoneyInput(goalMonthly);
-    const goalNum = Number.isFinite(goal) ? goal : 0;
-    const remaining = Math.max(0, goalNum - monthTotal);
-    const neededPerDay = daysLeft > 0 ? remaining / daysLeft : remaining;
-
-    const paceToday = goalNum > 0 ? (goalNum * dayNum) / dim : 0;
-    const gap = monthTotal - paceToday;
-    const behindBy = Math.max(0, -gap);
-    const aheadBy = Math.max(0, gap);
-
-    const recentDeposits = [...deposits].sort((a, b) => {
-      if (a.date !== b.date) return b.date.localeCompare(a.date);
-      return Number(b.createdAt || 0) - Number(a.createdAt || 0);
-    });
-
-    const upcomingScheduled = [...monthScheduled].sort((a, b) => a.pay_date.localeCompare(b.pay_date));
-
-    const projectedMonthDates = computeProjectedPaydaysForMonth({
-      monthYM: targetMonth,
-      schedule,
-      anchorDateISO: anchorDate,
-    });
-
-    const sourceMap = new Map();
-    for (const d of monthDeposits) {
-      const key = niceSourceLabel(d.source);
-      sourceMap.set(key, (sourceMap.get(key) || 0) + Number(d.amount || 0));
-    }
-
-    const sourceBreakdown = Array.from(sourceMap.entries())
-      .map(([label, total]) => ({ label, total }))
-      .sort((a, b) => b.total - a.total);
-
-    const projectedThisMonth =
-      monthTotal +
-      scheduledMonthTotal +
-      (Number.isFinite(parseMoneyInput(bonusEstimate)) ? parseMoneyInput(bonusEstimate) : 0);
-
-    const nextPayday = [...scheduled]
-      .filter((x) => x.status === "scheduled")
-      .sort((a, b) => a.pay_date.localeCompare(b.pay_date))[0] || null;
-
-    const depositCountThisMonth = monthDeposits.length;
-    const avgDeposit = depositCountThisMonth ? monthTotal / depositCountThisMonth : 0;
 
     return {
-      monthDeposits,
-      monthScheduled,
-      monthTotal,
-      scheduledMonthTotal,
-      goalNum,
-      remaining,
-      neededPerDay,
-      paceToday,
-      behindBy,
-      aheadBy,
-      progressPct: pct(monthTotal, goalNum),
-      projectedThisMonth,
-      projectedPct: pct(projectedThisMonth, goalNum),
-      shortByProjection: Math.max(0, goalNum - projectedThisMonth),
-      recentDeposits,
-      upcomingScheduled,
-      sourceBreakdown,
-      projectedMonthDates,
-      nextPayday,
-      depositCountThisMonth,
-      avgDeposit,
+      received,
+      scheduled,
+      projected: received + scheduled,
+      count: monthItems.length,
     };
-  }, [deposits, scheduled, viewMonth, goalMonthly, bonusEstimate, schedule, anchorDate]);
+  }, [receivedItems, scheduledItems, monthItems]);
 
-  const visibleDeposits =
-    pageMode === "manage" ? computed.recentDeposits : computed.recentDeposits.slice(0, 5);
+  const nextScheduled = useMemo(() => {
+    return [...scheduledItems].sort((a, b) => {
+      return new Date(a.deposit_date).getTime() - new Date(b.deposit_date).getTime();
+    })[0];
+  }, [scheduledItems]);
 
-  const visibleScheduled =
-    pageMode === "manage" ? computed.upcomingScheduled : computed.upcomingScheduled.slice(0, 4);
+  const sourceBreakdown = useMemo(() => {
+    const map = new Map();
 
-  const defaultAccountName =
-    accounts.find((a) => String(a.id) === String(defaultAccountId))?.name || "No default account";
+    monthItems.forEach((item) => {
+      const key = item.source || "Income";
+      map.set(key, (map.get(key) || 0) + safeNum(item.amount));
+    });
+
+    return [...map.entries()]
+      .map(([source, total]) => ({ source, total }))
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 5);
+  }, [monthItems]);
+
+  const visibleItems = useMemo(() => {
+    const q = search.trim().toLowerCase();
+
+    let list = monthItems.filter((item) => {
+      if (filter === "received" && isScheduledItem(item)) return false;
+      if (filter === "scheduled" && !isScheduledItem(item)) return false;
+
+      if (!q) return true;
+
+      return [item.source, item.note, shortDate(item.deposit_date), splitSummaryText(item)]
+        .join(" ")
+        .toLowerCase()
+        .includes(q);
+    });
+
+    if (sort === "amount") {
+      list.sort((a, b) => safeNum(b.amount) - safeNum(a.amount));
+      return list;
+    }
+
+    if (sort === "source") {
+      list.sort((a, b) =>
+        String(a.source || "").localeCompare(String(b.source || ""))
+      );
+      return list;
+    }
+
+    if (sort === "date") {
+      list.sort(
+        (a, b) =>
+          new Date(a.deposit_date || 0).getTime() -
+          new Date(b.deposit_date || 0).getTime()
+      );
+      return list;
+    }
+
+    list.sort(
+      (a, b) =>
+        new Date(b.deposit_date || 0).getTime() -
+        new Date(a.deposit_date || 0).getTime()
+    );
+    return list;
+  }, [monthItems, filter, search, sort]);
+
+  useEffect(() => {
+    if (!visibleItems.length) {
+      setSelectedIncomeId("");
+      return;
+    }
+
+    const exists = visibleItems.some((item) => item.id === selectedIncomeId);
+    if (!exists) {
+      setSelectedIncomeId(visibleItems[0].id);
+    }
+  }, [visibleItems, selectedIncomeId]);
+
+  const selectedItem =
+    items.find((item) => item.id === selectedIncomeId) || visibleItems[0] || null;
+
+  useEffect(() => {
+    if (!selectedItem) {
+      setEditor({
+        source: "",
+        amount: "",
+        deposit_date: dateInputToday(),
+        note: "",
+        status: "received",
+        posted: false,
+        postedAt: null,
+        splits: [emptySplitLine(defaultAccountId)],
+      });
+      return;
+    }
+
+    setEditor({
+      source: selectedItem.source || "",
+      amount: String(selectedItem.amount ?? ""),
+      deposit_date: selectedItem.deposit_date || dateInputToday(),
+      note: selectedItem.note || "",
+      status: selectedItem.status || "received",
+      posted: !!selectedItem.posted,
+      postedAt: selectedItem.postedAt || null,
+      splits:
+        selectedItem.splits?.length
+          ? selectedItem.splits.map((split) => ({
+              id: uid(),
+              accountId: split.accountId,
+              amount: String(split.amount ?? ""),
+            }))
+          : [emptySplitLine(defaultAccountId)],
+    });
+  }, [selectedItem?.id, defaultAccountId]);
+
+  const maxVisibleAmount = useMemo(() => {
+    return visibleItems.reduce(
+      (max, item) => Math.max(max, safeNum(item.amount)),
+      0
+    );
+  }, [visibleItems]);
+
+  async function applySplitsToAccounts({ incomeId, source, note, deposit_date, splits }) {
+    if (!supabase || !userId || !splits.length) {
+      return { ok: true };
+    }
+
+    const nextAccounts = accounts.map((account) => ({ ...account }));
+    const txRows = [];
+
+    for (const split of splits) {
+      const account = nextAccounts.find((a) => a.id === split.accountId);
+      if (!account) {
+        return { ok: false, error: "Split account not found." };
+      }
+
+      const newBalance = round2(safeNum(account.balance, 0) + safeNum(split.amount, 0));
+
+      const { error: updateError } = await supabase
+        .from("accounts")
+        .update({
+          balance: newBalance,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", split.accountId)
+        .eq("user_id", userId);
+
+      if (updateError) {
+        console.error("account balance update error:", updateError);
+        return { ok: false, error: "Could not update account balances." };
+      }
+
+      account.balance = newBalance;
+
+      txRows.push({
+        user_id: userId,
+        account_id: split.accountId,
+        kind: "income",
+        amount: round2(split.amount),
+        delta: round2(split.amount),
+        resulting_balance: newBalance,
+        note: `${source || "Income"}${note ? ` • ${note}` : ""}`,
+        related_account_id: null,
+        related_account_name: null,
+        source_type: "income_deposit",
+        source_id: incomeId,
+        created_at: new Date().toISOString(),
+      });
+    }
+
+    if (txRows.length) {
+      const { error: txError } = await supabase.from("account_transactions").insert(txRows);
+      if (txError) {
+        console.error("account transaction insert error:", txError);
+        return { ok: false, error: "Could not write account transaction rows." };
+      }
+    }
+
+    setAccounts(nextAccounts);
+    return { ok: true };
+  }
+
+  async function addIncome() {
+    if (!supabase || !userId || addingBusy) return;
+
+    const amount = round2(parseMoneyInput(form.amount));
+    const source = String(form.source || "").trim();
+    const depositDate = form.deposit_date || dateInputToday();
+
+    if (!source || !Number.isFinite(amount) || amount <= 0) return;
+
+    const splitCheck = validateAndPrepareSplits(amount, form.splits);
+    if (splitCheck.error) {
+      window.alert(splitCheck.error);
+      return;
+    }
+
+    setAddingBusy(true);
+
+    const payload = mapIncomeToRow(
+      {
+        source,
+        amount,
+        note: form.note.trim(),
+        deposit_date: depositDate,
+        status: form.status,
+        posted: false,
+        postedAt: null,
+        splits: splitCheck.splits,
+      },
+      userId
+    );
+
+    const res = await supabase
+      .from("income_deposits")
+      .insert(payload)
+      .select("id, user_id, source, amount, note, deposit_date, created_at, updated_at")
+      .single();
+
+    if (res.error) {
+      console.error("add income error:", res.error);
+      await loadIncomePage();
+      setAddingBusy(false);
+      return;
+    }
+
+    let nextRow = mapIncomeRow(res.data);
+
+    if (nextRow.status === "received" && !nextRow.posted) {
+      const postRes = await applySplitsToAccounts({
+        incomeId: nextRow.id,
+        source: nextRow.source,
+        note: nextRow.note,
+        deposit_date: nextRow.deposit_date,
+        splits: nextRow.splits,
+      });
+
+      if (postRes.ok) {
+        const postedItem = {
+          ...nextRow,
+          posted: true,
+          postedAt: new Date().toISOString(),
+        };
+
+        const updateRes = await supabase
+          .from("income_deposits")
+          .update(
+            mapIncomeToRow(
+              {
+                ...postedItem,
+              },
+              userId
+            )
+          )
+          .eq("id", nextRow.id)
+          .eq("user_id", userId)
+          .select("id, user_id, source, amount, note, deposit_date, created_at, updated_at")
+          .single();
+
+        if (!updateRes.error && updateRes.data) {
+          nextRow = mapIncomeRow(updateRes.data);
+        } else {
+          nextRow = postedItem;
+        }
+      } else {
+        window.alert(postRes.error || "Could not post the split to accounts.");
+      }
+    }
+
+    setItems((prev) => [nextRow, ...prev]);
+    setSelectedIncomeId(nextRow.id);
+    setForm({
+      source: "Paycheck",
+      amount: "",
+      deposit_date: dateInputToday(),
+      note: "",
+      status: "received",
+      splits: [emptySplitLine(defaultAccountId)],
+    });
+    setAddingBusy(false);
+  }
+
+  async function saveSelectedIncome() {
+    if (!supabase || !userId || !selectedItem || savingSelected) return;
+
+    const amount = round2(parseMoneyInput(editor.amount));
+    const source = String(editor.source || "").trim();
+    const depositDate = editor.deposit_date || dateInputToday();
+
+    if (!source || !Number.isFinite(amount) || amount <= 0) return;
+
+    const splitCheck = validateAndPrepareSplits(amount, editor.splits);
+    if (splitCheck.error) {
+      window.alert(splitCheck.error);
+      return;
+    }
+
+    setSavingSelected(true);
+
+    const payload = {
+      ...mapIncomeToRow(
+        {
+          source,
+          amount,
+          note: editor.note.trim(),
+          deposit_date: depositDate,
+          status: editor.status,
+          posted: editor.posted,
+          postedAt: editor.postedAt,
+          splits: splitCheck.splits,
+        },
+        userId
+      ),
+      updated_at: new Date().toISOString(),
+    };
+
+    const res = await supabase
+      .from("income_deposits")
+      .update(payload)
+      .eq("id", selectedItem.id)
+      .eq("user_id", userId)
+      .select("id, user_id, source, amount, note, deposit_date, created_at, updated_at")
+      .single();
+
+    if (res.error) {
+      console.error("save income error:", res.error);
+      await loadIncomePage();
+      setSavingSelected(false);
+      return;
+    }
+
+    const nextItem = mapIncomeRow(res.data);
+
+    setItems((prev) =>
+      prev.map((item) => (item.id === selectedItem.id ? nextItem : item))
+    );
+
+    setSavingSelected(false);
+  }
+
+  async function postSelectedIncomeToAccounts() {
+    if (!supabase || !userId || !selectedItem || savingSelected) return;
+    if (editor.posted) return;
+
+    const amount = round2(parseMoneyInput(editor.amount));
+    const source = String(editor.source || "").trim();
+    const depositDate = dateInputToday();
+
+    if (!source || !Number.isFinite(amount) || amount <= 0) return;
+
+    const splitCheck = validateAndPrepareSplits(amount, editor.splits);
+    if (splitCheck.error) {
+      window.alert(splitCheck.error);
+      return;
+    }
+
+    setSavingSelected(true);
+
+    const postRes = await applySplitsToAccounts({
+      incomeId: selectedItem.id,
+      source,
+      note: editor.note.trim(),
+      deposit_date: depositDate,
+      splits: splitCheck.splits,
+    });
+
+    if (!postRes.ok) {
+      window.alert(postRes.error || "Could not post to accounts.");
+      setSavingSelected(false);
+      return;
+    }
+
+    const payload = {
+      ...mapIncomeToRow(
+        {
+          source,
+          amount,
+          note: editor.note.trim(),
+          deposit_date: depositDate,
+          status: "received",
+          posted: true,
+          postedAt: new Date().toISOString(),
+          splits: splitCheck.splits,
+        },
+        userId
+      ),
+      updated_at: new Date().toISOString(),
+    };
+
+    const res = await supabase
+      .from("income_deposits")
+      .update(payload)
+      .eq("id", selectedItem.id)
+      .eq("user_id", userId)
+      .select("id, user_id, source, amount, note, deposit_date, created_at, updated_at")
+      .single();
+
+    if (res.error) {
+      console.error("post income update error:", res.error);
+      await loadIncomePage();
+      setSavingSelected(false);
+      return;
+    }
+
+    const nextItem = mapIncomeRow(res.data);
+
+    setItems((prev) =>
+      prev.map((item) => (item.id === selectedItem.id ? nextItem : item))
+    );
+
+    setSavingSelected(false);
+  }
+
+  async function duplicateSelectedIncome() {
+    if (!supabase || !userId || !selectedItem || savingSelected) return;
+
+    setSavingSelected(true);
+
+    const payload = mapIncomeToRow(
+      {
+        source: selectedItem.source || "Income",
+        amount: safeNum(selectedItem.amount, 0),
+        note: selectedItem.note || "",
+        deposit_date: selectedItem.deposit_date || dateInputToday(),
+        status: selectedItem.status || "received",
+        posted: false,
+        postedAt: null,
+        splits: selectedItem.splits || [],
+      },
+      userId
+    );
+
+    const res = await supabase
+      .from("income_deposits")
+      .insert(payload)
+      .select("id, user_id, source, amount, note, deposit_date, created_at, updated_at")
+      .single();
+
+    if (res.error) {
+      console.error("duplicate income error:", res.error);
+      await loadIncomePage();
+      setSavingSelected(false);
+      return;
+    }
+
+    const nextRow = mapIncomeRow(res.data);
+    setItems((prev) => [nextRow, ...prev]);
+    setSelectedIncomeId(nextRow.id);
+    setSavingSelected(false);
+  }
+
+  async function removeSelectedIncome() {
+    if (!supabase || !userId || !selectedItem || savingSelected) return;
+    if (typeof window !== "undefined" && !window.confirm("Delete this income entry?")) {
+      return;
+    }
+
+    setSavingSelected(true);
+
+    const { error } = await supabase
+      .from("income_deposits")
+      .delete()
+      .eq("id", selectedItem.id)
+      .eq("user_id", userId);
+
+    if (error) {
+      console.error("delete income error:", error);
+      await loadIncomePage();
+      setSavingSelected(false);
+      return;
+    }
+
+    const nextItems = items.filter((item) => item.id !== selectedItem.id);
+    setItems(nextItems);
+    setSelectedIncomeId(nextItems[0]?.id || "");
+    setSavingSelected(false);
+  }
+
+  async function removeRowIncome(id) {
+    if (!supabase || !userId) return;
+    if (typeof window !== "undefined" && !window.confirm("Delete this income entry?")) {
+      return;
+    }
+
+    const { error } = await supabase
+      .from("income_deposits")
+      .delete()
+      .eq("id", id)
+      .eq("user_id", userId);
+
+    if (error) {
+      console.error("delete income row error:", error);
+      await loadIncomePage();
+      return;
+    }
+
+    const nextItems = items.filter((item) => item.id !== id);
+    setItems(nextItems);
+    if (selectedIncomeId === id) {
+      setSelectedIncomeId(nextItems[0]?.id || "");
+    }
+  }
+
+  async function duplicateRowIncome(item) {
+    if (!supabase || !userId) return;
+
+    const payload = mapIncomeToRow(
+      {
+        source: item.source || "Income",
+        amount: safeNum(item.amount, 0),
+        note: item.note || "",
+        deposit_date: item.deposit_date || dateInputToday(),
+        status: item.status || "received",
+        posted: false,
+        postedAt: null,
+        splits: item.splits || [],
+      },
+      userId
+    );
+
+    const res = await supabase
+      .from("income_deposits")
+      .insert(payload)
+      .select("id, user_id, source, amount, note, deposit_date, created_at, updated_at")
+      .single();
+
+    if (res.error) {
+      console.error("duplicate income row error:", res.error);
+      await loadIncomePage();
+      return;
+    }
+
+    const nextRow = mapIncomeRow(res.data);
+    setItems((prev) => [nextRow, ...prev]);
+    setSelectedIncomeId(nextRow.id);
+  }
 
   if (loading) {
     return (
-      <div className="incomePage">
-        <div className="pageShell">
-          <div className="panel heroPanel">Loading income…</div>
-          <style jsx>{styles}</style>
+      <main className="incomePage">
+        <div className="incomePageShell">
+          <GlassPane size="card">
+            <div style={{ fontWeight: 800, fontSize: 18, color: "#fff" }}>
+              Loading income.
+            </div>
+          </GlassPane>
         </div>
-      </div>
-    );
-  }
-
-  if (!user) {
-    return (
-      <div className="incomePage">
-        <div className="pageShell">
-          <div className="panel heroPanel">
-            <div className="heroTitle">Income Command</div>
-            <div className="heroSub">You need to log in to use this page.</div>
-          </div>
-          <style jsx>{styles}</style>
-        </div>
-      </div>
+        <style jsx global>{globalStyles}</style>
+      </main>
     );
   }
 
   return (
-    <div className="incomePage">
-      <div className="pageShell">
-        <section className="panel heroPanel">
-          <div className="heroRow">
-            <div>
-              <div className="eyebrow">income control</div>
-              <div className="heroTitle">Income Command</div>
-              <div className="heroSub">
-                Real deposits, payday planning, income routing, and target pace in one cleaner base page.
+    <>
+      <main className="incomePage">
+        <div className="incomePageShell">
+          <GlassPane size="card">
+            <div className="incomeHeroGrid">
+              <div style={{ minWidth: 0 }}>
+                <div className="incomeEyebrow">Life Command Center</div>
+                <div className="incomeHeroTitle">Income Command</div>
+                <div className="incomeHeroSub">
+                  Split paycheck routing, explicit scheduled paychecks, and a full-width layout
+                  that matches the rest of the app.
+                </div>
+
+                <div className="incomePillRow">
+                  <MiniPill>{monthItems.length} income items</MiniPill>
+                  <MiniPill>{currentMonthLabel()}</MiniPill>
+                  <MiniPill tone="green">{receivedItems.length} received</MiniPill>
+                  <MiniPill tone="blue">{scheduledItems.length} scheduled</MiniPill>
+                </div>
+
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 }}>
+                  <ActionBtn
+                    variant={view === "overview" ? "primary" : "ghost"}
+                    onClick={() => setView("overview")}
+                  >
+                    Overview
+                  </ActionBtn>
+                  <ActionBtn
+                    variant={view === "manage" ? "primary" : "ghost"}
+                    onClick={() => setView("manage")}
+                  >
+                    Manage
+                  </ActionBtn>
+                </div>
               </div>
 
-              <div className="chipRow" style={{ marginTop: 18 }}>
-                <TonePill tone="default">{computed.depositCountThisMonth} deposits</TonePill>
-                <TonePill tone="blue">{visibleScheduled.length} scheduled</TonePill>
-                <TonePill tone="green">default: {defaultAccountName}</TonePill>
+              <div className="incomeHeroSide">
+                <MiniPill>{monthValue}</MiniPill>
+                <MiniPill tone="green">{fmtMoney(totals.received)} monthly</MiniPill>
+                <MiniPill tone={totals.scheduled > 0 ? "blue" : "neutral"}>
+                  {fmtMoney(totals.scheduled)} pending
+                </MiniPill>
               </div>
             </div>
+          </GlassPane>
 
-            <div className="heroRight">
-              <div className="segmentWrap">
-                <button
-                  className={`segmentBtn ${pageMode === "overview" ? "active" : ""}`}
-                  onClick={() => setPageMode("overview")}
-                >
-                  Overview
-                </button>
-                <button
-                  className={`segmentBtn ${pageMode === "manage" ? "active" : ""}`}
-                  onClick={() => setPageMode("manage")}
-                >
-                  Manage
-                </button>
-              </div>
+          <section className="incomeMetricGrid">
+            <StatCard
+              icon={Landmark}
+              label="Received This Month"
+              value={fmtMoney(totals.received)}
+              detail="Actual deposited income."
+              tone="green"
+            />
+            <StatCard
+              icon={CalendarClock}
+              label="Scheduled This Month"
+              value={fmtMoney(totals.scheduled)}
+              detail="Planned income that has not posted yet."
+              tone="blue"
+            />
+            <StatCard
+              icon={BadgeDollarSign}
+              label="Next Payday"
+              value={nextScheduled ? shortDate(nextScheduled.deposit_date) : "—"}
+              detail={
+                nextScheduled
+                  ? `${nextScheduled.source || "Deposit"} • ${fmtMoneyTight(
+                      nextScheduled.amount
+                    )}`
+                  : "No payday scheduled."
+              }
+              tone="amber"
+            />
+            <StatCard
+              icon={ArrowUpRight}
+              label="Projected Finish"
+              value={fmtMoney(totals.projected)}
+              detail={`${totals.count} income item${
+                totals.count === 1 ? "" : "s"
+              } in ${prettyMonth(monthValue)}.`}
+              tone="neutral"
+            />
+          </section>
 
-              <div className="monthPickerWrap">
-                <div className="fieldLabel">Month</div>
+          <GlassPane size="card">
+            <PaneHeader
+              title="Income Controls"
+              subcopy="Filter the month, search the roster, and steer the page without wasting space."
+            />
+
+            <div className="incomeControlsGrid">
+              <div>
+                <div className="incomeTinyLabel">Month</div>
                 <input
                   type="month"
-                  value={viewMonth}
-                  onChange={(e) => setViewMonth(e.target.value)}
-                  className="input"
+                  className="incomeField"
+                  value={monthValue}
+                  onChange={(e) => setMonthValue(e.target.value)}
                 />
               </div>
-            </div>
-          </div>
 
-          {(status || warning || pageError) && (
-            <div className="chipRow" style={{ marginTop: 18 }}>
-              {status ? <TonePill tone="green">{status}</TonePill> : null}
-              {warning ? <TonePill tone="amber">{warning}</TonePill> : null}
-              {pageError ? <TonePill tone="red">{pageError}</TonePill> : null}
-            </div>
-          )}
-        </section>
-
-        <div className="statsGrid">
-          <StatCard
-            label="Received This Month"
-            value={money(computed.monthTotal)}
-            sub="Actual deposited income."
-            tone="green"
-          />
-          <StatCard
-            label="Scheduled This Month"
-            value={money(computed.scheduledMonthTotal)}
-            sub="Still planned but not received."
-            tone="blue"
-          />
-          <StatCard
-            label="Next Payday"
-            value={computed.nextPayday ? money(computed.nextPayday.expected_amount) : "—"}
-            sub={
-              computed.nextPayday
-                ? `${niceSourceLabel(computed.nextPayday.source)} • ${dateLabel(computed.nextPayday.pay_date)}`
-                : "No payday scheduled."
-            }
-            tone="amber"
-          />
-          <StatCard
-            label="Projected Finish"
-            value={money(computed.projectedThisMonth)}
-            sub={
-              computed.shortByProjection > 0
-                ? `Short by ${money(computed.shortByProjection)}`
-                : "Projection clears target."
-            }
-            tone={computed.shortByProjection > 0 ? "red" : "green"}
-          />
-        </div>
-
-        <div className="contentGrid">
-          <div className="mainCol">
-            <section className="panel boardPanel">
-              <div className="boardHead">
-                <div>
-                  <div className="eyebrow">income board</div>
-                  <div className="panelTitle">Income Board</div>
-                  <div className="panelSub">
-                    Received flow, scheduled paydays, deposit routing, and edit controls built in.
-                  </div>
-                </div>
-
-                <div className="chipRow">
-                  <TonePill tone={computed.behindBy > 0 ? "amber" : "green"}>
-                    {computed.behindBy > 0 ? "behind pace" : "ahead of pace"}
-                  </TonePill>
-                  <TonePill tone="default">{fmtMonthLabel(viewMonth)}</TonePill>
+              <div>
+                <div className="incomeTinyLabel">Type Filter</div>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <ActionBtn
+                    variant={filter === "all" ? "primary" : "ghost"}
+                    onClick={() => setFilter("all")}
+                  >
+                    All
+                  </ActionBtn>
+                  <ActionBtn
+                    variant={filter === "received" ? "primary" : "ghost"}
+                    onClick={() => setFilter("received")}
+                  >
+                    Received
+                  </ActionBtn>
+                  <ActionBtn
+                    variant={filter === "scheduled" ? "primary" : "ghost"}
+                    onClick={() => setFilter("scheduled")}
+                  >
+                    Scheduled
+                  </ActionBtn>
                 </div>
               </div>
 
-              <div className="boardSection">
-                <div className="sectionMiniHead">
-                  <div>
-                    <div className="sectionMiniTitle">Received Flow</div>
-                    <div className="sectionMiniSub">
-                      {pageMode === "manage" ? "All logged deposits." : "Most recent deposits."}
-                    </div>
-                  </div>
-                  <TonePill tone="green">{computed.recentDeposits.length} total</TonePill>
-                </div>
-
-                <div className="cardStack">
-                  {visibleDeposits.length === 0 ? (
-                    <div className="emptyCard">No deposits logged yet.</div>
-                  ) : (
-                    visibleDeposits.map((d) => {
-                      const sharePct = clamp(pct(d.amount, Math.max(computed.monthTotal, 1)), 0, 100);
-
-                      return (
-                        <div className="recordCard" key={d.id}>
-                          {editId === d.id ? (
-                            <>
-                              <div className="recordEditGrid">
-                                <input type="date" value={eDate} onChange={(e) => setEDate(e.target.value)} className="input" />
-                                <input value={eSource} onChange={(e) => setESource(e.target.value)} className="input" placeholder="Source" />
-                                <input value={eAmount} onChange={(e) => setEAmount(e.target.value)} className="input" placeholder="Amount" />
-                              </div>
-
-                              <textarea
-                                value={eNote}
-                                onChange={(e) => setENote(e.target.value)}
-                                className="textarea"
-                                placeholder="Deposit note"
-                              />
-
-                              <div className="actionRow">
-                                <ActionButton tone="blue" onClick={saveEdit}>Save Deposit</ActionButton>
-                                <ActionButton onClick={cancelEdit}>Cancel</ActionButton>
-                              </div>
-                            </>
-                          ) : (
-                            <>
-                              <div className="recordTop">
-                                <div>
-                                  <div className="recordTitle">{niceSourceLabel(d.source)}</div>
-                                  <div className="recordMeta">
-                                    Received • {dateLabel(d.date)}
-                                  </div>
-                                </div>
-
-                                <div className="recordValueBlock">
-                                  <div className="recordValue">{money(d.amount)}</div>
-                                  <div className="recordMeta">{sharePct.toFixed(0)}% share</div>
-                                </div>
-                              </div>
-
-                              <div className="barTrack">
-                                <div className="barFill green" style={{ width: `${sharePct}%` }} />
-                              </div>
-
-                              <div className="detailGrid">
-                                <DetailTile label="Date" value={dateLabel(d.date)} />
-                                <DetailTile label="Deposit Account" value={d.accountName || "Not routed"} />
-                                <DetailTile label="Status" value="Received" />
-                                <DetailTile label="Note" value={d.note || "No note"} />
-                              </div>
-
-                              <div className="actionRow">
-                                <ActionButton tone="blue" onClick={() => openEdit(d)}>Edit</ActionButton>
-                                <ActionButton tone="red" onClick={() => deleteDeposit(d.id)}>Delete</ActionButton>
-                              </div>
-                            </>
-                          )}
-                        </div>
-                      );
-                    })
-                  )}
-                </div>
-              </div>
-
-              <div className="boardDivider" />
-
-              <div className="boardSection">
-                <div className="sectionMiniHead">
-                  <div>
-                    <div className="sectionMiniTitle">Scheduled Paydays</div>
-                    <div className="sectionMiniSub">
-                      Active future income waiting to hit.
-                    </div>
-                  </div>
-                  <TonePill tone="amber">{computed.upcomingScheduled.length} active</TonePill>
-                </div>
-
-                <div className="cardStack">
-                  {visibleScheduled.length === 0 ? (
-                    <div className="emptyCard">No scheduled paydays saved yet.</div>
-                  ) : (
-                    visibleScheduled.map((item) => {
-                      const sharePct = clamp(pct(item.expected_amount, Math.max(computed.projectedThisMonth, 1)), 0, 100);
-
-                      return (
-                        <div className="recordCard" key={item.id}>
-                          <div className="recordTop">
-                            <div>
-                              <div className="recordTitle">{niceSourceLabel(item.source)}</div>
-                              <div className="recordMeta">
-                                Scheduled • {dateLabel(item.pay_date)}
-                              </div>
-                            </div>
-
-                            <div className="recordValueBlock">
-                              <div className="recordValue">{money(item.expected_amount)}</div>
-                              <div className="recordMeta">{sharePct.toFixed(0)}% share</div>
-                            </div>
-                          </div>
-
-                          <div className="barTrack">
-                            <div className="barFill blue" style={{ width: `${sharePct}%` }} />
-                          </div>
-
-                          <div className="detailGrid">
-                            <DetailTile label="Pay Date" value={dateLabel(item.pay_date)} />
-                            <DetailTile label="Target Account" value={item.account_name || "Not chosen"} />
-                            <DetailTile label="Status" value="Scheduled" />
-                            <DetailTile label="Note" value={item.note || "No note"} />
-                          </div>
-
-                          <div className="actionRow">
-                            <ActionButton tone="green" onClick={() => markScheduledReceived(item)}>
-                              Mark Received
-                            </ActionButton>
-                            <ActionButton tone="red" onClick={() => deleteScheduled(item.id)}>
-                              Delete
-                            </ActionButton>
-                          </div>
-                        </div>
-                      );
-                    })
-                  )}
-                </div>
-
-                {computed.projectedMonthDates.length > 0 && (
-                  <div style={{ marginTop: 16 }}>
-                    <div className="eyebrow" style={{ marginBottom: 10 }}>projected dates from settings</div>
-                    <div className="chipRow">
-                      {computed.projectedMonthDates.map((p) => (
-                        <TonePill key={p.id} tone="default">
-                          {dateLabel(p.pay_date)}
-                        </TonePill>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </section>
-          </div>
-
-          <div className="sideCol">
-            <section className="panel sidePanel">
-              <div className="eyebrow">income action</div>
-              <div className="panelTitle">Log Income</div>
-              <div className="panelSub">Log a real deposit or schedule a payday from the same box.</div>
-
-              <div className="toggleRow">
-                <button
-                  className={`miniToggle ${entryMode === "received" ? "activeMini" : ""}`}
-                  onClick={() => setEntryMode("received")}
-                  type="button"
+              <div>
+                <div className="incomeTinyLabel">Sort</div>
+                <select
+                  className="incomeField"
+                  value={sort}
+                  onChange={(e) => setSort(e.target.value)}
                 >
-                  Received
-                </button>
-                <button
-                  className={`miniToggle ${entryMode === "scheduled" ? "activeMini amberMini" : ""}`}
-                  onClick={() => setEntryMode("scheduled")}
-                  type="button"
-                >
-                  Scheduled
-                </button>
+                  <option value="recent">Recent first</option>
+                  <option value="amount">Amount high → low</option>
+                  <option value="source">Source</option>
+                  <option value="date">Date ascending</option>
+                </select>
               </div>
+            </div>
+          </GlassPane>
 
-              <form onSubmit={addIncome} className="formStack">
-                <div className="formGrid">
-                  <div>
-                    <div className="fieldLabel">Amount</div>
-                    <input
-                      value={amount}
-                      onChange={(e) => setAmount(e.target.value)}
-                      className="input"
-                      placeholder="0.00"
-                      inputMode="decimal"
-                    />
-                  </div>
+          <section className="incomeWorkspaceGrid">
+            <GlassPane size="card" style={{ height: "100%" }}>
+              <PaneHeader
+                title="Income Roster"
+                subcopy="Main roster fills the page and shows split/posting state."
+                right={<MiniPill>{visibleItems.length} showing</MiniPill>}
+              />
 
-                  <div>
-                    <div className="fieldLabel">{entryMode === "scheduled" ? "Pay Date" : "Date"}</div>
-                    <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="input" />
-                  </div>
-
-                  <div>
-                    <div className="fieldLabel">Source</div>
-                    <select value={source} onChange={(e) => setSource(e.target.value)} className="input">
-                      <option value="Paycheck">Paycheck</option>
-                      <option value="Bonus">Bonus</option>
-                      <option value="Side Job">Side Job</option>
-                      <option value="Cash">Cash</option>
-                      <option value="Refund">Refund</option>
-                      <option value="Other Income">Other Income</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <div className="fieldLabel">Deposit Account</div>
-                    <select
-                      value={destinationAccountId}
-                      onChange={(e) => setDestinationAccountId(e.target.value)}
-                      className="input"
-                    >
-                      <option value="">Choose account</option>
-                      {accounts.map((a) => (
-                        <option key={a.id} value={a.id}>
-                          {a.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                <div>
-                  <div className="fieldLabel">Note</div>
-                  <textarea
-                    value={note}
-                    onChange={(e) => setNote(e.target.value)}
-                    className="textarea"
-                    placeholder={entryMode === "scheduled" ? "Expected payday note" : "Optional deposit note"}
-                  />
-                </div>
-
-                <label className="checkRow">
+              <div className="incomeRosterControls">
+                <div className="incomeSearchWrap">
+                  <Search size={15} />
                   <input
-                    type="checkbox"
-                    checked={createCalendarEvent}
-                    onChange={(e) => setCreateCalendarEvent(e.target.checked)}
+                    className="incomeField incomeSearchField"
+                    placeholder="Search income"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
                   />
-                  <span>
-                    {entryMode === "scheduled"
-                      ? "Create payday event in calendar"
-                      : "Also add payday event to calendar"}
-                  </span>
-                </label>
-
-                <div className="actionRow">
-                  <ActionButton tone="blue" type="submit">
-                    {entryMode === "scheduled" ? "Schedule Payday" : "Log Deposit"}
-                  </ActionButton>
-                  <ActionButton type="button" onClick={resetQuickAdd}>
-                    Reset
-                  </ActionButton>
                 </div>
-              </form>
-            </section>
 
-            <section className="panel sidePanel">
-              <div className="sidePanelHead">
-                <div>
-                  <div className="eyebrow">settings</div>
-                  <div className="panelTitle">Income Settings</div>
-                </div>
-                <ActionButton
-                  type="button"
-                  onClick={() => setSettingsOpen((v) => !v)}
-                  style={{ height: 38, padding: "0 12px" }}
+                <select
+                  className="incomeField"
+                  value={filter}
+                  onChange={(e) => setFilter(e.target.value)}
                 >
-                  {settingsOpen ? "Hide" : "Open"}
-                </ActionButton>
+                  <option value="all">All income</option>
+                  <option value="received">Received only</option>
+                  <option value="scheduled">Scheduled only</option>
+                </select>
+
+                <select
+                  className="incomeField"
+                  value={sort}
+                  onChange={(e) => setSort(e.target.value)}
+                >
+                  <option value="recent">Recent first</option>
+                  <option value="amount">Amount high → low</option>
+                  <option value="source">Source</option>
+                  <option value="date">Date ascending</option>
+                </select>
               </div>
 
-              {!settingsOpen ? (
-                <div className="detailGrid">
-                  <DetailTile label="Monthly Target" value={money(parseMoneyInput(goalMonthly) || 0)} />
-                  <DetailTile label="Schedule" value={schedule} />
-                  <DetailTile label="Default Paycheck" value={money(parseMoneyInput(paycheckAmt) || 0)} />
-                  <DetailTile label="Bonus Estimate" value={money(parseMoneyInput(bonusEstimate) || 0)} />
+              {visibleItems.length ? (
+                <div className="incomeRosterListCompact">
+                  {visibleItems.map((item) => (
+                    <CompactIncomeRow
+                      key={item.id}
+                      item={item}
+                      selected={item.id === selectedItem?.id}
+                      maxAmount={maxVisibleAmount}
+                      onSelect={() => setSelectedIncomeId(item.id)}
+                      onDuplicate={() => duplicateRowIncome(item)}
+                      onDelete={() => removeRowIncome(item.id)}
+                    />
+                  ))}
                 </div>
               ) : (
-                <div className="formStack">
-                  <div className="formGrid">
-                    <div>
-                      <div className="fieldLabel">Monthly Target</div>
-                      <input value={goalMonthly} onChange={(e) => setGoalMonthly(e.target.value)} className="input" />
+                <div className="incomeEmptyState">
+                  <div>
+                    <div className="incomeEmptyTitle">No income found</div>
+                    <div className="incomeEmptyText">
+                      Clear filters or add a new deposit.
                     </div>
-
-                    <div>
-                      <div className="fieldLabel">Schedule</div>
-                      <select value={schedule} onChange={(e) => setSchedule(e.target.value)} className="input">
-                        <option value="WEEKLY">Weekly</option>
-                        <option value="BIWEEKLY">Biweekly</option>
-                        <option value="TWICE_MONTHLY">Twice Monthly</option>
-                        <option value="MONTHLY">Monthly</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <div className="fieldLabel">Anchor Payday</div>
-                      <input type="date" value={anchorDate} onChange={(e) => setAnchorDate(e.target.value)} className="input" />
-                    </div>
-
-                    <div>
-                      <div className="fieldLabel">Default Paycheck</div>
-                      <input value={paycheckAmt} onChange={(e) => setPaycheckAmt(e.target.value)} className="input" />
-                    </div>
-
-                    <div>
-                      <div className="fieldLabel">Bonus Estimate</div>
-                      <input value={bonusEstimate} onChange={(e) => setBonusEstimate(e.target.value)} className="input" />
-                    </div>
-
-                    <div>
-                      <div className="fieldLabel">Default Account</div>
-                      <select value={defaultAccountId} onChange={(e) => setDefaultAccountId(e.target.value)} className="input">
-                        <option value="">No default</option>
-                        {accounts.map((a) => (
-                          <option key={a.id} value={a.id}>
-                            {a.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div>
-                      <div className="fieldLabel">Calendar Profile</div>
-                      <select value={defaultProfileId} onChange={(e) => setDefaultProfileId(e.target.value)} className="input">
-                        <option value="">No default</option>
-                        {profiles.map((p) => (
-                          <option key={p.id} value={p.id}>
-                            {p.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div>
-                      <div className="fieldLabel">Payday Event Time</div>
-                      <input type="time" value={paydayEventTime} onChange={(e) => setPaydayEventTime(e.target.value)} className="input" />
-                    </div>
-                  </div>
-
-                  <label className="checkRow">
-                    <input
-                      type="checkbox"
-                      checked={autoCreateCalendar}
-                      onChange={(e) => setAutoCreateCalendar(e.target.checked)}
-                    />
-                    <span>Auto-create payday calendar events</span>
-                  </label>
-
-                  <div className="actionRow">
-                    <ActionButton tone="blue" type="button" onClick={saveSettings}>
-                      Save Settings
-                    </ActionButton>
-                    <ActionButton type="button" onClick={() => setSettingsOpen(false)}>
-                      Close
-                    </ActionButton>
                   </div>
                 </div>
               )}
+            </GlassPane>
+
+            <FocusIncomeCard
+              item={selectedItem}
+              editor={editor}
+              setEditor={setEditor}
+              accounts={accounts}
+              defaultAccountName={defaultAccountName}
+              saving={savingSelected}
+              onSave={saveSelectedIncome}
+              onDuplicate={duplicateSelectedIncome}
+              onDelete={removeSelectedIncome}
+              onPostToAccounts={postSelectedIncomeToAccounts}
+            />
+
+            <AddIncomeCard
+              form={form}
+              setForm={setForm}
+              accounts={accounts}
+              defaultAccountName={defaultAccountName}
+              accountCount={accounts.length}
+              saving={addingBusy}
+              onAdd={addIncome}
+            />
+          </section>
+
+          {view === "overview" ? (
+            <section className="incomeSectionGrid">
+              <GlassPane size="card" style={{ height: "100%" }}>
+                <PaneHeader
+                  title="Upcoming Deposits"
+                  subcopy="Scheduled paychecks and split plans waiting to hit."
+                  right={
+                    <MiniPill tone="blue">
+                      {scheduledItems.length} item
+                      {scheduledItems.length === 1 ? "" : "s"}
+                    </MiniPill>
+                  }
+                />
+
+                {scheduledItems.length ? (
+                  <div className="incomeIntelList">
+                    {scheduledItems
+                      .slice()
+                      .sort(
+                        (a, b) =>
+                          new Date(a.deposit_date).getTime() -
+                          new Date(b.deposit_date).getTime()
+                      )
+                      .slice(0, 5)
+                      .map((item) => (
+                        <IntelItem
+                          key={item.id}
+                          title={item.source || "Income"}
+                          subcopy={`${shortDate(item.deposit_date)} • ${fmtMoneyTight(
+                            item.amount
+                          )} • ${splitSummaryText(item)}`}
+                          right="Scheduled"
+                          tone="blue"
+                          onClick={() => setSelectedIncomeId(item.id)}
+                        />
+                      ))}
+                  </div>
+                ) : (
+                  <div className="incomeEmptyState incomeInlineEmpty">
+                    <div>
+                      <div className="incomeEmptyTitle">Nothing scheduled</div>
+                      <div className="incomeEmptyText">
+                        No future deposits are queued for this month.
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </GlassPane>
+
+              <GlassPane size="card" style={{ height: "100%" }}>
+                <PaneHeader
+                  title="Recent Activity"
+                  subcopy="Quick history of the most recent income changes."
+                  right={<MiniPill>{monthItems.length} entries</MiniPill>}
+                />
+
+                {monthItems.length ? (
+                  <div className="incomeIntelList">
+                    {monthItems.slice(0, 5).map((item) => (
+                      <IntelItem
+                        key={item.id}
+                        title={item.source || "Income"}
+                        subcopy={`${fmtMoneyTight(item.amount)} • ${shortDate(
+                          item.deposit_date
+                        )} • ${splitSummaryText(item)} • Updated ${formatAgo(
+                          item.updated_at || item.created_at
+                        )}`}
+                        right={isScheduledItem(item) ? "Scheduled" : "Received"}
+                        tone={isScheduledItem(item) ? "blue" : "green"}
+                        onClick={() => setSelectedIncomeId(item.id)}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <div className="incomeEmptyState incomeInlineEmpty">
+                    <div>
+                      <div className="incomeEmptyTitle">Nothing recent</div>
+                      <div className="incomeEmptyText">
+                        Add income to start building history.
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </GlassPane>
             </section>
+          ) : (
+            <section className="incomeSectionGrid">
+              <GlassPane size="card" style={{ height: "100%" }}>
+                <PaneHeader
+                  title="Source Breakdown"
+                  subcopy="See which income source is carrying the month."
+                  right={
+                    <MiniPill>
+                      {sourceBreakdown.length} source
+                      {sourceBreakdown.length === 1 ? "" : "s"}
+                    </MiniPill>
+                  }
+                />
 
-            <section className="panel sidePanel">
-              <div className="eyebrow">snapshot</div>
-              <div className="panelTitle">Income Pulse</div>
-              <div className="panelSub">Fast read on the month without digging around.</div>
-
-              <div className="pulseList">
-                <div className="pulseItem">
-                  <div className="pulseTitle">Target Pace</div>
-                  <div className="pulseBody">
-                    {computed.behindBy > 0
-                      ? `Behind pace by ${money(computed.behindBy)}.`
-                      : `Ahead of pace by ${money(computed.aheadBy)}.`}
-                  </div>
-                </div>
-
-                <div className="pulseItem">
-                  <div className="pulseTitle">Still Needed</div>
-                  <div className="pulseBody">
-                    {computed.remaining > 0
-                      ? `${money(computed.remaining)} left this month, about ${money(computed.neededPerDay)} per day.`
-                      : "Target already cleared."}
-                  </div>
-                </div>
-
-                <div className="pulseItem">
-                  <div className="pulseTitle">Average Deposit</div>
-                  <div className="pulseBody">
-                    {computed.depositCountThisMonth > 0
-                      ? `${money(computed.avgDeposit)} average across ${computed.depositCountThisMonth} deposits this month.`
-                      : "No deposits this month yet."}
-                  </div>
-                </div>
-              </div>
-
-              <div style={{ marginTop: 18 }}>
-                <div className="sectionMiniTitle" style={{ marginBottom: 12 }}>Income Streams</div>
-                <div className="sourceStack">
-                  {computed.sourceBreakdown.length === 0 ? (
-                    <div className="emptyCard">No income sources this month.</div>
-                  ) : (
-                    computed.sourceBreakdown.map((row) => {
-                      const width = clamp(pct(row.total, Math.max(computed.monthTotal, 1)), 0, 100);
-                      return (
-                        <div key={row.label} className="sourceRow">
-                          <div className="sourceTop">
-                            <div className="sourceLabel">{row.label}</div>
-                            <div className="sourceValue">{money(row.total)}</div>
+                {sourceBreakdown.length ? (
+                  <div className="incomeIntelList">
+                    {sourceBreakdown.map((row) => (
+                      <div key={row.source} className="incomeIntelItem">
+                        <div
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            gap: 10,
+                            alignItems: "flex-start",
+                            flexWrap: "wrap",
+                          }}
+                        >
+                          <div>
+                            <div className="incomeIntelTitle">{row.source}</div>
+                            <div className="incomeIntelSub">
+                              Total in {prettyMonth(monthValue)}
+                            </div>
                           </div>
-                          <div className="barTrack smallTrack">
-                            <div className="barFill neutral" style={{ width: `${width}%` }} />
-                          </div>
+
+                          <MiniPill tone="green">{fmtMoney(row.total)}</MiniPill>
                         </div>
-                      );
-                    })
-                  )}
-                </div>
-              </div>
-            </section>
-          </div>
-        </div>
-      </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="incomeEmptyState incomeInlineEmpty">
+                    <div>
+                      <div className="incomeEmptyTitle">No source data</div>
+                      <div className="incomeEmptyText">
+                        Add deposits to build a source breakdown.
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </GlassPane>
 
-      <style jsx>{styles}</style>
-    </div>
+              <GlassPane size="card" style={{ height: "100%" }}>
+                <PaneHeader
+                  title="Income Snapshot"
+                  subcopy="Quick monthly view of the whole income stack."
+                />
+
+                <div className="incomeSnapshotGrid">
+                  <div className="incomeSnapshotRow">
+                    <span>Received total</span>
+                    <strong>{fmtMoney(totals.received)}</strong>
+                  </div>
+                  <div className="incomeSnapshotRow">
+                    <span>Scheduled total</span>
+                    <strong>{fmtMoney(totals.scheduled)}</strong>
+                  </div>
+                  <div className="incomeSnapshotRow">
+                    <span>Projected total</span>
+                    <strong>{fmtMoney(totals.projected)}</strong>
+                  </div>
+                  <div className="incomeSnapshotRow">
+                    <span>Largest deposit</span>
+                    <strong>
+                      {monthItems.length
+                        ? fmtMoney(
+                            Math.max(...monthItems.map((item) => safeNum(item.amount)))
+                          )
+                        : "$0"}
+                    </strong>
+                  </div>
+                  <div className="incomeSnapshotRow">
+                    <span>Default account</span>
+                    <strong>{defaultAccountName || "Not set"}</strong>
+                  </div>
+                  <div className="incomeSnapshotRow">
+                    <span>Month count</span>
+                    <strong>{monthItems.length}</strong>
+                  </div>
+                </div>
+              </GlassPane>
+            </section>
+          )}
+        </div>
+      </main>
+
+      <style jsx global>{globalStyles}</style>
+    </>
   );
 }
 
-const styles = `
+const globalStyles = `
   .incomePage {
-    min-height: 100vh;
-    padding: 24px;
-    color: #eef4ff;
-    background:
-      radial-gradient(circle at 12% 18%, rgba(44, 92, 190, 0.10), transparent 22%),
-      radial-gradient(circle at 85% 20%, rgba(44, 92, 190, 0.10), transparent 26%),
-      radial-gradient(circle at 72% 72%, rgba(20, 38, 82, 0.18), transparent 24%),
-      linear-gradient(180deg, #030814 0%, #02050f 100%);
+    width: 100%;
+    min-width: 0;
+    color: var(--lcc-text);
+    font-family: var(--lcc-font-sans);
   }
 
-  .pageShell {
-    max-width: 1540px;
-    margin: 0 auto;
+  .incomePageShell {
+    width: 100%;
+    max-width: none;
+    margin: 0;
+    padding: 12px 0 20px;
     display: grid;
-    gap: 18px;
+    gap: 14px;
   }
 
-  .panel {
-    position: relative;
-    overflow: hidden;
-    border-radius: 28px;
-    border: 1px solid rgba(170, 194, 255, 0.12);
-    background:
-      linear-gradient(180deg, rgba(10, 16, 31, 0.88), rgba(4, 8, 19, 0.92)),
-      radial-gradient(circle at top left, rgba(58, 110, 255, 0.07), transparent 28%);
-    box-shadow:
-      0 24px 70px rgba(0, 0, 0, 0.42),
-      inset 0 1px 0 rgba(255,255,255,0.04);
-    backdrop-filter: blur(14px);
-  }
-
-  .panel::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    background:
-      linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.01) 16%, rgba(255,255,255,0) 34%);
-    opacity: 0.85;
-  }
-
-  .heroPanel {
-    padding: 26px 26px 24px;
-  }
-
-  .heroRow {
-    display: flex;
-    justify-content: space-between;
-    gap: 20px;
-    align-items: flex-start;
-  }
-
-  .heroRight {
-    display: grid;
-    gap: 12px;
-    justify-items: end;
-  }
-
-  .heroTitle {
-    font-size: clamp(40px, 5vw, 74px);
-    line-height: 0.96;
-    letter-spacing: -0.05em;
-    font-weight: 900;
-    color: #f6f7fb;
-  }
-
-  .heroSub {
-    margin-top: 14px;
-    max-width: 850px;
-    color: rgba(222, 230, 245, 0.78);
-    font-size: 16px;
-    line-height: 1.5;
-  }
-
-  .eyebrow {
-    color: rgba(193, 204, 229, 0.54);
-    font-size: 12px;
-    letter-spacing: 0.26em;
+  .incomeEyebrow {
+    font-size: 10px;
     text-transform: uppercase;
-    font-weight: 700;
-  }
-
-  .chipRow {
-    display: flex;
-    gap: 10px;
-    flex-wrap: wrap;
-  }
-
-  .segmentWrap {
-    display: inline-flex;
-    border-radius: 999px;
-    padding: 4px;
-    background: rgba(255,255,255,0.05);
-    border: 1px solid rgba(255,255,255,0.10);
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
-  }
-
-  .segmentBtn {
-    height: 48px;
-    padding: 0 24px;
-    border: 0;
-    border-radius: 999px;
-    background: transparent;
-    color: rgba(229, 235, 247, 0.85);
-    font-size: 15px;
+    letter-spacing: .22em;
     font-weight: 800;
-    cursor: pointer;
+    color: rgba(255,255,255,0.42);
   }
 
-  .segmentBtn.active {
-    background: linear-gradient(180deg, rgba(244,247,255,0.98), rgba(220,228,242,0.95));
-    color: #111827;
-    box-shadow: 0 10px 22px rgba(0,0,0,0.18);
-  }
-
-  .monthPickerWrap {
-    min-width: 180px;
-  }
-
-  .statsGrid {
-    display: grid;
-    gap: 16px;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
-
-  .statCard {
-    position: relative;
-    overflow: hidden;
-    min-height: 156px;
-    border-radius: 26px;
-    border: 1px solid rgba(170, 194, 255, 0.12);
-    background:
-      linear-gradient(180deg, rgba(7, 12, 25, 0.90), rgba(2, 7, 17, 0.92));
-    padding: 18px 20px 18px;
-    box-shadow:
-      0 18px 48px rgba(0,0,0,0.34),
-      inset 0 1px 0 rgba(255,255,255,0.04);
-  }
-
-  .statGlow {
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-  }
-
-  .statTopLine {
-    position: absolute;
-    left: 16px;
-    right: 16px;
-    top: 0;
-    height: 2px;
-    border-radius: 999px;
-    opacity: 0.95;
-  }
-
-  .statValue {
-    margin-top: 14px;
-    font-size: clamp(28px, 3vw, 46px);
-    line-height: 1;
+  .incomeHeroTitle {
+    margin-top: 8px;
+    font-size: clamp(24px, 3.2vw, 34px);
+    line-height: 1.02;
+    font-weight: 850;
     letter-spacing: -0.05em;
-    font-weight: 900;
-    color: #f7f9fe;
+    color: #fff;
   }
 
-  .subtleText {
-    margin-top: 12px;
-    color: rgba(218, 226, 241, 0.72);
-    font-size: 14px;
-    line-height: 1.45;
+  .incomeHeroSub {
+    margin-top: 8px;
+    font-size: 13px;
+    line-height: 1.55;
+    color: rgba(255,255,255,0.62);
+    max-width: 840px;
   }
 
-  .contentGrid {
+  .incomeHeroGrid {
     display: grid;
-    grid-template-columns: minmax(0, 1.55fr) minmax(340px, 0.9fr);
-    gap: 18px;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 14px;
     align-items: start;
   }
 
-  .mainCol,
-  .sideCol {
-    min-width: 0;
-  }
-
-  .sideCol {
-    display: grid;
-    gap: 18px;
-  }
-
-  .boardPanel {
-    padding: 22px;
-  }
-
-  .sidePanel {
-    padding: 22px;
-  }
-
-  .boardHead,
-  .sidePanelHead {
+  .incomeHeroSide {
     display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    gap: 14px;
+    gap: 8px;
     flex-wrap: wrap;
+    justify-content: flex-end;
+    align-content: flex-start;
   }
 
-  .panelTitle {
-    margin-top: 6px;
-    font-size: 28px;
-    line-height: 1;
-    letter-spacing: -0.04em;
-    font-weight: 900;
-    color: #f5f7fc;
-  }
-
-  .panelSub {
-    margin-top: 10px;
-    color: rgba(219, 227, 241, 0.70);
-    font-size: 14px;
-    line-height: 1.45;
-  }
-
-  .boardSection {
-    margin-top: 22px;
-  }
-
-  .boardDivider {
-    height: 1px;
-    margin: 24px 0;
-    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.10), transparent);
-  }
-
-  .sectionMiniHead {
+  .incomePillRow {
+    margin-top: 12px;
     display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 14px;
-    flex-wrap: wrap;
-    margin-bottom: 14px;
-  }
-
-  .sectionMiniTitle {
-    font-size: 18px;
-    font-weight: 900;
-    color: #f4f7ff;
-  }
-
-  .sectionMiniSub {
-    margin-top: 4px;
-    color: rgba(219, 227, 241, 0.65);
-    font-size: 13px;
-  }
-
-  .cardStack {
-    display: grid;
-    gap: 14px;
-  }
-
-  .recordCard {
-    border-radius: 22px;
-    border: 1px solid rgba(170, 194, 255, 0.10);
-    background:
-      linear-gradient(180deg, rgba(7, 12, 25, 0.80), rgba(4, 7, 16, 0.86));
-    box-shadow:
-      inset 0 1px 0 rgba(255,255,255,0.04),
-      0 14px 34px rgba(0,0,0,0.22);
-    padding: 16px;
-  }
-
-  .recordTop {
-    display: flex;
-    justify-content: space-between;
-    gap: 14px;
-    align-items: flex-start;
-  }
-
-  .recordTitle {
-    font-size: 18px;
-    font-weight: 900;
-    color: #f5f7fc;
-    letter-spacing: -0.02em;
-  }
-
-  .recordMeta {
-    margin-top: 6px;
-    color: rgba(213, 221, 236, 0.70);
-    font-size: 13px;
-  }
-
-  .recordValueBlock {
-    text-align: right;
-  }
-
-  .recordValue {
-    font-size: 20px;
-    line-height: 1;
-    font-weight: 900;
-    color: #f5f8ff;
-  }
-
-  .barTrack {
-    margin-top: 14px;
-    width: 100%;
-    height: 12px;
-    border-radius: 999px;
-    overflow: hidden;
-    border: 1px solid rgba(170, 194, 255, 0.10);
-    background: rgba(255,255,255,0.045);
-  }
-
-  .smallTrack {
-    height: 10px;
-    margin-top: 10px;
-  }
-
-  .barFill {
-    height: 100%;
-    border-radius: 999px;
-  }
-
-  .barFill.green {
-    background: linear-gradient(90deg, #58e79d, #9effcf);
-    box-shadow: 0 0 18px rgba(88, 231, 157, 0.45);
-  }
-
-  .barFill.blue {
-    background: linear-gradient(90deg, #6ea7ff, #b3d1ff);
-    box-shadow: 0 0 18px rgba(110, 167, 255, 0.45);
-  }
-
-  .barFill.neutral {
-    background: linear-gradient(90deg, #7d9fff, #ccd8ff);
-    box-shadow: 0 0 18px rgba(125, 159, 255, 0.32);
-  }
-
-  .detailGrid {
-    margin-top: 14px;
-    display: grid;
-    gap: 10px;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .detailTile {
-    border-radius: 16px;
-    border: 1px solid rgba(170, 194, 255, 0.08);
-    background: rgba(255,255,255,0.035);
-    padding: 12px;
-    min-width: 0;
-  }
-
-  .detailLabel {
-    color: rgba(193, 204, 229, 0.56);
-    font-size: 11px;
-    letter-spacing: 0.18em;
-    text-transform: uppercase;
-    font-weight: 700;
-    margin-bottom: 8px;
-  }
-
-  .detailValue {
-    color: #f4f8ff;
-    font-weight: 800;
-    font-size: 15px;
-    line-height: 1.35;
-    word-break: break-word;
-  }
-
-  .actionRow {
-    display: flex;
-    gap: 10px;
-    flex-wrap: wrap;
-    margin-top: 14px;
-  }
-
-  .formStack {
-    margin-top: 16px;
-    display: grid;
-    gap: 14px;
-  }
-
-  .formGrid {
-    display: grid;
-    gap: 12px;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .fieldLabel {
-    color: rgba(193, 204, 229, 0.58);
-    font-size: 11px;
-    letter-spacing: 0.18em;
-    text-transform: uppercase;
-    font-weight: 700;
-    margin-bottom: 8px;
-  }
-
-  .input,
-  .textarea {
-    width: 100%;
-    border-radius: 16px;
-    border: 1px solid rgba(170, 194, 255, 0.12);
-    background: rgba(255,255,255,0.04);
-    color: #f3f7ff;
-    outline: none;
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
-  }
-
-  .input {
-    height: 48px;
-    padding: 0 14px;
-  }
-
-  .textarea {
-    min-height: 96px;
-    padding: 12px 14px;
-    resize: vertical;
-  }
-
-  .input::placeholder,
-  .textarea::placeholder {
-    color: rgba(193, 204, 229, 0.46);
-  }
-
-  .input option {
-    background: #09111f;
-    color: #eef4ff;
-  }
-
-  .toggleRow {
-    margin-top: 16px;
-    display: inline-flex;
     gap: 8px;
     flex-wrap: wrap;
   }
 
-  .miniToggle {
-    height: 38px;
-    padding: 0 14px;
-    border-radius: 999px;
-    border: 1px solid rgba(255,255,255,0.10);
-    background: rgba(255,255,255,0.05);
-    color: rgba(233, 238, 247, 0.86);
+  .incomeMetricGrid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 14px;
+  }
+
+  .incomeControlsGrid {
+    display: grid;
+    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.15fr) minmax(0, 0.72fr);
+    gap: 14px;
+    align-items: end;
+  }
+
+  .incomeWorkspaceGrid {
+    display: grid;
+    grid-template-columns: minmax(500px, 1.45fr) minmax(440px, 1.18fr) minmax(380px, 1fr);
+    gap: 14px;
+    align-items: stretch;
+  }
+
+  .incomeWorkspaceGrid > * {
+    min-width: 0;
+    height: 100%;
+  }
+
+  .incomeSectionGrid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+    gap: 14px;
+    align-items: stretch;
+  }
+
+  .incomeSectionGrid > * {
+    min-width: 0;
+    height: 100%;
+  }
+
+  .incomeRosterControls {
+    display: grid;
+    grid-template-columns: 1.32fr 0.84fr 0.88fr;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+
+  .incomeSearchWrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 44px;
+    border-radius: 14px;
+    border: 1px solid rgba(214,226,255,0.10);
+    background:
+      linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.012)),
+      rgba(8, 12, 20, 0.76);
+    color: rgba(255,255,255,0.58);
+    padding: 0 12px;
+  }
+
+  .incomeSearchField {
+    min-height: 42px !important;
+    border: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+  }
+
+  .incomeRosterListCompact {
+    display: grid;
+    gap: 10px;
+    min-height: 720px;
+    max-height: 720px;
+    overflow: auto;
+    padding-right: 2px;
+  }
+
+  .incomeCompactRow {
+    display: grid;
+    grid-template-columns: 42px minmax(0, 1fr) auto auto;
+    gap: 10px;
+    align-items: center;
+    min-height: 118px;
+    padding: 12px 14px;
+    border-radius: 18px;
+    border: 1px solid rgba(255,255,255,0.07);
+    background:
+      linear-gradient(180deg, rgba(8,13,24,0.78), rgba(4,8,16,0.72));
+    cursor: pointer;
+    transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+  }
+
+  .incomeCompactRow:hover {
+    transform: translateY(-1px);
+  }
+
+  .incomeCompactAvatar {
+    width: 42px;
+    height: 42px;
+    border-radius: 14px;
+    display: grid;
+    place-items: center;
+    border: 1px solid rgba(255,255,255,0.08);
+    background:
+      linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.012)),
+      rgba(9, 14, 23, 0.68);
+    font-size: 12px;
     font-weight: 800;
+    letter-spacing: .05em;
+  }
+
+  .incomeCompactTitle {
+    font-size: 13.5px;
+    font-weight: 800;
+    color: #fff;
+    line-height: 1.2;
+    overflow-wrap: anywhere;
+  }
+
+  .incomeCompactSub {
+    margin-top: 4px;
+    font-size: 11.5px;
+    color: rgba(255,255,255,0.54);
+    line-height: 1.35;
+  }
+
+  .incomeCompactValue {
+    font-size: 15px;
+    font-weight: 850;
+    color: #fff;
+    white-space: nowrap;
+  }
+
+  .incomeCompactActions {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+  }
+
+  .incomeIconBtn {
+    width: 34px;
+    height: 34px;
+    border-radius: 12px;
+    border: 1px solid rgba(214,226,255,0.10);
+    background:
+      linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.012));
+    color: rgba(247,251,255,0.88);
+    display: grid;
+    place-items: center;
     cursor: pointer;
   }
 
-  .activeMini {
-    background: rgba(34,197,94,0.14);
-    border-color: rgba(34,197,94,0.30);
-    color: #ddffe8;
+  .incomeDangerBtn {
+    border-color: rgba(255,132,163,0.18);
+    color: #ffd3df;
   }
 
-  .amberMini.activeMini {
-    background: rgba(245,158,11,0.14);
-    border-color: rgba(245,158,11,0.30);
-    color: #fff0c7;
+  .incomeFocusBox {
+    border-radius: 22px;
+    border: 1px solid rgba(214,226,255,0.12);
+    background:
+      linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01));
+    padding: 15px;
+    min-height: 100%;
   }
 
-  .checkRow {
-    display: inline-flex;
-    align-items: center;
-    gap: 10px;
-    color: rgba(222, 230, 245, 0.80);
-    font-size: 14px;
-  }
-
-  .pulseList,
-  .sourceStack {
+  .incomeInfoGrid {
     display: grid;
-    gap: 12px;
-    margin-top: 16px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
   }
 
-  .pulseItem,
-  .sourceRow,
-  .emptyCard {
+  .incomeInfoCell {
     border-radius: 18px;
-    border: 1px solid rgba(170, 194, 255, 0.08);
-    background: rgba(255,255,255,0.035);
-    padding: 14px;
+    border: 1px solid rgba(255,255,255,0.05);
+    background: rgba(255,255,255,0.025);
+    padding: 11px;
   }
 
-  .pulseTitle {
-    font-size: 12px;
-    letter-spacing: 0.16em;
-    text-transform: uppercase;
-    color: rgba(193, 204, 229, 0.58);
-    font-weight: 700;
-    margin-bottom: 8px;
+  .incomeInfoValue {
+    font-size: 0.96rem;
+    font-weight: 900;
+    line-height: 1.15;
+    color: #fff;
   }
 
-  .pulseBody {
-    color: #eef4ff;
-    font-size: 14px;
-    line-height: 1.5;
-    font-weight: 700;
+  .incomeInfoSub {
+    margin-top: 5px;
+    color: rgba(255,255,255,0.62);
+    font-size: 0.79rem;
+    line-height: 1.4;
   }
 
-  .sourceTop {
-    display: flex;
-    justify-content: space-between;
+  .incomeSplitWrap {
+    display: grid;
+    gap: 10px;
+  }
+
+  .incomeSplitList {
+    display: grid;
+    gap: 10px;
+  }
+
+  .incomeSplitRow {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(130px, 0.42fr) auto;
     gap: 10px;
     align-items: center;
   }
 
-  .sourceLabel {
-    color: #f1f6ff;
-    font-weight: 800;
+  .incomeProgress {
+    height: 8px;
+    border-radius: 999px;
+    overflow: hidden;
+    background: rgba(255,255,255,0.1);
   }
 
-  .sourceValue {
-    color: rgba(225, 233, 246, 0.84);
-    font-weight: 800;
+  .incomeProgressFill {
+    height: 100%;
+    border-radius: 999px;
+    transition: width 0.4s ease;
   }
 
-  .recordEditGrid {
+  .incomeActionGrid {
     display: grid;
-    gap: 10px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .incomeActionGridTight {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
-  @media (max-width: 1220px) {
-    .statsGrid {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
+  .incomeActionGridQuad {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 
-    .contentGrid {
+  .incomeFormStack {
+    display: grid;
+    gap: 12px;
+  }
+
+  .incomeFormGrid2,
+  .incomeFormGrid3 {
+    display: grid;
+    gap: 10px;
+  }
+
+  .incomeFormGrid2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .incomeFormGrid3 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .incomeTinyLabel {
+    display: block;
+    margin-bottom: 8px;
+    font-size: 10px;
+    color: rgba(255,255,255,0.46);
+    text-transform: uppercase;
+    letter-spacing: .16em;
+    font-weight: 800;
+  }
+
+  .incomeField {
+    width: 100%;
+    min-height: 44px;
+    border-radius: 14px;
+    border: 1px solid rgba(214,226,255,0.10);
+    background:
+      linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.012)),
+      rgba(8, 12, 20, 0.76);
+    color: var(--lcc-text);
+    padding: 0 13px;
+    outline: none;
+    font: inherit;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
+    transition: border-color 160ms ease, box-shadow 160ms ease, background 160ms ease;
+  }
+
+  .incomeField:focus {
+    border-color: rgba(143,177,255,0.30);
+    box-shadow:
+      0 0 0 4px rgba(79,114,255,0.08),
+      inset 0 1px 0 rgba(255,255,255,0.035);
+  }
+
+  .incomeField::placeholder {
+    color: rgba(225,233,245,0.38);
+  }
+
+  .incomeField option {
+    background: #08111f;
+    color: #f4f7ff;
+  }
+
+  textarea.incomeField {
+    min-height: 110px;
+    resize: vertical;
+    padding: 12px 13px;
+  }
+
+  .incomeActionBtn {
+    min-height: 40px;
+    padding: 10px 13px;
+    border-radius: 14px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    font-size: 13px;
+    font-weight: 800;
+    line-height: 1;
+    transition: transform 160ms ease, border-color 160ms ease, background 160ms ease, box-shadow 160ms ease;
+  }
+
+  .incomeActionBtn:hover {
+    transform: translateY(-1px);
+  }
+
+  .incomeIntelList {
+    display: grid;
+    gap: 10px;
+    min-height: 360px;
+    max-height: 360px;
+    overflow: auto;
+    padding-right: 2px;
+  }
+
+  .incomeIntelItem {
+    border-radius: 18px;
+    border: 1px solid rgba(255,255,255,0.07);
+    background:
+      linear-gradient(180deg, rgba(8,13,24,0.78), rgba(4,8,16,0.72));
+    padding: 12px;
+    display: grid;
+    gap: 10px;
+  }
+
+  .incomeIntelTitle {
+    font-size: 13px;
+    font-weight: 800;
+    color: #fff;
+    line-height: 1.25;
+    overflow-wrap: anywhere;
+  }
+
+  .incomeIntelSub {
+    margin-top: 4px;
+    font-size: 11.5px;
+    color: rgba(255,255,255,0.54);
+    line-height: 1.35;
+  }
+
+  .incomeSnapshotGrid {
+    display: grid;
+    gap: 8px;
+  }
+
+  .incomeSnapshotRow {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 14px;
+    border-radius: 14px;
+    border: 1px solid rgba(255,255,255,0.08);
+    background: rgba(255,255,255,0.03);
+    color: rgba(255,255,255,0.78);
+  }
+
+  .incomeEmptyState {
+    min-height: 150px;
+    display: grid;
+    place-items: center;
+    text-align: center;
+    padding: 14px;
+  }
+
+  .incomeInlineEmpty {
+    min-height: 360px;
+  }
+
+  .incomeEmptyTitle {
+    font-size: 16px;
+    font-weight: 850;
+    color: #fff;
+  }
+
+  .incomeEmptyText {
+    margin-top: 6px;
+    font-size: 13px;
+    line-height: 1.5;
+    color: rgba(255,255,255,0.60);
+    max-width: 360px;
+  }
+
+  @media (max-width: 1560px) {
+    .incomeWorkspaceGrid {
+      grid-template-columns: minmax(440px, 1.22fr) minmax(390px, 1fr) minmax(320px, 0.9fr);
+    }
+  }
+
+  @media (max-width: 1420px) {
+    .incomeControlsGrid {
       grid-template-columns: 1fr;
     }
 
-    .heroRow {
-      flex-direction: column;
-      align-items: stretch;
+    .incomeWorkspaceGrid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
-    .heroRight {
-      justify-items: start;
+    .incomeWorkspaceGrid > :nth-child(3) {
+      grid-column: 1 / -1;
+    }
+  }
+
+  @media (max-width: 1260px) {
+    .incomeMetricGrid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .incomeSectionGrid {
+      grid-template-columns: 1fr;
+    }
+
+    .incomeRosterListCompact {
+      min-height: 580px;
+      max-height: 580px;
+    }
+  }
+
+  @media (max-width: 1100px) {
+    .incomeHeroGrid,
+    .incomeWorkspaceGrid {
+      grid-template-columns: 1fr;
+    }
+
+    .incomeHeroSide {
+      justify-content: flex-start;
+    }
+  }
+
+  @media (max-width: 1024px) {
+    .incomeRosterControls,
+    .incomeInfoGrid,
+    .incomeFormGrid2,
+    .incomeFormGrid3,
+    .incomeActionGrid,
+    .incomeActionGridTight,
+    .incomeActionGridQuad,
+    .incomeSplitRow {
+      grid-template-columns: 1fr;
+    }
+
+    .incomeCompactRow {
+      grid-template-columns: 42px minmax(0, 1fr);
+    }
+
+    .incomeCompactValue {
+      white-space: normal;
+    }
+
+    .incomeCompactActions {
+      grid-column: 2;
+      justify-content: flex-start;
+    }
+
+    .incomeRosterListCompact,
+    .incomeIntelList {
+      min-height: 0;
+      max-height: none;
     }
   }
 
   @media (max-width: 760px) {
-    .incomePage {
-      padding: 14px;
+    .incomePageShell {
+      padding: 8px 0 14px;
     }
 
-    .heroPanel,
-    .boardPanel,
-    .sidePanel {
-      padding: 16px;
-      border-radius: 22px;
-    }
-
-    .panel {
-      border-radius: 22px;
-    }
-
-    .statsGrid {
+    .incomeMetricGrid,
+    .incomeSectionGrid {
       grid-template-columns: 1fr;
     }
+  }
 
-    .formGrid,
-    .detailGrid,
-    .recordEditGrid {
+  @media (max-width: 640px) {
+    .incomeMetricGrid,
+    .incomeActionGrid,
+    .incomeActionGridTight,
+    .incomeActionGridQuad {
       grid-template-columns: 1fr;
-    }
-
-    .segmentWrap {
-      width: 100%;
-    }
-
-    .segmentBtn {
-      flex: 1 1 0;
-      width: 100%;
-    }
-
-    .monthPickerWrap {
-      min-width: 0;
-      width: 100%;
-    }
-
-    .heroTitle {
-      font-size: 48px;
-    }
-
-    .recordTop,
-    .boardHead,
-    .sidePanelHead,
-    .sectionMiniHead,
-    .sourceTop {
-      flex-direction: column;
-      align-items: stretch;
-    }
-
-    .recordValueBlock {
-      text-align: left;
     }
   }
 `;
