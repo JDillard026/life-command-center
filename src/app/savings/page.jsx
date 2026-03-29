@@ -1,18 +1,24 @@
 "use client";
 
-import * as React from "react";
-import { supabase } from "@/lib/supabaseClient";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Badge } from "@/components/ui/badge";
-import { Label } from "@/components/ui/label";
-
 export const dynamic = "force-dynamic";
 
-/* =========================
-   constants
-========================= */
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  Archive,
+  CalendarClock,
+  Copy,
+  Download,
+  PiggyBank,
+  Plus,
+  Search,
+  Target,
+  Trash2,
+  TrendingUp,
+  Wallet,
+} from "lucide-react";
+import { supabase } from "@/lib/supabaseClient";
+import GlassPane from "../components/GlassPane";
+
 const GOAL_PRESETS = [
   "Emergency Fund",
   "Vacation",
@@ -24,34 +30,19 @@ const GOAL_PRESETS = [
   "Other",
 ];
 
+const PRIORITY_OPTIONS = ["High", "Medium", "Low"];
 const QUICK_AMOUNTS = [25, 100, 250, 500];
 
-const RED = "#ff5d73";
-const GREEN = "#4ade80";
-const BLUE = "#38bdf8";
-const AMBER = "#f59e0b";
-const PINK = "#fb7185";
-
-/* =========================
-   utils
-========================= */
 function uid() {
-  return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  return (
+    globalThis.crypto?.randomUUID?.() ??
+    `${Date.now()}-${Math.random().toString(16).slice(2)}`
+  );
 }
 
-function pad2(n) {
-  return String(n).padStart(2, "0");
-}
-
-function todayISO() {
-  const d = new Date();
-  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
-}
-
-function money(n) {
+function safeNum(n, fallback = 0) {
   const x = Number(n);
-  if (!Number.isFinite(x)) return "$0.00";
-  return x.toLocaleString(undefined, { style: "currency", currency: "USD" });
+  return Number.isFinite(x) ? x : fallback;
 }
 
 function parseMoneyInput(v) {
@@ -60,14 +51,62 @@ function parseMoneyInput(v) {
   return Number.isFinite(num) ? num : NaN;
 }
 
-function clamp(n, min, max) {
-  return Math.max(min, Math.min(max, n));
+function fmtMoney(n) {
+  const num = Number(n);
+  if (!Number.isFinite(num)) return "$0";
+  return num.toLocaleString(undefined, {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
+  });
+}
+
+function fmtMoneyTight(n) {
+  const num = Number(n);
+  if (!Number.isFinite(num)) return "$0.00";
+  return num.toLocaleString(undefined, {
+    style: "currency",
+    currency: "USD",
+  });
+}
+
+function pct(n) {
+  const num = Number(n);
+  if (!Number.isFinite(num)) return "0%";
+  return `${Math.round(num)}%`;
+}
+
+function isoDate(d = new Date()) {
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function todayISO() {
+  return isoDate(new Date());
+}
+
+function monthKeyFromISO(iso) {
+  const s = String(iso || "");
+  return s.length >= 7 ? s.slice(0, 7) : "";
+}
+
+function fmtMonthLabel(ym) {
+  if (!ym || ym.length < 7) return "—";
+  const [y, m] = ym.split("-").map(Number);
+  if (!Number.isFinite(y) || !Number.isFinite(m)) return ym;
+  const d = new Date(y, m - 1, 1);
+  return d.toLocaleDateString(undefined, {
+    month: "long",
+    year: "numeric",
+  });
 }
 
 function fmtDate(iso) {
-  if (!iso) return "";
+  if (!iso) return "—";
   const d = new Date(`${iso}T00:00:00`);
-  if (!Number.isFinite(d.getTime())) return "";
+  if (!Number.isFinite(d.getTime())) return "—";
   return d.toLocaleDateString(undefined, {
     month: "short",
     day: "numeric",
@@ -75,25 +114,49 @@ function fmtDate(iso) {
   });
 }
 
+function formatAgo(value) {
+  if (!value) return "—";
+  const ms = Date.now() - new Date(value).getTime();
+  const minutes = Math.round(ms / 60000);
+
+  if (!Number.isFinite(minutes)) return "—";
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes}m ago`;
+
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+
+  const days = Math.round(hours / 24);
+  return `${days}d ago`;
+}
+
 function daysUntil(iso) {
   if (!iso) return null;
   const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-  const target = new Date(`${iso}T00:00:00`).getTime();
-  if (!Number.isFinite(target)) return null;
-  return Math.round((target - today) / 86400000);
+  const today = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate()
+  ).getTime();
+  const due = new Date(`${iso}T00:00:00`).getTime();
+  if (!Number.isFinite(due)) return null;
+  return Math.round((due - today) / 86400000);
 }
 
-function pct(goal) {
-  const t = Number(goal?.target) || 0;
-  const c = Number(goal?.current) || 0;
-  if (t <= 0) return 0;
-  return clamp((c / t) * 100, 0, 100);
+function progressPercent(goal) {
+  const target = safeNum(goal?.target, 0);
+  const current = safeNum(goal?.current, 0);
+  if (target <= 0) return 0;
+  return Math.max(0, Math.min(100, (current / target) * 100));
 }
 
-function priorityRank(p) {
-  if (p === "High") return 0;
-  if (p === "Medium") return 1;
+function amountLeft(goal) {
+  return Math.max(0, safeNum(goal?.target, 0) - safeNum(goal?.current, 0));
+}
+
+function priorityRank(priority) {
+  if (priority === "High") return 0;
+  if (priority === "Medium") return 1;
   return 2;
 }
 
@@ -101,298 +164,185 @@ function dueLabel(goal) {
   if (!goal?.dueDate) return "No due date";
   const d = daysUntil(goal.dueDate);
   if (d === null) return "No due date";
-  if (d < 0) return `Overdue • ${fmtDate(goal.dueDate)}`;
+  if (d < 0) return `${Math.abs(d)}d overdue`;
   if (d === 0) return "Due today";
-  return `Due in ${d} day${d === 1 ? "" : "s"}`;
+  if (d === 1) return "Due tomorrow";
+  return `Due in ${d}d`;
+}
+
+function progressTone(goal) {
+  const value = progressPercent(goal);
+  if (value >= 100) return "green";
+  if (value >= 65) return "green";
+  if (value >= 30) return "amber";
+  return "neutral";
 }
 
 function dueTone(goal) {
-  if (!goal?.dueDate) return "steel";
-  const d = daysUntil(goal.dueDate);
-  if (d === null) return "steel";
-  if (d < 0) return "danger";
-  if (d === 0) return "danger";
+  const d = daysUntil(goal?.dueDate);
+  if (d === null) return "neutral";
+  if (d < 0) return "red";
+  if (d === 0) return "red";
   if (d <= 7) return "amber";
-  if (d <= 30) return "blue";
   return "green";
 }
 
 function priorityTone(priority) {
-  if (priority === "High") return "danger";
-  if (priority === "Low") return "steel";
-  return "green";
+  if (priority === "High") return "red";
+  if (priority === "Medium") return "amber";
+  return "neutral";
 }
 
-function computeNeeded(left, dueIso) {
-  const d = daysUntil(dueIso);
-  if (d === null) {
-    return { daysLeft: null, perDay: null, perWeek: null, perMonth: null };
+function toneByValue(value, inverse = false) {
+  const num = safeNum(value, 0);
+  if (num === 0) return "neutral";
+  if (inverse) return num > 0 ? "red" : "green";
+  return num > 0 ? "green" : "red";
+}
+
+function toneMeta(tone = "neutral") {
+  if (tone === "green") {
+    return {
+      text: "#97efc7",
+      border: "rgba(143, 240, 191, 0.18)",
+      glow: "rgba(110, 229, 173, 0.10)",
+      bg: "rgba(11, 22, 17, 0.66)",
+    };
   }
 
-  const daysLeft = Math.max(0, d);
-
-  if (daysLeft === 0) {
+  if (tone === "amber") {
     return {
-      daysLeft,
-      perDay: left,
-      perWeek: left,
-      perMonth: left,
+      text: "#f5cf88",
+      border: "rgba(255, 204, 112, 0.18)",
+      glow: "rgba(255, 194, 92, 0.10)",
+      bg: "rgba(22, 17, 11, 0.66)",
+    };
+  }
+
+  if (tone === "red") {
+    return {
+      text: "#ffb4c5",
+      border: "rgba(255, 132, 163, 0.18)",
+      glow: "rgba(255, 108, 145, 0.10)",
+      bg: "rgba(22, 11, 15, 0.66)",
     };
   }
 
   return {
-    daysLeft,
-    perDay: left / daysLeft,
-    perWeek: left / (daysLeft / 7),
-    perMonth: left / (daysLeft / 30),
+    text: "#f7fbff",
+    border: "rgba(214, 226, 255, 0.14)",
+    glow: "rgba(140, 170, 255, 0.08)",
+    bg: "rgba(10, 15, 24, 0.66)",
   };
 }
 
-function projectedFinishDate(goal) {
-  const contributions = Array.isArray(goal?.contributions) ? goal.contributions : [];
-  const current = Number(goal?.current) || 0;
-  const target = Number(goal?.target) || 0;
-  const left = Math.max(0, target - current);
+function goalInitials(name = "") {
+  const clean = String(name).trim();
+  if (!clean) return "SG";
+  const parts = clean.split(/\s+/).slice(0, 2);
+  return parts
+    .map((p) => p[0])
+    .join("")
+    .toUpperCase();
+}
 
-  if (left <= 0) return { status: "done", text: "Already funded" };
-  if (contributions.length === 0) return { status: "none", text: "No contribution history yet" };
+function paceNeed(goal) {
+  const left = amountLeft(goal);
+  const d = daysUntil(goal?.dueDate);
 
-  const recent = contributions
+  if (left <= 0 || d === null) {
+    return {
+      perDay: null,
+      perWeek: null,
+      perMonth: null,
+    };
+  }
+
+  const safeDays = Math.max(1, d);
+
+  return {
+    perDay: left / safeDays,
+    perWeek: left / (safeDays / 7),
+    perMonth: left / (safeDays / 30),
+  };
+}
+
+function recentProjection(goal) {
+  const list = Array.isArray(goal?.contributions) ? goal.contributions : [];
+
+  if (amountLeft(goal) <= 0) {
+    return {
+      text: "Already funded",
+      tone: "green",
+    };
+  }
+
+  if (list.length < 2) {
+    return {
+      text: "Need more history",
+      tone: "neutral",
+    };
+  }
+
+  const recent = list
     .slice()
     .sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")))
     .slice(-8);
 
-  const totalRecent = recent.reduce((sum, x) => sum + (Number(x.amount) || 0), 0);
-
   const dates = recent
-    .map((x) => (x?.date ? new Date(`${x.date}T00:00:00`).getTime() : NaN))
+    .map((item) => new Date(`${item.date}T00:00:00`).getTime())
     .filter((n) => Number.isFinite(n));
 
-  if (dates.length < 2 || totalRecent <= 0) {
-    return { status: "weak", text: "Need more contribution history" };
+  const total = recent.reduce((sum, item) => sum + safeNum(item.amount, 0), 0);
+
+  if (dates.length < 2 || total <= 0) {
+    return {
+      text: "Need more history",
+      tone: "neutral",
+    };
   }
 
   const first = Math.min(...dates);
   const last = Math.max(...dates);
   const spanDays = Math.max(1, Math.round((last - first) / 86400000) + 1);
+  const perDay = total / spanDays;
 
-  const perDay = totalRecent / spanDays;
   if (!Number.isFinite(perDay) || perDay <= 0) {
-    return { status: "weak", text: "Need more contribution history" };
+    return {
+      text: "Need more history",
+      tone: "neutral",
+    };
   }
 
+  const left = amountLeft(goal);
   const daysToFinish = Math.ceil(left / perDay);
   const finish = new Date();
   finish.setDate(finish.getDate() + daysToFinish);
 
   return {
-    status: "forecast",
-    text: `At recent pace, finish around ${finish.toLocaleDateString()}`,
-    perDay,
-    daysToFinish,
+    text: `At this pace, around ${finish.toLocaleDateString()}`,
+    tone: daysToFinish <= 60 ? "green" : "amber",
   };
 }
 
-function paceTone(goal) {
-  const proj = projectedFinishDate(goal);
-  if (proj.status === "done") return "green";
-  if (proj.status === "forecast") {
-    if (proj.daysToFinish <= 30) return "green";
-    if (proj.daysToFinish <= 90) return "blue";
-    return "amber";
-  }
-  return "steel";
+function resolvedGoalName(preset, customName) {
+  if (preset && preset !== "Other") return preset;
+  return String(customName || "").trim();
 }
 
-function progressColor(value) {
-  if (value >= 100) return GREEN;
-  if (value >= 70) return "#22c55e";
-  if (value >= 30) return BLUE;
-  return PINK;
-}
-
-/* =========================
-   shared visual pieces
-========================= */
-function GlassSection({ children, className = "" }) {
-  return (
-    <div
-      className={
-        "rounded-[28px] border border-white/10 bg-[linear-gradient(180deg,rgba(8,12,24,.96),rgba(7,11,21,.94))] shadow-[0_24px_60px_rgba(0,0,0,.42)] backdrop-blur-xl " +
-        className
-      }
-    >
-      {children}
-    </div>
-  );
-}
-
-function NativeSelect({ value, onChange, children, className = "", ...rest }) {
-  return (
-    <select
-      value={value}
-      onChange={onChange}
-      className={
-        "w-full h-11 rounded-2xl border border-white/10 bg-white/[0.04] px-3 text-sm text-white outline-none focus-visible:ring-2 focus-visible:ring-sky-400/40 " +
-        className
-      }
-      {...rest}
-    >
-      {children}
-    </select>
-  );
-}
-
-function CommandMetricCard({ title, value, sub, accentValue, tone = "green" }) {
-  const toneMap = {
-    red: { border: "rgba(255,93,115,.18)", glow: "rgba(255,93,115,.18)", accent: RED },
-    green: { border: "rgba(74,222,128,.18)", glow: "rgba(74,222,128,.18)", accent: GREEN },
-    blue: { border: "rgba(56,189,248,.18)", glow: "rgba(56,189,248,.18)", accent: BLUE },
-    amber: { border: "rgba(245,158,11,.18)", glow: "rgba(245,158,11,.18)", accent: AMBER },
-  };
-
-  const t = toneMap[tone] || toneMap.green;
-
-  return (
-    <div
-      className="relative overflow-hidden rounded-[24px] border p-5"
-      style={{
-        borderColor: t.border,
-        background: "linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,.02))",
-        boxShadow: `inset 0 1px 0 rgba(255,255,255,.03), 0 0 28px ${t.glow}`,
-      }}
-    >
-      <div className="mb-2 text-[11px] uppercase tracking-[0.18em] text-white/40">{title}</div>
-      <div className="text-[26px] font-black leading-none text-white md:text-[32px]">{value}</div>
-      <div className="mt-2 flex items-center gap-2 text-sm">
-        {accentValue ? (
-          <span className="font-black" style={{ color: t.accent }}>
-            {accentValue}
-          </span>
-        ) : null}
-        <span className="text-white/52">{sub}</span>
-      </div>
-    </div>
-  );
-}
-
-function ProgressBar({ value = 0, color = GREEN, height = "h-3", animated = true }) {
-  const pctValue = clamp(Number(value) || 0, 0, 100);
-
-  return (
-    <div
-      className={`${height} relative overflow-hidden rounded-full bg-white/10 shadow-[inset_0_1px_3px_rgba(0,0,0,.25)]`}
-    >
-      <div
-        className="absolute inset-0 opacity-40"
-        style={{
-          background:
-            "linear-gradient(90deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.00) 100%)",
-        }}
-      />
-      <div
-        className={`h-full rounded-full ${animated ? "transition-all duration-700 ease-out" : ""}`}
-        style={{
-          width: `${pctValue}%`,
-          background: `linear-gradient(90deg, ${color} 0%, rgba(255,255,255,.92) 180%)`,
-          boxShadow: `0 0 18px ${color}55, 0 0 30px ${color}33`,
-        }}
-      >
-        <div
-          className="h-full w-full rounded-full opacity-40"
-          style={{
-            background:
-              "linear-gradient(90deg, rgba(255,255,255,.22) 0%, rgba(255,255,255,0) 45%)",
-          }}
-        />
-      </div>
-    </div>
-  );
-}
-
-function MiniMetric({ label, value }) {
-  return (
-    <div className="rounded-[20px] border border-white/10 bg-white/[0.03] p-4">
-      <div className="text-[10px] uppercase tracking-[0.22em] text-white/38">{label}</div>
-      <div className="mt-2 text-lg font-black text-white">{value}</div>
-    </div>
-  );
-}
-
-function ToneBadge({ children, tone = "steel" }) {
-  const tones = {
-    green: "border-emerald-400/20 bg-emerald-400/10 text-emerald-200",
-    blue: "border-sky-400/20 bg-sky-400/10 text-sky-200",
-    amber: "border-amber-400/20 bg-amber-400/10 text-amber-200",
-    danger: "border-rose-400/20 bg-rose-400/10 text-rose-200",
-    steel: "border-white/10 bg-white/5 text-white/70",
-  };
-
-  return (
-    <div className={`rounded-full border px-3 py-1.5 text-[11px] font-black uppercase tracking-[0.08em] ${tones[tone] || tones.steel}`}>
-      {children}
-    </div>
-  );
-}
-
-function SavingsProgressCard({ goal }) {
-  const value = pct(goal);
-  const color = progressColor(value);
-  const projection = projectedFinishDate(goal);
-
-  return (
-    <div className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4 transition-all duration-200 hover:scale-[1.01] hover:bg-white/[0.045] hover:shadow-[0_0_30px_rgba(255,255,255,0.05)]">
-      <div className="mb-3 flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="truncate text-[28px] font-black leading-none tracking-tight text-white md:text-[32px]">
-            {goal.name}
-          </div>
-          <div className="mt-2 text-sm text-white/52">
-            {money(goal.current)} of {money(goal.target)}
-          </div>
-        </div>
-
-        <ToneBadge tone={value >= 100 ? "green" : value >= 30 ? "blue" : "steel"}>
-          {Math.round(value)}%
-        </ToneBadge>
-      </div>
-
-      <ProgressBar value={value} color={color} />
-
-      <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-sm">
-        <div className="text-white/45">{dueLabel(goal)}</div>
-        <div className="font-black text-white/75">{goal.priority || "Medium"}</div>
-      </div>
-
-      <div className="mt-3 flex items-center justify-between gap-3 rounded-[16px] border border-white/10 bg-white/[0.025] px-3 py-2">
-        <div className="text-xs text-white/58">{projection.text}</div>
-        <ToneBadge tone={paceTone(goal)}>
-          {projection.status === "done"
-            ? "Done"
-            : projection.status === "forecast"
-            ? "Momentum"
-            : "Building"}
-        </ToneBadge>
-      </div>
-    </div>
-  );
-}
-
-/* =========================
-   db mapping
-========================= */
 function mapGoalRow(row) {
   return {
     id: row.id,
     name: String(row.name ?? "").trim(),
-    target: Number(row.target_amount) || 0,
-    current: Number(row.current_amount) || 0,
+    target: safeNum(row.target_amount, 0),
+    current: safeNum(row.current_amount, 0),
     dueDate: row.target_date || "",
     priority: row.priority || "Medium",
     archived: !!row.archived,
     createdAt:
       row.created_at_ms ??
       (row.created_at ? new Date(row.created_at).getTime() : Date.now()),
+    updatedAt: row.updated_at || row.created_at || null,
     contributions: Array.isArray(row.contributions) ? row.contributions : [],
   };
 }
@@ -402,8 +352,8 @@ function mapGoalToRow(goal, userId) {
     id: goal.id,
     user_id: userId,
     name: String(goal.name ?? "").trim(),
-    target_amount: Number(goal.target) || 0,
-    current_amount: Number(goal.current) || 0,
+    target_amount: safeNum(goal.target, 0),
+    current_amount: safeNum(goal.current, 0),
     target_date: goal.dueDate || null,
     category: "general",
     notes: "",
@@ -415,50 +365,745 @@ function mapGoalToRow(goal, userId) {
   };
 }
 
-/* =========================
-   page
-========================= */
+function MiniPill({ children, tone = "neutral" }) {
+  const meta = toneMeta(tone);
+
+  return (
+    <div
+      style={{
+        minHeight: 30,
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 8,
+        padding: "0 10px",
+        borderRadius: 999,
+        border: `1px solid ${meta.border}`,
+        background:
+          "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.012))",
+        boxShadow: `inset 0 1px 0 rgba(255,255,255,0.03), 0 0 10px ${meta.glow}`,
+        color: tone === "neutral" ? "rgba(255,255,255,0.88)" : meta.text,
+        fontSize: 11,
+        fontWeight: 800,
+        whiteSpace: "nowrap",
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+function PaneHeader({ title, subcopy, right }) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "flex-start",
+        gap: 10,
+        flexWrap: "wrap",
+        marginBottom: 10,
+      }}
+    >
+      <div style={{ minWidth: 0 }}>
+        <div
+          style={{
+            fontSize: 17,
+            lineHeight: 1.08,
+            fontWeight: 850,
+            letterSpacing: "-0.035em",
+            color: "#fff",
+          }}
+        >
+          {title}
+        </div>
+
+        {subcopy ? (
+          <div
+            style={{
+              marginTop: 3,
+              fontSize: 12,
+              lineHeight: 1.45,
+              color: "rgba(255,255,255,0.60)",
+            }}
+          >
+            {subcopy}
+          </div>
+        ) : null}
+      </div>
+
+      {right || null}
+    </div>
+  );
+}
+
+function StatCard({ icon: Icon, label, value, detail, tone = "neutral", badge = "" }) {
+  const meta = toneMeta(tone);
+
+  return (
+    <GlassPane tone={tone} size="card" style={{ height: "100%" }}>
+      <div
+        style={{
+          minHeight: 112,
+          display: "grid",
+          gridTemplateRows: "auto auto 1fr",
+          gap: 7,
+        }}
+      >
+        <div
+          style={{
+            width: 34,
+            height: 34,
+            borderRadius: 12,
+            display: "grid",
+            placeItems: "center",
+            border: `1px solid ${meta.border}`,
+            background: meta.bg,
+            color: tone === "neutral" ? "#fff" : meta.text,
+            boxShadow: `0 0 10px ${meta.glow}`,
+          }}
+        >
+          <Icon size={15} />
+        </div>
+
+        <div>
+          <div
+            style={{
+              fontSize: 10,
+              textTransform: "uppercase",
+              letterSpacing: ".2em",
+              fontWeight: 800,
+              color: "rgba(255,255,255,0.40)",
+            }}
+          >
+            {label}
+          </div>
+
+          {badge ? (
+            <div style={{ marginTop: 6 }}>
+              <MiniPill tone={tone}>{badge}</MiniPill>
+            </div>
+          ) : null}
+
+          <div
+            style={{
+              marginTop: 8,
+              fontSize: "clamp(18px, 2.2vw, 28px)",
+              lineHeight: 1,
+              fontWeight: 850,
+              letterSpacing: "-0.05em",
+              color: tone === "neutral" ? "#fff" : meta.text,
+            }}
+          >
+            {value}
+          </div>
+        </div>
+
+        <div
+          style={{
+            fontSize: 11.5,
+            lineHeight: 1.4,
+            color: "rgba(255,255,255,0.60)",
+          }}
+        >
+          {detail}
+        </div>
+      </div>
+    </GlassPane>
+  );
+}
+
+function ActionBtn({
+  children,
+  onClick,
+  variant = "ghost",
+  full = false,
+  type = "button",
+  disabled = false,
+}) {
+  const isPrimary = variant === "primary";
+  const isDanger = variant === "danger";
+
+  return (
+    <button
+      type={type}
+      onClick={onClick}
+      disabled={disabled}
+      className="savingsActionBtn"
+      style={{
+        width: full ? "100%" : undefined,
+        border: isDanger
+          ? "1px solid rgba(255,132,163,0.18)"
+          : isPrimary
+          ? "1px solid rgba(143,177,255,0.18)"
+          : "1px solid rgba(214,226,255,0.10)",
+        background: isDanger
+          ? "linear-gradient(180deg, rgba(255,132,163,0.10), rgba(255,132,163,0.05))"
+          : isPrimary
+          ? "linear-gradient(180deg, rgba(143,177,255,0.14), rgba(143,177,255,0.06))"
+          : "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.012))",
+        color: isDanger ? "#ffd3df" : "#f7fbff",
+        opacity: disabled ? 0.55 : 1,
+        cursor: disabled ? "not-allowed" : "pointer",
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
+function ProgressBar({ fill = 0, tone = "neutral" }) {
+  const normalized = Math.max(0, Math.min(100, safeNum(fill)));
+  const toneMap = {
+    neutral: "linear-gradient(90deg, rgba(96,165,250,.95), rgba(147,197,253,.95))",
+    green: "linear-gradient(90deg, rgba(74,222,128,.95), rgba(167,243,208,.95))",
+    amber: "linear-gradient(90deg, rgba(251,191,36,.95), rgba(253,230,138,.95))",
+    red: "linear-gradient(90deg, rgba(248,113,113,.95), rgba(252,165,165,.95))",
+  };
+
+  return (
+    <div className="savingsProgress">
+      <div
+        className="savingsProgressFill"
+        style={{
+          width: `${normalized}%`,
+          background: toneMap[tone] || toneMap.neutral,
+        }}
+      />
+    </div>
+  );
+}
+
+function CompactGoalRow({
+  goal,
+  selected,
+  priority,
+  onSelect,
+  onDuplicate,
+  onArchive,
+  onDelete,
+}) {
+  const dueStatusTone = dueTone(goal);
+  const progressStatusTone = progressTone(goal);
+  const meta = toneMeta(
+    dueStatusTone === "red"
+      ? "red"
+      : progressStatusTone === "green"
+      ? "green"
+      : "neutral"
+  );
+  const projection = recentProjection(goal);
+
+  return (
+    <div
+      className="savingsCompactRow"
+      onClick={onSelect}
+      style={{
+        borderColor: selected ? meta.border : "rgba(255,255,255,0.07)",
+        boxShadow: selected
+          ? `inset 0 1px 0 rgba(255,255,255,0.03), 0 0 0 1px rgba(255,255,255,0.01), 0 0 24px ${meta.glow}`
+          : "inset 0 1px 0 rgba(255,255,255,0.025)",
+      }}
+    >
+      <div
+        className="savingsCompactAvatar"
+        style={{
+          borderColor: meta.border,
+          color: dueStatusTone === "neutral" ? "#fff" : meta.text,
+          boxShadow: `0 0 12px ${meta.glow}`,
+        }}
+      >
+        {goalInitials(goal.name)}
+      </div>
+
+      <div style={{ minWidth: 0 }}>
+        <div
+          style={{
+            display: "flex",
+            gap: 8,
+            alignItems: "center",
+            flexWrap: "wrap",
+          }}
+        >
+          <div className="savingsCompactTitle">{goal.name || "Untitled goal"}</div>
+          <MiniPill tone={priorityTone(goal.priority)}>{goal.priority}</MiniPill>
+          <MiniPill tone={dueStatusTone}>{dueLabel(goal)}</MiniPill>
+          <MiniPill tone={progressStatusTone}>{pct(progressPercent(goal))}</MiniPill>
+          {priority ? <MiniPill tone="amber">Rank #{priority}</MiniPill> : null}
+          {goal.archived ? <MiniPill>Archived</MiniPill> : null}
+        </div>
+
+        <div className="savingsCompactSub">
+          {fmtMoney(goal.current)} saved • {fmtMoney(amountLeft(goal))} left •{" "}
+          {projection.text} • Updated {formatAgo(goal.updatedAt)}
+        </div>
+
+        <div style={{ marginTop: 10 }}>
+          <ProgressBar fill={progressPercent(goal)} tone={progressStatusTone} />
+        </div>
+      </div>
+
+      <div className="savingsCompactValue">{fmtMoney(goal.target)}</div>
+
+      <div className="savingsCompactActions" onClick={(e) => e.stopPropagation()}>
+        <button
+          type="button"
+          className="savingsIconBtn"
+          onClick={onDuplicate}
+          aria-label="Duplicate goal"
+          title="Duplicate goal"
+        >
+          <Copy size={14} />
+        </button>
+        <button
+          type="button"
+          className="savingsIconBtn"
+          onClick={onArchive}
+          aria-label={goal.archived ? "Unarchive goal" : "Archive goal"}
+          title={goal.archived ? "Unarchive goal" : "Archive goal"}
+        >
+          <Archive size={14} />
+        </button>
+        <button
+          type="button"
+          className="savingsIconBtn savingsDangerBtn"
+          onClick={onDelete}
+          aria-label="Delete goal"
+          title="Delete goal"
+        >
+          <Trash2 size={14} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function FocusGoalCard({
+  goal,
+  priority,
+  saving,
+  onDuplicate,
+  onArchive,
+  onDelete,
+  onQuickAdd,
+  onUndoLast,
+  customAmount,
+  customNote,
+  setCustomAmount,
+  setCustomNote,
+  onCustomAdd,
+}) {
+  if (!goal) {
+    return (
+      <GlassPane size="card">
+        <PaneHeader
+          title="Focus Goal"
+          subcopy="Choose one from the roster to work it here."
+        />
+        <div className="savingsEmptyState" style={{ minHeight: 170 }}>
+          <div>
+            <div className="savingsEmptyTitle">No goal selected</div>
+            <div className="savingsEmptyText">
+              Pick one from the roster on the left.
+            </div>
+          </div>
+        </div>
+      </GlassPane>
+    );
+  }
+
+  const dueStatusTone = dueTone(goal);
+  const progressStatusTone = progressTone(goal);
+  const left = amountLeft(goal);
+  const need = paceNeed(goal);
+  const projection = recentProjection(goal);
+
+  return (
+    <GlassPane tone={progressStatusTone} size="card" style={{ height: "100%" }}>
+      <PaneHeader
+        title={goal.name || "Untitled goal"}
+        subcopy="Focused controls for the goal you are actively touching."
+        right={
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {priority ? <MiniPill tone="amber">Rank #{priority}</MiniPill> : null}
+            <MiniPill tone={priorityTone(goal.priority)}>{goal.priority}</MiniPill>
+            <MiniPill tone={dueStatusTone}>{dueLabel(goal)}</MiniPill>
+            {goal.archived ? <MiniPill>Archived</MiniPill> : null}
+            {saving ? <MiniPill tone="amber">Saving...</MiniPill> : null}
+          </div>
+        }
+      />
+
+      <div className="savingsFocusBox">
+        <div className="savingsTinyLabel">Current Saved</div>
+
+        <div
+          style={{
+            marginTop: 8,
+            fontSize: "clamp(30px, 4vw, 46px)",
+            lineHeight: 1,
+            fontWeight: 850,
+            letterSpacing: "-0.05em",
+            color: progressStatusTone === "green" ? "#97efc7" : "#fff",
+          }}
+        >
+          {fmtMoney(goal.current)}
+        </div>
+
+        <div
+          style={{
+            marginTop: 10,
+            fontSize: 12,
+            color: "rgba(255,255,255,0.58)",
+          }}
+        >
+          Target {fmtMoney(goal.target)} • Updated {formatAgo(goal.updatedAt)}
+        </div>
+
+        <div className="savingsInfoGrid" style={{ marginTop: 14 }}>
+          <div className="savingsInfoCell">
+            <div className="savingsTinyLabel">Left</div>
+            <div className="savingsInfoValue">{fmtMoney(left)}</div>
+            <div className="savingsInfoSub">Still needed to finish</div>
+          </div>
+
+          <div className="savingsInfoCell">
+            <div className="savingsTinyLabel">Progress</div>
+            <div className="savingsInfoValue">{pct(progressPercent(goal))}</div>
+            <div className="savingsInfoSub">Of total target</div>
+          </div>
+
+          <div className="savingsInfoCell">
+            <div className="savingsTinyLabel">Monthly Pace</div>
+            <div className="savingsInfoValue">
+              {need.perMonth !== null ? fmtMoney(need.perMonth) : "—"}
+            </div>
+            <div className="savingsInfoSub">
+              {goal.dueDate ? "Needed to hit due date" : "No due date assigned"}
+            </div>
+          </div>
+
+          <div className="savingsInfoCell">
+            <div className="savingsTinyLabel">Projection</div>
+            <div className="savingsInfoValue">{projection.text}</div>
+            <div className="savingsInfoSub">Based on recent contribution pace</div>
+          </div>
+        </div>
+
+        <div style={{ marginTop: 12 }}>
+          <ProgressBar fill={progressPercent(goal)} tone={progressStatusTone} />
+        </div>
+
+        <div className="savingsQuickChipRow" style={{ marginTop: 14 }}>
+          {QUICK_AMOUNTS.map((amount) => (
+            <ActionBtn key={amount} onClick={() => onQuickAdd(amount)}>
+              +{fmtMoney(amount)}
+            </ActionBtn>
+          ))}
+        </div>
+
+        <div className="savingsContributionGrid" style={{ marginTop: 12 }}>
+          <input
+            className="savingsField"
+            inputMode="decimal"
+            placeholder="Custom amount"
+            value={customAmount}
+            onChange={(e) => setCustomAmount(e.target.value)}
+          />
+
+          <input
+            className="savingsField"
+            placeholder="Note (optional)"
+            value={customNote}
+            onChange={(e) => setCustomNote(e.target.value)}
+          />
+
+          <ActionBtn variant="primary" onClick={onCustomAdd}>
+            Add
+          </ActionBtn>
+        </div>
+
+        <div className="savingsActionGrid savingsActionGridTight" style={{ marginTop: 14 }}>
+          <ActionBtn onClick={onDuplicate} full>
+            <Copy size={14} /> Duplicate
+          </ActionBtn>
+          <ActionBtn onClick={onUndoLast} full>
+            Undo Last
+          </ActionBtn>
+          <ActionBtn onClick={onArchive} full>
+            <Archive size={14} /> {goal.archived ? "Unarchive" : "Archive"}
+          </ActionBtn>
+          <ActionBtn variant="danger" onClick={onDelete} full>
+            <Trash2 size={14} /> Delete
+          </ActionBtn>
+        </div>
+      </div>
+    </GlassPane>
+  );
+}
+
+function AddGoalCard({ adding, setAdding, onAdd, saving }) {
+  return (
+    <GlassPane size="card" style={{ height: "100%" }}>
+      <PaneHeader
+        title="Add Goal"
+        subcopy="Keep this fast and simple."
+        right={
+          <MiniPill>
+            <Plus size={13} /> New
+          </MiniPill>
+        }
+      />
+
+      <div className="savingsFormStack">
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {GOAL_PRESETS.slice(0, 4).map((item) => (
+            <ActionBtn
+              key={item}
+              variant={adding.preset === item ? "primary" : "ghost"}
+              onClick={() => setAdding((p) => ({ ...p, preset: item }))}
+            >
+              {item === "Truck / Car Fund" ? "Truck / Car" : item}
+            </ActionBtn>
+          ))}
+          <ActionBtn
+            variant={adding.preset === "Other" ? "primary" : "ghost"}
+            onClick={() => setAdding((p) => ({ ...p, preset: "Other" }))}
+          >
+            Other
+          </ActionBtn>
+        </div>
+
+        {adding.preset === "Other" ? (
+          <div>
+            <div className="savingsTinyLabel">Goal Name</div>
+            <input
+              className="savingsField"
+              placeholder="New goal name..."
+              value={adding.customName}
+              onChange={(e) =>
+                setAdding((p) => ({ ...p, customName: e.target.value }))
+              }
+            />
+          </div>
+        ) : null}
+
+        <div>
+          <div className="savingsTinyLabel">Resolved Goal</div>
+          <input
+            className="savingsField"
+            value={resolvedGoalName(adding.preset, adding.customName)}
+            readOnly
+          />
+        </div>
+
+        <div className="savingsFormGrid2">
+          <div>
+            <div className="savingsTinyLabel">Target</div>
+            <input
+              className="savingsField"
+              inputMode="decimal"
+              placeholder="0.00"
+              value={adding.target}
+              onChange={(e) => setAdding((p) => ({ ...p, target: e.target.value }))}
+            />
+          </div>
+
+          <div>
+            <div className="savingsTinyLabel">Starting Saved</div>
+            <input
+              className="savingsField"
+              inputMode="decimal"
+              placeholder="0.00"
+              value={adding.current}
+              onChange={(e) => setAdding((p) => ({ ...p, current: e.target.value }))}
+            />
+          </div>
+        </div>
+
+        <div className="savingsFormGrid2">
+          <div>
+            <div className="savingsTinyLabel">Due Date</div>
+            <input
+              className="savingsField"
+              type="date"
+              value={adding.dueDate}
+              onChange={(e) => setAdding((p) => ({ ...p, dueDate: e.target.value }))}
+            />
+          </div>
+
+          <div>
+            <div className="savingsTinyLabel">Priority</div>
+            <select
+              className="savingsField"
+              value={adding.priority}
+              onChange={(e) => setAdding((p) => ({ ...p, priority: e.target.value }))}
+            >
+              {PRIORITY_OPTIONS.map((item) => (
+                <option key={item} value={item}>
+                  {item}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div className="savingsActionGrid">
+          <ActionBtn variant="primary" onClick={onAdd} full disabled={saving}>
+            <Plus size={14} /> {saving ? "Saving..." : "Add Goal"}
+          </ActionBtn>
+        </div>
+      </div>
+    </GlassPane>
+  );
+}
+
+function GoalEditorCard({ goal, saving, onPatch }) {
+  if (!goal) {
+    return (
+      <GlassPane size="card">
+        <PaneHeader
+          title="Goal Details"
+          subcopy="Select a goal to edit the deeper fields."
+        />
+        <div className="savingsEmptyState" style={{ minHeight: 150 }}>
+          <div>
+            <div className="savingsEmptyTitle">No goal selected</div>
+            <div className="savingsEmptyText">
+              Choose one from the roster to edit it here.
+            </div>
+          </div>
+        </div>
+      </GlassPane>
+    );
+  }
+
+  return (
+    <GlassPane size="card">
+      <PaneHeader
+        title="Goal Details"
+        subcopy="This section autosaves as you type."
+        right={saving ? <MiniPill tone="amber">Saving...</MiniPill> : null}
+      />
+
+      <div className="savingsFormStack">
+        <div className="savingsFormGrid3">
+          <div>
+            <div className="savingsTinyLabel">Goal Name</div>
+            <input
+              className="savingsField"
+              value={goal.name}
+              onChange={(e) => onPatch({ name: e.target.value })}
+            />
+          </div>
+
+          <div>
+            <div className="savingsTinyLabel">Priority</div>
+            <select
+              className="savingsField"
+              value={goal.priority}
+              onChange={(e) => onPatch({ priority: e.target.value })}
+            >
+              {PRIORITY_OPTIONS.map((item) => (
+                <option key={item} value={item}>
+                  {item}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <div className="savingsTinyLabel">Due Date</div>
+            <input
+              className="savingsField"
+              type="date"
+              value={goal.dueDate || ""}
+              onChange={(e) => onPatch({ dueDate: e.target.value })}
+            />
+          </div>
+        </div>
+
+        <div className="savingsFormGrid3">
+          <div>
+            <div className="savingsTinyLabel">Current Saved</div>
+            <input
+              className="savingsField"
+              value={String(goal.current || "")}
+              onChange={(e) =>
+                onPatch({ current: safeNum(parseMoneyInput(e.target.value), 0) })
+              }
+            />
+          </div>
+
+          <div>
+            <div className="savingsTinyLabel">Target</div>
+            <input
+              className="savingsField"
+              value={String(goal.target || "")}
+              onChange={(e) =>
+                onPatch({ target: safeNum(parseMoneyInput(e.target.value), 0) })
+              }
+            />
+          </div>
+
+          <div>
+            <div className="savingsTinyLabel">Archived</div>
+            <select
+              className="savingsField"
+              value={goal.archived ? "yes" : "no"}
+              onChange={(e) => onPatch({ archived: e.target.value === "yes" })}
+            >
+              <option value="no">No</option>
+              <option value="yes">Yes</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="savingsInfoCell">
+          <div className="savingsTinyLabel">Computed Read</div>
+          <div className="savingsInfoValue">
+            {fmtMoney(goal.current)} / {fmtMoney(goal.target)} • {pct(progressPercent(goal))}
+          </div>
+          <div className="savingsInfoSub" style={{ marginTop: 6 }}>
+            {dueLabel(goal)} • {fmtMoney(amountLeft(goal))} left
+          </div>
+        </div>
+      </div>
+    </GlassPane>
+  );
+}
+
 export default function SavingsPage() {
-  const [loading, setLoading] = React.useState(true);
-  const [userId, setUserId] = React.useState(null);
-  const [goals, setGoals] = React.useState([]);
-  const [savingIds, setSavingIds] = React.useState({});
-  const [pageError, setPageError] = React.useState("");
+  const [goals, setGoals] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [userId, setUserId] = useState(null);
+  const [search, setSearch] = useState("");
+  const [filter, setFilter] = useState("active");
+  const [sort, setSort] = useState("priority");
+  const [showArchived, setShowArchived] = useState(false);
+  const [focusMode, setFocusMode] = useState("deadline");
+  const [selectedGoalId, setSelectedGoalId] = useState("");
+  const [savingIds, setSavingIds] = useState({});
+  const [pageError, setPageError] = useState("");
+  const [addingBusy, setAddingBusy] = useState(false);
+  const [ioText, setIoText] = useState("");
 
-  const [tab, setTab] = React.useState("overview");
-
-  const [preset, setPreset] = React.useState(GOAL_PRESETS[0]);
-  const [customName, setCustomName] = React.useState("");
-  const [target, setTarget] = React.useState("");
-  const [current, setCurrent] = React.useState("");
-  const [dueDate, setDueDate] = React.useState("");
-  const [priority, setPriority] = React.useState("Medium");
-
-  const [query, setQuery] = React.useState("");
-  const [sortBy, setSortBy] = React.useState("priority_then_due");
-  const [showArchived, setShowArchived] = React.useState(false);
-
-  const [editingId, setEditingId] = React.useState(null);
-  const [editDraft, setEditDraft] = React.useState({
-    name: "",
+  const [adding, setAdding] = useState({
+    preset: "Emergency Fund",
+    customName: "",
     target: "",
     current: "",
     dueDate: "",
     priority: "Medium",
-    archived: false,
   });
 
-  const [openId, setOpenId] = React.useState(null);
-  const [manageId, setManageId] = React.useState(null);
+  const [customContribution, setCustomContribution] = useState({});
+  const [customContributionNote, setCustomContributionNote] = useState({});
 
-  const [customAdd, setCustomAdd] = React.useState({});
-  const [customNote, setCustomNote] = React.useState({});
-
-  const [ioText, setIoText] = React.useState("");
-
-  const saveTimersRef = React.useRef({});
+  const rowSaveTimers = useRef({});
 
   async function getCurrentUser() {
+    if (!supabase) return null;
+
     const {
       data: { user },
       error,
@@ -472,15 +1117,20 @@ export default function SavingsPage() {
     return user ?? null;
   }
 
-  async function loadGoals() {
+  async function loadSavingsPage() {
+    if (!supabase) {
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     setPageError("");
 
     const user = await getCurrentUser();
-
     if (!user) {
       setUserId(null);
       setGoals([]);
+      setSelectedGoalId("");
       setLoading(false);
       return;
     }
@@ -495,1088 +1145,1464 @@ export default function SavingsPage() {
 
     if (error) {
       console.error("load savings error:", error);
-      setPageError(error.message || "Failed to load savings goals.");
+      setPageError(error.message || "Failed to load savings.");
       setGoals([]);
+      setSelectedGoalId("");
       setLoading(false);
       return;
     }
 
-    setGoals((data || []).map(mapGoalRow));
+    const mappedGoals = (data || []).map(mapGoalRow);
+    setGoals(mappedGoals);
+    setSelectedGoalId((prev) => prev || mappedGoals[0]?.id || "");
     setLoading(false);
   }
 
-  React.useEffect(() => {
-    loadGoals();
+  useEffect(() => {
+    loadSavingsPage();
+
+    if (!supabase) return;
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(() => {
-      loadGoals();
+      loadSavingsPage();
     });
 
     return () => {
       subscription?.unsubscribe?.();
-      Object.values(saveTimersRef.current).forEach((t) => clearTimeout(t));
+      Object.values(rowSaveTimers.current).forEach((timer) => clearTimeout(timer));
     };
   }, []);
 
-  async function persistGoal(goal) {
-    if (!userId) return;
+  useEffect(() => {
+    if (!goals.length) {
+      setSelectedGoalId("");
+      return;
+    }
 
-    setSavingIds((prev) => ({ ...prev, [goal.id]: true }));
+    const exists = goals.some((g) => g.id === selectedGoalId);
+    if (!exists) {
+      setSelectedGoalId(goals[0]?.id || "");
+    }
+  }, [goals, selectedGoalId]);
 
-    const { error } = await supabase.from("savings_goals").upsert(mapGoalToRow(goal, userId), {
-      onConflict: "id",
-    });
+  async function persistGoal(nextGoal) {
+    if (!supabase || !userId) return;
+
+    setSavingIds((prev) => ({ ...prev, [nextGoal.id]: true }));
+
+    const { error } = await supabase
+      .from("savings_goals")
+      .upsert(mapGoalToRow(nextGoal, userId), { onConflict: "id" });
 
     if (error) {
       console.error("save goal error:", error);
       setPageError(error.message || "Failed to save goal.");
     }
 
-    setSavingIds((prev) => ({ ...prev, [goal.id]: false }));
+    setSavingIds((prev) => ({ ...prev, [nextGoal.id]: false }));
   }
 
-  function scheduleSave(goal) {
-    if (saveTimersRef.current[goal.id]) {
-      clearTimeout(saveTimersRef.current[goal.id]);
+  function scheduleGoalSave(nextGoal) {
+    if (rowSaveTimers.current[nextGoal.id]) {
+      clearTimeout(rowSaveTimers.current[nextGoal.id]);
     }
 
-    saveTimersRef.current[goal.id] = setTimeout(() => {
-      persistGoal(goal);
-    }, 250);
+    rowSaveTimers.current[nextGoal.id] = setTimeout(() => {
+      persistGoal(nextGoal);
+    }, 300);
   }
 
-  function resolvedName() {
-    if (preset && preset !== "Other") return preset;
-    return customName.trim();
+  function updateGoal(id, patch) {
+    setGoals((prev) => {
+      const nextRows = prev.map((g) =>
+        g.id === id
+          ? { ...g, ...patch, updatedAt: new Date().toISOString() }
+          : g
+      );
+      const changed = nextRows.find((g) => g.id === id);
+      if (changed) scheduleGoalSave(changed);
+      return nextRows;
+    });
   }
 
-  function clearAddForm() {
-    setPreset(GOAL_PRESETS[0]);
-    setCustomName("");
-    setTarget("");
-    setCurrent("");
-    setDueDate("");
-    setPriority("Medium");
-    setPageError("");
-  }
+  async function addGoalFromForm() {
+    if (!supabase || !userId || addingBusy) return;
 
-  async function addGoal() {
-    setPageError("");
+    const name = resolvedGoalName(adding.preset, adding.customName);
+    const target = safeNum(parseMoneyInput(adding.target), NaN);
+    const current = safeNum(parseMoneyInput(adding.current || "0"), 0);
 
-    const n = resolvedName();
-    const t = parseMoneyInput(target);
-    const c = parseMoneyInput(current === "" ? "0" : current);
+    if (!name) {
+      alert("Goal name is required.");
+      return;
+    }
 
-    if (!n) return alert("Goal name is required.");
-    if (!Number.isFinite(t) || t <= 0) return alert("Target must be greater than 0.");
-    if (!Number.isFinite(c) || c < 0) return alert("Starting saved must be 0 or more.");
-    if (!userId) return alert("You must be signed in.");
+    if (!Number.isFinite(target) || target <= 0) {
+      alert("Target must be greater than 0.");
+      return;
+    }
 
-    const id = uid();
-    const nextGoal = {
-      id,
-      name: n,
-      target: t,
-      current: c,
-      dueDate: dueDate || "",
-      priority: priority || "Medium",
+    if (!Number.isFinite(current) || current < 0) {
+      alert("Starting saved must be 0 or more.");
+      return;
+    }
+
+    const next = {
+      id: uid(),
+      name,
+      target,
+      current,
+      dueDate: adding.dueDate || "",
+      priority: adding.priority || "Medium",
       archived: false,
       createdAt: Date.now(),
+      updatedAt: new Date().toISOString(),
       contributions:
-        c > 0
-          ? [{ id: uid(), date: todayISO(), amount: c, note: "Starting balance" }]
+        current > 0
+          ? [
+              {
+                id: uid(),
+                date: todayISO(),
+                amount: current,
+                note: "Starting balance",
+              },
+            ]
           : [],
     };
 
-    setGoals((prev) => [nextGoal, ...prev]);
-    clearAddForm();
+    setAddingBusy(true);
+    setGoals((prev) => [next, ...prev]);
+    setSelectedGoalId(next.id);
 
-    const { error: insertError } = await supabase
+    const { error } = await supabase
       .from("savings_goals")
-      .insert(mapGoalToRow(nextGoal, userId));
+      .insert(mapGoalToRow(next, userId));
 
-    if (insertError) {
-      console.error("add goal error:", insertError);
-      setPageError(insertError.message || "Failed to add goal.");
-      await loadGoals();
+    if (error) {
+      console.error("add goal error:", error);
+      await loadSavingsPage();
+    } else {
+      setAdding({
+        preset: "Emergency Fund",
+        customName: "",
+        target: "",
+        current: "",
+        dueDate: "",
+        priority: "Medium",
+      });
     }
-  }
 
-  function startEdit(goal) {
-    setEditingId(goal.id);
-    setPageError("");
-    setEditDraft({
-      name: goal.name || "",
-      target: String(goal.target ?? ""),
-      current: String(goal.current ?? ""),
-      dueDate: goal.dueDate || "",
-      priority: goal.priority || "Medium",
-      archived: !!goal.archived,
-    });
-  }
-
-  function cancelEdit() {
-    setEditingId(null);
-    setEditDraft({
-      name: "",
-      target: "",
-      current: "",
-      dueDate: "",
-      priority: "Medium",
-      archived: false,
-    });
-  }
-
-  function saveEdit(id) {
-    setPageError("");
-
-    const n = editDraft.name.trim();
-    const t = parseMoneyInput(editDraft.target);
-    const c = parseMoneyInput(editDraft.current === "" ? "0" : editDraft.current);
-
-    if (!n) return alert("Goal name is required.");
-    if (!Number.isFinite(t) || t <= 0) return alert("Target must be greater than 0.");
-    if (!Number.isFinite(c) || c < 0) return alert("Current saved must be 0 or more.");
-
-    setGoals((prev) => {
-      const next = prev.map((g) =>
-        g.id === id
-          ? {
-              ...g,
-              name: n,
-              target: t,
-              current: c,
-              dueDate: editDraft.dueDate || "",
-              priority: editDraft.priority || "Medium",
-              archived: !!editDraft.archived,
-            }
-          : g
-      );
-
-      const changed = next.find((g) => g.id === id);
-      if (changed) scheduleSave(changed);
-
-      return next;
-    });
-
-    cancelEdit();
+    setAddingBusy(false);
   }
 
   async function removeGoal(id) {
-    setGoals((prev) => prev.filter((g) => g.id !== id));
+    if (!supabase || !userId) return;
+    if (typeof window !== "undefined" && !window.confirm("Delete this goal?")) return;
 
-    if (openId === id) setOpenId(null);
-    if (manageId === id) setManageId(null);
-    if (editingId === id) cancelEdit();
+    const nextGoals = goals.filter((g) => g.id !== id);
+    setGoals(nextGoals);
+    if (selectedGoalId === id) {
+      setSelectedGoalId(nextGoals[0]?.id || "");
+    }
 
-    const { error } = await supabase.from("savings_goals").delete().eq("id", id);
+    const { error } = await supabase
+      .from("savings_goals")
+      .delete()
+      .eq("id", id)
+      .eq("user_id", userId);
 
     if (error) {
       console.error("delete goal error:", error);
-      setPageError(error.message || "Failed to delete goal.");
-      await loadGoals();
+      await loadSavingsPage();
     }
   }
 
-  function setArchived(goalId, archived) {
-    setGoals((prev) => {
-      const next = prev.map((g) => (g.id === goalId ? { ...g, archived: !!archived } : g));
-      const changed = next.find((g) => g.id === goalId);
-      if (changed) scheduleSave(changed);
-      return next;
-    });
+  async function duplicateGoal(goal) {
+    if (!supabase || !userId) return;
+
+    const cloned = {
+      ...goal,
+      id: uid(),
+      name: `${goal.name || "Goal"} Copy`,
+      createdAt: Date.now(),
+      updatedAt: new Date().toISOString(),
+      contributions: Array.isArray(goal.contributions)
+        ? goal.contributions.map((item) => ({
+            ...item,
+            id: uid(),
+          }))
+        : [],
+    };
+
+    setGoals((prev) => [cloned, ...prev]);
+    setSelectedGoalId(cloned.id);
+
+    const { error } = await supabase
+      .from("savings_goals")
+      .insert(mapGoalToRow(cloned, userId));
+
+    if (error) {
+      console.error("duplicate goal error:", error);
+      await loadSavingsPage();
+    }
   }
 
-  function applyContribution(goalId, amount, note) {
-    const amt = Number(amount);
+  function applyContribution(goalId, amount, note = "") {
+    const parsedAmount = safeNum(amount, NaN);
 
-    if (!Number.isFinite(amt) || amt <= 0) {
-      return alert("Contribution amount must be greater than 0.");
+    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+      alert("Contribution amount must be greater than 0.");
+      return;
     }
 
-    setPageError("");
-
     setGoals((prev) => {
-      const next = prev.map((g) => {
-        if (g.id !== goalId) return g;
+      const nextRows = prev.map((goal) => {
+        if (goal.id !== goalId) return goal;
 
-        const nextCurrent = (Number(g.current) || 0) + amt;
         const entry = {
           id: uid(),
           date: todayISO(),
-          amount: amt,
+          amount: parsedAmount,
           note: String(note || "").trim(),
         };
 
         return {
-          ...g,
-          current: nextCurrent,
-          contributions: [entry, ...(Array.isArray(g.contributions) ? g.contributions : [])],
+          ...goal,
+          current: safeNum(goal.current, 0) + parsedAmount,
+          contributions: [entry, ...(Array.isArray(goal.contributions) ? goal.contributions : [])],
+          updatedAt: new Date().toISOString(),
         };
       });
 
-      const changed = next.find((g) => g.id === goalId);
-      if (changed) scheduleSave(changed);
+      const changed = nextRows.find((g) => g.id === goalId);
+      if (changed) scheduleGoalSave(changed);
 
-      return next;
+      return nextRows;
     });
 
-    setCustomAdd((m) => ({ ...m, [goalId]: "" }));
-    setCustomNote((m) => ({ ...m, [goalId]: "" }));
+    setCustomContribution((prev) => ({ ...prev, [goalId]: "" }));
+    setCustomContributionNote((prev) => ({ ...prev, [goalId]: "" }));
   }
 
-  function undoLast(goalId) {
-    setPageError("");
-
+  function undoLastContribution(goalId) {
     setGoals((prev) => {
-      const next = prev.map((g) => {
-        if (g.id !== goalId) return g;
-
-        const list = Array.isArray(g.contributions) ? g.contributions : [];
-        if (list.length === 0) return g;
+      const nextRows = prev.map((goal) => {
+        if (goal.id !== goalId) return goal;
+        const list = Array.isArray(goal.contributions) ? goal.contributions : [];
+        if (!list.length) return goal;
 
         const [last, ...rest] = list;
-        const nextCurrent = Math.max(0, (Number(g.current) || 0) - (Number(last.amount) || 0));
 
         return {
-          ...g,
-          current: nextCurrent,
+          ...goal,
+          current: Math.max(0, safeNum(goal.current, 0) - safeNum(last.amount, 0)),
           contributions: rest,
+          updatedAt: new Date().toISOString(),
         };
       });
 
-      const changed = next.find((g) => g.id === goalId);
-      if (changed) scheduleSave(changed);
+      const changed = nextRows.find((g) => g.id === goalId);
+      if (changed) scheduleGoalSave(changed);
 
-      return next;
+      return nextRows;
     });
   }
 
-  const activeGoals = React.useMemo(() => goals.filter((g) => !g.archived), [goals]);
+  async function exportGoals() {
+    const payload = JSON.stringify(goals, null, 2);
+    setIoText(payload);
 
-  const totals = React.useMemo(() => {
-    const active = goals.filter((g) => !g.archived);
+    try {
+      await navigator.clipboard.writeText(payload);
+    } catch {}
+  }
 
-    const totalTarget = active.reduce((sum, g) => sum + (Number(g.target) || 0), 0);
-    const totalCurrent = active.reduce((sum, g) => sum + (Number(g.current) || 0), 0);
-    const left = Math.max(0, totalTarget - totalCurrent);
-    const overallPct = totalTarget > 0 ? Math.round((totalCurrent / totalTarget) * 100) : 0;
+  async function importReplaceGoals() {
+    if (!supabase || !userId) return;
 
-    const dueSoonCount = active.reduce((count, g) => {
-      const d = daysUntil(g.dueDate);
-      if (d === null) return count;
-      return d >= 0 && d <= 14 ? count + 1 : count;
-    }, 0);
-
-    const fundedCount = active.reduce((count, g) => {
-      const t = Number(g.target) || 0;
-      const c = Number(g.current) || 0;
-      return t > 0 && c >= t ? count + 1 : count;
-    }, 0);
-
-    const topOpenGoal =
-      active
-        .slice()
-        .sort((a, b) => {
-          const aLeft = Math.max(0, (Number(a.target) || 0) - (Number(a.current) || 0));
-          const bLeft = Math.max(0, (Number(b.target) || 0) - (Number(b.current) || 0));
-          return bLeft - aLeft;
-        })[0] || null;
-
-    const closestDueGoal =
-      active
-        .filter((g) => g.dueDate)
-        .slice()
-        .sort((a, b) => {
-          const ad = daysUntil(a.dueDate);
-          const bd = daysUntil(b.dueDate);
-          return (ad ?? Number.POSITIVE_INFINITY) - (bd ?? Number.POSITIVE_INFINITY);
-        })[0] || null;
-
-    const recentContributionCount = active.reduce(
-      (sum, g) => sum + (Array.isArray(g.contributions) ? g.contributions.length : 0),
-      0
-    );
-
-    return {
-      totalTarget,
-      totalCurrent,
-      left,
-      overallPct: clamp(overallPct, 0, 100),
-      dueSoonCount,
-      fundedCount,
-      activeCount: active.length,
-      topOpenGoal,
-      closestDueGoal,
-      recentContributionCount,
-    };
-  }, [goals]);
-
-  const filteredGoals = React.useMemo(() => {
-    const q = query.trim().toLowerCase();
-    let list = goals.slice();
-
-    if (!showArchived) list = list.filter((g) => !g.archived);
-    if (q) {
-      list = list.filter((g) => String(g.name || "").toLowerCase().includes(q));
+    let parsed;
+    try {
+      parsed = JSON.parse(ioText || "[]");
+    } catch {
+      setPageError("Import failed: invalid JSON.");
+      return;
     }
 
-    const dueKey = (g) => {
-      if (!g.dueDate) return Number.POSITIVE_INFINITY;
-      const d = daysUntil(g.dueDate);
-      return d === null ? Number.POSITIVE_INFINITY : d;
-    };
+    if (!Array.isArray(parsed)) {
+      setPageError("Import failed: JSON must be an array of goals.");
+      return;
+    }
 
-    list.sort((a, b) => {
-      if (sortBy === "name") return String(a.name || "").localeCompare(String(b.name || ""));
-      if (sortBy === "due") return dueKey(a) - dueKey(b);
-      if (sortBy === "progress") return pct(b) - pct(a);
+    if (typeof window !== "undefined") {
+      const okay = window.confirm(
+        "Replace all current savings goals for this account?"
+      );
+      if (!okay) return;
+    }
 
-      if (sortBy === "left") {
-        const la = Math.max(0, (Number(a.target) || 0) - (Number(a.current) || 0));
-        const lb = Math.max(0, (Number(b.target) || 0) - (Number(b.current) || 0));
-        return lb - la;
+    const normalized = parsed.map((goal) => ({
+      id: goal.id ?? uid(),
+      name: String(goal.name ?? "").trim(),
+      target: safeNum(goal.target, 0),
+      current: safeNum(goal.current, 0),
+      dueDate: goal.dueDate || "",
+      priority: goal.priority || "Medium",
+      archived: !!goal.archived,
+      createdAt: goal.createdAt ?? Date.now(),
+      updatedAt: new Date().toISOString(),
+      contributions: Array.isArray(goal.contributions) ? goal.contributions : [],
+    }));
+
+    setGoals(normalized);
+    setSelectedGoalId(normalized[0]?.id || "");
+
+    const { error: deleteError } = await supabase
+      .from("savings_goals")
+      .delete()
+      .eq("user_id", userId);
+
+    if (deleteError) {
+      console.error("import delete savings goals error:", deleteError);
+      setPageError(deleteError.message || "Failed while clearing current goals.");
+      await loadSavingsPage();
+      return;
+    }
+
+    if (normalized.length > 0) {
+      const rows = normalized.map((goal) => mapGoalToRow(goal, userId));
+      const { error: insertError } = await supabase
+        .from("savings_goals")
+        .upsert(rows, { onConflict: "id" });
+
+      if (insertError) {
+        console.error("import upsert savings goals error:", insertError);
+        setPageError(insertError.message || "Import failed.");
+        await loadSavingsPage();
       }
+    }
+  }
 
-      const pr = priorityRank(a.priority) - priorityRank(b.priority);
-      if (pr !== 0) return pr;
-      return dueKey(a) - dueKey(b);
-    });
+  const activeGoals = useMemo(
+    () => goals.filter((g) => !g.archived),
+    [goals]
+  );
 
-    return list;
-  }, [goals, query, sortBy, showArchived]);
+  const totals = useMemo(() => {
+    const totalCurrent = activeGoals.reduce(
+      (sum, g) => sum + safeNum(g.current),
+      0
+    );
+    const totalTarget = activeGoals.reduce(
+      (sum, g) => sum + safeNum(g.target),
+      0
+    );
+    const totalLeft = Math.max(0, totalTarget - totalCurrent);
+    const completion =
+      totalTarget > 0 ? (totalCurrent / totalTarget) * 100 : 0;
 
-  const progressGoals = React.useMemo(() => {
-    return activeGoals.slice().sort((a, b) => pct(b) - pct(a)).slice(0, 6);
+    const fundedCount = activeGoals.filter((g) => amountLeft(g) <= 0).length;
+    const dueSoonCount = activeGoals.filter((g) => {
+      const d = daysUntil(g.dueDate);
+      return d !== null && d >= 0 && d <= 14 && amountLeft(g) > 0;
+    }).length;
+
+    const overdueCount = activeGoals.filter((g) => {
+      const d = daysUntil(g.dueDate);
+      return d !== null && d < 0 && amountLeft(g) > 0;
+    }).length;
+
+    return {
+      totalCurrent,
+      totalTarget,
+      totalLeft,
+      completion,
+      fundedCount,
+      dueSoonCount,
+      overdueCount,
+    };
   }, [activeGoals]);
 
-  const focusGoal = totals.topOpenGoal;
+  const rankedGoals = useMemo(() => {
+    const rows = [...activeGoals];
+
+    if (focusMode === "gap") {
+      rows.sort((a, b) => {
+        const leftDiff = amountLeft(b) - amountLeft(a);
+        if (leftDiff !== 0) return leftDiff;
+        return priorityRank(a.priority) - priorityRank(b.priority);
+      });
+    } else if (focusMode === "progress") {
+      rows.sort((a, b) => {
+        const progressDiff = progressPercent(a) - progressPercent(b);
+        if (progressDiff !== 0) return progressDiff;
+        return amountLeft(b) - amountLeft(a);
+      });
+    } else {
+      rows.sort((a, b) => {
+        const aFunded = amountLeft(a) <= 0 ? 1 : 0;
+        const bFunded = amountLeft(b) <= 0 ? 1 : 0;
+        if (aFunded !== bFunded) return aFunded - bFunded;
+
+        const ad = daysUntil(a.dueDate);
+        const bd = daysUntil(b.dueDate);
+        const aDue = ad === null ? Number.POSITIVE_INFINITY : ad;
+        const bDue = bd === null ? Number.POSITIVE_INFINITY : bd;
+        if (aDue !== bDue) return aDue - bDue;
+
+        const pr = priorityRank(a.priority) - priorityRank(b.priority);
+        if (pr !== 0) return pr;
+
+        return amountLeft(b) - amountLeft(a);
+      });
+    }
+
+    return rows.map((g, i) => ({
+      ...g,
+      priorityRank: i + 1,
+    }));
+  }, [activeGoals, focusMode]);
+
+  const priorityMap = useMemo(() => {
+    const map = new Map();
+    rankedGoals.forEach((g) => map.set(g.id, g.priorityRank));
+    return map;
+  }, [rankedGoals]);
+
+  const visibleGoals = useMemo(() => {
+    const q = search.trim().toLowerCase();
+
+    let list = goals.filter((g) => {
+      if (filter === "active" && g.archived) return false;
+      if (filter === "archived" && !g.archived) return false;
+      if (filter === "due") {
+        const d = daysUntil(g.dueDate);
+        if (!(d !== null && d <= 14 && amountLeft(g) > 0)) return false;
+      }
+
+      if (!showArchived && filter !== "archived" && g.archived) return false;
+
+      if (!q) return true;
+
+      return [g.name, g.priority, g.dueDate]
+        .join(" ")
+        .toLowerCase()
+        .includes(q);
+    });
+
+    if (sort === "priority") {
+      list.sort((a, b) => {
+        const ar = priorityMap.get(a.id) ?? 999;
+        const br = priorityMap.get(b.id) ?? 999;
+        if (ar !== br) return ar - br;
+        return amountLeft(b) - amountLeft(a);
+      });
+      return list;
+    }
+
+    if (sort === "left") {
+      list.sort((a, b) => amountLeft(b) - amountLeft(a));
+      return list;
+    }
+
+    if (sort === "progress") {
+      list.sort((a, b) => progressPercent(a) - progressPercent(b));
+      return list;
+    }
+
+    if (sort === "updated") {
+      list.sort(
+        (a, b) =>
+          new Date(b.updatedAt || 0).getTime() -
+          new Date(a.updatedAt || 0).getTime()
+      );
+      return list;
+    }
+
+    if (sort === "name") {
+      list.sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")));
+      return list;
+    }
+
+    list.sort((a, b) => {
+      const ad = daysUntil(a.dueDate);
+      const bd = daysUntil(b.dueDate);
+      return safeNum(ad, 9999) - safeNum(bd, 9999);
+    });
+    return list;
+  }, [goals, showArchived, filter, search, sort, priorityMap]);
+
+  const selectedGoal =
+    goals.find((g) => g.id === selectedGoalId) || visibleGoals[0] || null;
+
+  const selectedPriority = selectedGoal
+    ? priorityMap.get(selectedGoal.id) ?? null
+    : null;
+
+  const contributionFeed = useMemo(() => {
+    const items = activeGoals.flatMap((goal) =>
+      (Array.isArray(goal.contributions) ? goal.contributions : []).map((entry) => ({
+        id: entry.id,
+        goalId: goal.id,
+        goalName: goal.name,
+        amount: safeNum(entry.amount),
+        note: entry.note || "",
+        date: entry.date || "",
+      }))
+    );
+
+    return items
+      .sort((a, b) => String(b.date).localeCompare(String(a.date)))
+      .slice(0, 6);
+  }, [activeGoals]);
+
+  const monthLabel = fmtMonthLabel(monthKeyFromISO(todayISO()));
+
+  const focusText = useMemo(() => {
+    if (!activeGoals.length) {
+      return "No goals yet. Add one and start filling the page with real data.";
+    }
+
+    if (totals.overdueCount > 0) {
+      return `${totals.overdueCount} goal${totals.overdueCount === 1 ? "" : "s"} overdue. Fix those first.`;
+    }
+
+    const firstOpen = rankedGoals.find((g) => amountLeft(g) > 0);
+    if (firstOpen) return `${firstOpen.name} is the main focus right now.`;
+
+    return "Everything funded. Keep it that way.";
+  }, [activeGoals, totals.overdueCount, rankedGoals]);
+
+  const heroTone =
+    totals.overdueCount > 0
+      ? "red"
+      : totals.dueSoonCount > 0
+      ? "amber"
+      : "green";
 
   if (loading) {
     return (
-      <div className="mx-auto max-w-[1700px] px-4 py-4">
-        <GlassSection className="p-5 text-white/70">Loading savings...</GlassSection>
-      </div>
+      <main className="savingsPage">
+        <div className="savingsPageShell">
+          <GlassPane size="card">
+            <div style={{ fontWeight: 800, fontSize: 18, color: "#fff" }}>
+              Loading savings.
+            </div>
+          </GlassPane>
+        </div>
+        <style jsx global>{globalStyles}</style>
+      </main>
     );
   }
 
   return (
-    <div className="mx-auto max-w-[1700px] space-y-4 px-4 py-4">
-      <GlassSection className="overflow-hidden px-6 py-5">
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-          <div className="min-w-0">
-            <div className="mb-1 text-[10px] font-black uppercase tracking-[0.26em] text-sky-300/75">
-              Life Command Center
+    <>
+      <main className="savingsPage">
+        <div className="savingsPageShell">
+          {pageError ? (
+            <GlassPane tone="red" size="card">
+              <div style={{ fontWeight: 800, fontSize: 16, color: "#fff" }}>
+                Savings error
+              </div>
+              <div
+                style={{
+                  marginTop: 6,
+                  fontSize: 13,
+                  color: "rgba(255,255,255,0.74)",
+                }}
+              >
+                {pageError}
+              </div>
+            </GlassPane>
+          ) : null}
+
+          <GlassPane size="card">
+            <div className="savingsHeroGrid">
+              <div style={{ minWidth: 0 }}>
+                <div className="savingsEyebrow">Life Command Center</div>
+                <div className="savingsHeroTitle">Savings Command</div>
+                <div className="savingsHeroSub">
+                  Cleaner savings pressure, tighter controls, stronger focus logic,
+                  and a layout that actually fills the page instead of leaving dead space.
+                </div>
+
+                <div className="savingsPillRow">
+                  <MiniPill>{activeGoals.length} active goals</MiniPill>
+                  <MiniPill>{monthLabel}</MiniPill>
+                  <MiniPill>{GOAL_PRESETS.length - 1} presets</MiniPill>
+                  <MiniPill>{PRIORITY_OPTIONS.length} priorities</MiniPill>
+                </div>
+              </div>
+
+              <div className="savingsHeroSide">
+                <MiniPill>{focusMode}</MiniPill>
+                <MiniPill tone="green">{fmtMoney(totals.totalCurrent)} saved</MiniPill>
+                <MiniPill tone={heroTone}>{totals.dueSoonCount} due soon</MiniPill>
+              </div>
             </div>
-            <h1 className="m-0 text-3xl font-bold tracking-tight text-white">
-              Savings Control
-            </h1>
-            <div className="mt-1 text-sm text-white/50">
-              Track goal pressure, build reserves, and forecast what needs funded next.
-            </div>
-          </div>
+          </GlassPane>
 
-          <Tabs value={tab} onValueChange={setTab}>
-            <TabsList className="h-11 rounded-full border border-white/10 bg-black/40 p-1">
-              <TabsTrigger value="overview" className="rounded-full px-5 text-sm">Overview</TabsTrigger>
-              <TabsTrigger value="manage" className="rounded-full px-5 text-sm">Manage</TabsTrigger>
-            </TabsList>
-          </Tabs>
-        </div>
-      </GlassSection>
+          <section className="savingsMetricGrid">
+            <StatCard
+              icon={PiggyBank}
+              label="Saved"
+              value={fmtMoney(totals.totalCurrent)}
+              detail={`${activeGoals.length} active goal${activeGoals.length === 1 ? "" : "s"} on the board.`}
+              tone="green"
+            />
+            <StatCard
+              icon={Target}
+              label="Target"
+              value={fmtMoney(totals.totalTarget)}
+              detail="All active savings targets added together."
+              tone="neutral"
+            />
+            <StatCard
+              icon={Wallet}
+              label="Still Needed"
+              value={fmtMoney(totals.totalLeft)}
+              detail="Total gap left before the active board is fully funded."
+              tone={totals.totalLeft > 0 ? "amber" : "green"}
+            />
+            <StatCard
+              icon={TrendingUp}
+              label="Funding Health"
+              value={pct(totals.completion)}
+              detail="Overall completion across active savings goals."
+              tone={toneByValue(totals.completion - 50)}
+              badge={`${totals.fundedCount} funded`}
+            />
+            <StatCard
+              icon={CalendarClock}
+              label="Due Soon"
+              value={String(totals.dueSoonCount)}
+              detail={focusText}
+              tone={heroTone}
+              badge={totals.overdueCount > 0 ? `${totals.overdueCount} overdue` : ""}
+            />
+          </section>
 
-      {pageError ? (
-        <GlassSection className="border-red-400/20 p-4">
-          <div className="font-black text-white">Savings issue</div>
-          <div className="mt-1 text-sm text-white/60">{pageError}</div>
-        </GlassSection>
-      ) : null}
+          <GlassPane size="card">
+            <PaneHeader
+              title="Savings Controls"
+              subcopy="Tune focus order and whether archived goals stay in view."
+            />
 
-      <div className="grid gap-4 xl:grid-cols-3">
-        <CommandMetricCard
-          title="Saved"
-          value={money(totals.totalCurrent)}
-          sub={`${totals.activeCount} active goal${totals.activeCount === 1 ? "" : "s"}`}
-          accentValue={`${totals.fundedCount} funded`}
-          tone="green"
-        />
-        <CommandMetricCard
-          title="Remaining"
-          value={money(totals.left)}
-          sub={`from ${money(totals.totalTarget)} total target`}
-          accentValue={totals.left > 0 ? "still open" : "fully covered"}
-          tone="blue"
-        />
-        <CommandMetricCard
-          title="Funding Health"
-          value={`${totals.overallPct}%`}
-          sub={
-            totals.closestDueGoal
-              ? `${dueLabel(totals.closestDueGoal)}`
-              : "No current due-date pressure"
-          }
-          accentValue={
-            totals.closestDueGoal ? totals.closestDueGoal.name : "stable"
-          }
-          tone={totals.dueSoonCount > 0 ? "amber" : "green"}
-        />
-      </div>
-
-      <Tabs value={tab} onValueChange={setTab}>
-        <TabsList className="hidden" />
-
-        <TabsContent value="overview" className="space-y-4">
-          <div className="grid gap-4 xl:grid-cols-[minmax(0,1.75fr)_minmax(320px,.85fr)]">
-            <GlassSection className="p-5">
-              <div className="mb-4 flex items-center justify-between gap-4">
-                <div>
-                  <div className="text-2xl font-black text-white">Savings Progress</div>
-                  <div className="mt-1 text-sm text-white/52">
-                    Best-funded goals right now.
-                  </div>
-                </div>
-
-                <div className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1.5 text-xs font-semibold text-white/60">
-                  Top funded
-                </div>
-              </div>
-
-              <div className="space-y-3">
-                {progressGoals.length === 0 ? (
-                  <div className="rounded-[20px] border border-white/10 bg-white/[0.03] p-4 text-sm text-white/55">
-                    No active goals yet.
-                  </div>
-                ) : (
-                  progressGoals.map((g) => <SavingsProgressCard key={g.id} goal={g} />)
-                )}
-              </div>
-            </GlassSection>
-
-            <GlassSection className="p-5">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <div className="mb-1 text-[10px] uppercase tracking-[0.24em] text-white/40">Focus Goal</div>
-                  <div className="text-xl font-black text-white">
-                    {focusGoal?.name || "No active goals"}
-                  </div>
-                </div>
-
-                <ToneBadge tone={focusGoal ? priorityTone(focusGoal.priority) : "steel"}>
-                  {focusGoal ? (focusGoal.priority || "Medium") : "Idle"}
-                </ToneBadge>
-              </div>
-
-              <div className="mt-5">
-                <ProgressBar
-                  value={focusGoal ? pct(focusGoal) : 0}
-                  color={focusGoal ? progressColor(pct(focusGoal)) : BLUE}
-                  height="h-4"
-                />
-              </div>
-
-              <div className="mt-4 grid gap-3">
-                <MiniMetric label="Saved" value={money(focusGoal?.current || 0)} />
-                <MiniMetric label="Target" value={money(focusGoal?.target || 0)} />
-                <MiniMetric
-                  label="Left"
-                  value={money(
-                    Math.max(
-                      0,
-                      (Number(focusGoal?.target) || 0) - (Number(focusGoal?.current) || 0)
-                    )
-                  )}
-                />
-                <MiniMetric label="Due" value={focusGoal ? dueLabel(focusGoal) : "No due date"} />
-              </div>
-
-              <div className="mt-4 rounded-[22px] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,.05),rgba(255,255,255,.025))] p-4">
-                <div className="mb-2 text-sm text-white/55">Quick read</div>
-                <div className="text-sm leading-7 text-white/88">
-                  {focusGoal ? (
-                    (() => {
-                      const left = Math.max(
-                        0,
-                        (Number(focusGoal.target) || 0) - (Number(focusGoal.current) || 0)
-                      );
-                      const projection = projectedFinishDate(focusGoal);
-
-                      if (left <= 0) return "This goal is already fully funded.";
-                      if (projection.status === "forecast") return projection.text;
-                      if (focusGoal.dueDate) {
-                        return `You still need ${money(left)} before ${fmtDate(focusGoal.dueDate)}.`;
-                      }
-                      return "This goal has no due date yet, so pace pressure is low until you assign one.";
-                    })()
-                  ) : (
-                    "Add a savings goal to generate live focus insights."
-                  )}
-                </div>
-              </div>
-            </GlassSection>
-          </div>
-
-          <div className="grid gap-4 xl:grid-cols-[minmax(0,1.08fr)_minmax(320px,.82fr)]">
-            <GlassSection className="p-5">
-              <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <div className="text-2xl font-black text-white">Goals</div>
-                  <div className="mt-1 text-sm text-white/52">Priority-first savings pressure view.</div>
-                </div>
-
-                <div className="flex flex-wrap gap-2">
-                  <Input
-                    className="h-11 w-[220px] rounded-2xl border-white/10 bg-white/[0.04] text-white placeholder:text-white/35"
-                    placeholder="Search goals..."
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                  />
-
-                  <NativeSelect
-                    className="w-[210px]"
-                    value={sortBy}
-                    onChange={(e) => setSortBy(e.target.value)}
+            <div className="savingsControlsGrid">
+              <div>
+                <div className="savingsTinyLabel">Focus Order</div>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <ActionBtn
+                    variant={focusMode === "deadline" ? "primary" : "ghost"}
+                    onClick={() => setFocusMode("deadline")}
                   >
-                    <option value="priority_then_due">Priority → Due</option>
-                    <option value="due">Due date</option>
-                    <option value="progress">Progress</option>
-                    <option value="left">Amount left</option>
-                    <option value="name">Name</option>
-                  </NativeSelect>
-
-                  <Button variant="secondary" onClick={() => setShowArchived((v) => !v)}>
-                    {showArchived ? "Hide archived" : "Show archived"}
-                  </Button>
+                    Deadline
+                  </ActionBtn>
+                  <ActionBtn
+                    variant={focusMode === "gap" ? "primary" : "ghost"}
+                    onClick={() => setFocusMode("gap")}
+                  >
+                    Biggest Gap
+                  </ActionBtn>
+                  <ActionBtn
+                    variant={focusMode === "progress" ? "primary" : "ghost"}
+                    onClick={() => setFocusMode("progress")}
+                  >
+                    Least Funded
+                  </ActionBtn>
                 </div>
               </div>
 
-              <div className="space-y-3">
-                {filteredGoals.length === 0 ? (
-                  <div className="rounded-[20px] border border-white/10 bg-white/[0.03] p-4 text-sm text-white/55">
-                    No goals showing.
-                  </div>
-                ) : (
-                  filteredGoals.map((g) => {
-                    const t = Number(g.target) || 0;
-                    const c = Number(g.current) || 0;
-                    const left = Math.max(0, t - c);
-                    const value = pct(g);
-                    const pace =
-                      g.dueDate && left > 0
-                        ? computeNeeded(left, g.dueDate)
-                        : { daysLeft: null, perDay: null, perWeek: null, perMonth: null };
-
-                    const archived = !!g.archived;
-                    const isEditing = editingId === g.id;
-                    const panelOpen = openId === g.id;
-                    const manageOpen = manageId === g.id;
-
-                    return (
-                      <div
-                        key={g.id}
-                        className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4 transition-all duration-200 hover:scale-[1.005] hover:bg-white/[0.045] hover:shadow-[0_0_34px_rgba(255,255,255,0.045)]"
-                      >
-                        {isEditing ? (
-                          <div className="space-y-3">
-                            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-                              <Input
-                                className="h-11 rounded-2xl border-white/10 bg-white/[0.04] text-white"
-                                value={editDraft.name}
-                                onChange={(e) => setEditDraft((d) => ({ ...d, name: e.target.value }))}
-                                placeholder="Goal name"
-                              />
-
-                              <Input
-                                className="h-11 rounded-2xl border-white/10 bg-white/[0.04] text-white"
-                                value={editDraft.target}
-                                onChange={(e) => setEditDraft((d) => ({ ...d, target: e.target.value }))}
-                                inputMode="decimal"
-                                placeholder="Target"
-                              />
-
-                              <Input
-                                className="h-11 rounded-2xl border-white/10 bg-white/[0.04] text-white"
-                                value={editDraft.current}
-                                onChange={(e) => setEditDraft((d) => ({ ...d, current: e.target.value }))}
-                                inputMode="decimal"
-                                placeholder="Saved"
-                              />
-
-                              <Input
-                                className="h-11 rounded-2xl border-white/10 bg-white/[0.04] text-white"
-                                type="date"
-                                value={editDraft.dueDate}
-                                onChange={(e) => setEditDraft((d) => ({ ...d, dueDate: e.target.value }))}
-                              />
-
-                              <NativeSelect
-                                value={editDraft.priority}
-                                onChange={(e) => setEditDraft((d) => ({ ...d, priority: e.target.value }))}
-                              >
-                                {["High", "Medium", "Low"].map((p) => (
-                                  <option key={p} value={p}>{p}</option>
-                                ))}
-                              </NativeSelect>
-                            </div>
-
-                            <label className="flex items-center gap-2 text-sm text-white/65">
-                              <input
-                                type="checkbox"
-                                checked={!!editDraft.archived}
-                                onChange={(e) => setEditDraft((d) => ({ ...d, archived: e.target.checked }))}
-                              />
-                              Archive this goal
-                            </label>
-
-                            <div className="flex flex-wrap gap-2">
-                              <Button onClick={() => saveEdit(g.id)}>Save</Button>
-                              <Button variant="secondary" onClick={cancelEdit}>Cancel</Button>
-                            </div>
-                          </div>
-                        ) : (
-                          <>
-                            <div className="flex flex-wrap items-start justify-between gap-4">
-                              <div className="min-w-0 flex-1">
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <div className="truncate text-2xl font-black tracking-tight text-white">
-                                    {g.name}
-                                  </div>
-
-                                  <ToneBadge tone={priorityTone(g.priority)}>
-                                    {g.priority || "Medium"}
-                                  </ToneBadge>
-
-                                  <ToneBadge tone={dueTone(g)}>
-                                    {dueLabel(g)}
-                                  </ToneBadge>
-
-                                  {archived ? <ToneBadge tone="steel">Archived</ToneBadge> : null}
-                                  {savingIds[g.id] ? <ToneBadge tone="blue">Saving</ToneBadge> : null}
-                                </div>
-
-                                <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                                  <MiniMetric label="Saved" value={money(c)} />
-                                  <MiniMetric label="Target" value={money(t)} />
-                                  <MiniMetric label="Left" value={money(left)} />
-                                  <MiniMetric label="Funded" value={`${Math.round(value)}%`} />
-                                </div>
-                              </div>
-
-                              <div className="flex flex-wrap gap-2">
-                                <Button onClick={() => setOpenId(panelOpen ? null : g.id)}>
-                                  {panelOpen ? "Close" : "Contribute"}
-                                </Button>
-
-                                <Button variant="secondary" onClick={() => setManageId(manageOpen ? null : g.id)}>
-                                  {manageOpen ? "Close" : "Manage"}
-                                </Button>
-                              </div>
-                            </div>
-
-                            <div className="mt-4">
-                              <ProgressBar value={value} color={progressColor(value)} />
-
-                              <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-sm">
-                                <div className="text-white/55">
-                                  {g.dueDate && left > 0 && pace.daysLeft !== null && pace.daysLeft >= 0 ? (
-                                    <>
-                                      Need <b>{money(pace.perMonth)}</b>/month • <b>{money(pace.perWeek)}</b>/week • <b>{money(pace.perDay)}</b>/day
-                                    </>
-                                  ) : (
-                                    <>No pace target needed yet.</>
-                                  )}
-                                </div>
-
-                                <div className="font-black text-white/75">
-                                  {money(c)} / {money(t)}
-                                </div>
-                              </div>
-                            </div>
-
-                            {manageOpen ? (
-                              <div className="mt-4 rounded-[20px] border border-white/10 bg-white/[0.03] p-4">
-                                <div className="flex flex-wrap items-start justify-between gap-3">
-                                  <div>
-                                    <div className="text-lg font-black text-white">Manage {g.name}</div>
-                                    <div className="mt-1 text-sm text-white/55">
-                                      Edit, archive, or delete this goal.
-                                    </div>
-                                  </div>
-
-                                  <div className="flex flex-wrap gap-2">
-                                    <Button variant="secondary" onClick={() => startEdit(g)}>
-                                      Edit
-                                    </Button>
-                                    <Button variant="secondary" onClick={() => setArchived(g.id, !archived)}>
-                                      {archived ? "Unarchive" : "Archive"}
-                                    </Button>
-                                    <Button variant="destructive" onClick={() => removeGoal(g.id)}>
-                                      Delete
-                                    </Button>
-                                  </div>
-                                </div>
-                              </div>
-                            ) : null}
-
-                            {panelOpen ? (
-                              <div className="mt-4 rounded-[20px] border border-white/10 bg-white/[0.03] p-4">
-                                <div className="flex flex-wrap items-start justify-between gap-3">
-                                  <div>
-                                    <div className="text-lg font-black text-white">Contribute to {g.name}</div>
-                                    <div className="mt-1 text-sm text-white/55">
-                                      Quick adds or a custom contribution with note.
-                                    </div>
-                                  </div>
-
-                                  <Button variant="secondary" onClick={() => undoLast(g.id)}>
-                                    Undo last
-                                  </Button>
-                                </div>
-
-                                <div className="mt-4 flex flex-wrap gap-2">
-                                  {QUICK_AMOUNTS.map((amt) => (
-                                    <Button
-                                      key={amt}
-                                      variant="secondary"
-                                      onClick={() => applyContribution(g.id, amt, "Quick add")}
-                                    >
-                                      +{money(amt)}
-                                    </Button>
-                                  ))}
-                                </div>
-
-                                <div className="mt-4 grid gap-3 md:grid-cols-[160px_minmax(0,1fr)_120px]">
-                                  <Input
-                                    className="h-11 rounded-2xl border-white/10 bg-white/[0.04] text-white"
-                                    inputMode="decimal"
-                                    placeholder="Custom amount"
-                                    value={customAdd[g.id] ?? ""}
-                                    onChange={(e) => setCustomAdd((m) => ({ ...m, [g.id]: e.target.value }))}
-                                  />
-
-                                  <Input
-                                    className="h-11 rounded-2xl border-white/10 bg-white/[0.04] text-white"
-                                    placeholder="Note (optional)"
-                                    value={customNote[g.id] ?? ""}
-                                    onChange={(e) => setCustomNote((m) => ({ ...m, [g.id]: e.target.value }))}
-                                  />
-
-                                  <Button
-                                    onClick={() =>
-                                      applyContribution(
-                                        g.id,
-                                        parseMoneyInput(customAdd[g.id] ?? ""),
-                                        customNote[g.id] ?? ""
-                                      )
-                                    }
-                                  >
-                                    Add
-                                  </Button>
-                                </div>
-
-                                <div className="mt-4">
-                                  <div className="mb-2 text-sm text-white/55">Recent contributions</div>
-
-                                  {Array.isArray(g.contributions) && g.contributions.length > 0 ? (
-                                    <div className="space-y-2">
-                                      {g.contributions.slice(0, 5).map((x) => (
-                                        <div key={x.id} className="rounded-[18px] border border-white/10 bg-white/[0.03] p-3">
-                                          <div className="flex items-center justify-between gap-3">
-                                            <div>
-                                              <div className="text-base font-black text-white">{money(x.amount)}</div>
-                                              <div className="mt-1 text-xs text-white/45">
-                                                {fmtDate(x.date)} {x.note ? `• ${x.note}` : ""}
-                                              </div>
-                                            </div>
-                                            <Badge variant="outline">Logged</Badge>
-                                          </div>
-                                        </div>
-                                      ))}
-                                    </div>
-                                  ) : (
-                                    <div className="text-sm text-white/55">No contributions yet.</div>
-                                  )}
-                                </div>
-                              </div>
-                            ) : null}
-                          </>
-                        )}
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-            </GlassSection>
-
-            <GlassSection className="p-5">
-              <div className="mb-4">
-                <div className="text-2xl font-black text-white">Priority Pressure</div>
-                <div className="mt-1 text-sm text-white/52">Deadlines and pace risk.</div>
+              <div>
+                <div className="savingsTinyLabel">Quick Read</div>
+                <input className="savingsField" readOnly value={focusText} />
               </div>
 
-              <div className="space-y-3">
-                <div className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <div className="mb-1 text-[10px] uppercase tracking-[0.24em] text-white/40">Closest Due Goal</div>
-                      <div className="text-lg font-black text-white">
-                        {totals.closestDueGoal ? totals.closestDueGoal.name : "No urgent due dates"}
-                      </div>
-                    </div>
-
-                    <ToneBadge tone={totals.closestDueGoal ? dueTone(totals.closestDueGoal) : "steel"}>
-                      {totals.closestDueGoal ? dueLabel(totals.closestDueGoal) : "Relaxed"}
-                    </ToneBadge>
-                  </div>
-
-                  <div className="mt-3 text-sm leading-7 text-white/80">
-                    {totals.closestDueGoal
-                      ? `Closest dated goal is ${totals.closestDueGoal.name}. ${dueLabel(totals.closestDueGoal)}.`
-                      : "No goal currently has a due date. Pace pressure is low right now."}
-                  </div>
-                </div>
-
-                <div className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4">
-                  <div className="mb-2 text-sm text-white/55">Quick read</div>
-                  <div className="text-sm leading-7 text-white/88">
-                    {totals.dueSoonCount > 0
-                      ? `${totals.dueSoonCount} goal${totals.dueSoonCount === 1 ? "" : "s"} due inside 14 days.`
-                      : "No immediate due-date pressure in the next 14 days."}
-                  </div>
-                </div>
-
-                <div className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4">
-                  <div className="mb-1 text-[10px] uppercase tracking-[0.24em] text-white/40">Activity</div>
-                  <div className="text-lg font-black text-white">
-                    {totals.recentContributionCount} logged contribution{totals.recentContributionCount === 1 ? "" : "s"}
-                  </div>
-                  <div className="mt-2 text-sm text-white/55">
-                    This page is saving cloud-first through Supabase across devices.
-                  </div>
+              <div>
+                <div className="savingsTinyLabel">Show Archived</div>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <ActionBtn
+                    variant={!showArchived ? "primary" : "ghost"}
+                    onClick={() => setShowArchived(false)}
+                  >
+                    Hide
+                  </ActionBtn>
+                  <ActionBtn
+                    variant={showArchived ? "primary" : "ghost"}
+                    onClick={() => setShowArchived(true)}
+                  >
+                    Show
+                  </ActionBtn>
                 </div>
               </div>
-            </GlassSection>
-          </div>
-        </TabsContent>
-
-        <TabsContent value="manage" className="space-y-4">
-          <div className="grid gap-4 xl:grid-cols-[minmax(0,1.05fr)_minmax(0,.95fr)]">
-            <GlassSection className="p-5">
-              <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <div className="text-lg font-black text-white">Create Goal</div>
-                  <div className="mt-1 text-sm text-white/55">Saved directly to Supabase.</div>
-                </div>
-
-                <ToneBadge tone="blue">Cloud</ToneBadge>
-              </div>
-
-              <div className="grid gap-3 md:grid-cols-12">
-                <div className="md:col-span-4">
-                  <Label className="mb-2 block text-xs text-white/55">Goal</Label>
-                  <NativeSelect value={preset} onChange={(e) => setPreset(e.target.value)}>
-                    {GOAL_PRESETS.map((p) => (
-                      <option key={p} value={p}>{p}</option>
-                    ))}
-                  </NativeSelect>
-                </div>
-
-                <div className="md:col-span-4">
-                  <Label className="mb-2 block text-xs text-white/55">Target</Label>
-                  <Input
-                    className="h-11 rounded-2xl border-white/10 bg-white/[0.04] text-white placeholder:text-white/35"
-                    inputMode="decimal"
-                    placeholder="$10,000"
-                    value={target}
-                    onChange={(e) => setTarget(e.target.value)}
-                  />
-                </div>
-
-                <div className="md:col-span-4">
-                  <Label className="mb-2 block text-xs text-white/55">Starting saved</Label>
-                  <Input
-                    className="h-11 rounded-2xl border-white/10 bg-white/[0.04] text-white placeholder:text-white/35"
-                    inputMode="decimal"
-                    placeholder="$0"
-                    value={current}
-                    onChange={(e) => setCurrent(e.target.value)}
-                  />
-                </div>
-              </div>
-
-              {preset === "Other" ? (
-                <div className="mt-3">
-                  <Label className="mb-2 block text-xs text-white/55">Custom goal name</Label>
-                  <Input
-                    className="h-11 rounded-2xl border-white/10 bg-white/[0.04] text-white placeholder:text-white/35"
-                    placeholder="Custom goal name"
-                    value={customName}
-                    onChange={(e) => setCustomName(e.target.value)}
-                  />
-                </div>
-              ) : null}
-
-              <div className="mt-3 grid gap-3 md:grid-cols-12">
-                <div className="md:col-span-6">
-                  <Label className="mb-2 block text-xs text-white/55">Due date</Label>
-                  <Input
-                    className="h-11 rounded-2xl border-white/10 bg-white/[0.04] text-white"
-                    type="date"
-                    value={dueDate}
-                    onChange={(e) => setDueDate(e.target.value)}
-                  />
-                </div>
-
-                <div className="md:col-span-6">
-                  <Label className="mb-2 block text-xs text-white/55">Priority</Label>
-                  <NativeSelect value={priority} onChange={(e) => setPriority(e.target.value)}>
-                    {["High", "Medium", "Low"].map((p) => (
-                      <option key={p} value={p}>{p}</option>
-                    ))}
-                  </NativeSelect>
-                </div>
-              </div>
-
-              <div className="mt-4 flex flex-wrap gap-2">
-                <Button onClick={addGoal}>Add Goal</Button>
-                <Button variant="secondary" onClick={clearAddForm}>Clear</Button>
-              </div>
-            </GlassSection>
-
-            <GlassSection className="p-5">
-              <div className="mb-4">
-                <div className="text-lg font-black text-white">Import / Export</div>
-                <div className="mt-1 text-sm text-white/55">
-                  Export copies JSON. Import replaces this signed-in user’s current savings goals in Supabase.
-                </div>
-              </div>
-
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  onClick={async () => {
-                    const payload = JSON.stringify(goals, null, 2);
-                    setIoText(payload);
-                    try {
-                      await navigator.clipboard.writeText(payload);
-                    } catch {}
-                  }}
-                >
-                  Export (copy)
-                </Button>
-
-                <Button variant="secondary" onClick={() => setIoText("")}>
-                  Clear text
-                </Button>
-
-                <Button
-                  variant="secondary"
-                  onClick={async () => {
-                    setPageError("");
-
-                    let parsed = null;
-                    try {
-                      parsed = JSON.parse(ioText || "[]");
-                    } catch {
-                      setPageError("Import failed: invalid JSON.");
-                      return;
-                    }
-
-                    if (!Array.isArray(parsed)) {
-                      setPageError("Import failed: JSON must be an array of goals.");
-                      return;
-                    }
-
-                    const fixed = parsed.map((g) => ({
-                      id: g.id ?? uid(),
-                      name: String(g.name ?? "").trim(),
-                      target: Number(g.target) || 0,
-                      current: Number(g.current) || 0,
-                      dueDate: g.dueDate || "",
-                      priority: g.priority || "Medium",
-                      archived: !!g.archived,
-                      createdAt: g.createdAt ?? Date.now(),
-                      contributions: Array.isArray(g.contributions) ? g.contributions : [],
-                    }));
-
-                    setGoals(fixed);
-
-                    if (userId) {
-                      const { error: deleteError } = await supabase
-                        .from("savings_goals")
-                        .delete()
-                        .eq("user_id", userId);
-
-                      if (deleteError) {
-                        console.error("replace delete error:", deleteError);
-                        setPageError(deleteError.message || "Import delete failed.");
-                        await loadGoals();
-                        return;
-                      }
-
-                      if (fixed.length > 0) {
-                        const rows = fixed.map((g) => mapGoalToRow(g, userId));
-                        const { error: insertError } = await supabase
-                          .from("savings_goals")
-                          .upsert(rows, { onConflict: "id" });
-
-                        if (insertError) {
-                          console.error("replace import error:", insertError);
-                          setPageError(insertError.message || "Import failed.");
-                          await loadGoals();
-                        }
-                      }
-                    }
-                  }}
-                >
-                  Import (replace)
-                </Button>
-              </div>
-
-              <div className="mt-4">
-                <textarea
-                  className="min-h-[260px] w-full rounded-[22px] border border-white/10 bg-white/[0.04] p-4 text-sm text-white outline-none placeholder:text-white/35 focus-visible:ring-2 focus-visible:ring-sky-400/40"
-                  value={ioText}
-                  onChange={(e) => setIoText(e.target.value)}
-                  placeholder="Paste exported JSON here to import..."
-                />
-              </div>
-            </GlassSection>
-          </div>
-
-          <GlassSection className="p-5">
-            <div className="mb-4">
-              <div className="text-lg font-black text-white">Manage Goals</div>
-              <div className="mt-1 text-sm text-white/55">Search, sort, archive, edit, and fund.</div>
             </div>
+          </GlassPane>
 
-            <div className="flex flex-wrap gap-2">
-              <Input
-                className="h-11 w-[220px] rounded-2xl border-white/10 bg-white/[0.04] text-white placeholder:text-white/35"
-                placeholder="Search goals..."
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
+          <section className="savingsWorkspaceGrid">
+            <GlassPane size="card" style={{ height: "100%" }}>
+              <PaneHeader
+                title="Goal Roster"
+                subcopy="Scroll the roster, select the one you want, and work it in the center."
+                right={<MiniPill>{visibleGoals.length} showing</MiniPill>}
               />
 
-              <NativeSelect
-                className="w-[210px]"
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value)}
-              >
-                <option value="priority_then_due">Priority → Due</option>
-                <option value="due">Due date</option>
-                <option value="progress">Progress</option>
-                <option value="left">Amount left</option>
-                <option value="name">Name</option>
-              </NativeSelect>
+              <div className="savingsRosterControls">
+                <div className="savingsSearchWrap">
+                  <Search size={15} />
+                  <input
+                    className="savingsField savingsSearchField"
+                    placeholder="Search goal"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                  />
+                </div>
 
-              <Button variant="secondary" onClick={() => setShowArchived((v) => !v)}>
-                {showArchived ? "Hide archived" : "Show archived"}
-              </Button>
-            </div>
-          </GlassSection>
-        </TabsContent>
-      </Tabs>
-    </div>
+                <select
+                  className="savingsField"
+                  value={filter}
+                  onChange={(e) => setFilter(e.target.value)}
+                >
+                  <option value="active">Active only</option>
+                  <option value="all">All goals</option>
+                  <option value="archived">Archived</option>
+                  <option value="due">Due soon</option>
+                </select>
+
+                <select
+                  className="savingsField"
+                  value={sort}
+                  onChange={(e) => setSort(e.target.value)}
+                >
+                  <option value="priority">Priority</option>
+                  <option value="due">Due first</option>
+                  <option value="left">Amount left</option>
+                  <option value="progress">Least funded</option>
+                  <option value="updated">Recently updated</option>
+                  <option value="name">Name</option>
+                </select>
+              </div>
+
+              {visibleGoals.length ? (
+                <div className="savingsRosterListCompact">
+                  {visibleGoals.map((goal) => (
+                    <CompactGoalRow
+                      key={goal.id}
+                      goal={goal}
+                      selected={goal.id === selectedGoal?.id}
+                      priority={priorityMap.get(goal.id) ?? null}
+                      onSelect={() => setSelectedGoalId(goal.id)}
+                      onDuplicate={() => duplicateGoal(goal)}
+                      onArchive={() => updateGoal(goal.id, { archived: !goal.archived })}
+                      onDelete={() => removeGoal(goal.id)}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <div className="savingsEmptyState">
+                  <div>
+                    <div className="savingsEmptyTitle">No goals found</div>
+                    <div className="savingsEmptyText">
+                      Clear filters or add a new savings goal.
+                    </div>
+                  </div>
+                </div>
+              )}
+            </GlassPane>
+
+            <FocusGoalCard
+              goal={selectedGoal}
+              priority={selectedPriority}
+              saving={selectedGoal ? !!savingIds[selectedGoal.id] : false}
+              onDuplicate={() => selectedGoal && duplicateGoal(selectedGoal)}
+              onArchive={() =>
+                selectedGoal &&
+                updateGoal(selectedGoal.id, { archived: !selectedGoal.archived })
+              }
+              onDelete={() => selectedGoal && removeGoal(selectedGoal.id)}
+              onQuickAdd={(amount) =>
+                selectedGoal && applyContribution(selectedGoal.id, amount, "Quick add")
+              }
+              onUndoLast={() => selectedGoal && undoLastContribution(selectedGoal.id)}
+              customAmount={selectedGoal ? customContribution[selectedGoal.id] ?? "" : ""}
+              customNote={selectedGoal ? customContributionNote[selectedGoal.id] ?? "" : ""}
+              setCustomAmount={(value) =>
+                selectedGoal &&
+                setCustomContribution((prev) => ({ ...prev, [selectedGoal.id]: value }))
+              }
+              setCustomNote={(value) =>
+                selectedGoal &&
+                setCustomContributionNote((prev) => ({ ...prev, [selectedGoal.id]: value }))
+              }
+              onCustomAdd={() =>
+                selectedGoal &&
+                applyContribution(
+                  selectedGoal.id,
+                  parseMoneyInput(customContribution[selectedGoal.id] ?? ""),
+                  customContributionNote[selectedGoal.id] ?? ""
+                )
+              }
+            />
+
+            <AddGoalCard
+              adding={adding}
+              setAdding={setAdding}
+              onAdd={addGoalFromForm}
+              saving={addingBusy}
+            />
+          </section>
+
+          <section className="savingsLowerGrid">
+            <GlassPane size="card" style={{ height: "100%" }}>
+              <PaneHeader
+                title="Savings Snapshot"
+                subcopy="Quick board read plus import and export."
+              />
+
+              <div className="savingsSnapshotGrid">
+                <div className="savingsSnapshotRow">
+                  <span>Total saved</span>
+                  <strong>{fmtMoney(totals.totalCurrent)}</strong>
+                </div>
+                <div className="savingsSnapshotRow">
+                  <span>Total target</span>
+                  <strong>{fmtMoney(totals.totalTarget)}</strong>
+                </div>
+                <div className="savingsSnapshotRow">
+                  <span>Total left</span>
+                  <strong>{fmtMoney(totals.totalLeft)}</strong>
+                </div>
+                <div className="savingsSnapshotRow">
+                  <span>Funding health</span>
+                  <strong>{pct(totals.completion)}</strong>
+                </div>
+                <div className="savingsSnapshotRow">
+                  <span>Due soon</span>
+                  <strong>{totals.dueSoonCount}</strong>
+                </div>
+                <div className="savingsSnapshotRow">
+                  <span>Recent contributions</span>
+                  <strong>{contributionFeed.length}</strong>
+                </div>
+              </div>
+
+              <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <ActionBtn onClick={exportGoals}>
+                  <Download size={14} /> Export
+                </ActionBtn>
+                <ActionBtn onClick={importReplaceGoals}>
+                  Import / Replace
+                </ActionBtn>
+              </div>
+
+              <div style={{ marginTop: 12 }}>
+                <textarea
+                  className="savingsField"
+                  rows={6}
+                  placeholder="Paste exported JSON here to import..."
+                  value={ioText}
+                  onChange={(e) => setIoText(e.target.value)}
+                />
+              </div>
+
+              <div style={{ marginTop: 12 }}>
+                <div className="savingsTinyLabel" style={{ marginBottom: 8 }}>
+                  Recent Contributions
+                </div>
+
+                {contributionFeed.length ? (
+                  <div className="savingsIntelList savingsFeedList">
+                    {contributionFeed.map((item) => (
+                      <div key={item.id} className="savingsIntelItem">
+                        <div
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            gap: 10,
+                            alignItems: "flex-start",
+                            flexWrap: "wrap",
+                          }}
+                        >
+                          <div>
+                            <div className="savingsIntelTitle">{item.goalName}</div>
+                            <div className="savingsIntelSub">
+                              {fmtDate(item.date)}
+                              {item.note ? ` • ${item.note}` : ""}
+                            </div>
+                          </div>
+
+                          <MiniPill tone="green">{fmtMoneyTight(item.amount)}</MiniPill>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="savingsEmptyText">
+                    No recent contributions logged.
+                  </div>
+                )}
+              </div>
+            </GlassPane>
+
+            <GoalEditorCard
+              goal={selectedGoal}
+              saving={selectedGoal ? !!savingIds[selectedGoal.id] : false}
+              onPatch={(patch) => selectedGoal && updateGoal(selectedGoal.id, patch)}
+            />
+          </section>
+        </div>
+      </main>
+
+      <style jsx global>{globalStyles}</style>
+    </>
   );
 }
+
+const globalStyles = `
+  .savingsPage {
+    width: 100%;
+    min-width: 0;
+    color: var(--lcc-text);
+    font-family: var(--lcc-font-sans);
+  }
+
+  .savingsPageShell {
+    width: 100%;
+    max-width: none;
+    margin: 0;
+    padding: 12px 0 20px;
+    display: grid;
+    gap: 14px;
+  }
+
+  .savingsEyebrow {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: .22em;
+    font-weight: 800;
+    color: rgba(255,255,255,0.42);
+  }
+
+  .savingsHeroTitle {
+    margin-top: 8px;
+    font-size: clamp(24px, 3.2vw, 34px);
+    line-height: 1.02;
+    font-weight: 850;
+    letter-spacing: -0.05em;
+    color: #fff;
+  }
+
+  .savingsHeroSub {
+    margin-top: 8px;
+    font-size: 13px;
+    line-height: 1.55;
+    color: rgba(255,255,255,0.62);
+    max-width: 840px;
+  }
+
+  .savingsHeroGrid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 14px;
+    align-items: start;
+  }
+
+  .savingsHeroSide {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    align-content: flex-start;
+  }
+
+  .savingsPillRow {
+    margin-top: 12px;
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .savingsMetricGrid {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 14px;
+  }
+
+  .savingsControlsGrid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.02fr) minmax(0, 1.1fr) minmax(250px, 0.42fr);
+    gap: 14px;
+    align-items: end;
+  }
+
+  .savingsWorkspaceGrid {
+    display: grid;
+    grid-template-columns: minmax(500px, 1.45fr) minmax(420px, 1.18fr) minmax(360px, 1fr);
+    gap: 14px;
+    align-items: stretch;
+  }
+
+  .savingsWorkspaceGrid > * {
+    min-width: 0;
+    height: 100%;
+  }
+
+  .savingsLowerGrid {
+    display: grid;
+    grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr);
+    gap: 14px;
+    align-items: start;
+  }
+
+  .savingsLowerGrid > * {
+    min-width: 0;
+  }
+
+  .savingsRosterControls {
+    display: grid;
+    grid-template-columns: 1.32fr 0.84fr 0.88fr;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+
+  .savingsSearchWrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 44px;
+    border-radius: 14px;
+    border: 1px solid rgba(214,226,255,0.10);
+    background:
+      linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.012)),
+      rgba(8, 12, 20, 0.76);
+    color: rgba(255,255,255,0.58);
+    padding: 0 12px;
+  }
+
+  .savingsSearchField {
+    min-height: 42px !important;
+    border: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+  }
+
+  .savingsRosterListCompact {
+    display: grid;
+    gap: 10px;
+    min-height: 720px;
+    max-height: 720px;
+    overflow: auto;
+    padding-right: 2px;
+  }
+
+  .savingsCompactRow {
+    display: grid;
+    grid-template-columns: 42px minmax(0, 1fr) auto auto;
+    gap: 10px;
+    align-items: center;
+    min-height: 118px;
+    padding: 12px 14px;
+    border-radius: 18px;
+    border: 1px solid rgba(255,255,255,0.07);
+    background:
+      linear-gradient(180deg, rgba(8,13,24,0.78), rgba(4,8,16,0.72));
+    cursor: pointer;
+    transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+  }
+
+  .savingsCompactRow:hover {
+    transform: translateY(-1px);
+  }
+
+  .savingsCompactAvatar {
+    width: 42px;
+    height: 42px;
+    border-radius: 14px;
+    display: grid;
+    place-items: center;
+    border: 1px solid rgba(255,255,255,0.08);
+    background:
+      linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.012)),
+      rgba(9, 14, 23, 0.68);
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: .05em;
+  }
+
+  .savingsCompactTitle {
+    font-size: 13.5px;
+    font-weight: 800;
+    color: #fff;
+    line-height: 1.2;
+    overflow-wrap: anywhere;
+  }
+
+  .savingsCompactSub {
+    margin-top: 4px;
+    font-size: 11.5px;
+    color: rgba(255,255,255,0.54);
+    line-height: 1.35;
+  }
+
+  .savingsCompactValue {
+    font-size: 15px;
+    font-weight: 850;
+    color: #fff;
+    white-space: nowrap;
+  }
+
+  .savingsCompactActions {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+  }
+
+  .savingsIconBtn {
+    width: 34px;
+    height: 34px;
+    border-radius: 12px;
+    border: 1px solid rgba(214,226,255,0.10);
+    background:
+      linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.012));
+    color: rgba(247,251,255,0.88);
+    display: grid;
+    place-items: center;
+    cursor: pointer;
+  }
+
+  .savingsDangerBtn {
+    border-color: rgba(255,132,163,0.18);
+    color: #ffd3df;
+  }
+
+  .savingsFocusBox {
+    border-radius: 22px;
+    border: 1px solid rgba(214,226,255,0.12);
+    background:
+      linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01));
+    padding: 15px;
+    min-height: 100%;
+  }
+
+  .savingsInfoGrid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .savingsInfoCell {
+    border-radius: 18px;
+    border: 1px solid rgba(255,255,255,0.05);
+    background: rgba(255,255,255,0.025);
+    padding: 11px;
+  }
+
+  .savingsInfoValue {
+    font-size: 0.96rem;
+    font-weight: 900;
+    line-height: 1.15;
+    color: #fff;
+    overflow-wrap: anywhere;
+  }
+
+  .savingsInfoSub {
+    margin-top: 5px;
+    color: rgba(255,255,255,0.62);
+    font-size: 0.79rem;
+    line-height: 1.4;
+  }
+
+  .savingsProgress {
+    height: 8px;
+    border-radius: 999px;
+    overflow: hidden;
+    background: rgba(255,255,255,0.1);
+  }
+
+  .savingsProgressFill {
+    height: 100%;
+    border-radius: 999px;
+    transition: width 0.4s ease;
+  }
+
+  .savingsActionGrid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .savingsActionGridTight {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .savingsFormStack {
+    display: grid;
+    gap: 12px;
+  }
+
+  .savingsFormGrid2,
+  .savingsFormGrid3 {
+    display: grid;
+    gap: 10px;
+  }
+
+  .savingsFormGrid2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .savingsFormGrid3 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .savingsContributionGrid {
+    display: grid;
+    grid-template-columns: 180px minmax(0, 1fr) 130px;
+    gap: 10px;
+  }
+
+  .savingsTinyLabel {
+    display: block;
+    margin-bottom: 8px;
+    font-size: 10px;
+    color: rgba(255,255,255,0.46);
+    text-transform: uppercase;
+    letter-spacing: .16em;
+    font-weight: 800;
+  }
+
+  .savingsField {
+    width: 100%;
+    min-height: 44px;
+    border-radius: 14px;
+    border: 1px solid rgba(214,226,255,0.10);
+    background:
+      linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.012)),
+      rgba(8, 12, 20, 0.76);
+    color: var(--lcc-text);
+    padding: 0 13px;
+    outline: none;
+    font: inherit;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
+    transition: border-color 160ms ease, box-shadow 160ms ease, background 160ms ease;
+  }
+
+  .savingsField:focus {
+    border-color: rgba(143,177,255,0.30);
+    box-shadow:
+      0 0 0 4px rgba(79,114,255,0.08),
+      inset 0 1px 0 rgba(255,255,255,0.035);
+  }
+
+  .savingsField::placeholder {
+    color: rgba(225,233,245,0.38);
+  }
+
+  .savingsField option {
+    background: #08111f;
+    color: #f4f7ff;
+  }
+
+  textarea.savingsField {
+    min-height: 110px;
+    resize: vertical;
+    padding: 12px 13px;
+  }
+
+  .savingsActionBtn {
+    min-height: 40px;
+    padding: 10px 13px;
+    border-radius: 14px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    font-size: 13px;
+    font-weight: 800;
+    line-height: 1;
+    transition: transform 160ms ease, border-color 160ms ease, background 160ms ease, box-shadow 160ms ease;
+  }
+
+  .savingsActionBtn:hover {
+    transform: translateY(-1px);
+  }
+
+  .savingsSnapshotGrid {
+    display: grid;
+    gap: 8px;
+  }
+
+  .savingsSnapshotRow {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 14px;
+    border-radius: 14px;
+    border: 1px solid rgba(255,255,255,0.08);
+    background: rgba(255,255,255,0.03);
+    color: rgba(255,255,255,0.78);
+  }
+
+  .savingsQuickChipRow {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .savingsIntelList {
+    display: grid;
+    gap: 10px;
+    min-height: 0;
+    max-height: 360px;
+    overflow: auto;
+    padding-right: 2px;
+  }
+
+  .savingsFeedList {
+    max-height: 300px;
+  }
+
+  .savingsIntelItem {
+    border-radius: 18px;
+    border: 1px solid rgba(255,255,255,0.07);
+    background:
+      linear-gradient(180deg, rgba(8,13,24,0.78), rgba(4,8,16,0.72));
+    padding: 12px;
+    display: grid;
+    gap: 10px;
+  }
+
+  .savingsIntelTitle {
+    font-size: 13px;
+    font-weight: 800;
+    color: #fff;
+    line-height: 1.25;
+    overflow-wrap: anywhere;
+  }
+
+  .savingsIntelSub {
+    margin-top: 4px;
+    font-size: 11.5px;
+    color: rgba(255,255,255,0.54);
+    line-height: 1.35;
+  }
+
+  .savingsEmptyState {
+    min-height: 150px;
+    display: grid;
+    place-items: center;
+    text-align: center;
+    padding: 14px;
+  }
+
+  .savingsEmptyTitle {
+    font-size: 16px;
+    font-weight: 850;
+    color: #fff;
+  }
+
+  .savingsEmptyText {
+    margin-top: 6px;
+    font-size: 13px;
+    line-height: 1.5;
+    color: rgba(255,255,255,0.60);
+    max-width: 360px;
+  }
+
+  @media (max-width: 1560px) {
+    .savingsWorkspaceGrid {
+      grid-template-columns: minmax(440px, 1.22fr) minmax(390px, 1fr) minmax(320px, 0.9fr);
+    }
+  }
+
+  @media (max-width: 1420px) {
+    .savingsControlsGrid {
+      grid-template-columns: 1fr;
+    }
+
+    .savingsWorkspaceGrid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .savingsWorkspaceGrid > :nth-child(3) {
+      grid-column: 1 / -1;
+    }
+
+    .savingsLowerGrid {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  @media (max-width: 1260px) {
+    .savingsMetricGrid {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .savingsRosterListCompact {
+      min-height: 580px;
+      max-height: 580px;
+    }
+  }
+
+  @media (max-width: 1100px) {
+    .savingsHeroGrid,
+    .savingsWorkspaceGrid {
+      grid-template-columns: 1fr;
+    }
+
+    .savingsHeroSide {
+      justify-content: flex-start;
+    }
+  }
+
+  @media (max-width: 1024px) {
+    .savingsRosterControls,
+    .savingsInfoGrid,
+    .savingsFormGrid2,
+    .savingsFormGrid3,
+    .savingsActionGrid,
+    .savingsActionGridTight,
+    .savingsContributionGrid {
+      grid-template-columns: 1fr;
+    }
+
+    .savingsCompactRow {
+      grid-template-columns: 42px minmax(0, 1fr);
+    }
+
+    .savingsCompactValue {
+      white-space: normal;
+    }
+
+    .savingsCompactActions {
+      grid-column: 2;
+      justify-content: flex-start;
+    }
+
+    .savingsRosterListCompact,
+    .savingsIntelList {
+      min-height: 0;
+      max-height: none;
+    }
+  }
+
+  @media (max-width: 760px) {
+    .savingsPageShell {
+      padding: 8px 0 14px;
+    }
+
+    .savingsMetricGrid,
+    .savingsLowerGrid {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  @media (max-width: 640px) {
+    .savingsMetricGrid,
+    .savingsActionGrid,
+    .savingsActionGridTight {
+      grid-template-columns: 1fr;
+    }
+  }
+`;

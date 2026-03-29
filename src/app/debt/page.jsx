@@ -4,16 +4,17 @@ export const dynamic = "force-dynamic";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  BadgeDollarSign,
+  Archive,
   CalendarClock,
   Copy,
-  CreditCard,
-  Flame,
-  PauseCircle,
-  PlayCircle,
+  Download,
+  PiggyBank,
   Plus,
   Search,
+  Target,
   Trash2,
+  TrendingUp,
+  Wallet,
 } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import GlassPane from "../components/GlassPane";
@@ -55,39 +56,47 @@ function fmtMoneyTight(n) {
   });
 }
 
-function fmtPct(n) {
+function pct(n) {
   const num = Number(n);
-  if (!Number.isFinite(num)) return "0.00%";
-  return `${num.toFixed(2)}%`;
+  if (!Number.isFinite(num)) return "0%";
+  return `${Math.round(num)}%`;
 }
 
-function monthLabel(months) {
-  if (!Number.isFinite(months)) return "No payoff";
-  if (months <= 0) return "Paid";
-  if (months < 1) return "<1 mo";
-  if (months < 12) return `${Math.ceil(months)} mo`;
-  const years = Math.floor(months / 12);
-  const rem = Math.ceil(months % 12);
-  return rem ? `${years} yr ${rem} mo` : `${years} yr`;
+function isoDate(d = new Date()) {
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
 }
 
-function nextMonthDate(monthsFromNow) {
-  if (!Number.isFinite(monthsFromNow)) return "—";
-  const d = new Date();
-  d.setMonth(d.getMonth() + Math.max(0, monthsFromNow));
-  return d.toLocaleDateString(undefined, { year: "numeric", month: "short" });
+function todayISO() {
+  return isoDate(new Date());
 }
 
-function fmtWhen(ts) {
-  if (!ts) return "—";
-  const d = new Date(ts);
+function monthKeyFromISO(iso) {
+  const s = String(iso || "");
+  return s.length >= 7 ? s.slice(0, 7) : "";
+}
+
+function fmtMonthLabel(ym) {
+  if (!ym || ym.length < 7) return "—";
+  const [y, m] = ym.split("-").map(Number);
+  if (!Number.isFinite(y) || !Number.isFinite(m)) return ym;
+  const d = new Date(y, m - 1, 1);
+  return d.toLocaleDateString(undefined, {
+    month: "long",
+    year: "numeric",
+  });
+}
+
+function fmtDate(iso) {
+  if (!iso) return "—";
+  const d = new Date(`${iso}T00:00:00`);
   if (!Number.isFinite(d.getTime())) return "—";
-  return d.toLocaleString(undefined, {
+  return d.toLocaleDateString(undefined, {
     month: "short",
     day: "numeric",
     year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
   });
 }
 
@@ -107,323 +116,74 @@ function formatAgo(value) {
   return `${days}d ago`;
 }
 
-function currentMonthLabel() {
-  return new Intl.DateTimeFormat("en-US", {
-    month: "long",
-    year: "numeric",
-  }).format(new Date());
-}
-
-function payoffMonths(balance, apr, payment) {
-  balance = safeNum(balance);
-  apr = safeNum(apr);
-  payment = safeNum(payment);
-
-  if (balance <= 0) return 0;
-  if (payment <= 0) return Infinity;
-
-  const monthlyRate = apr / 100 / 12;
-
-  if (monthlyRate <= 0) return balance / payment;
-  if (payment <= balance * monthlyRate) return Infinity;
-
-  const months =
-    -Math.log(1 - (balance * monthlyRate) / payment) /
-    Math.log(1 + monthlyRate);
-
-  return Number.isFinite(months) ? months : Infinity;
-}
-
-function debtTypeLabel(type) {
-  const map = {
-    mortgage: "Mortgage",
-    auto: "Auto Loan",
-    credit_card: "Credit Card",
-    personal_loan: "Personal Loan",
-    student_loan: "Student Loan",
-    other: "Other Debt",
-  };
-  return map[type] || "Debt";
-}
-
-function debtInitials(name = "") {
-  const clean = String(name).trim();
-  if (!clean) return "DT";
-  const parts = clean.split(/\s+/).slice(0, 2);
-  return parts
-    .map((p) => p[0])
-    .join("")
-    .toUpperCase();
-}
-
-function createDebt(type = "other") {
-  return {
-    id: uid(),
-    name:
-      type === "mortgage"
-        ? "Mortgage"
-        : type === "auto"
-        ? "Car Loan"
-        : type === "credit_card"
-        ? "Credit Card"
-        : type === "personal_loan"
-        ? "Personal Loan"
-        : type === "student_loan"
-        ? "Student Loan"
-        : "New Debt",
-    type,
-    lender: "",
-    balance: 0,
-    originalBalance: 0,
-    creditLimit: 0,
-    apr: 0,
-    minimumPayment: 0,
-    extraPayment: 0,
-    dueDay: "",
-    monthlyPayment: 0,
-    principalPortion: 0,
-    interestPortion: 0,
-    escrowPortion: 0,
-    promoApr: "",
-    promoEnds: "",
-    notes: "",
-    isActive: true,
-    createdAt: Date.now(),
-    updatedAt: new Date().toISOString(),
-    termMonths: null,
-    remainingMonths: null,
-  };
-}
-
-const defaultSettings = {
-  strategy: "avalanche",
-  globalExtraPool: 0,
-  showInactive: false,
-};
-
-function mapDebtRow(row) {
-  return {
-    id: row.id,
-    name: row.name ?? "",
-    type: row.debt_type ?? "other",
-    lender: row.lender ?? "",
-    balance: safeNum(row.balance, 0),
-    originalBalance: safeNum(row.original_balance, 0),
-    creditLimit: safeNum(row.credit_limit, 0),
-    apr: safeNum(row.interest_rate, 0),
-    minimumPayment: safeNum(row.minimum_payment, 0),
-    extraPayment: safeNum(row.extra_payment, 0),
-    dueDay: row.due_day == null ? "" : String(row.due_day),
-    monthlyPayment: safeNum(row.monthly_payment, 0),
-    principalPortion: safeNum(row.principal_portion, 0),
-    interestPortion: safeNum(row.interest_portion, 0),
-    escrowPortion: safeNum(row.escrow_portion, 0),
-    promoApr: row.promo_apr ?? "",
-    promoEnds: row.promo_ends ?? "",
-    notes: row.notes ?? "",
-    isActive: row.is_active ?? true,
-    createdAt:
-      row.created_at_ms ??
-      (row.created_at ? new Date(row.created_at).getTime() : Date.now()),
-    updatedAt: row.updated_at || row.created_at || null,
-    termMonths: row.term_months ?? null,
-    remainingMonths: row.remaining_months ?? null,
-  };
-}
-
-function mapDebtToRow(debt, userId) {
-  return {
-    id: debt.id,
-    user_id: userId,
-    name: debt.name ?? "",
-    lender: debt.lender ?? "",
-    debt_type: debt.type ?? "other",
-    balance: safeNum(debt.balance, 0),
-    original_balance: safeNum(debt.originalBalance, 0),
-    credit_limit: safeNum(debt.creditLimit, 0),
-    interest_rate: safeNum(debt.apr, 0),
-    minimum_payment: safeNum(debt.minimumPayment, 0),
-    extra_payment: safeNum(debt.extraPayment, 0),
-    due_day:
-      debt.dueDay === "" || debt.dueDay == null
-        ? null
-        : safeNum(debt.dueDay, null),
-    monthly_payment: safeNum(debt.monthlyPayment, 0),
-    principal_portion: safeNum(debt.principalPortion, 0),
-    interest_portion: safeNum(debt.interestPortion, 0),
-    escrow_portion: safeNum(debt.escrowPortion, 0),
-    promo_apr: debt.promoApr ?? "",
-    promo_ends: debt.promoEnds || null,
-    notes: debt.notes ?? "",
-    is_active: !!debt.isActive,
-    created_at_ms: debt.createdAt ?? Date.now(),
-    term_months: debt.termMonths ?? null,
-    remaining_months: debt.remainingMonths ?? null,
-    updated_at: new Date().toISOString(),
-  };
-}
-
-function mapSettingsRow(row) {
-  return {
-    strategy: row?.strategy ?? "avalanche",
-    globalExtraPool: safeNum(row?.global_extra_pool, 0),
-    showInactive: !!row?.show_inactive,
-  };
-}
-
-function mapSettingsToRow(settings, userId, existingId) {
-  return {
-    ...(existingId ? { id: existingId } : {}),
-    user_id: userId,
-    strategy: settings.strategy ?? "avalanche",
-    global_extra_pool: safeNum(settings.globalExtraPool, 0),
-    show_inactive: !!settings.showInactive,
-    updated_at: new Date().toISOString(),
-  };
-}
-
-function getDueStatus(dueDay) {
-  const day = Number(dueDay);
-  if (!Number.isFinite(day) || day < 1 || day > 31) {
-    return { label: "No due day", tone: "neutral", sort: 999 };
-  }
-
+function daysUntil(iso) {
+  if (!iso) return null;
   const now = new Date();
-  const today = now.getDate();
-
-  if (day === today) return { label: "Due today", tone: "amber", sort: 0 };
-
-  if (day > today) {
-    const diff = day - today;
-    return {
-      label: diff === 1 ? "Due tomorrow" : `Due in ${diff}d`,
-      tone: diff <= 3 ? "amber" : "green",
-      sort: diff,
-    };
-  }
-
-  const late = today - day;
-  return {
-    label: `${late}d late`,
-    tone: late >= 7 ? "red" : "amber",
-    sort: -late,
-  };
+  const today = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate()
+  ).getTime();
+  const due = new Date(`${iso}T00:00:00`).getTime();
+  if (!Number.isFinite(due)) return null;
+  return Math.round((due - today) / 86400000);
 }
 
-function getUtilizationPercent(debt) {
-  if (debt.type !== "credit_card") return null;
-  const limit = safeNum(debt.creditLimit);
-  const bal = safeNum(debt.balance);
-  if (limit <= 0) return null;
-  return Math.max(0, Math.min(100, (bal / limit) * 100));
+function progressPercent(goal) {
+  const target = safeNum(goal?.target, 0);
+  const current = safeNum(goal?.current, 0);
+  if (target <= 0) return 0;
+  return Math.max(0, Math.min(100, (current / target) * 100));
 }
 
-function getPaidDownPercent(debt) {
-  const original = safeNum(debt.originalBalance);
-  const bal = safeNum(debt.balance);
-  if (original <= 0) return null;
-  const paid = ((original - bal) / original) * 100;
-  return Math.max(0, Math.min(100, paid));
+function amountLeft(goal) {
+  return Math.max(0, safeNum(goal?.target, 0) - safeNum(goal?.current, 0));
 }
 
-function getMortgageTotal(debt) {
-  return (
-    safeNum(debt.principalPortion) +
-    safeNum(debt.interestPortion) +
-    safeNum(debt.escrowPortion)
-  );
+function priorityRank(priority) {
+  if (priority === "High") return 0;
+  if (priority === "Medium") return 1;
+  return 2;
 }
 
-function getMonthlyShown(debt) {
-  const mortgageTotal = getMortgageTotal(debt);
-  if (debt.type === "mortgage" && mortgageTotal > 0) return mortgageTotal;
-  return Math.max(safeNum(debt.monthlyPayment), safeNum(debt.minimumPayment));
+function dueLabel(goal) {
+  if (!goal?.dueDate) return "No due date";
+  const d = daysUntil(goal.dueDate);
+  if (d === null) return "No due date";
+  if (d < 0) return `${Math.abs(d)}d overdue`;
+  if (d === 0) return "Due today";
+  if (d === 1) return "Due tomorrow";
+  return `Due in ${d}d`;
 }
 
-function getAttackPayment(debt) {
-  return safeNum(debt.minimumPayment) + safeNum(debt.extraPayment);
+function progressTone(goal) {
+  const value = progressPercent(goal);
+  if (value >= 100) return "green";
+  if (value >= 65) return "green";
+  if (value >= 30) return "amber";
+  return "neutral";
 }
 
-function getDebtProgressPercent(debt) {
-  const util = getUtilizationPercent(debt);
-  if (util !== null) return Math.max(0, Math.min(100, 100 - util));
-
-  const paid = getPaidDownPercent(debt);
-  if (paid !== null) return paid;
-
-  const payoff = payoffMonths(debt.balance, debt.apr, getAttackPayment(debt));
-  if (!Number.isFinite(payoff)) return 4;
-  if (payoff <= 12) return 85;
-  if (payoff <= 24) return 62;
-  if (payoff <= 48) return 38;
-  return 18;
-}
-
-function getDebtBarTone(debt) {
-  const util = getUtilizationPercent(debt);
-  const apr = safeNum(debt.apr);
-  const due = getDueStatus(debt.dueDay);
-
-  if (due.tone === "red") return "red";
-  if (util !== null) {
-    if (util >= 90) return "red";
-    if (util >= 50) return "amber";
-    return "green";
-  }
-
-  if (apr >= 24) return "red";
-  if (apr >= 12) return "amber";
+function dueTone(goal) {
+  const d = daysUntil(goal?.dueDate);
+  if (d === null) return "neutral";
+  if (d < 0) return "red";
+  if (d === 0) return "red";
+  if (d <= 7) return "amber";
   return "green";
 }
 
-function getPromoStatus(debt) {
-  if (!debt.promoEnds) return null;
-  const end = new Date(debt.promoEnds);
-  if (Number.isNaN(end.getTime())) return null;
-
-  const now = new Date();
-  const diffDays = Math.ceil((end.getTime() - now.getTime()) / 86400000);
-
-  if (diffDays < 0) return { label: "Promo ended", tone: "red" };
-  if (diffDays <= 30) return { label: `Promo ends in ${diffDays}d`, tone: "amber" };
-  return { label: `Promo ends in ${diffDays}d`, tone: "green" };
+function priorityTone(priority) {
+  if (priority === "High") return "red";
+  if (priority === "Medium") return "amber";
+  return "neutral";
 }
 
-function getPrincipalShare(debt) {
-  if (debt.type !== "mortgage") return null;
-  const principal = safeNum(debt.principalPortion);
-  const total = getMortgageTotal(debt);
-  if (total <= 0) return null;
-  return Math.max(0, Math.min(100, (principal / total) * 100));
-}
-
-function getDebtChip(debt, priority) {
-  const util = getUtilizationPercent(debt);
-  const promo = getPromoStatus(debt);
-  const principalShare = getPrincipalShare(debt);
-
-  if (priority === 1) return { label: "Target #1", tone: "amber" };
-  if (promo && promo.tone !== "green") return promo;
-
-  if (util !== null) {
-    if (util >= 90) return { label: "Maxed pressure", tone: "red" };
-    if (util >= 50) return { label: `${Math.round(util)}% used`, tone: "amber" };
-    return { label: `${Math.round(util)}% used`, tone: "green" };
-  }
-
-  if (principalShare !== null) {
-    if (principalShare < 25) return { label: "Interest heavy", tone: "amber" };
-    return { label: `${Math.round(principalShare)}% principal`, tone: "green" };
-  }
-
-  const apr = safeNum(debt.apr);
-  if (apr >= 24) return { label: "APR drag", tone: "red" };
-  if (apr >= 15) return { label: "Watch APR", tone: "amber" };
-
-  const payoff = payoffMonths(debt.balance, debt.apr, getAttackPayment(debt));
-  if (Number.isFinite(payoff) && payoff <= 12) return { label: "Close win", tone: "green" };
-
-  return { label: "On plan", tone: "neutral" };
+function toneByValue(value, inverse = false) {
+  const num = safeNum(value, 0);
+  if (num === 0) return "neutral";
+  if (inverse) return num > 0 ? "red" : "green";
+  return num > 0 ? "green" : "red";
 }
 
 function toneMeta(tone = "neutral") {
@@ -459,6 +219,149 @@ function toneMeta(tone = "neutral") {
     border: "rgba(214, 226, 255, 0.14)",
     glow: "rgba(140, 170, 255, 0.08)",
     bg: "rgba(10, 15, 24, 0.66)",
+  };
+}
+
+function goalInitials(name = "") {
+  const clean = String(name).trim();
+  if (!clean) return "SG";
+  const parts = clean.split(/\s+/).slice(0, 2);
+  return parts
+    .map((p) => p[0])
+    .join("")
+    .toUpperCase();
+}
+
+function paceNeed(goal) {
+  const left = amountLeft(goal);
+  const d = daysUntil(goal?.dueDate);
+
+  if (left <= 0 || d === null) {
+    return {
+      perDay: null,
+      perWeek: null,
+      perMonth: null,
+    };
+  }
+
+  const safeDays = Math.max(1, d);
+
+  return {
+    perDay: left / safeDays,
+    perWeek: left / (safeDays / 7),
+    perMonth: left / (safeDays / 30),
+  };
+}
+
+function recentProjection(goal) {
+  const list = Array.isArray(goal?.contributions) ? goal.contributions : [];
+
+  if (amountLeft(goal) <= 0) {
+    return {
+      text: "Already funded",
+      tone: "green",
+    };
+  }
+
+  if (list.length < 2) {
+    return {
+      text: "Need more history",
+      tone: "neutral",
+    };
+  }
+
+  const recent = list
+    .slice()
+    .sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")))
+    .slice(-8);
+
+  const dates = recent
+    .map((item) => new Date(`${item.date}T00:00:00`).getTime())
+    .filter((n) => Number.isFinite(n));
+
+  const total = recent.reduce((sum, item) => sum + safeNum(item.amount, 0), 0);
+
+  if (dates.length < 2 || total <= 0) {
+    return {
+      text: "Need more history",
+      tone: "neutral",
+    };
+  }
+
+  const first = Math.min(...dates);
+  const last = Math.max(...dates);
+  const spanDays = Math.max(1, Math.round((last - first) / 86400000) + 1);
+  const perDay = total / spanDays;
+
+  if (!Number.isFinite(perDay) || perDay <= 0) {
+    return {
+      text: "Need more history",
+      tone: "neutral",
+    };
+  }
+
+  const left = amountLeft(goal);
+  const daysToFinish = Math.ceil(left / perDay);
+  const finish = new Date();
+  finish.setDate(finish.getDate() + daysToFinish);
+
+  return {
+    text: `At this pace, around ${finish.toLocaleDateString()}`,
+    tone: daysToFinish <= 60 ? "green" : "amber",
+  };
+}
+
+function resolvedGoalName(preset, customName) {
+  if (preset && preset !== "Other") return preset;
+  return String(customName || "").trim();
+}
+
+const GOAL_PRESETS = [
+  "Emergency Fund",
+  "Vacation",
+  "Truck / Car Fund",
+  "House Projects",
+  "Christmas / Gifts",
+  "Taxes",
+  "Investing (Cash to Brokerage)",
+  "Other",
+];
+
+const PRIORITY_OPTIONS = ["High", "Medium", "Low"];
+const QUICK_AMOUNTS = [25, 100, 250, 500];
+
+function mapGoalRow(row) {
+  return {
+    id: row.id,
+    name: String(row.name ?? "").trim(),
+    target: safeNum(row.target_amount, 0),
+    current: safeNum(row.current_amount, 0),
+    dueDate: row.target_date || "",
+    priority: row.priority || "Medium",
+    archived: !!row.archived,
+    createdAt:
+      row.created_at_ms ??
+      (row.created_at ? new Date(row.created_at).getTime() : Date.now()),
+    updatedAt: row.updated_at || row.created_at || null,
+    contributions: Array.isArray(row.contributions) ? row.contributions : [],
+  };
+}
+
+function mapGoalToRow(goal, userId) {
+  return {
+    id: goal.id,
+    user_id: userId,
+    name: String(goal.name ?? "").trim(),
+    target_amount: safeNum(goal.target, 0),
+    current_amount: safeNum(goal.current, 0),
+    target_date: goal.dueDate || null,
+    category: "general",
+    notes: "",
+    priority: goal.priority || "Medium",
+    archived: !!goal.archived,
+    contributions: Array.isArray(goal.contributions) ? goal.contributions : [],
+    created_at_ms: goal.createdAt ?? Date.now(),
+    updated_at: new Date().toISOString(),
   };
 }
 
@@ -533,7 +436,7 @@ function PaneHeader({ title, subcopy, right }) {
   );
 }
 
-function StatCard({ icon: Icon, label, value, detail, tone = "neutral" }) {
+function StatCard({ icon: Icon, label, value, detail, tone = "neutral", badge = "" }) {
   const meta = toneMeta(tone);
 
   return (
@@ -574,6 +477,12 @@ function StatCard({ icon: Icon, label, value, detail, tone = "neutral" }) {
           >
             {label}
           </div>
+
+          {badge ? (
+            <div style={{ marginTop: 6 }}>
+              <MiniPill tone={tone}>{badge}</MiniPill>
+            </div>
+          ) : null}
 
           <div
             style={{
@@ -619,7 +528,7 @@ function ActionBtn({
       type={type}
       onClick={onClick}
       disabled={disabled}
-      className="debtActionBtn"
+      className="savingsActionBtn"
       style={{
         width: full ? "100%" : undefined,
         border: isDanger
@@ -652,9 +561,9 @@ function ProgressBar({ fill = 0, tone = "neutral" }) {
   };
 
   return (
-    <div className="debtProgress">
+    <div className="savingsProgress">
       <div
-        className="debtProgressFill"
+        className="savingsProgressFill"
         style={{
           width: `${normalized}%`,
           background: toneMap[tone] || toneMap.neutral,
@@ -664,24 +573,25 @@ function ProgressBar({ fill = 0, tone = "neutral" }) {
   );
 }
 
-function CompactDebtRow({
-  debt,
+function CompactGoalRow({
+  goal,
   selected,
   priority,
   onSelect,
   onDuplicate,
-  onToggle,
+  onArchive,
   onDelete,
 }) {
-  const due = getDueStatus(debt.dueDay);
-  const tone = getDebtBarTone(debt);
-  const meta = toneMeta(tone);
-  const chip = getDebtChip(debt, priority);
-  const monthlyShown = getMonthlyShown(debt);
+  const dueToneValue = dueTone(goal);
+  const progressToneValue = progressTone(goal);
+  const meta = toneMeta(
+    dueToneValue === "red" ? "red" : progressToneValue === "green" ? "green" : "neutral"
+  );
+  const projection = recentProjection(goal);
 
   return (
     <div
-      className="debtCompactRow"
+      className="savingsCompactRow"
       onClick={onSelect}
       style={{
         borderColor: selected ? meta.border : "rgba(255,255,255,0.07)",
@@ -691,14 +601,14 @@ function CompactDebtRow({
       }}
     >
       <div
-        className="debtCompactAvatar"
+        className="savingsCompactAvatar"
         style={{
           borderColor: meta.border,
-          color: tone === "neutral" ? "#fff" : meta.text,
+          color: dueToneValue === "neutral" ? "#fff" : meta.text,
           boxShadow: `0 0 12px ${meta.glow}`,
         }}
       >
-        {debtInitials(debt.name)}
+        {goalInitials(goal.name)}
       </div>
 
       <div style={{ minWidth: 0 }}>
@@ -710,50 +620,51 @@ function CompactDebtRow({
             flexWrap: "wrap",
           }}
         >
-          <div className="debtCompactTitle">{debt.name || "Untitled debt"}</div>
-          <MiniPill>{debtTypeLabel(debt.type)}</MiniPill>
-          <MiniPill tone={due.tone}>{due.label}</MiniPill>
-          <MiniPill tone={chip.tone}>{chip.label}</MiniPill>
-          {!debt.isActive ? <MiniPill>Inactive</MiniPill> : null}
+          <div className="savingsCompactTitle">{goal.name || "Untitled goal"}</div>
+          <MiniPill tone={priorityTone(goal.priority)}>{goal.priority}</MiniPill>
+          <MiniPill tone={dueToneValue}>{dueLabel(goal)}</MiniPill>
+          <MiniPill tone={progressToneValue}>{pct(progressPercent(goal))}</MiniPill>
+          {priority ? <MiniPill tone="amber">Rank #{priority}</MiniPill> : null}
+          {goal.archived ? <MiniPill>Archived</MiniPill> : null}
         </div>
 
-        <div className="debtCompactSub">
-          {debt.lender || "No lender"} • {fmtPct(debt.apr)} APR • Monthly{" "}
-          {fmtMoney(monthlyShown)} • Updated {formatAgo(debt.updatedAt)}
+        <div className="savingsCompactSub">
+          {fmtMoney(goal.current)} saved • {fmtMoney(amountLeft(goal))} left • {projection.text} • Updated{" "}
+          {formatAgo(goal.updatedAt)}
         </div>
 
         <div style={{ marginTop: 10 }}>
-          <ProgressBar fill={getDebtProgressPercent(debt)} tone={tone} />
+          <ProgressBar fill={progressPercent(goal)} tone={progressToneValue} />
         </div>
       </div>
 
-      <div className="debtCompactValue">{fmtMoney(debt.balance)}</div>
+      <div className="savingsCompactValue">{fmtMoney(goal.target)}</div>
 
-      <div className="debtCompactActions" onClick={(e) => e.stopPropagation()}>
+      <div className="savingsCompactActions" onClick={(e) => e.stopPropagation()}>
         <button
           type="button"
-          className="debtIconBtn"
+          className="savingsIconBtn"
           onClick={onDuplicate}
-          aria-label="Duplicate debt"
-          title="Duplicate debt"
+          aria-label="Duplicate goal"
+          title="Duplicate goal"
         >
           <Copy size={14} />
         </button>
         <button
           type="button"
-          className="debtIconBtn"
-          onClick={onToggle}
-          aria-label={debt.isActive ? "Mark inactive" : "Mark active"}
-          title={debt.isActive ? "Mark inactive" : "Mark active"}
+          className="savingsIconBtn"
+          onClick={onArchive}
+          aria-label={goal.archived ? "Unarchive goal" : "Archive goal"}
+          title={goal.archived ? "Unarchive goal" : "Archive goal"}
         >
-          {debt.isActive ? <PauseCircle size={14} /> : <PlayCircle size={14} />}
+          <Archive size={14} />
         </button>
         <button
           type="button"
-          className="debtIconBtn debtDangerBtn"
+          className="savingsIconBtn savingsDangerBtn"
           onClick={onDelete}
-          aria-label="Delete debt"
-          title="Delete debt"
+          aria-label="Delete goal"
+          title="Delete goal"
         >
           <Trash2 size={14} />
         </button>
@@ -762,26 +673,32 @@ function CompactDebtRow({
   );
 }
 
-function FocusDebtCard({
-  debt,
+function FocusGoalCard({
+  goal,
   priority,
-  globalExtraPool,
   saving,
   onDuplicate,
-  onToggle,
+  onArchive,
   onDelete,
+  onQuickAdd,
+  onUndoLast,
+  customAmount,
+  customNote,
+  setCustomAmount,
+  setCustomNote,
+  onCustomAdd,
 }) {
-  if (!debt) {
+  if (!goal) {
     return (
       <GlassPane size="card">
         <PaneHeader
-          title="Selected Debt"
+          title="Focus Goal"
           subcopy="Choose one from the roster to work it here."
         />
-        <div className="debtEmptyState" style={{ minHeight: 170 }}>
+        <div className="savingsEmptyState" style={{ minHeight: 170 }}>
           <div>
-            <div className="debtEmptyTitle">No debt selected</div>
-            <div className="debtEmptyText">
+            <div className="savingsEmptyTitle">No goal selected</div>
+            <div className="savingsEmptyText">
               Pick one from the roster on the left.
             </div>
           </div>
@@ -790,36 +707,30 @@ function FocusDebtCard({
     );
   }
 
-  const due = getDueStatus(debt.dueDay);
-  const tone = getDebtBarTone(debt);
-  const meta = toneMeta(tone);
-  const util = getUtilizationPercent(debt);
-  const paidDown = getPaidDownPercent(debt);
-  const principalShare = getPrincipalShare(debt);
-  const plannedAttack =
-    getAttackPayment(debt) + (priority === 1 ? safeNum(globalExtraPool) : 0);
-  const payoff = payoffMonths(debt.balance, debt.apr, plannedAttack);
-  const chip = getDebtChip(debt, priority);
-  const promo = getPromoStatus(debt);
+  const dueStatusTone = dueTone(goal);
+  const progressStatusTone = progressTone(goal);
+  const left = amountLeft(goal);
+  const need = paceNeed(goal);
+  const projection = recentProjection(goal);
 
   return (
-    <GlassPane tone={tone} size="card" style={{ height: "100%" }}>
+    <GlassPane tone={progressStatusTone} size="card" style={{ height: "100%" }}>
       <PaneHeader
-        title={debt.name || "Untitled debt"}
-        subcopy="Focused controls for the debt you are actively touching."
+        title={goal.name || "Untitled goal"}
+        subcopy="Focused controls for the goal you are actively touching."
         right={
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <MiniPill>{debtTypeLabel(debt.type)}</MiniPill>
-            <MiniPill tone={due.tone}>{due.label}</MiniPill>
-            <MiniPill tone={chip.tone}>{chip.label}</MiniPill>
-            {!debt.isActive ? <MiniPill>Inactive</MiniPill> : null}
+            {priority ? <MiniPill tone="amber">Rank #{priority}</MiniPill> : null}
+            <MiniPill tone={priorityTone(goal.priority)}>{goal.priority}</MiniPill>
+            <MiniPill tone={dueStatusTone}>{dueLabel(goal)}</MiniPill>
+            {goal.archived ? <MiniPill>Archived</MiniPill> : null}
             {saving ? <MiniPill tone="amber">Saving...</MiniPill> : null}
           </div>
         }
       />
 
-      <div className="debtFocusBox">
-        <div className="debtTinyLabel">Current Balance</div>
+      <div className="savingsFocusBox">
+        <div className="savingsTinyLabel">Current Saved</div>
 
         <div
           style={{
@@ -828,10 +739,10 @@ function FocusDebtCard({
             lineHeight: 1,
             fontWeight: 850,
             letterSpacing: "-0.05em",
-            color: tone === "neutral" ? "#fff" : meta.text,
+            color: progressStatusTone === "green" ? "#97efc7" : "#fff",
           }}
         >
-          {fmtMoney(debt.balance)}
+          {fmtMoney(goal.current)}
         </div>
 
         <div
@@ -841,120 +752,134 @@ function FocusDebtCard({
             color: "rgba(255,255,255,0.58)",
           }}
         >
-          {debt.lender || "No lender"} • Updated {fmtWhen(debt.updatedAt)}
+          Target {fmtMoney(goal.target)} • Updated {formatAgo(goal.updatedAt)}
         </div>
 
-        <div className="debtInfoGrid" style={{ marginTop: 14 }}>
-          <div className="debtInfoCell">
-            <div className="debtTinyLabel">APR</div>
-            <div className="debtInfoValue">{fmtPct(debt.apr)}</div>
-            <div className="debtInfoSub">
-              {promo ? promo.label : "Standard interest rate"}
+        <div className="savingsInfoGrid" style={{ marginTop: 14 }}>
+          <div className="savingsInfoCell">
+            <div className="savingsTinyLabel">Left</div>
+            <div className="savingsInfoValue">{fmtMoney(left)}</div>
+            <div className="savingsInfoSub">Still needed to finish</div>
+          </div>
+
+          <div className="savingsInfoCell">
+            <div className="savingsTinyLabel">Progress</div>
+            <div className="savingsInfoValue">{pct(progressPercent(goal))}</div>
+            <div className="savingsInfoSub">Of total target</div>
+          </div>
+
+          <div className="savingsInfoCell">
+            <div className="savingsTinyLabel">Monthly Pace</div>
+            <div className="savingsInfoValue">
+              {need.perMonth !== null ? fmtMoney(need.perMonth) : "—"}
+            </div>
+            <div className="savingsInfoSub">
+              {goal.dueDate ? "Needed to hit due date" : "No due date assigned"}
             </div>
           </div>
 
-          <div className="debtInfoCell">
-            <div className="debtTinyLabel">Monthly Attack</div>
-            <div className="debtInfoValue">{fmtMoney(plannedAttack)}</div>
-            <div className="debtInfoSub">
-              Min + extra
-              {priority === 1 && safeNum(globalExtraPool) > 0 ? " + pool" : ""}
+          <div className="savingsInfoCell">
+            <div className="savingsTinyLabel">Projection</div>
+            <div className="savingsInfoValue">
+              {projection.text}
             </div>
-          </div>
-
-          <div className="debtInfoCell">
-            <div className="debtTinyLabel">Payoff</div>
-            <div className="debtInfoValue">{monthLabel(payoff)}</div>
-            <div className="debtInfoSub">
-              {Number.isFinite(payoff)
-                ? nextMonthDate(Math.ceil(payoff))
-                : "Payment too low"}
-            </div>
-          </div>
-
-          <div className="debtInfoCell">
-            <div className="debtTinyLabel">
-              {util !== null
-                ? "Utilization"
-                : paidDown !== null
-                ? "Paid Down"
-                : principalShare !== null
-                ? "Principal Share"
-                : "Monthly"}
-            </div>
-            <div className="debtInfoValue">
-              {util !== null
-                ? `${Math.round(util)}%`
-                : paidDown !== null
-                ? `${Math.round(paidDown)}%`
-                : principalShare !== null
-                ? `${Math.round(principalShare)}%`
-                : fmtMoney(getMonthlyShown(debt))}
-            </div>
-            <div className="debtInfoSub">
-              {util !== null
-                ? "Of total credit limit"
-                : paidDown !== null
-                ? "Of original balance"
-                : principalShare !== null
-                ? "Principal in payment"
-                : "Displayed monthly payment"}
-            </div>
+            <div className="savingsInfoSub">Based on recent contribution pace</div>
           </div>
         </div>
 
         <div style={{ marginTop: 12 }}>
-          <ProgressBar fill={getDebtProgressPercent(debt)} tone={tone} />
+          <ProgressBar fill={progressPercent(goal)} tone={progressStatusTone} />
         </div>
 
-        {debt.type === "mortgage" ? (
-          <div className="debtMortgageGrid" style={{ marginTop: 12 }}>
-            <div className="debtInfoCell">
-              <div className="debtTinyLabel">Principal</div>
-              <div className="debtInfoValue">{fmtMoney(debt.principalPortion)}</div>
-            </div>
-            <div className="debtInfoCell">
-              <div className="debtTinyLabel">Interest</div>
-              <div className="debtInfoValue">{fmtMoney(debt.interestPortion)}</div>
-            </div>
-            <div className="debtInfoCell">
-              <div className="debtTinyLabel">Escrow</div>
-              <div className="debtInfoValue">{fmtMoney(debt.escrowPortion)}</div>
-            </div>
-          </div>
-        ) : null}
+        <div className="savingsQuickChipRow" style={{ marginTop: 14 }}>
+          {QUICK_AMOUNTS.map((amount) => (
+            <ActionBtn key={amount} onClick={() => onQuickAdd(amount)}>
+              +{fmtMoney(amount)}
+            </ActionBtn>
+          ))}
+        </div>
 
-        {debt.notes ? (
-          <div className="debtInfoCell" style={{ marginTop: 12 }}>
-            <div className="debtTinyLabel">Notes</div>
-            <div className="debtInfoSub" style={{ color: "#fff" }}>
-              {debt.notes}
-            </div>
-          </div>
-        ) : null}
+        <div className="savingsContributionGrid" style={{ marginTop: 12 }}>
+          <input
+            className="savingsField"
+            inputMode="decimal"
+            placeholder="Custom amount"
+            value={customAmount}
+            onChange={(e) => setCustomAmount(e.target.value)}
+          />
 
-        <div className="debtActionGrid debtActionGridTight" style={{ marginTop: 14 }}>
+          <input
+            className="savingsField"
+            placeholder="Note (optional)"
+            value={customNote}
+            onChange={(e) => setCustomNote(e.target.value)}
+          />
+
+          <ActionBtn variant="primary" onClick={onCustomAdd}>
+            Add
+          </ActionBtn>
+        </div>
+
+        <div className="savingsActionGrid savingsActionGridTight" style={{ marginTop: 14 }}>
           <ActionBtn onClick={onDuplicate} full>
             <Copy size={14} /> Duplicate
           </ActionBtn>
-          <ActionBtn onClick={onToggle} full>
-            {debt.isActive ? <PauseCircle size={14} /> : <PlayCircle size={14} />}
-            {debt.isActive ? "Mark Inactive" : "Mark Active"}
+          <ActionBtn onClick={onUndoLast} full>
+            Undo Last
+          </ActionBtn>
+          <ActionBtn onClick={onArchive} full>
+            <Archive size={14} /> {goal.archived ? "Unarchive" : "Archive"}
           </ActionBtn>
           <ActionBtn variant="danger" onClick={onDelete} full>
             <Trash2 size={14} /> Delete
           </ActionBtn>
+        </div>
+
+        <div className="savingsContributionList" style={{ marginTop: 14 }}>
+          <div className="savingsTinyLabel" style={{ marginBottom: 8 }}>
+            Recent Contributions
+          </div>
+
+          {Array.isArray(goal.contributions) && goal.contributions.length ? (
+            <div className="savingsIntelList">
+              {goal.contributions.slice(0, 5).map((item) => (
+                <div key={item.id} className="savingsIntelItem">
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      gap: 10,
+                      alignItems: "flex-start",
+                      flexWrap: "wrap",
+                    }}
+                  >
+                    <div>
+                      <div className="savingsIntelTitle">{fmtMoneyTight(item.amount)}</div>
+                      <div className="savingsIntelSub">
+                        {fmtDate(item.date)}
+                        {item.note ? ` • ${item.note}` : ""}
+                      </div>
+                    </div>
+
+                    <MiniPill tone="green">Logged</MiniPill>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="savingsEmptyText">No contributions yet.</div>
+          )}
         </div>
       </div>
     </GlassPane>
   );
 }
 
-function AddDebtCard({ adding, setAdding, onAdd, saving }) {
+function AddGoalCard({ adding, setAdding, onAdd, saving }) {
   return (
     <GlassPane size="card" style={{ height: "100%" }}>
       <PaneHeader
-        title="Add Debt"
+        title="Add Goal"
         subcopy="Keep this fast and simple."
         right={
           <MiniPill>
@@ -963,127 +888,102 @@ function AddDebtCard({ adding, setAdding, onAdd, saving }) {
         }
       />
 
-      <div className="debtFormStack">
+      <div className="savingsFormStack">
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          {[
-            ["credit_card", "Credit Card"],
-            ["auto", "Auto Loan"],
-            ["mortgage", "Mortgage"],
-            ["other", "Other"],
-          ].map(([value, label]) => (
+          {GOAL_PRESETS.slice(0, 4).map((item) => (
             <ActionBtn
-              key={value}
-              variant={adding.type === value ? "primary" : "ghost"}
-              onClick={() => setAdding((p) => ({ ...p, type: value }))}
+              key={item}
+              variant={adding.preset === item ? "primary" : "ghost"}
+              onClick={() => setAdding((p) => ({ ...p, preset: item }))}
             >
-              {label}
+              {item === "Truck / Car Fund" ? "Truck / Car" : item}
             </ActionBtn>
           ))}
+          <ActionBtn
+            variant={adding.preset === "Other" ? "primary" : "ghost"}
+            onClick={() => setAdding((p) => ({ ...p, preset: "Other" }))}
+          >
+            Other
+          </ActionBtn>
         </div>
 
+        {adding.preset === "Other" ? (
+          <div>
+            <div className="savingsTinyLabel">Goal Name</div>
+            <input
+              className="savingsField"
+              placeholder="New goal name..."
+              value={adding.customName}
+              onChange={(e) =>
+                setAdding((p) => ({ ...p, customName: e.target.value }))
+              }
+            />
+          </div>
+        ) : null}
+
         <div>
-          <div className="debtTinyLabel">Debt Name</div>
+          <div className="savingsTinyLabel">Resolved Goal</div>
           <input
-            className="debtField"
-            placeholder="Amex Gold, Mortgage, Car Loan..."
-            value={adding.name}
-            onChange={(e) => setAdding((p) => ({ ...p, name: e.target.value }))}
+            className="savingsField"
+            value={resolvedGoalName(adding.preset, adding.customName)}
+            readOnly
           />
         </div>
 
-        <div className="debtFormGrid2">
+        <div className="savingsFormGrid2">
           <div>
-            <div className="debtTinyLabel">Type</div>
+            <div className="savingsTinyLabel">Target</div>
+            <input
+              className="savingsField"
+              inputMode="decimal"
+              placeholder="0.00"
+              value={adding.target}
+              onChange={(e) => setAdding((p) => ({ ...p, target: e.target.value }))}
+            />
+          </div>
+
+          <div>
+            <div className="savingsTinyLabel">Starting Saved</div>
+            <input
+              className="savingsField"
+              inputMode="decimal"
+              placeholder="0.00"
+              value={adding.current}
+              onChange={(e) => setAdding((p) => ({ ...p, current: e.target.value }))}
+            />
+          </div>
+        </div>
+
+        <div className="savingsFormGrid2">
+          <div>
+            <div className="savingsTinyLabel">Due Date</div>
+            <input
+              className="savingsField"
+              type="date"
+              value={adding.dueDate}
+              onChange={(e) => setAdding((p) => ({ ...p, dueDate: e.target.value }))}
+            />
+          </div>
+
+          <div>
+            <div className="savingsTinyLabel">Priority</div>
             <select
-              className="debtField"
-              value={adding.type}
-              onChange={(e) => setAdding((p) => ({ ...p, type: e.target.value }))}
+              className="savingsField"
+              value={adding.priority}
+              onChange={(e) => setAdding((p) => ({ ...p, priority: e.target.value }))}
             >
-              <option value="mortgage">Mortgage</option>
-              <option value="auto">Auto Loan</option>
-              <option value="credit_card">Credit Card</option>
-              <option value="personal_loan">Personal Loan</option>
-              <option value="student_loan">Student Loan</option>
-              <option value="other">Other Debt</option>
+              {PRIORITY_OPTIONS.map((item) => (
+                <option key={item} value={item}>
+                  {item}
+                </option>
+              ))}
             </select>
           </div>
-
-          <div>
-            <div className="debtTinyLabel">Lender</div>
-            <input
-              className="debtField"
-              placeholder="Bank / lender"
-              value={adding.lender}
-              onChange={(e) => setAdding((p) => ({ ...p, lender: e.target.value }))}
-            />
-          </div>
         </div>
 
-        <div className="debtFormGrid3">
-          <div>
-            <div className="debtTinyLabel">Balance</div>
-            <input
-              className="debtField"
-              inputMode="decimal"
-              placeholder="0.00"
-              value={adding.balance}
-              onChange={(e) => setAdding((p) => ({ ...p, balance: e.target.value }))}
-            />
-          </div>
-
-          <div>
-            <div className="debtTinyLabel">APR %</div>
-            <input
-              className="debtField"
-              inputMode="decimal"
-              placeholder="24.99"
-              value={adding.apr}
-              onChange={(e) => setAdding((p) => ({ ...p, apr: e.target.value }))}
-            />
-          </div>
-
-          <div>
-            <div className="debtTinyLabel">Due Day</div>
-            <input
-              className="debtField"
-              placeholder="1-31"
-              value={adding.dueDay}
-              onChange={(e) => setAdding((p) => ({ ...p, dueDay: e.target.value }))}
-            />
-          </div>
-        </div>
-
-        <div className="debtFormGrid2">
-          <div>
-            <div className="debtTinyLabel">Minimum Payment</div>
-            <input
-              className="debtField"
-              inputMode="decimal"
-              placeholder="0.00"
-              value={adding.minimumPayment}
-              onChange={(e) =>
-                setAdding((p) => ({ ...p, minimumPayment: e.target.value }))
-              }
-            />
-          </div>
-
-          <div>
-            <div className="debtTinyLabel">Extra Payment</div>
-            <input
-              className="debtField"
-              inputMode="decimal"
-              placeholder="0.00"
-              value={adding.extraPayment}
-              onChange={(e) =>
-                setAdding((p) => ({ ...p, extraPayment: e.target.value }))
-              }
-            />
-          </div>
-        </div>
-
-        <div className="debtActionGrid">
+        <div className="savingsActionGrid">
           <ActionBtn variant="primary" onClick={onAdd} full disabled={saving}>
-            <Plus size={14} /> {saving ? "Saving..." : "Add Debt"}
+            <Plus size={14} /> {saving ? "Saving..." : "Add Goal"}
           </ActionBtn>
         </div>
       </div>
@@ -1091,12 +991,12 @@ function AddDebtCard({ adding, setAdding, onAdd, saving }) {
   );
 }
 
-function QueueItem({ debt, onFocus }) {
-  const due = getDueStatus(debt.dueDay);
-  const chip = getDebtChip(debt, debt.priority);
+function QueueItem({ goal, onFocus }) {
+  const projection = recentProjection(goal);
+  const tone = progressTone(goal);
 
   return (
-    <div className="debtIntelItem">
+    <div className="savingsIntelItem">
       <div
         style={{
           display: "flex",
@@ -1107,38 +1007,35 @@ function QueueItem({ debt, onFocus }) {
         }}
       >
         <div>
-          <div className="debtIntelTitle">{debt.name}</div>
-          <div className="debtIntelSub">
-            {debt.lender || "No lender"} • {fmtPct(debt.apr)} APR •{" "}
-            {fmtMoneyTight(debt.balance)}
+          <div className="savingsIntelTitle">{goal.name}</div>
+          <div className="savingsIntelSub">
+            {fmtMoneyTight(goal.current)} saved • {fmtMoneyTight(amountLeft(goal))} left •{" "}
+            {dueLabel(goal)}
           </div>
         </div>
 
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-          <MiniPill tone={chip.tone}>{chip.label}</MiniPill>
-          <MiniPill tone={due.tone}>{due.label}</MiniPill>
+          <MiniPill tone={priorityTone(goal.priority)}>{goal.priority}</MiniPill>
+          <MiniPill tone={tone}>{pct(progressPercent(goal))}</MiniPill>
         </div>
       </div>
 
       <div style={{ marginTop: 2 }}>
-        <ProgressBar
-          fill={getDebtProgressPercent(debt)}
-          tone={getDebtBarTone(debt)}
-        />
+        <ProgressBar fill={progressPercent(goal)} tone={tone} />
       </div>
 
-      <div className="debtIntelMiniGrid">
-        <div className="debtIntelMini">
-          <div className="debtTinyLabel">Attack</div>
-          <div className="debtIntelValue">{fmtMoneyTight(debt.plannedAttack)}</div>
+      <div className="savingsIntelMiniGrid">
+        <div className="savingsIntelMini">
+          <div className="savingsTinyLabel">Saved</div>
+          <div className="savingsIntelValue">{fmtMoney(goal.current)}</div>
         </div>
-        <div className="debtIntelMini">
-          <div className="debtTinyLabel">Payoff</div>
-          <div className="debtIntelValue">{monthLabel(debt.payoff)}</div>
+        <div className="savingsIntelMini">
+          <div className="savingsTinyLabel">Left</div>
+          <div className="savingsIntelValue">{fmtMoney(amountLeft(goal))}</div>
         </div>
-        <div className="debtIntelMini">
-          <div className="debtTinyLabel">Rank</div>
-          <div className="debtIntelValue">#{debt.priority}</div>
+        <div className="savingsIntelMini">
+          <div className="savingsTinyLabel">Pace</div>
+          <div className="savingsIntelValue">{projection.text}</div>
         </div>
       </div>
 
@@ -1149,11 +1046,11 @@ function QueueItem({ debt, onFocus }) {
   );
 }
 
-function DueItem({ debt, onFocus }) {
-  const due = getDueStatus(debt.dueDay);
+function DueItem({ goal, onFocus }) {
+  const tone = dueTone(goal);
 
   return (
-    <div className="debtIntelItem">
+    <div className="savingsIntelItem">
       <div
         style={{
           display: "flex",
@@ -1164,13 +1061,13 @@ function DueItem({ debt, onFocus }) {
         }}
       >
         <div>
-          <div className="debtIntelTitle">{debt.name}</div>
-          <div className="debtIntelSub">
-            Due day {debt.dueDay || "—"} • {fmtMoneyTight(debt.minimumPayment)}
+          <div className="savingsIntelTitle">{goal.name}</div>
+          <div className="savingsIntelSub">
+            {fmtMoneyTight(amountLeft(goal))} left • Target {fmtMoneyTight(goal.target)}
           </div>
         </div>
 
-        <MiniPill tone={due.tone}>{due.label}</MiniPill>
+        <MiniPill tone={tone}>{dueLabel(goal)}</MiniPill>
       </div>
 
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -1180,18 +1077,18 @@ function DueItem({ debt, onFocus }) {
   );
 }
 
-function DebtEditorCard({ debt, saving, onPatch }) {
-  if (!debt) {
+function GoalEditorCard({ goal, saving, onPatch }) {
+  if (!goal) {
     return (
       <GlassPane size="card">
         <PaneHeader
-          title="Debt Details"
-          subcopy="Select a debt to edit the deeper fields."
+          title="Goal Details"
+          subcopy="Select a goal to edit the deeper fields."
         />
-        <div className="debtEmptyState" style={{ minHeight: 150 }}>
+        <div className="savingsEmptyState" style={{ minHeight: 150 }}>
           <div>
-            <div className="debtEmptyTitle">No debt selected</div>
-            <div className="debtEmptyText">
+            <div className="savingsEmptyTitle">No goal selected</div>
+            <div className="savingsEmptyText">
               Choose one from the roster to edit it here.
             </div>
           </div>
@@ -1203,273 +1100,128 @@ function DebtEditorCard({ debt, saving, onPatch }) {
   return (
     <GlassPane size="card">
       <PaneHeader
-        title="Debt Details"
+        title="Goal Details"
         subcopy="This section autosaves as you type."
         right={saving ? <MiniPill tone="amber">Saving...</MiniPill> : null}
       />
 
-      <div className="debtFormStack">
-        <div className="debtFormGrid3">
+      <div className="savingsFormStack">
+        <div className="savingsFormGrid3">
           <div>
-            <div className="debtTinyLabel">Debt Name</div>
+            <div className="savingsTinyLabel">Goal Name</div>
             <input
-              className="debtField"
-              value={debt.name}
+              className="savingsField"
+              value={goal.name}
               onChange={(e) => onPatch({ name: e.target.value })}
             />
           </div>
 
           <div>
-            <div className="debtTinyLabel">Debt Type</div>
+            <div className="savingsTinyLabel">Priority</div>
             <select
-              className="debtField"
-              value={debt.type}
-              onChange={(e) => onPatch({ type: e.target.value })}
+              className="savingsField"
+              value={goal.priority}
+              onChange={(e) => onPatch({ priority: e.target.value })}
             >
-              <option value="mortgage">Mortgage</option>
-              <option value="auto">Auto Loan</option>
-              <option value="credit_card">Credit Card</option>
-              <option value="personal_loan">Personal Loan</option>
-              <option value="student_loan">Student Loan</option>
-              <option value="other">Other Debt</option>
+              {PRIORITY_OPTIONS.map((item) => (
+                <option key={item} value={item}>
+                  {item}
+                </option>
+              ))}
             </select>
           </div>
 
           <div>
-            <div className="debtTinyLabel">Lender</div>
+            <div className="savingsTinyLabel">Due Date</div>
             <input
-              className="debtField"
-              value={debt.lender}
-              onChange={(e) => onPatch({ lender: e.target.value })}
-            />
-          </div>
-        </div>
-
-        <div className="debtFormGrid4">
-          <div>
-            <div className="debtTinyLabel">Current Balance</div>
-            <input
-              className="debtField"
-              value={String(debt.balance || "")}
-              onChange={(e) =>
-                onPatch({ balance: safeNum(parseMoneyInput(e.target.value), 0) })
-              }
-            />
-          </div>
-
-          <div>
-            <div className="debtTinyLabel">Original Balance</div>
-            <input
-              className="debtField"
-              value={String(debt.originalBalance || "")}
-              onChange={(e) =>
-                onPatch({
-                  originalBalance: safeNum(parseMoneyInput(e.target.value), 0),
-                })
-              }
-            />
-          </div>
-
-          <div>
-            <div className="debtTinyLabel">Credit Limit</div>
-            <input
-              className="debtField"
-              value={String(debt.creditLimit || "")}
-              onChange={(e) =>
-                onPatch({
-                  creditLimit: safeNum(parseMoneyInput(e.target.value), 0),
-                })
-              }
-            />
-          </div>
-
-          <div>
-            <div className="debtTinyLabel">APR %</div>
-            <input
-              className="debtField"
-              value={String(debt.apr || "")}
-              onChange={(e) => onPatch({ apr: safeNum(e.target.value, 0) })}
-            />
-          </div>
-
-          <div>
-            <div className="debtTinyLabel">Minimum Payment</div>
-            <input
-              className="debtField"
-              value={String(debt.minimumPayment || "")}
-              onChange={(e) =>
-                onPatch({
-                  minimumPayment: safeNum(parseMoneyInput(e.target.value), 0),
-                })
-              }
-            />
-          </div>
-
-          <div>
-            <div className="debtTinyLabel">Extra Payment</div>
-            <input
-              className="debtField"
-              value={String(debt.extraPayment || "")}
-              onChange={(e) =>
-                onPatch({
-                  extraPayment: safeNum(parseMoneyInput(e.target.value), 0),
-                })
-              }
-            />
-          </div>
-
-          <div>
-            <div className="debtTinyLabel">Monthly Payment</div>
-            <input
-              className="debtField"
-              value={String(debt.monthlyPayment || "")}
-              onChange={(e) =>
-                onPatch({
-                  monthlyPayment: safeNum(parseMoneyInput(e.target.value), 0),
-                })
-              }
-            />
-          </div>
-
-          <div>
-            <div className="debtTinyLabel">Due Day</div>
-            <input
-              className="debtField"
-              value={debt.dueDay}
-              onChange={(e) => onPatch({ dueDay: e.target.value })}
-            />
-          </div>
-
-          <div>
-            <div className="debtTinyLabel">Promo APR %</div>
-            <input
-              className="debtField"
-              value={debt.promoApr}
-              onChange={(e) => onPatch({ promoApr: e.target.value })}
-            />
-          </div>
-
-          <div>
-            <div className="debtTinyLabel">Promo Ends</div>
-            <input
-              className="debtField"
+              className="savingsField"
               type="date"
-              value={debt.promoEnds || ""}
-              onChange={(e) => onPatch({ promoEnds: e.target.value })}
-            />
-          </div>
-
-          <div>
-            <div className="debtTinyLabel">Term Months</div>
-            <input
-              className="debtField"
-              value={debt.termMonths ?? ""}
-              onChange={(e) =>
-                onPatch({
-                  termMonths:
-                    e.target.value === "" ? null : safeNum(e.target.value, null),
-                })
-              }
-            />
-          </div>
-
-          <div>
-            <div className="debtTinyLabel">Remaining Months</div>
-            <input
-              className="debtField"
-              value={debt.remainingMonths ?? ""}
-              onChange={(e) =>
-                onPatch({
-                  remainingMonths:
-                    e.target.value === "" ? null : safeNum(e.target.value, null),
-                })
-              }
+              value={goal.dueDate || ""}
+              onChange={(e) => onPatch({ dueDate: e.target.value })}
             />
           </div>
         </div>
 
-        {debt.type === "mortgage" ? (
-          <div className="debtMortgageGrid">
-            <div>
-              <div className="debtTinyLabel">Principal Portion</div>
-              <input
-                className="debtField"
-                value={String(debt.principalPortion || "")}
-                onChange={(e) =>
-                  onPatch({
-                    principalPortion: safeNum(parseMoneyInput(e.target.value), 0),
-                  })
-                }
-              />
-            </div>
-
-            <div>
-              <div className="debtTinyLabel">Interest Portion</div>
-              <input
-                className="debtField"
-                value={String(debt.interestPortion || "")}
-                onChange={(e) =>
-                  onPatch({
-                    interestPortion: safeNum(parseMoneyInput(e.target.value), 0),
-                  })
-                }
-              />
-            </div>
-
-            <div>
-              <div className="debtTinyLabel">Escrow Portion</div>
-              <input
-                className="debtField"
-                value={String(debt.escrowPortion || "")}
-                onChange={(e) =>
-                  onPatch({
-                    escrowPortion: safeNum(parseMoneyInput(e.target.value), 0),
-                  })
-                }
-              />
-            </div>
+        <div className="savingsFormGrid3">
+          <div>
+            <div className="savingsTinyLabel">Current Saved</div>
+            <input
+              className="savingsField"
+              value={String(goal.current || "")}
+              onChange={(e) =>
+                onPatch({ current: safeNum(parseMoneyInput(e.target.value), 0) })
+              }
+            />
           </div>
-        ) : null}
 
-        <div>
-          <div className="debtTinyLabel">Notes</div>
-          <textarea
-            className="debtField"
-            rows={5}
-            value={debt.notes}
-            onChange={(e) => onPatch({ notes: e.target.value })}
-            placeholder="Rate notes, balance transfer info, refinance thoughts..."
-          />
+          <div>
+            <div className="savingsTinyLabel">Target</div>
+            <input
+              className="savingsField"
+              value={String(goal.target || "")}
+              onChange={(e) =>
+                onPatch({ target: safeNum(parseMoneyInput(e.target.value), 0) })
+              }
+            />
+          </div>
+
+          <div>
+            <div className="savingsTinyLabel">Archived</div>
+            <select
+              className="savingsField"
+              value={goal.archived ? "yes" : "no"}
+              onChange={(e) => onPatch({ archived: e.target.value === "yes" })}
+            >
+              <option value="no">No</option>
+              <option value="yes">Yes</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="savingsInfoCell">
+          <div className="savingsTinyLabel">Computed Read</div>
+          <div className="savingsInfoValue">
+            {fmtMoney(goal.current)} / {fmtMoney(goal.target)} • {pct(progressPercent(goal))}
+          </div>
+          <div className="savingsInfoSub" style={{ marginTop: 6 }}>
+            {dueLabel(goal)} • {fmtMoney(amountLeft(goal))} left
+          </div>
         </div>
       </div>
     </GlassPane>
   );
 }
 
-export default function DebtPage() {
-  const [debts, setDebts] = useState([]);
-  const [settings, setSettings] = useState(defaultSettings);
-  const [selectedDebtId, setSelectedDebtId] = useState("");
+export default function SavingsPage() {
+  const [goals, setGoals] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [userId, setUserId] = useState(null);
+
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("active");
   const [sort, setSort] = useState("priority");
-  const [loading, setLoading] = useState(true);
+  const [showArchived, setShowArchived] = useState(false);
+  const [focusMode, setFocusMode] = useState("deadline");
+
+  const [selectedGoalId, setSelectedGoalId] = useState("");
   const [savingIds, setSavingIds] = useState({});
-  const [userId, setUserId] = useState(null);
-  const [settingsRowId, setSettingsRowId] = useState(null);
+  const [pageError, setPageError] = useState("");
+
   const [adding, setAdding] = useState({
-    type: "credit_card",
-    name: "",
-    lender: "",
-    balance: "",
-    apr: "",
-    minimumPayment: "",
-    extraPayment: "",
-    dueDay: "",
+    preset: "Emergency Fund",
+    customName: "",
+    target: "",
+    current: "",
+    dueDate: "",
+    priority: "Medium",
   });
   const [addingBusy, setAddingBusy] = useState(false);
 
-  const settingsSaveTimer = useRef(null);
+  const [ioText, setIoText] = useState("");
+
+  const [customContribution, setCustomContribution] = useState({});
+  const [customContributionNote, setCustomContributionNote] = useState({});
+
   const rowSaveTimers = useRef({});
 
   async function getCurrentUser() {
@@ -1488,374 +1240,513 @@ export default function DebtPage() {
     return user ?? null;
   }
 
-  async function loadDebtPage() {
+  async function loadSavingsPage() {
     if (!supabase) {
       setLoading(false);
       return;
     }
 
     setLoading(true);
+    setPageError("");
 
     const user = await getCurrentUser();
     if (!user) {
       setUserId(null);
-      setDebts([]);
-      setSettings(defaultSettings);
-      setSelectedDebtId("");
+      setGoals([]);
+      setSelectedGoalId("");
       setLoading(false);
       return;
     }
 
     setUserId(user.id);
 
-    const [debtRes, settingsRes] = await Promise.all([
-      supabase
-        .from("debt")
-        .select("*")
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: false }),
-      supabase
-        .from("debt_settings")
-        .select("*")
-        .eq("user_id", user.id)
-        .maybeSingle(),
-    ]);
+    const { data, error } = await supabase
+      .from("savings_goals")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false });
 
-    if (debtRes.error) console.error("load debt error:", debtRes.error);
-    if (settingsRes.error) console.error("load debt settings error:", settingsRes.error);
+    if (error) {
+      console.error("load savings error:", error);
+      setPageError(error.message || "Failed to load savings.");
+      setGoals([]);
+      setSelectedGoalId("");
+      setLoading(false);
+      return;
+    }
 
-    const mappedDebts = (debtRes.data || []).map(mapDebtRow);
-    const mappedSettings = settingsRes.data
-      ? mapSettingsRow(settingsRes.data)
-      : defaultSettings;
-
-    setDebts(mappedDebts);
-    setSettings(mappedSettings);
-    setSettingsRowId(settingsRes.data?.id || null);
-    setSelectedDebtId((prev) => prev || mappedDebts[0]?.id || "");
+    const mappedGoals = (data || []).map(mapGoalRow);
+    setGoals(mappedGoals);
+    setSelectedGoalId((prev) => prev || mappedGoals[0]?.id || "");
     setLoading(false);
   }
 
   useEffect(() => {
-    loadDebtPage();
+    loadSavingsPage();
 
     if (!supabase) return;
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(() => {
-      loadDebtPage();
+      loadSavingsPage();
     });
 
     return () => {
       subscription?.unsubscribe?.();
-      if (settingsSaveTimer.current) clearTimeout(settingsSaveTimer.current);
       Object.values(rowSaveTimers.current).forEach((timer) => clearTimeout(timer));
     };
   }, []);
 
   useEffect(() => {
-    if (!debts.length) {
-      setSelectedDebtId("");
+    if (!goals.length) {
+      setSelectedGoalId("");
       return;
     }
 
-    const exists = debts.some((d) => d.id === selectedDebtId);
+    const exists = goals.some((g) => g.id === selectedGoalId);
     if (!exists) {
-      setSelectedDebtId(debts[0]?.id || "");
+      setSelectedGoalId(goals[0]?.id || "");
     }
-  }, [debts, selectedDebtId]);
+  }, [goals, selectedGoalId]);
 
-  async function persistDebt(nextDebt) {
+  async function persistGoal(nextGoal) {
     if (!supabase || !userId) return;
 
-    setSavingIds((prev) => ({ ...prev, [nextDebt.id]: true }));
+    setSavingIds((prev) => ({ ...prev, [nextGoal.id]: true }));
 
     const { error } = await supabase
-      .from("debt")
-      .upsert(mapDebtToRow(nextDebt, userId), { onConflict: "id" });
+      .from("savings_goals")
+      .upsert(mapGoalToRow(nextGoal, userId), { onConflict: "id" });
 
-    if (error) console.error("save debt error:", error);
-
-    setSavingIds((prev) => ({ ...prev, [nextDebt.id]: false }));
-  }
-
-  function scheduleDebtSave(nextDebt) {
-    if (rowSaveTimers.current[nextDebt.id]) {
-      clearTimeout(rowSaveTimers.current[nextDebt.id]);
+    if (error) {
+      console.error("save goal error:", error);
+      setPageError(error.message || "Failed to save goal.");
     }
 
-    rowSaveTimers.current[nextDebt.id] = setTimeout(() => {
-      persistDebt(nextDebt);
-    }, 350);
+    setSavingIds((prev) => ({ ...prev, [nextGoal.id]: false }));
   }
 
-  async function persistSettings(nextSettings) {
-    if (!supabase || !userId) return;
-
-    const res = await supabase
-      .from("debt_settings")
-      .upsert(mapSettingsToRow(nextSettings, userId, settingsRowId), {
-        onConflict: "user_id",
-      })
-      .select()
-      .single();
-
-    if (res.error) {
-      console.error("save settings error:", res.error);
-      return;
+  function scheduleGoalSave(nextGoal) {
+    if (rowSaveTimers.current[nextGoal.id]) {
+      clearTimeout(rowSaveTimers.current[nextGoal.id]);
     }
 
-    setSettingsRowId(res.data.id);
+    rowSaveTimers.current[nextGoal.id] = setTimeout(() => {
+      persistGoal(nextGoal);
+    }, 300);
   }
 
-  function scheduleSettingsSave(nextSettings) {
-    if (settingsSaveTimer.current) clearTimeout(settingsSaveTimer.current);
-    settingsSaveTimer.current = setTimeout(() => {
-      persistSettings(nextSettings);
-    }, 350);
-  }
-
-  function updateSettings(patch) {
-    setSettings((prev) => {
-      const next = { ...prev, ...patch };
-      scheduleSettingsSave(next);
-      return next;
-    });
-  }
-
-  function updateDebt(id, patch) {
-    setDebts((prev) => {
-      const nextRows = prev.map((d) =>
-        d.id === id
-          ? { ...d, ...patch, updatedAt: new Date().toISOString() }
-          : d
+  function updateGoal(id, patch) {
+    setGoals((prev) => {
+      const nextRows = prev.map((g) =>
+        g.id === id
+          ? { ...g, ...patch, updatedAt: new Date().toISOString() }
+          : g
       );
-      const changed = nextRows.find((d) => d.id === id);
-      if (changed) scheduleDebtSave(changed);
+      const changed = nextRows.find((g) => g.id === id);
+      if (changed) scheduleGoalSave(changed);
       return nextRows;
     });
   }
 
-  async function addDebtFromForm() {
+  async function addGoalFromForm() {
     if (!supabase || !userId || addingBusy) return;
 
-    const base = createDebt(adding.type);
-    const name = adding.name.trim() || base.name;
+    const name = resolvedGoalName(adding.preset, adding.customName);
+    const target = safeNum(parseMoneyInput(adding.target), NaN);
+    const current = safeNum(parseMoneyInput(adding.current || "0"), 0);
+
+    if (!name) {
+      alert("Goal name is required.");
+      return;
+    }
+
+    if (!Number.isFinite(target) || target <= 0) {
+      alert("Target must be greater than 0.");
+      return;
+    }
+
+    if (!Number.isFinite(current) || current < 0) {
+      alert("Starting saved must be 0 or more.");
+      return;
+    }
 
     const next = {
-      ...base,
+      id: uid(),
       name,
-      lender: adding.lender.trim(),
-      balance: safeNum(parseMoneyInput(adding.balance), 0),
-      apr: safeNum(adding.apr, 0),
-      minimumPayment: safeNum(parseMoneyInput(adding.minimumPayment), 0),
-      extraPayment: safeNum(parseMoneyInput(adding.extraPayment), 0),
-      dueDay: adding.dueDay.trim(),
+      target,
+      current,
+      dueDate: adding.dueDate || "",
+      priority: adding.priority || "Medium",
+      archived: false,
+      createdAt: Date.now(),
+      updatedAt: new Date().toISOString(),
+      contributions:
+        current > 0
+          ? [
+              {
+                id: uid(),
+                date: todayISO(),
+                amount: current,
+                note: "Starting balance",
+              },
+            ]
+          : [],
     };
 
     setAddingBusy(true);
-    setDebts((prev) => [next, ...prev]);
-    setSelectedDebtId(next.id);
+    setGoals((prev) => [next, ...prev]);
+    setSelectedGoalId(next.id);
 
-    const { error } = await supabase.from("debt").insert(mapDebtToRow(next, userId));
+    const { error } = await supabase
+      .from("savings_goals")
+      .insert(mapGoalToRow(next, userId));
 
     if (error) {
-      console.error("add debt error:", error);
-      await loadDebtPage();
+      console.error("add goal error:", error);
+      await loadSavingsPage();
     } else {
       setAdding({
-        type: "credit_card",
-        name: "",
-        lender: "",
-        balance: "",
-        apr: "",
-        minimumPayment: "",
-        extraPayment: "",
-        dueDay: "",
+        preset: "Emergency Fund",
+        customName: "",
+        target: "",
+        current: "",
+        dueDate: "",
+        priority: "Medium",
       });
     }
 
     setAddingBusy(false);
   }
 
-  async function removeDebt(id) {
+  async function removeGoal(id) {
     if (!supabase || !userId) return;
-    if (typeof window !== "undefined" && !window.confirm("Delete this debt?")) return;
+    if (typeof window !== "undefined" && !window.confirm("Delete this goal?")) return;
 
-    const nextDebts = debts.filter((d) => d.id !== id);
-    setDebts(nextDebts);
-    if (selectedDebtId === id) {
-      setSelectedDebtId(nextDebts[0]?.id || "");
+    const nextGoals = goals.filter((g) => g.id !== id);
+    setGoals(nextGoals);
+    if (selectedGoalId === id) {
+      setSelectedGoalId(nextGoals[0]?.id || "");
     }
 
     const { error } = await supabase
-      .from("debt")
+      .from("savings_goals")
       .delete()
       .eq("id", id)
       .eq("user_id", userId);
 
     if (error) {
-      console.error("delete debt error:", error);
-      await loadDebtPage();
+      console.error("delete goal error:", error);
+      await loadSavingsPage();
     }
   }
 
-  async function duplicateDebt(debt) {
+  async function duplicateGoal(goal) {
     if (!supabase || !userId) return;
 
     const cloned = {
-      ...debt,
+      ...goal,
       id: uid(),
-      name: `${debt.name || "Debt"} Copy`,
+      name: `${goal.name || "Goal"} Copy`,
       createdAt: Date.now(),
       updatedAt: new Date().toISOString(),
+      contributions: Array.isArray(goal.contributions)
+        ? goal.contributions.map((item) => ({
+            ...item,
+            id: uid(),
+          }))
+        : [],
     };
 
-    setDebts((prev) => [cloned, ...prev]);
-    setSelectedDebtId(cloned.id);
+    setGoals((prev) => [cloned, ...prev]);
+    setSelectedGoalId(cloned.id);
 
-    const { error } = await supabase.from("debt").insert(mapDebtToRow(cloned, userId));
+    const { error } = await supabase
+      .from("savings_goals")
+      .insert(mapGoalToRow(cloned, userId));
+
     if (error) {
-      console.error("duplicate debt error:", error);
-      await loadDebtPage();
+      console.error("duplicate goal error:", error);
+      await loadSavingsPage();
     }
   }
 
-  const activeDebts = useMemo(
-    () => debts.filter((d) => d.isActive && safeNum(d.balance) > 0),
-    [debts]
+  function applyContribution(goalId, amount, note = "") {
+    const parsedAmount = safeNum(amount, NaN);
+
+    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+      alert("Contribution amount must be greater than 0.");
+      return;
+    }
+
+    setGoals((prev) => {
+      const nextRows = prev.map((goal) => {
+        if (goal.id !== goalId) return goal;
+
+        const entry = {
+          id: uid(),
+          date: todayISO(),
+          amount: parsedAmount,
+          note: String(note || "").trim(),
+        };
+
+        return {
+          ...goal,
+          current: safeNum(goal.current, 0) + parsedAmount,
+          contributions: [entry, ...(Array.isArray(goal.contributions) ? goal.contributions : [])],
+          updatedAt: new Date().toISOString(),
+        };
+      });
+
+      const changed = nextRows.find((g) => g.id === goalId);
+      if (changed) scheduleGoalSave(changed);
+
+      return nextRows;
+    });
+
+    setCustomContribution((prev) => ({ ...prev, [goalId]: "" }));
+    setCustomContributionNote((prev) => ({ ...prev, [goalId]: "" }));
+  }
+
+  function undoLastContribution(goalId) {
+    setGoals((prev) => {
+      const nextRows = prev.map((goal) => {
+        if (goal.id !== goalId) return goal;
+        const list = Array.isArray(goal.contributions) ? goal.contributions : [];
+        if (!list.length) return goal;
+
+        const [last, ...rest] = list;
+
+        return {
+          ...goal,
+          current: Math.max(0, safeNum(goal.current, 0) - safeNum(last.amount, 0)),
+          contributions: rest,
+          updatedAt: new Date().toISOString(),
+        };
+      });
+
+      const changed = nextRows.find((g) => g.id === goalId);
+      if (changed) scheduleGoalSave(changed);
+
+      return nextRows;
+    });
+  }
+
+  async function exportGoals() {
+    const payload = JSON.stringify(goals, null, 2);
+    setIoText(payload);
+
+    try {
+      await navigator.clipboard.writeText(payload);
+    } catch {}
+  }
+
+  async function importReplaceGoals() {
+    if (!supabase || !userId) return;
+
+    let parsed;
+    try {
+      parsed = JSON.parse(ioText || "[]");
+    } catch {
+      setPageError("Import failed: invalid JSON.");
+      return;
+    }
+
+    if (!Array.isArray(parsed)) {
+      setPageError("Import failed: JSON must be an array of goals.");
+      return;
+    }
+
+    if (typeof window !== "undefined") {
+      const okay = window.confirm(
+        "Replace all current savings goals for this account?"
+      );
+      if (!okay) return;
+    }
+
+    const normalized = parsed.map((goal) => ({
+      id: goal.id ?? uid(),
+      name: String(goal.name ?? "").trim(),
+      target: safeNum(goal.target, 0),
+      current: safeNum(goal.current, 0),
+      dueDate: goal.dueDate || "",
+      priority: goal.priority || "Medium",
+      archived: !!goal.archived,
+      createdAt: goal.createdAt ?? Date.now(),
+      updatedAt: new Date().toISOString(),
+      contributions: Array.isArray(goal.contributions) ? goal.contributions : [],
+    }));
+
+    setGoals(normalized);
+    setSelectedGoalId(normalized[0]?.id || "");
+
+    const { error: deleteError } = await supabase
+      .from("savings_goals")
+      .delete()
+      .eq("user_id", userId);
+
+    if (deleteError) {
+      console.error("import delete savings goals error:", deleteError);
+      setPageError(deleteError.message || "Failed while clearing current goals.");
+      await loadSavingsPage();
+      return;
+    }
+
+    if (normalized.length > 0) {
+      const rows = normalized.map((goal) => mapGoalToRow(goal, userId));
+      const { error: insertError } = await supabase
+        .from("savings_goals")
+        .upsert(rows, { onConflict: "id" });
+
+      if (insertError) {
+        console.error("import upsert savings goals error:", insertError);
+        setPageError(insertError.message || "Import failed.");
+        await loadSavingsPage();
+      }
+    }
+  }
+
+  const activeGoals = useMemo(
+    () => goals.filter((g) => !g.archived),
+    [goals]
   );
 
   const totals = useMemo(() => {
-    const totalBalance = activeDebts.reduce((sum, d) => sum + safeNum(d.balance), 0);
-    const totalMinimum = activeDebts.reduce(
-      (sum, d) => sum + safeNum(d.minimumPayment),
+    const totalCurrent = activeGoals.reduce(
+      (sum, g) => sum + safeNum(g.current),
       0
     );
-    const totalExtra = activeDebts.reduce(
-      (sum, d) => sum + safeNum(d.extraPayment),
+    const totalTarget = activeGoals.reduce(
+      (sum, g) => sum + safeNum(g.target),
       0
     );
+    const totalLeft = Math.max(0, totalTarget - totalCurrent);
+    const completion =
+      totalTarget > 0 ? (totalCurrent / totalTarget) * 100 : 0;
 
-    const weightedApr =
-      totalBalance > 0
-        ? activeDebts.reduce(
-            (sum, d) => sum + safeNum(d.balance) * safeNum(d.apr),
-            0
-          ) / totalBalance
-        : 0;
+    const fundedCount = activeGoals.filter((g) => amountLeft(g) <= 0).length;
+    const dueSoonCount = activeGoals.filter((g) => {
+      const d = daysUntil(g.dueDate);
+      return d !== null && d >= 0 && d <= 14 && amountLeft(g) > 0;
+    }).length;
 
-    const mortgagePrincipal = activeDebts
-      .filter((d) => d.type === "mortgage")
-      .reduce((sum, d) => sum + safeNum(d.principalPortion), 0);
-
-    const mortgageInterest = activeDebts
-      .filter((d) => d.type === "mortgage")
-      .reduce((sum, d) => sum + safeNum(d.interestPortion), 0);
+    const overdueCount = activeGoals.filter((g) => {
+      const d = daysUntil(g.dueDate);
+      return d !== null && d < 0 && amountLeft(g) > 0;
+    }).length;
 
     return {
-      totalBalance,
-      totalMinimum,
-      totalExtra,
-      weightedApr,
-      mortgagePrincipal,
-      mortgageInterest,
+      totalCurrent,
+      totalTarget,
+      totalLeft,
+      completion,
+      fundedCount,
+      dueSoonCount,
+      overdueCount,
     };
-  }, [activeDebts]);
+  }, [activeGoals]);
 
-  const rankedDebts = useMemo(() => {
-    const rows = [...activeDebts];
+  const rankedGoals = useMemo(() => {
+    const rows = [...activeGoals];
 
-    if (settings.strategy === "snowball") {
-      rows.sort((a, b) => safeNum(a.balance) - safeNum(b.balance));
+    if (focusMode === "gap") {
+      rows.sort((a, b) => {
+        const leftDiff = amountLeft(b) - amountLeft(a);
+        if (leftDiff !== 0) return leftDiff;
+        return priorityRank(a.priority) - priorityRank(b.priority);
+      });
+    } else if (focusMode === "progress") {
+      rows.sort((a, b) => {
+        const progressDiff = progressPercent(a) - progressPercent(b);
+        if (progressDiff !== 0) return progressDiff;
+        return amountLeft(b) - amountLeft(a);
+      });
     } else {
       rows.sort((a, b) => {
-        const aprDiff = safeNum(b.apr) - safeNum(a.apr);
-        if (aprDiff !== 0) return aprDiff;
-        return safeNum(a.balance) - safeNum(b.balance);
+        const aFunded = amountLeft(a) <= 0 ? 1 : 0;
+        const bFunded = amountLeft(b) <= 0 ? 1 : 0;
+        if (aFunded !== bFunded) return aFunded - bFunded;
+
+        const ad = daysUntil(a.dueDate);
+        const bd = daysUntil(b.dueDate);
+        const aDue = ad === null ? Number.POSITIVE_INFINITY : ad;
+        const bDue = bd === null ? Number.POSITIVE_INFINITY : bd;
+        if (aDue !== bDue) return aDue - bDue;
+
+        const pr = priorityRank(a.priority) - priorityRank(b.priority);
+        if (pr !== 0) return pr;
+
+        return amountLeft(b) - amountLeft(a);
       });
     }
 
-    return rows.map((d, i) => {
-      const plannedAttack =
-        getAttackPayment(d) + (i === 0 ? safeNum(settings.globalExtraPool) : 0);
-
-      return {
-        ...d,
-        priority: i + 1,
-        plannedAttack,
-        payoff: payoffMonths(d.balance, d.apr, plannedAttack),
-      };
-    });
-  }, [activeDebts, settings.strategy, settings.globalExtraPool]);
+    return rows.map((g, i) => ({
+      ...g,
+      priorityRank: i + 1,
+    }));
+  }, [activeGoals, focusMode]);
 
   const priorityMap = useMemo(() => {
     const map = new Map();
-    rankedDebts.forEach((d) => map.set(d.id, d.priority));
+    rankedGoals.forEach((g) => map.set(g.id, g.priorityRank));
     return map;
-  }, [rankedDebts]);
+  }, [rankedGoals]);
 
-  const topTarget = rankedDebts[0] || null;
+  const dueSoonGoals = useMemo(() => {
+    return activeGoals
+      .filter((g) => {
+        const d = daysUntil(g.dueDate);
+        return d !== null && d <= 14 && amountLeft(g) > 0;
+      })
+      .sort((a, b) => {
+        const ad = daysUntil(a.dueDate);
+        const bd = daysUntil(b.dueDate);
+        return safeNum(ad, 9999) - safeNum(bd, 9999);
+      })
+      .slice(0, 6);
+  }, [activeGoals]);
+
+  const contributionFeed = useMemo(() => {
+    const items = activeGoals.flatMap((goal) =>
+      (Array.isArray(goal.contributions) ? goal.contributions : []).map((entry) => ({
+        id: entry.id,
+        goalId: goal.id,
+        goalName: goal.name,
+        amount: safeNum(entry.amount),
+        note: entry.note || "",
+        date: entry.date || "",
+      }))
+    );
+
+    return items
+      .sort((a, b) => String(b.date).localeCompare(String(a.date)))
+      .slice(0, 6);
+  }, [activeGoals]);
 
   const quickStats = useMemo(() => {
-    const creditCards = debts.filter(
-      (d) => d.isActive && d.type === "credit_card"
-    ).length;
+    const activeCount = activeGoals.length;
+    const dueDated = activeGoals.filter((g) => !!g.dueDate).length;
+    const noDate = activeGoals.filter((g) => !g.dueDate).length;
+    return { activeCount, dueDated, noDate };
+  }, [activeGoals]);
 
-    const installment = debts.filter(
-      (d) =>
-        d.isActive &&
-        ["mortgage", "auto", "personal_loan", "student_loan"].includes(d.type)
-    ).length;
-
-    const totalAccounts = debts.filter((d) => d.isActive).length;
-
-    return { creditCards, installment, totalAccounts };
-  }, [debts]);
-
-  const dueSoon = useMemo(() => {
-    return activeDebts
-      .map((d) => ({ ...d, due: getDueStatus(d.dueDay) }))
-      .filter((d) => d.due.sort <= 7)
-      .sort((a, b) => a.due.sort - b.due.sort)
-      .slice(0, 6);
-  }, [activeDebts]);
-
-  const monthlyAttackTotal =
-    totals.totalMinimum + totals.totalExtra + safeNum(settings.globalExtraPool);
-
-  const visibleDebts = useMemo(() => {
+  const visibleGoals = useMemo(() => {
     const q = search.trim().toLowerCase();
 
-    let list = debts.filter((d) => {
-      if (filter === "active" && !d.isActive) return false;
-      if (filter === "inactive" && d.isActive) return false;
-      if (filter === "cards" && d.type !== "credit_card") return false;
-
-      if (filter === "installment") {
-        if (!["mortgage", "auto", "personal_loan", "student_loan"].includes(d.type)) {
-          return false;
-        }
-      }
-
+    let list = goals.filter((g) => {
+      if (filter === "active" && g.archived) return false;
+      if (filter === "archived" && !g.archived) return false;
       if (filter === "due") {
-        const due = getDueStatus(d.dueDay);
-        if (!(d.isActive && due.sort <= 7)) return false;
+        const d = daysUntil(g.dueDate);
+        if (!(d !== null && d <= 14 && amountLeft(g) > 0)) return false;
       }
 
-      if (
-        !settings.showInactive &&
-        filter !== "inactive" &&
-        filter !== "all" &&
-        !d.isActive
-      ) {
-        return false;
-      }
+      if (!showArchived && filter !== "archived" && g.archived) return false;
 
       if (!q) return true;
 
-      return [d.name, d.lender, d.type, d.notes, debtTypeLabel(d.type)]
+      return [g.name, g.priority, g.dueDate]
         .join(" ")
         .toLowerCase()
         .includes(q);
@@ -1866,18 +1757,27 @@ export default function DebtPage() {
         const ar = priorityMap.get(a.id) ?? 999;
         const br = priorityMap.get(b.id) ?? 999;
         if (ar !== br) return ar - br;
-        return safeNum(b.balance) - safeNum(a.balance);
+        return amountLeft(b) - amountLeft(a);
       });
       return list;
     }
 
-    if (sort === "balance") {
-      list.sort((a, b) => safeNum(b.balance) - safeNum(a.balance));
+    if (sort === "left") {
+      list.sort((a, b) => amountLeft(b) - amountLeft(a));
       return list;
     }
 
-    if (sort === "apr") {
-      list.sort((a, b) => safeNum(b.apr) - safeNum(a.apr));
+    if (sort === "progress") {
+      list.sort((a, b) => progressPercent(a) - progressPercent(b));
+      return list;
+    }
+
+    if (sort === "updated") {
+      list.sort(
+        (a, b) =>
+          new Date(b.updatedAt || 0).getTime() -
+          new Date(a.updatedAt || 0).getTime()
+      );
       return list;
     }
 
@@ -1886,35 +1786,53 @@ export default function DebtPage() {
       return list;
     }
 
-    if (sort === "updated") {
-      list.sort(
-        (a, b) =>
-          new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime()
-      );
-      return list;
-    }
-
-    list.sort((a, b) => getDueStatus(a.dueDay).sort - getDueStatus(b.dueDay).sort);
+    list.sort((a, b) => {
+      const ad = daysUntil(a.dueDate);
+      const bd = daysUntil(b.dueDate);
+      return safeNum(ad, 9999) - safeNum(bd, 9999);
+    });
     return list;
-  }, [debts, settings.showInactive, filter, search, sort, priorityMap]);
+  }, [goals, showArchived, filter, search, sort, priorityMap]);
 
-  const selectedDebt =
-    debts.find((d) => d.id === selectedDebtId) || visibleDebts[0] || null;
+  const selectedGoal =
+    goals.find((g) => g.id === selectedGoalId) || visibleGoals[0] || null;
 
-  const selectedPriority = selectedDebt
-    ? priorityMap.get(selectedDebt.id) ?? null
+  const selectedPriority = selectedGoal
+    ? priorityMap.get(selectedGoal.id) ?? null
     : null;
 
-  const weightedAprTone =
-    totals.weightedApr >= 18 ? "red" : totals.weightedApr >= 10 ? "amber" : "green";
+  const monthLabel = fmtMonthLabel(monthKeyFromISO(todayISO()));
+
+  const focusText = useMemo(() => {
+    if (!activeGoals.length) {
+      return "No goals yet. Add one and start filling the page with real data.";
+    }
+
+    if (totals.overdueCount > 0) {
+      return `${totals.overdueCount} goal${totals.overdueCount === 1 ? "" : "s"} overdue. Fix those first.`;
+    }
+
+    if (dueSoonGoals.length > 0) {
+      return `${dueSoonGoals[0].name} is the closest deadline pressure.`;
+    }
+
+    return "No due-date pressure right now. Use this time to build momentum.";
+  }, [activeGoals, totals.overdueCount, dueSoonGoals]);
+
+  const heroTone =
+    totals.overdueCount > 0
+      ? "red"
+      : totals.dueSoonCount > 0
+      ? "amber"
+      : "green";
 
   if (loading) {
     return (
-      <main className="debtPage">
-        <div className="debtPageShell">
+      <main className="savingsPage">
+        <div className="savingsPageShell">
           <GlassPane size="card">
             <div style={{ fontWeight: 800, fontSize: 18, color: "#fff" }}>
-              Loading debt.
+              Loading savings.
             </div>
           </GlassPane>
         </div>
@@ -1925,124 +1843,147 @@ export default function DebtPage() {
 
   return (
     <>
-      <main className="debtPage">
-        <div className="debtPageShell">
+      <main className="savingsPage">
+        <div className="savingsPageShell">
+          {pageError ? (
+            <GlassPane tone="red" size="card">
+              <div style={{ fontWeight: 800, fontSize: 16, color: "#fff" }}>
+                Savings error
+              </div>
+              <div
+                style={{
+                  marginTop: 6,
+                  fontSize: 13,
+                  color: "rgba(255,255,255,0.74)",
+                }}
+              >
+                {pageError}
+              </div>
+            </GlassPane>
+          ) : null}
+
           <GlassPane size="card">
-            <div className="debtHeroGrid">
+            <div className="savingsHeroGrid">
               <div style={{ minWidth: 0 }}>
-                <div className="debtEyebrow">Life Command Center</div>
-                <div className="debtHeroTitle">Debt Command</div>
-                <div className="debtHeroSub">
-                  Cleaner payoff pressure, tighter controls, stronger priority logic,
+                <div className="savingsEyebrow">Life Command Center</div>
+                <div className="savingsHeroTitle">Savings Command</div>
+                <div className="savingsHeroSub">
+                  Cleaner goal pressure, tighter controls, stronger focus logic,
                   and a layout that actually fills the page instead of leaving dead space.
                 </div>
 
-                <div className="debtPillRow">
-                  <MiniPill>{quickStats.totalAccounts} active debts</MiniPill>
-                  <MiniPill>{currentMonthLabel()}</MiniPill>
-                  <MiniPill>{quickStats.creditCards} cards</MiniPill>
-                  <MiniPill>{quickStats.installment} installment</MiniPill>
+                <div className="savingsPillRow">
+                  <MiniPill>{quickStats.activeCount} active goals</MiniPill>
+                  <MiniPill>{monthLabel}</MiniPill>
+                  <MiniPill>{quickStats.dueDated} dated</MiniPill>
+                  <MiniPill>{quickStats.noDate} without date</MiniPill>
                 </div>
               </div>
 
-              <div className="debtHeroSide">
-                <MiniPill>{settings.strategy}</MiniPill>
-                <MiniPill tone="green">{fmtMoney(monthlyAttackTotal)} attack</MiniPill>
-                <MiniPill tone={dueSoon.length > 0 ? "amber" : "green"}>
-                  {dueSoon.length} due soon
-                </MiniPill>
+              <div className="savingsHeroSide">
+                <MiniPill>{focusMode}</MiniPill>
+                <MiniPill tone="green">{fmtMoney(totals.totalCurrent)} saved</MiniPill>
+                <MiniPill tone={heroTone}>{totals.dueSoonCount} due soon</MiniPill>
               </div>
             </div>
           </GlassPane>
 
-          <section className="debtMetricGrid">
+          <section className="savingsMetricGrid">
             <StatCard
-              icon={CreditCard}
-              label="Total Debt Balance"
-              value={fmtMoney(totals.totalBalance)}
-              detail={`${quickStats.totalAccounts} active debt account${
-                quickStats.totalAccounts === 1 ? "" : "s"
-              }.`}
-              tone="red"
-            />
-            <StatCard
-              icon={BadgeDollarSign}
-              label="Monthly Attack"
-              value={fmtMoney(monthlyAttackTotal)}
-              detail="Minimums + debt-specific extra + global pool."
+              icon={PiggyBank}
+              label="Saved"
+              value={fmtMoney(totals.totalCurrent)}
+              detail={`${quickStats.activeCount} active goal${quickStats.activeCount === 1 ? "" : "s"} on the board.`}
               tone="green"
             />
             <StatCard
-              icon={Flame}
-              label="APR Pressure"
-              value={fmtPct(totals.weightedApr)}
-              detail={
-                settings.strategy === "avalanche"
-                  ? "Avalanche strategy active."
-                  : "Snowball strategy active."
-              }
-              tone={weightedAprTone}
+              icon={Target}
+              label="Target"
+              value={fmtMoney(totals.totalTarget)}
+              detail="All active savings targets added together."
+              tone="neutral"
+            />
+            <StatCard
+              icon={Wallet}
+              label="Still Needed"
+              value={fmtMoney(totals.totalLeft)}
+              detail="Total gap left before the active board is fully funded."
+              tone={totals.totalLeft > 0 ? "amber" : "green"}
+            />
+            <StatCard
+              icon={TrendingUp}
+              label="Funding Health"
+              value={pct(totals.completion)}
+              detail="Overall completion across active savings goals."
+              tone={toneByValue(totals.completion - 50)}
+              badge={`${totals.fundedCount} funded`}
             />
             <StatCard
               icon={CalendarClock}
               label="Due Soon"
-              value={String(dueSoon.length)}
-              detail={topTarget ? `Top target: ${topTarget.name}` : "No target ranked yet."}
-              tone={dueSoon.length > 0 ? "amber" : "green"}
+              value={String(totals.dueSoonCount)}
+              detail={
+                dueSoonGoals[0]
+                  ? `Top pressure: ${dueSoonGoals[0].name}`
+                  : "No dated goals creating short-term pressure."
+              }
+              tone={heroTone}
+              badge={totals.overdueCount > 0 ? `${totals.overdueCount} overdue` : ""}
             />
           </section>
 
           <GlassPane size="card">
             <PaneHeader
-              title="Debt Controls"
-              subcopy="Tune strategy, search the roster, and steer what the queue attacks first."
+              title="Goal Controls"
+              subcopy="Tune focus order, search the roster, and steer what the page attacks first."
             />
 
-            <div className="debtControlsGrid">
+            <div className="savingsControlsGrid">
               <div>
-                <div className="debtTinyLabel">Payoff Strategy</div>
+                <div className="savingsTinyLabel">Focus Order</div>
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                   <ActionBtn
-                    variant={settings.strategy === "avalanche" ? "primary" : "ghost"}
-                    onClick={() => updateSettings({ strategy: "avalanche" })}
+                    variant={focusMode === "deadline" ? "primary" : "ghost"}
+                    onClick={() => setFocusMode("deadline")}
                   >
-                    Avalanche
+                    Deadline
                   </ActionBtn>
                   <ActionBtn
-                    variant={settings.strategy === "snowball" ? "primary" : "ghost"}
-                    onClick={() => updateSettings({ strategy: "snowball" })}
+                    variant={focusMode === "gap" ? "primary" : "ghost"}
+                    onClick={() => setFocusMode("gap")}
                   >
-                    Snowball
+                    Biggest Gap
+                  </ActionBtn>
+                  <ActionBtn
+                    variant={focusMode === "progress" ? "primary" : "ghost"}
+                    onClick={() => setFocusMode("progress")}
+                  >
+                    Least Funded
                   </ActionBtn>
                 </div>
               </div>
 
               <div>
-                <div className="debtTinyLabel">Global Extra Pool / Month</div>
+                <div className="savingsTinyLabel">Quick Read</div>
                 <input
-                  className="debtField"
-                  value={String(settings.globalExtraPool || "")}
-                  onChange={(e) =>
-                    updateSettings({
-                      globalExtraPool: safeNum(parseMoneyInput(e.target.value), 0),
-                    })
-                  }
-                  placeholder="e.g. 300"
+                  className="savingsField"
+                  readOnly
+                  value={focusText}
                 />
               </div>
 
               <div>
-                <div className="debtTinyLabel">Show Inactive</div>
+                <div className="savingsTinyLabel">Show Archived</div>
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                   <ActionBtn
-                    variant={!settings.showInactive ? "primary" : "ghost"}
-                    onClick={() => updateSettings({ showInactive: false })}
+                    variant={!showArchived ? "primary" : "ghost"}
+                    onClick={() => setShowArchived(false)}
                   >
                     Hide
                   </ActionBtn>
                   <ActionBtn
-                    variant={settings.showInactive ? "primary" : "ghost"}
-                    onClick={() => updateSettings({ showInactive: true })}
+                    variant={showArchived ? "primary" : "ghost"}
+                    onClick={() => setShowArchived(true)}
                   >
                     Show
                   </ActionBtn>
@@ -2051,132 +1992,145 @@ export default function DebtPage() {
             </div>
           </GlassPane>
 
-          <section className="debtWorkspaceGrid">
+          <section className="savingsWorkspaceGrid">
             <GlassPane size="card" style={{ height: "100%" }}>
               <PaneHeader
-                title="Debt Roster"
+                title="Goal Roster"
                 subcopy="Main roster fills the page now instead of shrinking into the left and leaving dead space."
-                right={<MiniPill>{visibleDebts.length} showing</MiniPill>}
+                right={<MiniPill>{visibleGoals.length} showing</MiniPill>}
               />
 
-              <div className="debtRosterControls">
-                <div className="debtSearchWrap">
+              <div className="savingsRosterControls">
+                <div className="savingsSearchWrap">
                   <Search size={15} />
                   <input
-                    className="debtField debtSearchField"
-                    placeholder="Search debt"
+                    className="savingsField savingsSearchField"
+                    placeholder="Search goal"
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
                   />
                 </div>
 
                 <select
-                  className="debtField"
+                  className="savingsField"
                   value={filter}
                   onChange={(e) => setFilter(e.target.value)}
                 >
                   <option value="active">Active only</option>
-                  <option value="all">All debts</option>
-                  <option value="inactive">Inactive</option>
-                  <option value="cards">Credit cards</option>
-                  <option value="installment">Installment</option>
+                  <option value="all">All goals</option>
+                  <option value="archived">Archived</option>
                   <option value="due">Due soon</option>
                 </select>
 
                 <select
-                  className="debtField"
+                  className="savingsField"
                   value={sort}
                   onChange={(e) => setSort(e.target.value)}
                 >
                   <option value="priority">Priority</option>
                   <option value="due">Due first</option>
-                  <option value="balance">Balance high → low</option>
-                  <option value="apr">APR high → low</option>
+                  <option value="left">Amount left</option>
+                  <option value="progress">Least funded</option>
                   <option value="updated">Recently updated</option>
                   <option value="name">Name</option>
                 </select>
               </div>
 
-              {visibleDebts.length ? (
-                <div className="debtRosterListCompact">
-                  {visibleDebts.map((debt) => (
-                    <CompactDebtRow
-                      key={debt.id}
-                      debt={debt}
-                      selected={debt.id === selectedDebt?.id}
-                      priority={priorityMap.get(debt.id) ?? null}
-                      onSelect={() => setSelectedDebtId(debt.id)}
-                      onDuplicate={() => duplicateDebt(debt)}
-                      onToggle={() => updateDebt(debt.id, { isActive: !debt.isActive })}
-                      onDelete={() => removeDebt(debt.id)}
+              {visibleGoals.length ? (
+                <div className="savingsRosterListCompact">
+                  {visibleGoals.map((goal) => (
+                    <CompactGoalRow
+                      key={goal.id}
+                      goal={goal}
+                      selected={goal.id === selectedGoal?.id}
+                      priority={priorityMap.get(goal.id) ?? null}
+                      onSelect={() => setSelectedGoalId(goal.id)}
+                      onDuplicate={() => duplicateGoal(goal)}
+                      onArchive={() => updateGoal(goal.id, { archived: !goal.archived })}
+                      onDelete={() => removeGoal(goal.id)}
                     />
                   ))}
                 </div>
               ) : (
-                <div className="debtEmptyState">
+                <div className="savingsEmptyState">
                   <div>
-                    <div className="debtEmptyTitle">No debts found</div>
-                    <div className="debtEmptyText">
-                      Clear filters or add a new debt account.
+                    <div className="savingsEmptyTitle">No goals found</div>
+                    <div className="savingsEmptyText">
+                      Clear filters or add a new savings goal.
                     </div>
                   </div>
                 </div>
               )}
             </GlassPane>
 
-            <FocusDebtCard
-              debt={selectedDebt}
+            <FocusGoalCard
+              goal={selectedGoal}
               priority={selectedPriority}
-              globalExtraPool={settings.globalExtraPool}
-              saving={selectedDebt ? !!savingIds[selectedDebt.id] : false}
-              onDuplicate={() => selectedDebt && duplicateDebt(selectedDebt)}
-              onToggle={() =>
-                selectedDebt &&
-                updateDebt(selectedDebt.id, { isActive: !selectedDebt.isActive })
+              saving={selectedGoal ? !!savingIds[selectedGoal.id] : false}
+              onDuplicate={() => selectedGoal && duplicateGoal(selectedGoal)}
+              onArchive={() =>
+                selectedGoal &&
+                updateGoal(selectedGoal.id, { archived: !selectedGoal.archived })
               }
-              onDelete={() => selectedDebt && removeDebt(selectedDebt.id)}
+              onDelete={() => selectedGoal && removeGoal(selectedGoal.id)}
+              onQuickAdd={(amount) => selectedGoal && applyContribution(selectedGoal.id, amount, "Quick add")}
+              onUndoLast={() => selectedGoal && undoLastContribution(selectedGoal.id)}
+              customAmount={selectedGoal ? customContribution[selectedGoal.id] ?? "" : ""}
+              customNote={selectedGoal ? customContributionNote[selectedGoal.id] ?? "" : ""}
+              setCustomAmount={(value) =>
+                selectedGoal &&
+                setCustomContribution((prev) => ({ ...prev, [selectedGoal.id]: value }))
+              }
+              setCustomNote={(value) =>
+                selectedGoal &&
+                setCustomContributionNote((prev) => ({ ...prev, [selectedGoal.id]: value }))
+              }
+              onCustomAdd={() =>
+                selectedGoal &&
+                applyContribution(
+                  selectedGoal.id,
+                  parseMoneyInput(customContribution[selectedGoal.id] ?? ""),
+                  customContributionNote[selectedGoal.id] ?? ""
+                )
+              }
             />
 
-            <AddDebtCard
+            <AddGoalCard
               adding={adding}
               setAdding={setAdding}
-              onAdd={addDebtFromForm}
+              onAdd={addGoalFromForm}
               saving={addingBusy}
             />
           </section>
 
-          <section className="debtSectionGrid">
+          <section className="savingsSectionGrid">
             <GlassPane size="card" style={{ height: "100%" }}>
               <PaneHeader
-                title="Priority Queue"
-                subcopy={
-                  settings.strategy === "avalanche"
-                    ? "Highest APR first."
-                    : "Smallest balance first."
-                }
+                title="Funding Queue"
+                subcopy="The order this page should push your attention."
                 right={
                   <MiniPill>
-                    {rankedDebts.length} item{rankedDebts.length === 1 ? "" : "s"}
+                    {rankedGoals.length} item{rankedGoals.length === 1 ? "" : "s"}
                   </MiniPill>
                 }
               />
 
-              {rankedDebts.length ? (
-                <div className="debtIntelList">
-                  {rankedDebts.slice(0, 5).map((debt) => (
+              {rankedGoals.length ? (
+                <div className="savingsIntelList">
+                  {rankedGoals.slice(0, 5).map((goal) => (
                     <QueueItem
-                      key={debt.id}
-                      debt={debt}
-                      onFocus={() => setSelectedDebtId(debt.id)}
+                      key={goal.id}
+                      goal={goal}
+                      onFocus={() => setSelectedGoalId(goal.id)}
                     />
                   ))}
                 </div>
               ) : (
-                <div className="debtEmptyState debtInlineEmpty">
+                <div className="savingsEmptyState savingsInlineEmpty">
                   <div>
-                    <div className="debtEmptyTitle">Nothing to rank yet</div>
-                    <div className="debtEmptyText">
-                      Add active balances and payment info to build a payoff order.
+                    <div className="savingsEmptyTitle">Nothing to rank yet</div>
+                    <div className="savingsEmptyText">
+                      Add active goals and real target numbers to build a queue.
                     </div>
                   </div>
                 </div>
@@ -2186,30 +2140,30 @@ export default function DebtPage() {
             <GlassPane size="card" style={{ height: "100%" }}>
               <PaneHeader
                 title="Due Soon"
-                subcopy="Fast action view for urgent payments."
+                subcopy="Fast action view for the closest target dates."
                 right={
                   <MiniPill>
-                    {dueSoon.length} item{dueSoon.length === 1 ? "" : "s"}
+                    {dueSoonGoals.length} item{dueSoonGoals.length === 1 ? "" : "s"}
                   </MiniPill>
                 }
               />
 
-              {dueSoon.length ? (
-                <div className="debtIntelList">
-                  {dueSoon.map((debt) => (
+              {dueSoonGoals.length ? (
+                <div className="savingsIntelList">
+                  {dueSoonGoals.map((goal) => (
                     <DueItem
-                      key={debt.id}
-                      debt={debt}
-                      onFocus={() => setSelectedDebtId(debt.id)}
+                      key={goal.id}
+                      goal={goal}
+                      onFocus={() => setSelectedGoalId(goal.id)}
                     />
                   ))}
                 </div>
               ) : (
-                <div className="debtEmptyState debtInlineEmpty">
+                <div className="savingsEmptyState savingsInlineEmpty">
                   <div>
-                    <div className="debtEmptyTitle">Nothing urgent right now</div>
-                    <div className="debtEmptyText">
-                      No active debt has immediate due pressure.
+                    <div className="savingsEmptyTitle">Nothing urgent right now</div>
+                    <div className="savingsEmptyText">
+                      No active savings goal has immediate due pressure.
                     </div>
                   </div>
                 </div>
@@ -2217,59 +2171,102 @@ export default function DebtPage() {
             </GlassPane>
           </section>
 
-          <section className="debtLowerGrid">
+          <section className="savingsLowerGrid">
             <GlassPane size="card" style={{ height: "100%" }}>
               <PaneHeader
-                title="Debt Snapshot"
-                subcopy="Quick monthly view of the whole debt stack."
+                title="Savings Snapshot"
+                subcopy="Quick board view plus import and export."
               />
 
-              <div className="debtSnapshotGrid">
-                <div className="debtSnapshotRow">
-                  <span>Total minimums</span>
-                  <strong>{fmtMoney(totals.totalMinimum)}</strong>
+              <div className="savingsSnapshotGrid">
+                <div className="savingsSnapshotRow">
+                  <span>Total saved</span>
+                  <strong>{fmtMoney(totals.totalCurrent)}</strong>
                 </div>
-                <div className="debtSnapshotRow">
-                  <span>Debt-specific extra</span>
-                  <strong>{fmtMoney(totals.totalExtra)}</strong>
+                <div className="savingsSnapshotRow">
+                  <span>Total target</span>
+                  <strong>{fmtMoney(totals.totalTarget)}</strong>
                 </div>
-                <div className="debtSnapshotRow">
-                  <span>Global extra pool</span>
-                  <strong>{fmtMoney(settings.globalExtraPool)}</strong>
+                <div className="savingsSnapshotRow">
+                  <span>Total left</span>
+                  <strong>{fmtMoney(totals.totalLeft)}</strong>
                 </div>
-                <div className="debtSnapshotRow">
-                  <span>Total monthly attack</span>
-                  <strong>{fmtMoney(monthlyAttackTotal)}</strong>
+                <div className="savingsSnapshotRow">
+                  <span>Funding health</span>
+                  <strong>{pct(totals.completion)}</strong>
                 </div>
-                <div className="debtSnapshotRow">
-                  <span>Mortgage principal / month</span>
-                  <strong>{fmtMoney(totals.mortgagePrincipal)}</strong>
+                <div className="savingsSnapshotRow">
+                  <span>Due soon</span>
+                  <strong>{totals.dueSoonCount}</strong>
                 </div>
-                <div className="debtSnapshotRow">
-                  <span>Mortgage interest / month</span>
-                  <strong>{fmtMoney(totals.mortgageInterest)}</strong>
+                <div className="savingsSnapshotRow">
+                  <span>Recent contributions</span>
+                  <strong>{contributionFeed.length}</strong>
                 </div>
               </div>
 
-              {topTarget ? (
-                <div className="debtInfoCell" style={{ marginTop: 12 }}>
-                  <div className="debtTinyLabel">Projected First Win</div>
-                  <div className="debtInfoValue">{topTarget.name}</div>
-                  <div className="debtInfoSub" style={{ marginTop: 6 }}>
-                    {topTarget.payoff === Infinity
-                      ? "Current payment path does not pay this off."
-                      : `Estimated payoff ${monthLabel(
-                          topTarget.payoff
-                        )} • around ${nextMonthDate(Math.ceil(topTarget.payoff))}.`}
-                  </div>
+              <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <ActionBtn onClick={exportGoals}>
+                  <Download size={14} /> Export
+                </ActionBtn>
+                <ActionBtn onClick={importReplaceGoals}>
+                  Import / Replace
+                </ActionBtn>
+              </div>
+
+              <div style={{ marginTop: 12 }}>
+                <textarea
+                  className="savingsField"
+                  rows={6}
+                  placeholder="Paste exported JSON here to import..."
+                  value={ioText}
+                  onChange={(e) => setIoText(e.target.value)}
+                />
+              </div>
+
+              <div style={{ marginTop: 12 }}>
+                <div className="savingsTinyLabel" style={{ marginBottom: 8 }}>
+                  Recent Board Activity
                 </div>
-              ) : null}
+
+                {contributionFeed.length ? (
+                  <div className="savingsIntelList savingsFeedList">
+                    {contributionFeed.map((item) => (
+                      <div key={item.id} className="savingsIntelItem">
+                        <div
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            gap: 10,
+                            alignItems: "flex-start",
+                            flexWrap: "wrap",
+                          }}
+                        >
+                          <div>
+                            <div className="savingsIntelTitle">{item.goalName}</div>
+                            <div className="savingsIntelSub">
+                              {fmtDate(item.date)}
+                              {item.note ? ` • ${item.note}` : ""}
+                            </div>
+                          </div>
+
+                          <MiniPill tone="green">{fmtMoneyTight(item.amount)}</MiniPill>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="savingsEmptyText">
+                    No recent contributions logged.
+                  </div>
+                )}
+              </div>
             </GlassPane>
 
-            <DebtEditorCard
-              debt={selectedDebt}
-              saving={selectedDebt ? !!savingIds[selectedDebt.id] : false}
-              onPatch={(patch) => selectedDebt && updateDebt(selectedDebt.id, patch)}
+            <GoalEditorCard
+              goal={selectedGoal}
+              saving={selectedGoal ? !!savingIds[selectedGoal.id] : false}
+              onPatch={(patch) => selectedGoal && updateGoal(selectedGoal.id, patch)}
             />
           </section>
         </div>
@@ -2281,14 +2278,14 @@ export default function DebtPage() {
 }
 
 const globalStyles = `
-  .debtPage {
+  .savingsPage {
     width: 100%;
     min-width: 0;
     color: var(--lcc-text);
     font-family: var(--lcc-font-sans);
   }
 
-  .debtPageShell {
+  .savingsPageShell {
     width: 100%;
     max-width: none;
     margin: 0;
@@ -2297,7 +2294,7 @@ const globalStyles = `
     gap: 14px;
   }
 
-  .debtEyebrow {
+  .savingsEyebrow {
     font-size: 10px;
     text-transform: uppercase;
     letter-spacing: .22em;
@@ -2305,7 +2302,7 @@ const globalStyles = `
     color: rgba(255,255,255,0.42);
   }
 
-  .debtHeroTitle {
+  .savingsHeroTitle {
     margin-top: 8px;
     font-size: clamp(24px, 3.2vw, 34px);
     line-height: 1.02;
@@ -2314,7 +2311,7 @@ const globalStyles = `
     color: #fff;
   }
 
-  .debtHeroSub {
+  .savingsHeroSub {
     margin-top: 8px;
     font-size: 13px;
     line-height: 1.55;
@@ -2322,14 +2319,14 @@ const globalStyles = `
     max-width: 840px;
   }
 
-  .debtHeroGrid {
+  .savingsHeroGrid {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
     gap: 14px;
     align-items: start;
   }
 
-  .debtHeroSide {
+  .savingsHeroSide {
     display: flex;
     gap: 8px;
     flex-wrap: wrap;
@@ -2337,69 +2334,69 @@ const globalStyles = `
     align-content: flex-start;
   }
 
-  .debtPillRow {
+  .savingsPillRow {
     margin-top: 12px;
     display: flex;
     gap: 8px;
     flex-wrap: wrap;
   }
 
-  .debtMetricGrid {
+  .savingsMetricGrid {
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
     gap: 14px;
   }
 
-  .debtControlsGrid {
+  .savingsControlsGrid {
     display: grid;
     grid-template-columns: minmax(0, 1.02fr) minmax(0, 1.1fr) minmax(250px, 0.42fr);
     gap: 14px;
     align-items: end;
   }
 
-  .debtWorkspaceGrid {
+  .savingsWorkspaceGrid {
     display: grid;
     grid-template-columns: minmax(500px, 1.45fr) minmax(420px, 1.18fr) minmax(360px, 1fr);
     gap: 14px;
     align-items: stretch;
   }
 
-  .debtWorkspaceGrid > * {
+  .savingsWorkspaceGrid > * {
     min-width: 0;
     height: 100%;
   }
 
-  .debtSectionGrid {
+  .savingsSectionGrid {
     display: grid;
     grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
     gap: 14px;
     align-items: stretch;
   }
 
-  .debtSectionGrid > * {
+  .savingsSectionGrid > * {
     min-width: 0;
     height: 100%;
   }
 
-  .debtLowerGrid {
+  .savingsLowerGrid {
     display: grid;
     grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr);
     gap: 14px;
     align-items: start;
   }
 
-  .debtLowerGrid > * {
+  .savingsLowerGrid > * {
     min-width: 0;
   }
 
-  .debtRosterControls {
+  .savingsRosterControls {
     display: grid;
     grid-template-columns: 1.32fr 0.84fr 0.88fr;
     gap: 10px;
     margin-bottom: 10px;
   }
 
-  .debtSearchWrap {
+  .savingsSearchWrap {
     position: relative;
     display: flex;
     align-items: center;
@@ -2414,7 +2411,7 @@ const globalStyles = `
     padding: 0 12px;
   }
 
-  .debtSearchField {
+  .savingsSearchField {
     min-height: 42px !important;
     border: 0 !important;
     background: transparent !important;
@@ -2422,7 +2419,7 @@ const globalStyles = `
     padding: 0 !important;
   }
 
-  .debtRosterListCompact {
+  .savingsRosterListCompact {
     display: grid;
     gap: 10px;
     min-height: 720px;
@@ -2431,7 +2428,7 @@ const globalStyles = `
     padding-right: 2px;
   }
 
-  .debtCompactRow {
+  .savingsCompactRow {
     display: grid;
     grid-template-columns: 42px minmax(0, 1fr) auto auto;
     gap: 10px;
@@ -2446,11 +2443,11 @@ const globalStyles = `
     transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
   }
 
-  .debtCompactRow:hover {
+  .savingsCompactRow:hover {
     transform: translateY(-1px);
   }
 
-  .debtCompactAvatar {
+  .savingsCompactAvatar {
     width: 42px;
     height: 42px;
     border-radius: 14px;
@@ -2465,7 +2462,7 @@ const globalStyles = `
     letter-spacing: .05em;
   }
 
-  .debtCompactTitle {
+  .savingsCompactTitle {
     font-size: 13.5px;
     font-weight: 800;
     color: #fff;
@@ -2473,27 +2470,27 @@ const globalStyles = `
     overflow-wrap: anywhere;
   }
 
-  .debtCompactSub {
+  .savingsCompactSub {
     margin-top: 4px;
     font-size: 11.5px;
     color: rgba(255,255,255,0.54);
     line-height: 1.35;
   }
 
-  .debtCompactValue {
+  .savingsCompactValue {
     font-size: 15px;
     font-weight: 850;
     color: #fff;
     white-space: nowrap;
   }
 
-  .debtCompactActions {
+  .savingsCompactActions {
     display: flex;
     gap: 6px;
     align-items: center;
   }
 
-  .debtIconBtn {
+  .savingsIconBtn {
     width: 34px;
     height: 34px;
     border-radius: 12px;
@@ -2506,12 +2503,12 @@ const globalStyles = `
     cursor: pointer;
   }
 
-  .debtDangerBtn {
+  .savingsDangerBtn {
     border-color: rgba(255,132,163,0.18);
     color: #ffd3df;
   }
 
-  .debtFocusBox {
+  .savingsFocusBox {
     border-radius: 22px;
     border: 1px solid rgba(214,226,255,0.12);
     background:
@@ -2520,87 +2517,82 @@ const globalStyles = `
     min-height: 100%;
   }
 
-  .debtInfoGrid {
+  .savingsInfoGrid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 10px;
   }
 
-  .debtMortgageGrid {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 10px;
-  }
-
-  .debtInfoCell {
+  .savingsInfoCell {
     border-radius: 18px;
     border: 1px solid rgba(255,255,255,0.05);
     background: rgba(255,255,255,0.025);
     padding: 11px;
   }
 
-  .debtInfoValue {
+  .savingsInfoValue {
     font-size: 0.96rem;
     font-weight: 900;
     line-height: 1.15;
     color: #fff;
   }
 
-  .debtInfoSub {
+  .savingsInfoSub {
     margin-top: 5px;
     color: rgba(255,255,255,0.62);
     font-size: 0.79rem;
     line-height: 1.4;
   }
 
-  .debtProgress {
+  .savingsProgress {
     height: 8px;
     border-radius: 999px;
     overflow: hidden;
     background: rgba(255,255,255,0.1);
   }
 
-  .debtProgressFill {
+  .savingsProgressFill {
     height: 100%;
     border-radius: 999px;
     transition: width 0.4s ease;
   }
 
-  .debtActionGrid {
+  .savingsActionGrid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 8px;
   }
 
-  .debtActionGridTight {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+  .savingsActionGridTight {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 
-  .debtFormStack {
+  .savingsFormStack {
     display: grid;
     gap: 12px;
   }
 
-  .debtFormGrid2,
-  .debtFormGrid3,
-  .debtFormGrid4 {
+  .savingsFormGrid2,
+  .savingsFormGrid3 {
     display: grid;
     gap: 10px;
   }
 
-  .debtFormGrid2 {
+  .savingsFormGrid2 {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .debtFormGrid3 {
+  .savingsFormGrid3 {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
-  .debtFormGrid4 {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+  .savingsContributionGrid {
+    display: grid;
+    grid-template-columns: 180px minmax(0, 1fr) 130px;
+    gap: 10px;
   }
 
-  .debtTinyLabel {
+  .savingsTinyLabel {
     display: block;
     margin-bottom: 8px;
     font-size: 10px;
@@ -2610,7 +2602,7 @@ const globalStyles = `
     font-weight: 800;
   }
 
-  .debtField {
+  .savingsField {
     width: 100%;
     min-height: 44px;
     border-radius: 14px;
@@ -2626,29 +2618,29 @@ const globalStyles = `
     transition: border-color 160ms ease, box-shadow 160ms ease, background 160ms ease;
   }
 
-  .debtField:focus {
+  .savingsField:focus {
     border-color: rgba(143,177,255,0.30);
     box-shadow:
       0 0 0 4px rgba(79,114,255,0.08),
       inset 0 1px 0 rgba(255,255,255,0.035);
   }
 
-  .debtField::placeholder {
+  .savingsField::placeholder {
     color: rgba(225,233,245,0.38);
   }
 
-  .debtField option {
+  .savingsField option {
     background: #08111f;
     color: #f4f7ff;
   }
 
-  textarea.debtField {
+  textarea.savingsField {
     min-height: 110px;
     resize: vertical;
     padding: 12px 13px;
   }
 
-  .debtActionBtn {
+  .savingsActionBtn {
     min-height: 40px;
     padding: 10px 13px;
     border-radius: 14px;
@@ -2662,11 +2654,11 @@ const globalStyles = `
     transition: transform 160ms ease, border-color 160ms ease, background 160ms ease, box-shadow 160ms ease;
   }
 
-  .debtActionBtn:hover {
+  .savingsActionBtn:hover {
     transform: translateY(-1px);
   }
 
-  .debtIntelList {
+  .savingsIntelList {
     display: grid;
     gap: 10px;
     min-height: 360px;
@@ -2675,7 +2667,12 @@ const globalStyles = `
     padding-right: 2px;
   }
 
-  .debtIntelItem {
+  .savingsFeedList {
+    min-height: 0;
+    max-height: 360px;
+  }
+
+  .savingsIntelItem {
     border-radius: 18px;
     border: 1px solid rgba(255,255,255,0.07);
     background:
@@ -2685,7 +2682,7 @@ const globalStyles = `
     gap: 10px;
   }
 
-  .debtIntelTitle {
+  .savingsIntelTitle {
     font-size: 13px;
     font-weight: 800;
     color: #fff;
@@ -2693,38 +2690,38 @@ const globalStyles = `
     overflow-wrap: anywhere;
   }
 
-  .debtIntelSub {
+  .savingsIntelSub {
     margin-top: 4px;
     font-size: 11.5px;
     color: rgba(255,255,255,0.54);
     line-height: 1.35;
   }
 
-  .debtIntelValue {
+  .savingsIntelValue {
     font-size: 14px;
     font-weight: 850;
     color: #fff;
   }
 
-  .debtIntelMiniGrid {
+  .savingsIntelMiniGrid {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 8px;
   }
 
-  .debtIntelMini {
+  .savingsIntelMini {
     border-radius: 14px;
     border: 1px solid rgba(255,255,255,0.05);
     background: rgba(255,255,255,0.022);
     padding: 10px;
   }
 
-  .debtSnapshotGrid {
+  .savingsSnapshotGrid {
     display: grid;
     gap: 8px;
   }
 
-  .debtSnapshotRow {
+  .savingsSnapshotRow {
     display: flex;
     justify-content: space-between;
     gap: 12px;
@@ -2735,7 +2732,18 @@ const globalStyles = `
     color: rgba(255,255,255,0.78);
   }
 
-  .debtEmptyState {
+  .savingsQuickChipRow {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .savingsContributionList {
+    display: grid;
+    gap: 10px;
+  }
+
+  .savingsEmptyState {
     min-height: 150px;
     display: grid;
     place-items: center;
@@ -2743,17 +2751,17 @@ const globalStyles = `
     padding: 14px;
   }
 
-  .debtInlineEmpty {
+  .savingsInlineEmpty {
     min-height: 360px;
   }
 
-  .debtEmptyTitle {
+  .savingsEmptyTitle {
     font-size: 16px;
     font-weight: 850;
     color: #fff;
   }
 
-  .debtEmptyText {
+  .savingsEmptyText {
     margin-top: 6px;
     font-size: 13px;
     line-height: 1.5;
@@ -2762,108 +2770,103 @@ const globalStyles = `
   }
 
   @media (max-width: 1560px) {
-    .debtWorkspaceGrid {
+    .savingsWorkspaceGrid {
       grid-template-columns: minmax(440px, 1.22fr) minmax(390px, 1fr) minmax(320px, 0.9fr);
     }
   }
 
   @media (max-width: 1420px) {
-    .debtControlsGrid {
+    .savingsControlsGrid {
       grid-template-columns: 1fr;
     }
 
-    .debtWorkspaceGrid {
+    .savingsWorkspaceGrid {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
-    .debtWorkspaceGrid > :nth-child(3) {
+    .savingsWorkspaceGrid > :nth-child(3) {
       grid-column: 1 / -1;
     }
 
-    .debtLowerGrid {
+    .savingsLowerGrid {
       grid-template-columns: 1fr;
     }
   }
 
   @media (max-width: 1260px) {
-    .debtMetricGrid {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
+    .savingsMetricGrid {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
     }
 
-    .debtSectionGrid {
+    .savingsSectionGrid {
       grid-template-columns: 1fr;
     }
 
-    .debtFormGrid4 {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-
-    .debtRosterListCompact {
+    .savingsRosterListCompact {
       min-height: 580px;
       max-height: 580px;
     }
   }
 
   @media (max-width: 1100px) {
-    .debtHeroGrid,
-    .debtWorkspaceGrid {
+    .savingsHeroGrid,
+    .savingsWorkspaceGrid {
       grid-template-columns: 1fr;
     }
 
-    .debtHeroSide {
+    .savingsHeroSide {
       justify-content: flex-start;
     }
   }
 
   @media (max-width: 1024px) {
-    .debtRosterControls,
-    .debtInfoGrid,
-    .debtMortgageGrid,
-    .debtFormGrid2,
-    .debtFormGrid3,
-    .debtFormGrid4,
-    .debtActionGrid,
-    .debtActionGridTight,
-    .debtIntelMiniGrid {
+    .savingsRosterControls,
+    .savingsInfoGrid,
+    .savingsFormGrid2,
+    .savingsFormGrid3,
+    .savingsActionGrid,
+    .savingsActionGridTight,
+    .savingsIntelMiniGrid,
+    .savingsContributionGrid {
       grid-template-columns: 1fr;
     }
 
-    .debtCompactRow {
+    .savingsCompactRow {
       grid-template-columns: 42px minmax(0, 1fr);
     }
 
-    .debtCompactValue {
+    .savingsCompactValue {
       white-space: normal;
     }
 
-    .debtCompactActions {
+    .savingsCompactActions {
       grid-column: 2;
       justify-content: flex-start;
     }
 
-    .debtRosterListCompact,
-    .debtIntelList {
+    .savingsRosterListCompact,
+    .savingsIntelList {
       min-height: 0;
       max-height: none;
     }
   }
 
   @media (max-width: 760px) {
-    .debtPageShell {
+    .savingsPageShell {
       padding: 8px 0 14px;
     }
 
-    .debtMetricGrid,
-    .debtSectionGrid,
-    .debtLowerGrid {
+    .savingsMetricGrid,
+    .savingsSectionGrid,
+    .savingsLowerGrid {
       grid-template-columns: 1fr;
     }
   }
 
   @media (max-width: 640px) {
-    .debtMetricGrid,
-    .debtActionGrid,
-    .debtActionGridTight {
+    .savingsMetricGrid,
+    .savingsActionGrid,
+    .savingsActionGridTight {
       grid-template-columns: 1fr;
     }
   }
