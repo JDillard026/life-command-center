@@ -25,11 +25,11 @@ function BrandLogo({ size = 64, priority = false }) {
         borderRadius: Math.round(size * 0.3),
         overflow: "hidden",
         flexShrink: 0,
-        border: "1px solid rgba(120, 148, 210, 0.22)",
+        border: "1px solid rgba(121, 163, 255, 0.22)",
         background:
-          "linear-gradient(180deg, rgba(10,16,28,0.98), rgba(6,10,18,1))",
+          "linear-gradient(180deg, rgba(8,13,24,0.98), rgba(5,8,16,1))",
         boxShadow:
-          "0 16px 36px rgba(0,0,0,0.42), inset 0 1px 0 rgba(255,255,255,0.06)",
+          "0 18px 42px rgba(0,0,0,0.42), inset 0 1px 0 rgba(255,255,255,0.06), 0 0 24px rgba(57,104,255,0.10)",
       }}
     >
       <Image
@@ -44,44 +44,84 @@ function BrandLogo({ size = 64, priority = false }) {
   );
 }
 
-function StatCard({ title, value, tone = "blue" }) {
-  const toneMap = {
+function SignalPill({ children, tone = "blue" }) {
+  const tones = {
     blue: {
-      border: "rgba(79, 126, 255, 0.34)",
-      background:
-        "linear-gradient(180deg, rgba(12,18,34,0.92), rgba(7,11,21,0.98))",
-      glow: "radial-gradient(circle at 0% 100%, rgba(53,109,255,0.34), transparent 56%)",
-      shadow: "0 20px 44px rgba(10,18,44,0.34)",
-    },
-    amber: {
-      border: "rgba(255, 166, 67, 0.30)",
-      background:
-        "linear-gradient(180deg, rgba(24,18,12,0.92), rgba(12,9,7,0.98))",
-      glow: "radial-gradient(circle at 0% 100%, rgba(255,150,52,0.30), transparent 56%)",
-      shadow: "0 20px 44px rgba(54,26,4,0.28)",
+      border: "rgba(99, 137, 255, 0.18)",
+      bg: "rgba(18, 30, 61, 0.38)",
+      color: "rgba(232,239,255,0.92)",
+      glow: "0 0 18px rgba(75,122,255,0.08)",
     },
     green: {
-      border: "rgba(48, 208, 136, 0.30)",
-      background:
-        "linear-gradient(180deg, rgba(9,22,19,0.92), rgba(6,13,12,0.98))",
-      glow: "radial-gradient(circle at 100% 100%, rgba(34,197,94,0.30), transparent 56%)",
-      shadow: "0 20px 44px rgba(4,36,24,0.28)",
+      border: "rgba(52, 210, 146, 0.18)",
+      bg: "rgba(12, 38, 31, 0.34)",
+      color: "rgba(228,255,243,0.92)",
+      glow: "0 0 18px rgba(38,183,122,0.08)",
+    },
+    amber: {
+      border: "rgba(255, 179, 72, 0.18)",
+      bg: "rgba(45, 28, 8, 0.34)",
+      color: "rgba(255,243,221,0.92)",
+      glow: "0 0 18px rgba(255,163,48,0.08)",
     },
   };
 
-  const t = toneMap[tone] || toneMap.blue;
+  const t = tones[tone] || tones.blue;
+
+  return (
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        minHeight: 34,
+        padding: "0 14px",
+        borderRadius: 999,
+        border: `1px solid ${t.border}`,
+        background: `linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.015)), ${t.bg}`,
+        color: t.color,
+        fontSize: 12,
+        fontWeight: 800,
+        letterSpacing: 0.4,
+        boxShadow: `${t.glow}, inset 0 1px 0 rgba(255,255,255,0.04)`,
+        whiteSpace: "nowrap",
+      }}
+    >
+      {children}
+    </span>
+  );
+}
+
+function InfoCard({ label, title, text, tone = "blue" }) {
+  const tones = {
+    blue: {
+      border: "rgba(87, 126, 255, 0.22)",
+      glow: "radial-gradient(circle at 100% 0%, rgba(73,119,255,0.18), transparent 46%)",
+    },
+    green: {
+      border: "rgba(49, 199, 129, 0.22)",
+      glow: "radial-gradient(circle at 100% 0%, rgba(37,194,118,0.16), transparent 46%)",
+    },
+    amber: {
+      border: "rgba(255, 168, 55, 0.20)",
+      glow: "radial-gradient(circle at 100% 0%, rgba(255,156,35,0.14), transparent 46%)",
+    },
+  };
+
+  const t = tones[tone] || tones.blue;
 
   return (
     <div
       style={{
         position: "relative",
         overflow: "hidden",
-        borderRadius: 22,
+        minHeight: 170,
+        borderRadius: 24,
         border: `1px solid ${t.border}`,
-        background: t.background,
-        minHeight: 110,
-        padding: "18px 18px 16px",
-        boxShadow: `${t.shadow}, inset 0 1px 0 rgba(255,255,255,0.04)`,
+        background:
+          "linear-gradient(180deg, rgba(12,18,31,0.88), rgba(8,11,19,0.94))",
+        padding: 20,
+        boxShadow:
+          "0 20px 40px rgba(0,0,0,0.22), inset 0 1px 0 rgba(255,255,255,0.03)",
       }}
     >
       <div
@@ -95,11 +135,24 @@ function StatCard({ title, value, tone = "blue" }) {
       <div style={{ position: "relative", zIndex: 1 }}>
         <div
           style={{
-            fontSize: 12,
+            fontSize: 11,
             fontWeight: 800,
-            letterSpacing: 0.85,
+            letterSpacing: 1,
             textTransform: "uppercase",
-            color: "rgba(227,234,247,0.78)",
+            color: "rgba(213,224,244,0.66)",
+          }}
+        >
+          {label}
+        </div>
+
+        <div
+          style={{
+            marginTop: 12,
+            fontSize: 30,
+            lineHeight: 0.98,
+            fontWeight: 900,
+            letterSpacing: "-0.05em",
+            color: "#F7FAFF",
           }}
         >
           {title}
@@ -107,98 +160,68 @@ function StatCard({ title, value, tone = "blue" }) {
 
         <div
           style={{
-            marginTop: 10,
-            fontSize: 20,
-            lineHeight: 1.05,
-            fontWeight: 900,
-            letterSpacing: "-0.03em",
-            color: "#F7FAFF",
+            marginTop: 12,
+            fontSize: 13.5,
+            lineHeight: 1.65,
+            color: "rgba(226,234,246,0.72)",
           }}
         >
-          {value}
+          {text}
         </div>
       </div>
     </div>
   );
 }
 
-function ModulePill({ children }) {
-  return (
-    <span
-      style={{
-        padding: "10px 14px",
-        borderRadius: 999,
-        border: "1px solid rgba(255,255,255,0.08)",
-        background:
-          "linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.025))",
-        color: "rgba(240,244,252,0.90)",
-        fontSize: 13,
-        fontWeight: 700,
-        lineHeight: 1,
-        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.03)",
-      }}
-    >
-      {children}
-    </span>
-  );
-}
+function RailRow({ title, sub, tone = "blue" }) {
+  const dot =
+    tone === "green"
+      ? "rgba(42,196,120,0.92)"
+      : tone === "amber"
+      ? "rgba(255,174,64,0.92)"
+      : "rgba(87,126,255,0.95)";
 
-function SplashIntro({ leaving }) {
   return (
     <div
       style={{
-        position: "fixed",
-        inset: 0,
-        zIndex: 60,
         display: "grid",
-        placeItems: "center",
-        background:
-          "radial-gradient(circle at 50% 40%, rgba(56,88,140,0.18), transparent 18%), linear-gradient(180deg, #05070D 0%, #060A12 45%, #070C16 100%)",
-        transform: leaving ? "translateY(-100%)" : "translateY(0)",
-        opacity: leaving ? 0 : 1,
-        transition:
-          "transform 760ms cubic-bezier(0.22, 1, 0.36, 1), opacity 520ms ease",
-        pointerEvents: "none",
+        gridTemplateColumns: "12px minmax(0,1fr)",
+        gap: 12,
+        alignItems: "start",
+        padding: "14px 0",
+        borderBottom: "1px solid rgba(255,255,255,0.06)",
       }}
     >
       <div
         style={{
-          textAlign: "center",
-          transform: leaving ? "scale(0.97)" : "scale(1)",
-          transition: "transform 420ms ease",
-          padding: 24,
+          width: 10,
+          height: 10,
+          borderRadius: 999,
+          background: dot,
+          boxShadow: `0 0 14px ${dot}`,
+          marginTop: 6,
         }}
-      >
-        <div style={{ display: "grid", placeItems: "center" }}>
-          <BrandLogo size={148} priority />
-        </div>
+      />
 
+      <div>
         <div
           style={{
-            marginTop: 20,
-            fontSize: 12,
-            fontWeight: 900,
-            letterSpacing: 1.8,
-            textTransform: "uppercase",
-            color: "rgba(196,210,240,0.82)",
+            fontSize: 14.5,
+            fontWeight: 800,
+            color: "#F6F9FF",
           }}
         >
-          Life Command Center
+          {title}
         </div>
-
         <div
           style={{
-            marginTop: 14,
-            fontSize: "clamp(30px, 5vw, 58px)",
-            lineHeight: 1.02,
-            fontWeight: 900,
-            letterSpacing: "-0.05em",
-            color: "#F5F7FB",
+            marginTop: 5,
+            fontSize: 13,
+            lineHeight: 1.65,
+            color: "rgba(225,233,244,0.68)",
           }}
         >
-          Your financial system,
-          <br />
-          one command center
+          {sub}
         </div>
       </div>
     </div>
@@ -216,17 +239,6 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState("");
   const [msgType, setMsgType] = useState("info");
-  const [showSplash, setShowSplash] = useState(true);
-  const [splashLeaving, setSplashLeaving] = useState(false);
-
-  useEffect(() => {
-    const t1 = setTimeout(() => setSplashLeaving(true), 850);
-    const t2 = setTimeout(() => setShowSplash(false), 1600);
-    return () => {
-      clearTimeout(t1);
-      clearTimeout(t2);
-    };
-  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -423,724 +435,903 @@ export default function LoginPage() {
     }
   }
 
+  const modeMeta =
+    mode === "signup"
+      ? {
+          eyebrow: "Build your system",
+          title: "Create your command center",
+          sub: "Start your private financial dashboard and bring everything into one place.",
+          cta: "Create My Command Center",
+          tone: "green",
+        }
+      : {
+          eyebrow: "Account access",
+          title: "Welcome back",
+          sub: "Log in fast and get straight to what needs your attention.",
+          cta: "Enter Command Center",
+          tone: "blue",
+        };
+
   const messageStyles =
     msgType === "error"
       ? {
           border: "1px solid rgba(239,68,68,0.22)",
-          background: "rgba(110,26,26,0.18)",
+          background:
+            "linear-gradient(180deg, rgba(82,26,26,0.28), rgba(55,18,18,0.20))",
           color: "#FFD7D7",
         }
       : msgType === "success"
       ? {
           border: "1px solid rgba(52,211,153,0.20)",
-          background: "rgba(18,72,57,0.18)",
+          background:
+            "linear-gradient(180deg, rgba(17,67,52,0.25), rgba(11,39,31,0.18))",
           color: "#DDFEEB",
         }
       : {
           border: "1px solid rgba(255,255,255,0.10)",
-          background: "rgba(255,255,255,0.04)",
+          background:
+            "linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.03))",
           color: "#E6EDF9",
         };
 
   return (
-    <>
-      {showSplash ? <SplashIntro leaving={splashLeaving} /> : null}
+    <main className="lccLoginRoot">
+      <div className="lccBgGrid" />
+      <div className="lccBgStars" />
+      <div className="lccBgGlow lccBgGlowA" />
+      <div className="lccBgGlow lccBgGlowB" />
+      <div className="lccBgGlow lccBgGlowC" />
+      <div className="lccVignette" />
 
-      <main
-        style={{
-          minHeight: "100vh",
-          position: "relative",
-          overflow: "hidden",
-          color: "#EEF3FB",
-          background:
-            "radial-gradient(circle at top left, rgba(56,84,134,0.16), transparent 18%), radial-gradient(circle at top right, rgba(180,124,66,0.08), transparent 20%), linear-gradient(180deg, #05070C 0%, #070A11 38%, #080C14 100%)",
-        }}
-      >
-        <div
-          style={{
-            position: "absolute",
-            inset: 0,
-            pointerEvents: "none",
-            backgroundImage:
-              "linear-gradient(rgba(255,255,255,0.026) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.026) 1px, transparent 1px)",
-            backgroundSize: "48px 48px",
-            maskImage:
-              "linear-gradient(180deg, rgba(0,0,0,0.86), rgba(0,0,0,0.18))",
-          }}
-        />
-
-        <div
-          style={{
-            position: "absolute",
-            inset: 0,
-            pointerEvents: "none",
-            opacity: 0.28,
-            backgroundImage:
-              "radial-gradient(circle at 14% 18%, rgba(255,255,255,0.95) 0 1px, transparent 1.6px), radial-gradient(circle at 30% 42%, rgba(255,255,255,0.75) 0 1px, transparent 1.7px), radial-gradient(circle at 68% 25%, rgba(255,255,255,0.82) 0 1px, transparent 1.7px), radial-gradient(circle at 84% 35%, rgba(255,255,255,0.78) 0 1px, transparent 1.7px), radial-gradient(circle at 58% 70%, rgba(255,255,255,0.74) 0 1px, transparent 1.7px), radial-gradient(circle at 23% 78%, rgba(255,255,255,0.78) 0 1px, transparent 1.7px), radial-gradient(circle at 92% 78%, rgba(255,255,255,0.68) 0 1px, transparent 1.7px)",
-          }}
-        />
-
-        <div
-          style={{
-            position: "relative",
-            zIndex: 1,
-            maxWidth: 1380,
-            margin: "0 auto",
-            padding: "22px 18px 28px",
-          }}
-        >
-          <header
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 16,
-              padding: "4px 2px 18px",
-            }}
-          >
-            <BrandLogo size={64} />
-
+      <div className="lccShell">
+        <header className="lccHeader">
+          <div className="lccBrandWrap">
+            <BrandLogo size={66} priority />
             <div>
-              <div
-                style={{
-                  fontSize: 17,
-                  fontWeight: 900,
-                  letterSpacing: "-0.03em",
-                  color: "#F3F6FC",
-                }}
-              >
-                Life Command Center
-              </div>
-
-              <div
-                style={{
-                  marginTop: 4,
-                  fontSize: 11,
-                  fontWeight: 800,
-                  letterSpacing: 1.1,
-                  textTransform: "uppercase",
-                  color: "rgba(209,219,239,0.70)",
-                }}
-              >
-                Personal financial operating system
-              </div>
+              <div className="lccBrandTitle">Life Command Center</div>
+              <div className="lccBrandSub">Personal financial operating system</div>
             </div>
-          </header>
+          </div>
 
-          <section className="login-grid">
-            <div
-              style={{
-                position: "relative",
-                borderRadius: 32,
-                border: "1px solid rgba(255,255,255,0.08)",
-                background:
-                  "linear-gradient(180deg, rgba(11,15,24,0.78), rgba(7,10,18,0.90))",
-                padding: 34,
-                overflow: "hidden",
-                boxShadow:
-                  "0 30px 80px rgba(0,0,0,0.38), inset 0 1px 0 rgba(255,255,255,0.03)",
-              }}
-            >
-              <div
-                style={{
-                  position: "absolute",
-                  inset: 0,
-                  background:
-                    "radial-gradient(circle at 82% 32%, rgba(86,122,205,0.18), transparent 22%), radial-gradient(circle at 87% 76%, rgba(190,132,67,0.10), transparent 16%), radial-gradient(circle at 12% 88%, rgba(79,136,122,0.10), transparent 18%)",
-                  pointerEvents: "none",
-                }}
-              />
+          <div className="lccHeaderSignals">
+            <SignalPill tone="blue">Clear cash flow</SignalPill>
+            <SignalPill tone="amber">Catch due pressure</SignalPill>
+            <SignalPill tone="green">Build real control</SignalPill>
+          </div>
+        </header>
 
-              <div style={{ position: "relative", zIndex: 1 }}>
-                <div
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    borderRadius: 999,
-                    padding: "10px 14px",
-                    border: "1px solid rgba(255,255,255,0.08)",
-                    background: "rgba(255,255,255,0.03)",
-                    fontSize: 12,
-                    fontWeight: 800,
-                    letterSpacing: 0.9,
-                    textTransform: "uppercase",
-                    color: "rgba(218,228,245,0.85)",
-                  }}
-                >
-                  Built for control
-                </div>
-
-                <h1
-                  style={{
-                    margin: "26px 0 0 0",
-                    maxWidth: 760,
-                    fontSize: "clamp(48px, 5.8vw, 82px)",
-                    lineHeight: 0.96,
-                    letterSpacing: "-0.06em",
-                    fontWeight: 900,
-                    color: "#F5F7FB",
-                  }}
-                >
-                  Run your entire
-                  <br />
-                  financial life
-                  <br />
-                  from one command
-                  <br />
-                  center
-                </h1>
-
-                <p
-                  style={{
-                    marginTop: 24,
-                    maxWidth: 700,
-                    fontSize: 17,
-                    lineHeight: 1.7,
-                    color: "rgba(223,232,244,0.78)",
-                  }}
-                >
-                  Track income, bills, spending, debt, savings, investments, and
-                  your real day-to-day money flow in one private system.
-                </p>
-
-                <div
-                  className="stats-grid"
-                  style={{
-                    marginTop: 28,
-                    display: "grid",
-                    gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-                    gap: 14,
-                  }}
-                >
-                  <StatCard title="Spending" value="$1,284" tone="blue" />
-                  <StatCard title="Bills Due" value="4 upcoming" tone="amber" />
-                  <StatCard title="Net Flow" value="+$842" tone="green" />
-                </div>
-
-                <div
-                  className="bottom-grid"
-                  style={{
-                    marginTop: 16,
-                    display: "grid",
-                    gridTemplateColumns: "1fr 0.92fr",
-                    gap: 14,
-                  }}
-                >
-                  <div
-                    style={{
-                      borderRadius: 22,
-                      border: "1px solid rgba(255,255,255,0.07)",
-                      background:
-                        "linear-gradient(180deg, rgba(14,18,28,0.78), rgba(10,13,21,0.88))",
-                      padding: 22,
-                      boxShadow:
-                        "0 16px 30px rgba(0,0,0,0.16), inset 0 1px 0 rgba(255,255,255,0.03)",
-                    }}
-                  >
-                    <div
-                      style={{
-                        fontSize: 12,
-                        fontWeight: 800,
-                        letterSpacing: 0.8,
-                        textTransform: "uppercase",
-                        color: "rgba(214,224,242,0.72)",
-                      }}
-                    >
-                      Why it feels different
-                    </div>
-
-                    <div
-                      style={{
-                        marginTop: 14,
-                        fontSize: 16,
-                        lineHeight: 1.8,
-                        color: "rgba(233,239,248,0.82)",
-                        maxWidth: 470,
-                      }}
-                    >
-                      Less scattered apps. Less guessing. More visibility into
-                      what is due, what is coming in, and where your money is
-                      actually going.
-                    </div>
-                  </div>
-
-                  <div
-                    style={{
-                      borderRadius: 22,
-                      border: "1px solid rgba(255,255,255,0.07)",
-                      background:
-                        "linear-gradient(180deg, rgba(14,18,28,0.78), rgba(10,13,21,0.88))",
-                      padding: 22,
-                      boxShadow:
-                        "0 16px 30px rgba(0,0,0,0.16), inset 0 1px 0 rgba(255,255,255,0.03)",
-                    }}
-                  >
-                    <div
-                      style={{
-                        fontSize: 12,
-                        fontWeight: 800,
-                        letterSpacing: 0.8,
-                        textTransform: "uppercase",
-                        color: "rgba(214,224,242,0.72)",
-                      }}
-                    >
-                      Core modules
-                    </div>
-
-                    <div
-                      style={{
-                        marginTop: 14,
-                        display: "flex",
-                        flexWrap: "wrap",
-                        gap: 10,
-                      }}
-                    >
-                      <ModulePill>Income</ModulePill>
-                      <ModulePill>Bills</ModulePill>
-                      <ModulePill>Spending</ModulePill>
-                      <ModulePill>Debt</ModulePill>
-                      <ModulePill>Savings</ModulePill>
-                      <ModulePill>Investments</ModulePill>
-                      <ModulePill>Calendar</ModulePill>
-                    </div>
-                  </div>
-                </div>
-              </div>
+        <section className="lccLayout">
+          <section className="lccAuthPanel">
+            <div className="lccAuthHead">
+              <div className="lccAuthEyebrow">{modeMeta.eyebrow}</div>
+              <div className="lccAuthTitle">{modeMeta.title}</div>
+              <div className="lccAuthSub">{modeMeta.sub}</div>
             </div>
 
-            <div
-              style={{
-                position: "relative",
-                borderRadius: 32,
-                border: "1px solid rgba(255,255,255,0.08)",
-                background:
-                  "linear-gradient(180deg, rgba(12,15,24,0.80), rgba(8,11,18,0.92))",
-                padding: 28,
-                overflow: "hidden",
-                boxShadow:
-                  "0 30px 80px rgba(0,0,0,0.40), inset 0 1px 0 rgba(255,255,255,0.03)",
-              }}
-            >
-              <div
-                style={{
-                  position: "absolute",
-                  inset: 0,
-                  background:
-                    "radial-gradient(circle at 100% 0%, rgba(189,137,77,0.08), transparent 26%), radial-gradient(circle at 0% 20%, rgba(86,122,205,0.12), transparent 22%)",
-                  pointerEvents: "none",
-                }}
-              />
+            <div className={`lccModeNotice ${modeMeta.tone === "green" ? "isGreen" : "isBlue"}`}>
+              <div className="lccModeNoticeTitle">
+                {mode === "signup" ? "What you are building" : "What you will step back into"}
+              </div>
 
-              <div style={{ position: "relative", zIndex: 1 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-                  <BrandLogo size={74} />
-
-                  <div>
-                    <div
-                      style={{
-                        fontSize: 13,
-                        fontWeight: 900,
-                        letterSpacing: 1,
-                        textTransform: "uppercase",
-                        color: "rgba(215,225,243,0.82)",
-                      }}
-                    >
-                      Account access
-                    </div>
-
-                    <div
-                      style={{
-                        marginTop: 6,
-                        fontSize: 30,
-                        lineHeight: 1.05,
-                        fontWeight: 900,
-                        letterSpacing: "-0.04em",
-                        color: "#F5F7FB",
-                      }}
-                    >
-                      {mode === "login" ? "Welcome back" : "Create your account"}
-                    </div>
-                  </div>
-                </div>
-
-                <p
-                  style={{
-                    marginTop: 18,
-                    fontSize: 14,
-                    lineHeight: 1.75,
-                    color: "rgba(225,233,244,0.72)",
-                  }}
-                >
-                  Sign in to continue or create a private account for your own
-                  data.
-                </p>
-
-                <div
-                  style={{
-                    marginTop: 20,
-                    display: "grid",
-                    gridTemplateColumns: "1fr 1fr",
-                    gap: 8,
-                    padding: 6,
-                    borderRadius: 18,
-                    border: "1px solid rgba(255,255,255,0.08)",
-                    background: "rgba(255,255,255,0.025)",
-                  }}
-                >
-                  {[
-                    { key: "login", label: "Login" },
-                    { key: "signup", label: "Sign Up" },
-                  ].map((item) => {
-                    const active = mode === item.key;
-
-                    return (
-                      <button
-                        key={item.key}
-                        type="button"
-                        onClick={() => {
-                          setMode(item.key);
-                          setMsg("");
-                        }}
-                        disabled={loading}
-                        style={{
-                          height: 48,
-                          borderRadius: 14,
-                          border: active
-                            ? "1px solid rgba(138,163,215,0.22)"
-                            : "1px solid transparent",
-                          background: active
-                            ? "linear-gradient(180deg, rgba(34,46,72,0.96), rgba(20,28,44,0.96))"
-                            : "transparent",
-                          color: active ? "#F7FAFF" : "rgba(198,210,232,0.76)",
-                          fontWeight: 900,
-                          fontSize: 14,
-                          cursor: "pointer",
-                          boxShadow: active
-                            ? "0 10px 24px rgba(0,0,0,0.18), inset 0 1px 0 rgba(255,255,255,0.03)"
-                            : "none",
-                        }}
-                      >
-                        {item.label}
-                      </button>
-                    );
-                  })}
-                </div>
-
-                <form
-                  onSubmit={onSubmit}
-                  style={{ marginTop: 18, display: "grid", gap: 14 }}
-                >
-                  <label style={{ display: "grid", gap: 8 }}>
-                    <span style={labelStyle}>Email</span>
-                    <input
-                      className="lcc-auth-input"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      type="email"
-                      autoComplete="email"
-                      placeholder="you@example.com"
+              <div className="lccModeNoticeList">
+                {mode === "signup" ? (
+                  <>
+                    <RailRow
+                      title="Bills, debt, savings, and spending in one system"
+                      sub="Stop bouncing across separate tools just to understand your money."
+                      tone="green"
                     />
-                  </label>
-
-                  <label style={{ display: "grid", gap: 8 }}>
-                    <span style={labelStyle}>Password</span>
-
-                    <div style={{ position: "relative" }}>
-                      <input
-                        className="lcc-auth-input"
-                        value={pass}
-                        onChange={(e) => setPass(e.target.value)}
-                        type={showPass ? "text" : "password"}
-                        autoComplete={
-                          mode === "login" ? "current-password" : "new-password"
-                        }
-                        placeholder={
-                          mode === "login"
-                            ? "Enter your password"
-                            : "Create a password"
-                        }
-                        style={{ paddingRight: 82 }}
-                      />
-
-                      <button
-                        type="button"
-                        onClick={() => setShowPass((v) => !v)}
-                        style={showPassButtonStyle}
-                      >
-                        {showPass ? "Hide" : "Show"}
-                      </button>
-                    </div>
-                  </label>
-
-                  <button
-                    type="submit"
-                    disabled={disabled}
-                    style={{
-                      height: 56,
-                      borderRadius: 18,
-                      border: "1px solid rgba(196,144,81,0.16)",
-                      background: disabled
-                        ? "rgba(255,255,255,0.06)"
-                        : "linear-gradient(180deg, rgba(39,44,57,0.98), rgba(18,21,29,0.98))",
-                      color: "#FFFFFF",
-                      fontWeight: 900,
-                      fontSize: 16,
-                      cursor: disabled ? "not-allowed" : "pointer",
-                      boxShadow: disabled
-                        ? "none"
-                        : "0 18px 38px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.04)",
-                    }}
-                  >
-                    {loading
-                      ? "Working..."
-                      : mode === "login"
-                      ? "Enter Command Center"
-                      : "Create Account"}
-                  </button>
-                </form>
-
-                <div
-                  style={{
-                    margin: "18px 0",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 12,
-                  }}
-                >
-                  <div
-                    style={{
-                      flex: 1,
-                      height: 1,
-                      background: "rgba(255,255,255,0.08)",
-                    }}
-                  />
-                  <div
-                    style={{
-                      fontSize: 12,
-                      fontWeight: 800,
-                      letterSpacing: 1,
-                      color: "rgba(204,215,236,0.58)",
-                    }}
-                  >
-                    OR
-                  </div>
-                  <div
-                    style={{
-                      flex: 1,
-                      height: 1,
-                      background: "rgba(255,255,255,0.08)",
-                    }}
-                  />
-                </div>
-
-                <button
-                  type="button"
-                  onClick={onGoogle}
-                  disabled={loading}
-                  style={{
-                    width: "100%",
-                    height: 56,
-                    borderRadius: 18,
-                    border: "1px solid rgba(255,255,255,0.10)",
-                    background:
-                      "linear-gradient(180deg, rgba(18,22,31,0.94), rgba(12,15,21,0.96))",
-                    color: "#F5F8FD",
-                    fontWeight: 800,
-                    fontSize: 15,
-                    cursor: loading ? "not-allowed" : "pointer",
-                    boxShadow:
-                      "0 12px 28px rgba(0,0,0,0.20), inset 0 1px 0 rgba(255,255,255,0.03)",
-                  }}
-                >
-                  Continue with Google
-                </button>
-
-                <div
-                  style={{
-                    marginTop: 16,
-                    display: "flex",
-                    justifyContent: "space-between",
-                    gap: 12,
-                    flexWrap: "wrap",
-                  }}
-                >
-                  <button
-                    type="button"
-                    onClick={onForgotPassword}
-                    disabled={loading}
-                    style={textButtonStyle}
-                  >
-                    Forgot password?
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setMode((m) => (m === "login" ? "signup" : "login"));
-                      setMsg("");
-                    }}
-                    disabled={loading}
-                    style={textButtonStyle}
-                  >
-                    {mode === "login"
-                      ? "Need an account?"
-                      : "Already have an account?"}
-                  </button>
-                </div>
-
-                {msg ? (
-                  <div
-                    style={{
-                      marginTop: 16,
-                      borderRadius: 18,
-                      padding: 14,
-                      ...messageStyles,
-                    }}
-                  >
-                    <div style={{ fontWeight: 900, fontSize: 13 }}>
-                      {msgType === "error"
-                        ? "Error"
-                        : msgType === "success"
-                        ? "Success"
-                        : "Status"}
-                    </div>
-
-                    <div
-                      style={{
-                        marginTop: 6,
-                        fontSize: 13,
-                        lineHeight: 1.65,
-                      }}
-                    >
-                      {msg}
-                    </div>
-                  </div>
-                ) : null}
+                    <RailRow
+                      title="See what needs action first"
+                      sub="Get a cleaner view of pressure, balances, and what matters now."
+                      tone="amber"
+                    />
+                  </>
+                ) : (
+                  <>
+                    <RailRow
+                      title="See due dates, pressure, and account flow"
+                      sub="Get straight to the pages that tell you what is happening."
+                      tone="blue"
+                    />
+                    <RailRow
+                      title="Pick up where you left off"
+                      sub="Your private dashboard is waiting, not buried behind clutter."
+                      tone="green"
+                    />
+                  </>
+                )}
               </div>
+            </div>
+
+            <div className="lccToggle">
+              <button
+                type="button"
+                onClick={() => {
+                  setMode("login");
+                  setMsg("");
+                }}
+                disabled={loading}
+                className={`lccToggleBtn ${mode === "login" ? "isActive" : ""}`}
+              >
+                Login
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setMode("signup");
+                  setMsg("");
+                }}
+                disabled={loading}
+                className={`lccToggleBtn ${mode === "signup" ? "isActive" : ""}`}
+              >
+                Sign Up
+              </button>
+            </div>
+
+            <form onSubmit={onSubmit} className="lccAuthForm">
+              <label className="lccFieldWrap">
+                <span className="lccLabel">Email</span>
+                <input
+                  className="lccAuthInput"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  type="email"
+                  autoComplete="email"
+                  placeholder="you@example.com"
+                />
+              </label>
+
+              <label className="lccFieldWrap">
+                <span className="lccLabel">Password</span>
+
+                <div style={{ position: "relative" }}>
+                  <input
+                    className="lccAuthInput"
+                    value={pass}
+                    onChange={(e) => setPass(e.target.value)}
+                    type={showPass ? "text" : "password"}
+                    autoComplete={
+                      mode === "login" ? "current-password" : "new-password"
+                    }
+                    placeholder={
+                      mode === "login"
+                        ? "Enter your password"
+                        : "Create a password"
+                    }
+                    style={{ paddingRight: 84 }}
+                  />
+
+                  <button
+                    type="button"
+                    onClick={() => setShowPass((v) => !v)}
+                    className="lccShowPass"
+                  >
+                    {showPass ? "Hide" : "Show"}
+                  </button>
+                </div>
+              </label>
+
+              <button type="submit" disabled={disabled} className="lccPrimaryBtn">
+                {loading ? "Working..." : modeMeta.cta}
+              </button>
+            </form>
+
+            <div className="lccDivider">
+              <div className="lccDividerLine" />
+              <div className="lccDividerText">OR</div>
+              <div className="lccDividerLine" />
+            </div>
+
+            <button
+              type="button"
+              onClick={onGoogle}
+              disabled={loading}
+              className="lccGoogleBtn"
+            >
+              Continue with Google
+            </button>
+
+            <div className="lccLinkRow">
+              <button
+                type="button"
+                onClick={onForgotPassword}
+                disabled={loading}
+                className="lccTextBtn"
+              >
+                Forgot password?
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setMode((m) => (m === "login" ? "signup" : "login"));
+                  setMsg("");
+                }}
+                disabled={loading}
+                className="lccTextBtn"
+              >
+                {mode === "login"
+                  ? "Need an account?"
+                  : "Already have an account?"}
+              </button>
+            </div>
+
+            {msg ? (
+              <div
+                style={{
+                  marginTop: 16,
+                  borderRadius: 18,
+                  padding: 14,
+                  ...messageStyles,
+                }}
+              >
+                <div style={{ fontWeight: 900, fontSize: 13 }}>
+                  {msgType === "error"
+                    ? "Error"
+                    : msgType === "success"
+                    ? "Success"
+                    : "Status"}
+                </div>
+
+                <div
+                  style={{
+                    marginTop: 6,
+                    fontSize: 13,
+                    lineHeight: 1.65,
+                  }}
+                >
+                  {msg}
+                </div>
+              </div>
+            ) : null}
+          </section>
+
+          <section className="lccHeroPanel">
+            <div className="lccHeroTop">
+              <SignalPill tone="blue">Private finance command center</SignalPill>
+              <SignalPill tone="green">Less chaos. More control.</SignalPill>
+            </div>
+
+            <div className="lccHeroTitle">
+              Make better money
+              <br />
+              decisions before
+              <br />
+              small problems stack
+            </div>
+
+            <div className="lccHeroCopy">
+              Life Command Center helps you track bills, debt, spending,
+              savings, income, and account movement in one place so your money
+              feels tighter, calmer, and easier to manage.
+            </div>
+
+            <div className="lccHeroCards">
+              <InfoCard
+                label="Bills"
+                title="Catch what is due"
+                text="See upcoming payment pressure before it turns into late surprises."
+                tone="amber"
+              />
+              <InfoCard
+                label="Cash Flow"
+                title="Know where you stand"
+                text="See what is coming in, what is leaving, and where your month is headed."
+                tone="blue"
+              />
+              <InfoCard
+                label="Debt + Savings"
+                title="Move with intention"
+                text="Track payoff progress and savings growth without guessing or bouncing around."
+                tone="green"
+              />
+            </div>
+
+            <div className="lccHeroRail">
+              <div className="lccHeroRailLabel">Why this app feels different</div>
+              <RailRow
+                title="One place instead of scattered tools"
+                sub="Track the money system as a whole instead of piecing it together from separate apps."
+                tone="blue"
+              />
+              <RailRow
+                title="Pressure shows up earlier"
+                sub="Bills, flow, and balances become easier to spot before they turn into damage."
+                tone="amber"
+              />
+              <RailRow
+                title="The dashboard is built to act, not just look nice"
+                sub="It is meant to help you decide what to do next, not just show random numbers."
+                tone="green"
+              />
             </div>
           </section>
-        </div>
+        </section>
+      </div>
 
-        <style jsx>{`
-          .login-grid {
-            display: grid;
-            grid-template-columns: 1.08fr 0.92fr;
-            gap: 24px;
-            align-items: stretch;
+      <style jsx>{`
+        .lccLoginRoot {
+          min-height: 100vh;
+          position: relative;
+          overflow: hidden;
+          color: #eef3fb;
+          background:
+            radial-gradient(circle at top left, rgba(43, 71, 138, 0.14), transparent 18%),
+            radial-gradient(circle at top right, rgba(180, 122, 54, 0.06), transparent 18%),
+            linear-gradient(180deg, #04070c 0%, #070b12 42%, #080d15 100%);
+        }
+
+        .lccBgGrid,
+        .lccBgStars,
+        .lccBgGlow,
+        .lccVignette {
+          position: absolute;
+          inset: 0;
+          pointer-events: none;
+        }
+
+        .lccBgGrid {
+          background-image:
+            linear-gradient(rgba(255,255,255,0.024) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(255,255,255,0.024) 1px, transparent 1px);
+          background-size: 56px 56px;
+          mask-image: linear-gradient(180deg, rgba(0,0,0,0.88), rgba(0,0,0,0.18));
+        }
+
+        .lccBgStars {
+          opacity: 0.34;
+          background-image:
+            radial-gradient(circle at 12% 18%, rgba(255,255,255,0.95) 0 1px, transparent 1.7px),
+            radial-gradient(circle at 28% 34%, rgba(255,255,255,0.72) 0 1px, transparent 1.7px),
+            radial-gradient(circle at 54% 22%, rgba(255,255,255,0.82) 0 1px, transparent 1.7px),
+            radial-gradient(circle at 74% 30%, rgba(255,255,255,0.65) 0 1px, transparent 1.7px),
+            radial-gradient(circle at 86% 17%, rgba(255,255,255,0.8) 0 1px, transparent 1.7px),
+            radial-gradient(circle at 22% 76%, rgba(255,255,255,0.72) 0 1px, transparent 1.7px),
+            radial-gradient(circle at 58% 70%, rgba(255,255,255,0.72) 0 1px, transparent 1.7px),
+            radial-gradient(circle at 91% 82%, rgba(255,255,255,0.68) 0 1px, transparent 1.7px);
+          animation: twinkle 8s ease-in-out infinite alternate;
+        }
+
+        .lccBgGlow {
+          filter: blur(44px);
+        }
+
+        .lccBgGlowA {
+          background: radial-gradient(circle at 20% 22%, rgba(49, 102, 255, 0.16), transparent 34%);
+          animation: driftA 16s ease-in-out infinite alternate;
+        }
+
+        .lccBgGlowB {
+          background: radial-gradient(circle at 84% 20%, rgba(255, 159, 44, 0.08), transparent 24%);
+          animation: driftB 18s ease-in-out infinite alternate;
+        }
+
+        .lccBgGlowC {
+          background: radial-gradient(circle at 62% 58%, rgba(39, 189, 123, 0.08), transparent 24%);
+          animation: driftC 14s ease-in-out infinite alternate;
+        }
+
+        .lccVignette {
+          background: radial-gradient(circle at 50% 42%, transparent 38%, rgba(0,0,0,0.28) 100%);
+        }
+
+        .lccShell {
+          position: relative;
+          z-index: 1;
+          max-width: 1440px;
+          margin: 0 auto;
+          padding: 22px 18px 28px;
+        }
+
+        .lccHeader {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          gap: 18px;
+          flex-wrap: wrap;
+          padding: 2px 2px 18px;
+        }
+
+        .lccBrandWrap {
+          display: flex;
+          align-items: center;
+          gap: 16px;
+        }
+
+        .lccBrandTitle {
+          font-size: 18px;
+          font-weight: 900;
+          letter-spacing: -0.03em;
+          color: #f4f7fd;
+        }
+
+        .lccBrandSub {
+          margin-top: 4px;
+          font-size: 11px;
+          font-weight: 800;
+          letter-spacing: 1.04px;
+          text-transform: uppercase;
+          color: rgba(211,220,238,0.7);
+        }
+
+        .lccHeaderSignals {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 10px;
+        }
+
+        .lccLayout {
+          display: grid;
+          grid-template-columns: minmax(420px, 0.92fr) minmax(0, 1.08fr);
+          gap: 24px;
+          align-items: stretch;
+        }
+
+        .lccAuthPanel,
+        .lccHeroPanel {
+          position: relative;
+          overflow: hidden;
+          border-radius: 34px;
+          border: 1px solid rgba(255,255,255,0.08);
+          background:
+            linear-gradient(180deg, rgba(11,16,28,0.80), rgba(8,11,19,0.92)),
+            rgba(7,10,18,0.86);
+          box-shadow:
+            0 30px 90px rgba(0,0,0,0.40),
+            inset 0 1px 0 rgba(255,255,255,0.03);
+          backdrop-filter: blur(10px);
+        }
+
+        .lccAuthPanel {
+          padding: 28px;
+        }
+
+        .lccAuthPanel::before {
+          content: "";
+          position: absolute;
+          inset: 0;
+          pointer-events: none;
+          background:
+            radial-gradient(circle at 0% 18%, rgba(84,120,207,0.14), transparent 22%),
+            radial-gradient(circle at 100% 0%, rgba(190,131,65,0.06), transparent 26%);
+        }
+
+        .lccHeroPanel {
+          padding: 34px;
+        }
+
+        .lccHeroPanel::before {
+          content: "";
+          position: absolute;
+          inset: 0;
+          pointer-events: none;
+          background:
+            radial-gradient(circle at 78% 30%, rgba(73,113,255,0.18), transparent 18%),
+            radial-gradient(circle at 86% 76%, rgba(192,135,61,0.08), transparent 14%),
+            radial-gradient(circle at 12% 84%, rgba(43,188,121,0.08), transparent 16%);
+        }
+
+        .lccAuthHead,
+        .lccHeroTop {
+          position: relative;
+          z-index: 1;
+        }
+
+        .lccAuthEyebrow {
+          font-size: 12px;
+          font-weight: 900;
+          letter-spacing: 1px;
+          text-transform: uppercase;
+          color: rgba(215,225,243,0.82);
+        }
+
+        .lccAuthTitle {
+          margin-top: 8px;
+          font-size: clamp(30px, 3vw, 44px);
+          line-height: 1.02;
+          font-weight: 900;
+          letter-spacing: -0.05em;
+          color: #f5f7fb;
+        }
+
+        .lccAuthSub {
+          margin-top: 12px;
+          font-size: 14px;
+          line-height: 1.75;
+          color: rgba(225,233,244,0.74);
+          max-width: 520px;
+        }
+
+        .lccModeNotice {
+          position: relative;
+          z-index: 1;
+          margin-top: 18px;
+          border-radius: 22px;
+          padding: 18px;
+          border: 1px solid rgba(255,255,255,0.08);
+          background:
+            linear-gradient(180deg, rgba(15,22,36,0.84), rgba(9,13,22,0.92));
+          box-shadow:
+            inset 0 1px 0 rgba(255,255,255,0.04),
+            0 14px 30px rgba(0,0,0,0.18);
+        }
+
+        .lccModeNotice.isBlue {
+          box-shadow:
+            inset 0 1px 0 rgba(255,255,255,0.04),
+            0 14px 30px rgba(0,0,0,0.18),
+            0 0 24px rgba(56,104,255,0.08);
+        }
+
+        .lccModeNotice.isGreen {
+          box-shadow:
+            inset 0 1px 0 rgba(255,255,255,0.04),
+            0 14px 30px rgba(0,0,0,0.18),
+            0 0 24px rgba(32,175,113,0.08);
+        }
+
+        .lccModeNoticeTitle {
+          font-size: 12px;
+          font-weight: 800;
+          letter-spacing: 0.9px;
+          text-transform: uppercase;
+          color: rgba(212,224,242,0.70);
+        }
+
+        .lccModeNoticeList {
+          margin-top: 6px;
+        }
+
+        .lccToggle {
+          position: relative;
+          z-index: 1;
+          margin-top: 20px;
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 8px;
+          padding: 6px;
+          border-radius: 18px;
+          border: 1px solid rgba(255,255,255,0.08);
+          background: rgba(255,255,255,0.025);
+        }
+
+        .lccToggleBtn {
+          height: 50px;
+          border-radius: 14px;
+          border: 1px solid transparent;
+          background: transparent;
+          color: rgba(198,210,232,0.76);
+          font-weight: 900;
+          font-size: 14px;
+          cursor: pointer;
+          transition:
+            background 180ms ease,
+            color 180ms ease,
+            border-color 180ms ease,
+            transform 180ms ease,
+            box-shadow 180ms ease;
+        }
+
+        .lccToggleBtn:hover {
+          transform: translateY(-1px);
+        }
+
+        .lccToggleBtn.isActive {
+          border-color: rgba(138,163,215,0.22);
+          background: linear-gradient(180deg, rgba(34,46,72,0.96), rgba(20,28,44,0.96));
+          color: #f7faff;
+          box-shadow:
+            0 10px 24px rgba(0,0,0,0.18),
+            inset 0 1px 0 rgba(255,255,255,0.03);
+        }
+
+        .lccAuthForm {
+          position: relative;
+          z-index: 1;
+          margin-top: 18px;
+          display: grid;
+          gap: 14px;
+        }
+
+        .lccFieldWrap {
+          display: grid;
+          gap: 8px;
+        }
+
+        .lccLabel {
+          font-size: 13px;
+          font-weight: 800;
+          color: rgba(225,233,245,0.84);
+        }
+
+        .lccAuthInput {
+          width: 100%;
+          height: 56px;
+          border-radius: 18px;
+          border: 1px solid rgba(255,255,255,0.10);
+          background:
+            linear-gradient(180deg, rgba(19,27,43,0.94), rgba(10,15,27,0.98)) !important;
+          color: #f4f7fd !important;
+          padding: 0 18px;
+          outline: none;
+          font-size: 15px;
+          caret-color: #f4f7fd;
+          box-shadow:
+            inset 0 1px 0 rgba(255,255,255,0.05),
+            0 10px 24px rgba(0,0,0,0.18);
+          appearance: none;
+          -webkit-appearance: none;
+          transition:
+            border-color 160ms ease,
+            box-shadow 160ms ease,
+            transform 160ms ease;
+        }
+
+        .lccAuthInput::placeholder {
+          color: rgba(214,224,242,0.42) !important;
+        }
+
+        .lccAuthInput:focus {
+          border-color: rgba(79,126,255,0.38) !important;
+          box-shadow:
+            0 0 0 1px rgba(79,126,255,0.18),
+            0 0 24px rgba(47,107,255,0.12),
+            inset 0 1px 0 rgba(255,255,255,0.05);
+          transform: translateY(-1px);
+        }
+
+        .lccAuthInput:-webkit-autofill,
+        .lccAuthInput:-webkit-autofill:hover,
+        .lccAuthInput:-webkit-autofill:focus,
+        .lccAuthInput:-webkit-autofill:active {
+          -webkit-text-fill-color: #f4f7fd !important;
+          caret-color: #f4f7fd !important;
+          border: 1px solid rgba(255,255,255,0.10) !important;
+          -webkit-box-shadow:
+            0 0 0 1000px rgba(10,15,27,1) inset,
+            inset 0 1px 0 rgba(255,255,255,0.05),
+            0 10px 24px rgba(0,0,0,0.18) !important;
+          box-shadow:
+            0 0 0 1000px rgba(10,15,27,1) inset,
+            inset 0 1px 0 rgba(255,255,255,0.05),
+            0 10px 24px rgba(0,0,0,0.18) !important;
+          border-radius: 18px !important;
+          transition: background-color 99999s ease-in-out 0s;
+        }
+
+        .lccShowPass {
+          position: absolute;
+          top: 50%;
+          right: 10px;
+          transform: translateY(-50%);
+          height: 36px;
+          padding: 0 12px;
+          border-radius: 12px;
+          border: 1px solid rgba(255,255,255,0.10);
+          background: rgba(31,40,61,0.98);
+          color: rgba(236,242,250,0.88);
+          font-weight: 800;
+          cursor: pointer;
+          box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
+        }
+
+        .lccPrimaryBtn,
+        .lccGoogleBtn {
+          width: 100%;
+          height: 58px;
+          border-radius: 18px;
+          font-weight: 900;
+          font-size: 15px;
+          cursor: pointer;
+          transition:
+            transform 180ms ease,
+            box-shadow 180ms ease,
+            border-color 180ms ease,
+            background 180ms ease;
+        }
+
+        .lccPrimaryBtn:hover,
+        .lccGoogleBtn:hover {
+          transform: translateY(-1px);
+        }
+
+        .lccPrimaryBtn {
+          border: 1px solid rgba(156,178,232,0.18);
+          background:
+            linear-gradient(180deg, rgba(39,48,71,0.98), rgba(17,22,33,0.98));
+          color: #ffffff;
+          box-shadow:
+            0 18px 38px rgba(0,0,0,0.28),
+            inset 0 1px 0 rgba(255,255,255,0.04);
+        }
+
+        .lccPrimaryBtn:disabled,
+        .lccGoogleBtn:disabled {
+          cursor: not-allowed;
+          transform: none;
+          opacity: 0.66;
+          box-shadow: none;
+        }
+
+        .lccDivider {
+          position: relative;
+          z-index: 1;
+          margin: 18px 0;
+          display: flex;
+          align-items: center;
+          gap: 12px;
+        }
+
+        .lccDividerLine {
+          flex: 1;
+          height: 1px;
+          background: rgba(255,255,255,0.08);
+        }
+
+        .lccDividerText {
+          font-size: 12px;
+          font-weight: 800;
+          letter-spacing: 1px;
+          color: rgba(204,215,236,0.58);
+        }
+
+        .lccGoogleBtn {
+          position: relative;
+          z-index: 1;
+          border: 1px solid rgba(255,255,255,0.10);
+          background:
+            linear-gradient(180deg, rgba(18,22,31,0.94), rgba(12,15,21,0.96));
+          color: #f5f8fd;
+          box-shadow:
+            0 12px 28px rgba(0,0,0,0.20),
+            inset 0 1px 0 rgba(255,255,255,0.03);
+        }
+
+        .lccLinkRow {
+          position: relative;
+          z-index: 1;
+          margin-top: 16px;
+          display: flex;
+          justify-content: space-between;
+          gap: 12px;
+          flex-wrap: wrap;
+        }
+
+        .lccTextBtn {
+          background: transparent;
+          border: none;
+          padding: 0;
+          color: rgba(174,192,225,0.88);
+          font-size: 13px;
+          font-weight: 800;
+          cursor: pointer;
+        }
+
+        .lccHeroTop {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 10px;
+        }
+
+        .lccHeroTitle {
+          position: relative;
+          z-index: 1;
+          margin-top: 24px;
+          max-width: 760px;
+          font-size: clamp(46px, 5.8vw, 84px);
+          line-height: 0.95;
+          letter-spacing: -0.06em;
+          font-weight: 900;
+          color: #f7faff;
+        }
+
+        .lccHeroCopy {
+          position: relative;
+          z-index: 1;
+          margin-top: 22px;
+          max-width: 760px;
+          font-size: 17px;
+          line-height: 1.72;
+          color: rgba(225,233,244,0.78);
+        }
+
+        .lccHeroCards {
+          position: relative;
+          z-index: 1;
+          margin-top: 24px;
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 14px;
+        }
+
+        .lccHeroRail {
+          position: relative;
+          z-index: 1;
+          margin-top: 16px;
+          border-radius: 24px;
+          border: 1px solid rgba(255,255,255,0.07);
+          background:
+            linear-gradient(180deg, rgba(14,18,28,0.78), rgba(10,13,21,0.88));
+          padding: 22px;
+          box-shadow:
+            0 16px 30px rgba(0,0,0,0.16),
+            inset 0 1px 0 rgba(255,255,255,0.03);
+        }
+
+        .lccHeroRailLabel {
+          font-size: 12px;
+          font-weight: 800;
+          letter-spacing: 0.85px;
+          text-transform: uppercase;
+          color: rgba(214,224,242,0.72);
+          margin-bottom: 4px;
+        }
+
+        @keyframes twinkle {
+          0% { opacity: 0.24; }
+          100% { opacity: 0.40; }
+        }
+
+        @keyframes driftA {
+          0% { transform: translate3d(0,0,0) scale(1); }
+          100% { transform: translate3d(2%,4%,0) scale(1.08); }
+        }
+
+        @keyframes driftB {
+          0% { transform: translate3d(0,0,0) scale(1); }
+          100% { transform: translate3d(-3%,2%,0) scale(1.06); }
+        }
+
+        @keyframes driftC {
+          0% { transform: translate3d(0,0,0) scale(1); }
+          100% { transform: translate3d(3%,-2%,0) scale(1.05); }
+        }
+
+        @media (max-width: 1240px) {
+          .lccLayout {
+            grid-template-columns: 1fr;
           }
 
-          .lcc-auth-input {
-            width: 100%;
-            height: 54px;
-            border-radius: 18px;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            background: linear-gradient(
-              180deg,
-              rgba(28, 36, 52, 0.94),
-              rgba(14, 20, 32, 0.98)
-            ) !important;
-            color: #f4f7fd !important;
-            padding: 0 18px;
-            outline: none;
-            font-size: 15px;
-            caret-color: #f4f7fd;
-            box-shadow:
-              inset 0 1px 0 rgba(255, 255, 255, 0.05),
-              0 10px 24px rgba(0, 0, 0, 0.18);
-            appearance: none;
-            -webkit-appearance: none;
+          .lccAuthPanel {
+            max-width: 760px;
+          }
+        }
+
+        @media (max-width: 980px) {
+          .lccHeroCards {
+            grid-template-columns: 1fr;
+          }
+        }
+
+        @media (max-width: 760px) {
+          .lccShell {
+            padding: 18px 14px 22px;
           }
 
-          .lcc-auth-input::placeholder {
-            color: rgba(214, 224, 242, 0.42) !important;
+          .lccAuthPanel,
+          .lccHeroPanel {
+            padding: 22px;
+            border-radius: 28px;
           }
 
-          .lcc-auth-input:focus {
-            border-color: rgba(79, 126, 255, 0.38) !important;
-            background: linear-gradient(
-              180deg,
-              rgba(30, 40, 59, 0.96),
-              rgba(16, 22, 35, 1)
-            ) !important;
-            box-shadow:
-              0 0 0 1px rgba(79, 126, 255, 0.18),
-              0 0 24px rgba(47, 107, 255, 0.12),
-              inset 0 1px 0 rgba(255, 255, 255, 0.05);
+          .lccHeroTitle {
+            font-size: clamp(38px, 13vw, 58px);
+          }
+        }
+
+        @media (max-width: 640px) {
+          .lccLoginRoot {
+            min-height: 100dvh;
           }
 
-          .lcc-auth-input:-webkit-autofill,
-          .lcc-auth-input:-webkit-autofill:hover,
-          .lcc-auth-input:-webkit-autofill:focus,
-          .lcc-auth-input:-webkit-autofill:active {
-            -webkit-text-fill-color: #f4f7fd !important;
-            caret-color: #f4f7fd !important;
-            border: 1px solid rgba(255, 255, 255, 0.1) !important;
-            -webkit-box-shadow:
-              0 0 0 1000px rgba(14, 20, 32, 1) inset,
-              inset 0 1px 0 rgba(255, 255, 255, 0.05),
-              0 10px 24px rgba(0, 0, 0, 0.18) !important;
-            box-shadow:
-              0 0 0 1000px rgba(14, 20, 32, 1) inset,
-              inset 0 1px 0 rgba(255, 255, 255, 0.05),
-              0 10px 24px rgba(0, 0, 0, 0.18) !important;
-            border-radius: 18px !important;
-            transition: background-color 99999s ease-in-out 0s;
+          .lccLinkRow {
+            flex-direction: column;
+            align-items: flex-start;
           }
-
-          @media (max-width: 1100px) {
-            .login-grid {
-              grid-template-columns: 1fr;
-            }
-          }
-
-          @media (max-width: 760px) {
-            .stats-grid {
-              grid-template-columns: 1fr !important;
-            }
-
-            .bottom-grid {
-              grid-template-columns: 1fr !important;
-            }
-          }
-
-          @media (max-width: 640px) {
-            main {
-              min-height: 100dvh;
-            }
-          }
-        `}</style>
-      </main>
-    </>
+        }
+      `}</style>
+    </main>
   );
 }
-
-const labelStyle = {
-  fontSize: 13,
-  fontWeight: 800,
-  color: "rgba(225,233,245,0.84)",
-};
-
-const showPassButtonStyle = {
-  position: "absolute",
-  top: "50%",
-  right: 10,
-  transform: "translateY(-50%)",
-  height: 34,
-  padding: "0 12px",
-  borderRadius: 12,
-  border: "1px solid rgba(255,255,255,0.10)",
-  background: "rgba(30,38,56,0.96)",
-  color: "rgba(236,242,250,0.88)",
-  fontWeight: 800,
-  cursor: "pointer",
-  boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
-};
-
-const textButtonStyle = {
-  background: "transparent",
-  border: "none",
-  padding: 0,
-  color: "rgba(174,192,225,0.88)",
-  fontSize: 13,
-  fontWeight: 800,
-  cursor: "pointer",
-};
