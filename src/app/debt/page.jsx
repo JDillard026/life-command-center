@@ -1,23 +1,33 @@
+
 "use client";
 
 export const dynamic = "force-dynamic";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
-  Archive,
+  BadgeDollarSign,
   CalendarClock,
   Copy,
-  Download,
-  PiggyBank,
+  CreditCard,
+  Landmark,
+  Percent,
   Plus,
   Search,
-  Target,
+  ShieldAlert,
   Trash2,
-  TrendingUp,
   Wallet,
 } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import GlassPane from "../components/GlassPane";
+
+const FREQUENCY_OPTIONS = [
+  { value: "weekly", label: "Weekly" },
+  { value: "biweekly", label: "Biweekly" },
+  { value: "monthly", label: "Monthly" },
+  { value: "quarterly", label: "Quarterly" },
+  { value: "yearly", label: "Yearly" },
+  { value: "one_time", label: "One Time" },
+];
 
 function uid() {
   return (
@@ -31,35 +41,14 @@ function safeNum(n, fallback = 0) {
   return Number.isFinite(x) ? x : fallback;
 }
 
+function round2(n) {
+  return Math.round((safeNum(n, 0) + Number.EPSILON) * 100) / 100;
+}
+
 function parseMoneyInput(v) {
   const cleaned = String(v ?? "").replace(/[^0-9.-]/g, "");
   const num = Number(cleaned);
   return Number.isFinite(num) ? num : NaN;
-}
-
-function fmtMoney(n) {
-  const num = Number(n);
-  if (!Number.isFinite(num)) return "$0";
-  return num.toLocaleString(undefined, {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 0,
-  });
-}
-
-function fmtMoneyTight(n) {
-  const num = Number(n);
-  if (!Number.isFinite(num)) return "$0.00";
-  return num.toLocaleString(undefined, {
-    style: "currency",
-    currency: "USD",
-  });
-}
-
-function pct(n) {
-  const num = Number(n);
-  if (!Number.isFinite(num)) return "0%";
-  return `${Math.round(num)}%`;
 }
 
 function isoDate(d = new Date()) {
@@ -69,29 +58,28 @@ function isoDate(d = new Date()) {
   return `${yyyy}-${mm}-${dd}`;
 }
 
-function todayISO() {
-  return isoDate(new Date());
-}
-
-function monthKeyFromISO(iso) {
-  const s = String(iso || "");
-  return s.length >= 7 ? s.slice(0, 7) : "";
-}
-
-function fmtMonthLabel(ym) {
-  if (!ym || ym.length < 7) return "—";
-  const [y, m] = ym.split("-").map(Number);
-  if (!Number.isFinite(y) || !Number.isFinite(m)) return ym;
-  const d = new Date(y, m - 1, 1);
-  return d.toLocaleDateString(undefined, {
-    month: "long",
-    year: "numeric",
+function money(n) {
+  const num = Number(n);
+  if (!Number.isFinite(num)) return "$0";
+  return num.toLocaleString(undefined, {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
   });
 }
 
-function fmtDate(iso) {
-  if (!iso) return "—";
-  const d = new Date(`${iso}T00:00:00`);
+function moneyTight(n) {
+  const num = Number(n);
+  if (!Number.isFinite(num)) return "$0.00";
+  return num.toLocaleString(undefined, {
+    style: "currency",
+    currency: "USD",
+  });
+}
+
+function shortDate(dateValue) {
+  if (!dateValue) return "—";
+  const d = new Date(`${dateValue}T12:00:00`);
   if (!Number.isFinite(d.getTime())) return "—";
   return d.toLocaleDateString(undefined, {
     month: "short",
@@ -100,90 +88,143 @@ function fmtDate(iso) {
   });
 }
 
-function formatAgo(value) {
-  if (!value) return "—";
-  const ms = Date.now() - new Date(value).getTime();
-  const minutes = Math.round(ms / 60000);
+function fmtWhen(ts) {
+  if (!ts) return "—";
+  const d = new Date(ts);
+  if (!Number.isFinite(d.getTime())) return "—";
+  return d.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
 
-  if (!Number.isFinite(minutes)) return "—";
-  if (minutes < 1) return "just now";
-  if (minutes < 60) return `${minutes}m ago`;
-
-  const hours = Math.round(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-
-  const days = Math.round(hours / 24);
+function fmtAgo(ts) {
+  if (!ts) return "—";
+  const ms = Date.now() - new Date(ts).getTime();
+  const mins = Math.round(ms / 60000);
+  if (!Number.isFinite(mins)) return "—";
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.round(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.round(hrs / 24);
   return `${days}d ago`;
+}
+
+function currentMonthLabel() {
+  return new Intl.DateTimeFormat("en-US", {
+    month: "long",
+    year: "numeric",
+  }).format(new Date());
+}
+
+function addDays(iso, daysToAdd) {
+  if (!iso) return "";
+  const [y, m, d] = String(iso).split("-").map(Number);
+  if (![y, m, d].every(Number.isFinite)) return "";
+  const dt = new Date(y, m - 1, d);
+  dt.setDate(dt.getDate() + Number(daysToAdd || 0));
+  return isoDate(dt);
+}
+
+function addMonths(iso, monthsToAdd) {
+  if (!iso) return "";
+  const [y, m, d] = String(iso).split("-").map(Number);
+  if (![y, m, d].every(Number.isFinite)) return "";
+  const dt = new Date(y, m - 1, d);
+  dt.setMonth(dt.getMonth() + Number(monthsToAdd || 0));
+  return isoDate(dt);
+}
+
+function nextDueDateFromFrequency(currentISO, frequency) {
+  const base = currentISO || isoDate();
+  switch (String(frequency || "").toLowerCase()) {
+    case "weekly":
+      return addDays(base, 7);
+    case "biweekly":
+      return addDays(base, 14);
+    case "quarterly":
+      return addMonths(base, 3);
+    case "yearly":
+      return addMonths(base, 12);
+    case "one_time":
+      return base;
+    case "monthly":
+    default:
+      return addMonths(base, 1);
+  }
 }
 
 function daysUntil(iso) {
   if (!iso) return null;
   const now = new Date();
-  const today = new Date(
-    now.getFullYear(),
-    now.getMonth(),
-    now.getDate()
-  ).getTime();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
   const due = new Date(`${iso}T00:00:00`).getTime();
   if (!Number.isFinite(due)) return null;
   return Math.round((due - today) / 86400000);
 }
 
-function progressPercent(goal) {
-  const target = safeNum(goal?.target, 0);
-  const current = safeNum(goal?.current, 0);
-  if (target <= 0) return 0;
-  return Math.max(0, Math.min(100, (current / target) * 100));
+function dueMeta(days) {
+  if (!Number.isFinite(days)) {
+    return { label: "No due date", tone: "neutral", percent: 0 };
+  }
+  if (days < 0) {
+    return {
+      label: `${Math.abs(days)} day${Math.abs(days) === 1 ? "" : "s"} late`,
+      tone: "red",
+      percent: 100,
+    };
+  }
+  if (days === 0) return { label: "Due today", tone: "red", percent: 100 };
+  if (days <= 3) return { label: `Due in ${days} day${days === 1 ? "" : "s"}`, tone: "red", percent: 92 };
+  if (days <= 7) return { label: `Due in ${days} days`, tone: "amber", percent: 72 };
+  if (days <= 14) return { label: `Due in ${days} days`, tone: "amber", percent: 48 };
+  return { label: `Due in ${days} days`, tone: "green", percent: 18 };
 }
 
-function amountLeft(goal) {
-  return Math.max(0, safeNum(goal?.target, 0) - safeNum(goal?.current, 0));
+function debtMonthlyPressure(debt) {
+  const min = safeNum(debt?.minPay, 0);
+  const extra = safeNum(debt?.extraPay, 0);
+  const amount = safeNum(debt?.amount, 0);
+  return round2(min + extra || amount);
 }
 
-function priorityRank(priority) {
-  if (priority === "High") return 0;
-  if (priority === "Medium") return 1;
-  return 2;
+function payoffMonths(balance, aprPct, monthlyPayment) {
+  const b = safeNum(balance, 0);
+  const apr = safeNum(aprPct, 0);
+  const pay = safeNum(monthlyPayment, 0);
+
+  if (b <= 0 || pay <= 0) return 0;
+
+  const r = apr / 100 / 12;
+  if (r <= 0) return Math.ceil(b / pay);
+
+  if (pay <= b * r) return Infinity;
+
+  const months = -Math.log(1 - (r * b) / pay) / Math.log(1 + r);
+  return Number.isFinite(months) ? Math.ceil(months) : Infinity;
 }
 
-function dueLabel(goal) {
-  if (!goal?.dueDate) return "No due date";
-  const d = daysUntil(goal.dueDate);
-  if (d === null) return "No due date";
-  if (d < 0) return `${Math.abs(d)}d overdue`;
-  if (d === 0) return "Due today";
-  if (d === 1) return "Due tomorrow";
-  return `Due in ${d}d`;
+function payoffLabel(balance, aprPct, payment) {
+  const months = payoffMonths(balance, aprPct, payment);
+  if (months === Infinity) return "Payment too low";
+  if (months <= 0) return "Paid off";
+  if (months < 12) return `${months} mo payoff`;
+  const years = months / 12;
+  return `${years.toFixed(years >= 2 ? 1 : 2)} yr payoff`;
 }
 
-function progressTone(goal) {
-  const value = progressPercent(goal);
-  if (value >= 100) return "green";
-  if (value >= 65) return "green";
-  if (value >= 30) return "amber";
-  return "neutral";
-}
-
-function dueTone(goal) {
-  const d = daysUntil(goal?.dueDate);
-  if (d === null) return "neutral";
-  if (d < 0) return "red";
-  if (d === 0) return "red";
-  if (d <= 7) return "amber";
-  return "green";
-}
-
-function priorityTone(priority) {
-  if (priority === "High") return "red";
-  if (priority === "Medium") return "amber";
-  return "neutral";
-}
-
-function toneByValue(value, inverse = false) {
-  const num = safeNum(value, 0);
-  if (num === 0) return "neutral";
-  if (inverse) return num > 0 ? "red" : "green";
-  return num > 0 ? "green" : "red";
+function accountTypeLabel(t) {
+  const v = String(t || "other").toLowerCase();
+  if (v === "checking") return "Checking";
+  if (v === "savings") return "Savings";
+  if (v === "cash") return "Cash";
+  if (v === "credit") return "Credit Card";
+  if (v === "investment") return "Investment";
+  return "Other";
 }
 
 function toneMeta(tone = "neutral") {
@@ -219,149 +260,6 @@ function toneMeta(tone = "neutral") {
     border: "rgba(214, 226, 255, 0.14)",
     glow: "rgba(140, 170, 255, 0.08)",
     bg: "rgba(10, 15, 24, 0.66)",
-  };
-}
-
-function goalInitials(name = "") {
-  const clean = String(name).trim();
-  if (!clean) return "SG";
-  const parts = clean.split(/\s+/).slice(0, 2);
-  return parts
-    .map((p) => p[0])
-    .join("")
-    .toUpperCase();
-}
-
-function paceNeed(goal) {
-  const left = amountLeft(goal);
-  const d = daysUntil(goal?.dueDate);
-
-  if (left <= 0 || d === null) {
-    return {
-      perDay: null,
-      perWeek: null,
-      perMonth: null,
-    };
-  }
-
-  const safeDays = Math.max(1, d);
-
-  return {
-    perDay: left / safeDays,
-    perWeek: left / (safeDays / 7),
-    perMonth: left / (safeDays / 30),
-  };
-}
-
-function recentProjection(goal) {
-  const list = Array.isArray(goal?.contributions) ? goal.contributions : [];
-
-  if (amountLeft(goal) <= 0) {
-    return {
-      text: "Already funded",
-      tone: "green",
-    };
-  }
-
-  if (list.length < 2) {
-    return {
-      text: "Need more history",
-      tone: "neutral",
-    };
-  }
-
-  const recent = list
-    .slice()
-    .sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")))
-    .slice(-8);
-
-  const dates = recent
-    .map((item) => new Date(`${item.date}T00:00:00`).getTime())
-    .filter((n) => Number.isFinite(n));
-
-  const total = recent.reduce((sum, item) => sum + safeNum(item.amount, 0), 0);
-
-  if (dates.length < 2 || total <= 0) {
-    return {
-      text: "Need more history",
-      tone: "neutral",
-    };
-  }
-
-  const first = Math.min(...dates);
-  const last = Math.max(...dates);
-  const spanDays = Math.max(1, Math.round((last - first) / 86400000) + 1);
-  const perDay = total / spanDays;
-
-  if (!Number.isFinite(perDay) || perDay <= 0) {
-    return {
-      text: "Need more history",
-      tone: "neutral",
-    };
-  }
-
-  const left = amountLeft(goal);
-  const daysToFinish = Math.ceil(left / perDay);
-  const finish = new Date();
-  finish.setDate(finish.getDate() + daysToFinish);
-
-  return {
-    text: `At this pace, around ${finish.toLocaleDateString()}`,
-    tone: daysToFinish <= 60 ? "green" : "amber",
-  };
-}
-
-function resolvedGoalName(preset, customName) {
-  if (preset && preset !== "Other") return preset;
-  return String(customName || "").trim();
-}
-
-const GOAL_PRESETS = [
-  "Emergency Fund",
-  "Vacation",
-  "Truck / Car Fund",
-  "House Projects",
-  "Christmas / Gifts",
-  "Taxes",
-  "Investing (Cash to Brokerage)",
-  "Other",
-];
-
-const PRIORITY_OPTIONS = ["High", "Medium", "Low"];
-const QUICK_AMOUNTS = [25, 100, 250, 500];
-
-function mapGoalRow(row) {
-  return {
-    id: row.id,
-    name: String(row.name ?? "").trim(),
-    target: safeNum(row.target_amount, 0),
-    current: safeNum(row.current_amount, 0),
-    dueDate: row.target_date || "",
-    priority: row.priority || "Medium",
-    archived: !!row.archived,
-    createdAt:
-      row.created_at_ms ??
-      (row.created_at ? new Date(row.created_at).getTime() : Date.now()),
-    updatedAt: row.updated_at || row.created_at || null,
-    contributions: Array.isArray(row.contributions) ? row.contributions : [],
-  };
-}
-
-function mapGoalToRow(goal, userId) {
-  return {
-    id: goal.id,
-    user_id: userId,
-    name: String(goal.name ?? "").trim(),
-    target_amount: safeNum(goal.target, 0),
-    current_amount: safeNum(goal.current, 0),
-    target_date: goal.dueDate || null,
-    category: "general",
-    notes: "",
-    priority: goal.priority || "Medium",
-    archived: !!goal.archived,
-    contributions: Array.isArray(goal.contributions) ? goal.contributions : [],
-    created_at_ms: goal.createdAt ?? Date.now(),
-    updated_at: new Date().toISOString(),
   };
 }
 
@@ -436,7 +334,7 @@ function PaneHeader({ title, subcopy, right }) {
   );
 }
 
-function StatCard({ icon: Icon, label, value, detail, tone = "neutral", badge = "" }) {
+function StatCard({ icon: Icon, label, value, detail, tone = "neutral" }) {
   const meta = toneMeta(tone);
 
   return (
@@ -477,12 +375,6 @@ function StatCard({ icon: Icon, label, value, detail, tone = "neutral", badge = 
           >
             {label}
           </div>
-
-          {badge ? (
-            <div style={{ marginTop: 6 }}>
-              <MiniPill tone={tone}>{badge}</MiniPill>
-            </div>
-          ) : null}
 
           <div
             style={{
@@ -528,7 +420,7 @@ function ActionBtn({
       type={type}
       onClick={onClick}
       disabled={disabled}
-      className="savingsActionBtn"
+      className="debtActionBtn"
       style={{
         width: full ? "100%" : undefined,
         border: isDanger
@@ -561,9 +453,9 @@ function ProgressBar({ fill = 0, tone = "neutral" }) {
   };
 
   return (
-    <div className="savingsProgress">
+    <div className="debtProgress">
       <div
-        className="savingsProgressFill"
+        className="debtProgressFill"
         style={{
           width: `${normalized}%`,
           background: toneMap[tone] || toneMap.neutral,
@@ -573,25 +465,116 @@ function ProgressBar({ fill = 0, tone = "neutral" }) {
   );
 }
 
-function CompactGoalRow({
-  goal,
+function emptyDebt(defaultAccountId = "") {
+  return {
+    id: uid(),
+    name: "",
+    type: "controllable",
+    frequency: "monthly",
+    dueDate: isoDate(),
+    amount: 0,
+    active: true,
+    balance: 0,
+    minPay: 0,
+    extraPay: 0,
+    aprPct: 0,
+    autopay: false,
+    category: "",
+    notes: "",
+    accountId: defaultAccountId || "",
+    lastPaidDate: "",
+    createdAt: Date.now(),
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+function mapBillRowToClient(row) {
+  return {
+    id: row.id,
+    name: row.name || "Debt",
+    type: row.type === "controllable" ? "controllable" : "noncontrollable",
+    frequency: row.frequency || "monthly",
+    dueDate: row.due_date || "",
+    amount: safeNum(row.amount, 0),
+    active: row.active !== false,
+    balance: safeNum(row.balance, 0),
+    minPay: safeNum(row.min_pay, 0),
+    extraPay: safeNum(row.extra_pay, 0),
+    aprPct: safeNum(row.apr_pct, 0),
+    autopay: row.autopay === true,
+    category: row.category || "",
+    notes: row.notes || "",
+    accountId: row.account_id || "",
+    lastPaidDate: row.last_paid_date || "",
+    createdAt: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
+    updatedAt: row.updated_at || row.created_at || new Date().toISOString(),
+  };
+}
+
+function mapDebtToRow(debt, userId) {
+  return {
+    id: debt.id,
+    user_id: userId,
+    name: debt.name || "",
+    type: "controllable",
+    frequency: debt.frequency || "monthly",
+    due_date: debt.dueDate || null,
+    amount: round2(debt.amount),
+    active: debt.active !== false,
+    balance: round2(debt.balance),
+    min_pay: round2(debt.minPay),
+    extra_pay: round2(debt.extraPay),
+    apr_pct: round2(debt.aprPct),
+    autopay: debt.autopay === true,
+    category: debt.category || "",
+    notes: debt.notes || "",
+    account_id: debt.accountId || null,
+    last_paid_date: debt.lastPaidDate || null,
+    created_at: debt.createdAt
+      ? new Date(debt.createdAt).toISOString()
+      : new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+}
+
+function mapAccountRowToClient(row) {
+  return {
+    id: row.id,
+    name: row.name || "",
+    type: row.account_type || "other",
+    balance: safeNum(row.balance, 0),
+    updatedAt: row.updated_at ? new Date(row.updated_at).getTime() : Date.now(),
+  };
+}
+
+function mapPaymentRowToClient(row) {
+  return {
+    id: row.id,
+    billId: row.bill_id,
+    amount: safeNum(row.amount, 0),
+    paymentDate: row.payment_date || "",
+    accountId: row.payment_account_id || "",
+    note: row.note || "",
+    createdAt: row.created_at || new Date().toISOString(),
+  };
+}
+
+function DebtRosterRow({
+  debt,
   selected,
-  priority,
   onSelect,
   onDuplicate,
-  onArchive,
+  onToggle,
   onDelete,
 }) {
-  const dueToneValue = dueTone(goal);
-  const progressToneValue = progressTone(goal);
-  const meta = toneMeta(
-    dueToneValue === "red" ? "red" : progressToneValue === "green" ? "green" : "neutral"
-  );
-  const projection = recentProjection(goal);
+  const due = dueMeta(daysUntil(debt.dueDate));
+  const tone = due.tone;
+  const meta = toneMeta(tone);
+  const paymentLoad = debtMonthlyPressure(debt);
 
   return (
     <div
-      className="savingsCompactRow"
+      className="debtCompactRow"
       onClick={onSelect}
       style={{
         borderColor: selected ? meta.border : "rgba(255,255,255,0.07)",
@@ -601,14 +584,14 @@ function CompactGoalRow({
       }}
     >
       <div
-        className="savingsCompactAvatar"
+        className="debtCompactAvatar"
         style={{
           borderColor: meta.border,
-          color: dueToneValue === "neutral" ? "#fff" : meta.text,
+          color: tone === "neutral" ? "#fff" : meta.text,
           boxShadow: `0 0 12px ${meta.glow}`,
         }}
       >
-        {goalInitials(goal.name)}
+        <Wallet size={15} />
       </div>
 
       <div style={{ minWidth: 0 }}>
@@ -620,51 +603,52 @@ function CompactGoalRow({
             flexWrap: "wrap",
           }}
         >
-          <div className="savingsCompactTitle">{goal.name || "Untitled goal"}</div>
-          <MiniPill tone={priorityTone(goal.priority)}>{goal.priority}</MiniPill>
-          <MiniPill tone={dueToneValue}>{dueLabel(goal)}</MiniPill>
-          <MiniPill tone={progressToneValue}>{pct(progressPercent(goal))}</MiniPill>
-          {priority ? <MiniPill tone="amber">Rank #{priority}</MiniPill> : null}
-          {goal.archived ? <MiniPill>Archived</MiniPill> : null}
+          <div className="debtCompactTitle">{debt.name || "Debt"}</div>
+          <MiniPill tone={due.tone}>{due.label}</MiniPill>
+          {debt.autopay ? <MiniPill tone="green">Autopay</MiniPill> : null}
+          {!debt.active ? <MiniPill>Inactive</MiniPill> : null}
         </div>
 
-        <div className="savingsCompactSub">
-          {fmtMoney(goal.current)} saved • {fmtMoney(amountLeft(goal))} left • {projection.text} • Updated{" "}
-          {formatAgo(goal.updatedAt)}
+        <div className="debtCompactSub">
+          {debt.category || "No category"} • {debt.aprPct || 0}% APR • Min{" "}
+          {moneyTight(debt.minPay || debt.amount)} • With extra {moneyTight(paymentLoad)} • Updated{" "}
+          {fmtAgo(debt.updatedAt)}
         </div>
 
         <div style={{ marginTop: 10 }}>
-          <ProgressBar fill={progressPercent(goal)} tone={progressToneValue} />
+          <ProgressBar fill={due.percent} tone={due.tone} />
         </div>
       </div>
 
-      <div className="savingsCompactValue">{fmtMoney(goal.target)}</div>
+      <div className="debtCompactValue">{money(debt.balance)}</div>
 
-      <div className="savingsCompactActions" onClick={(e) => e.stopPropagation()}>
+      <div className="debtCompactActions" onClick={(e) => e.stopPropagation()}>
         <button
           type="button"
-          className="savingsIconBtn"
+          className="debtIconBtn"
           onClick={onDuplicate}
-          aria-label="Duplicate goal"
-          title="Duplicate goal"
+          aria-label="Duplicate debt"
+          title="Duplicate debt"
         >
           <Copy size={14} />
         </button>
+
         <button
           type="button"
-          className="savingsIconBtn"
-          onClick={onArchive}
-          aria-label={goal.archived ? "Unarchive goal" : "Archive goal"}
-          title={goal.archived ? "Unarchive goal" : "Archive goal"}
+          className="debtIconBtn"
+          onClick={onToggle}
+          aria-label={debt.active ? "Archive debt" : "Activate debt"}
+          title={debt.active ? "Archive debt" : "Activate debt"}
         >
-          <Archive size={14} />
+          {debt.active ? "↘" : "↗"}
         </button>
+
         <button
           type="button"
-          className="savingsIconBtn savingsDangerBtn"
+          className="debtIconBtn debtDangerBtn"
           onClick={onDelete}
-          aria-label="Delete goal"
-          title="Delete goal"
+          aria-label="Delete debt"
+          title="Delete debt"
         >
           <Trash2 size={14} />
         </button>
@@ -673,32 +657,83 @@ function CompactGoalRow({
   );
 }
 
-function FocusGoalCard({
-  goal,
-  priority,
+function PaymentHistory({ payments, accountNameById }) {
+  if (!payments.length) {
+    return (
+      <div className="debtEmptyState debtInlineEmpty">
+        <div>
+          <div className="debtEmptyTitle">No payment history yet</div>
+          <div className="debtEmptyText">
+            Use the payment box above to log a payment on this debt.
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="debtIntelList">
+      {payments.map((payment) => (
+        <div key={payment.id} className="debtIntelItem">
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              gap: 10,
+              alignItems: "flex-start",
+              flexWrap: "wrap",
+            }}
+          >
+            <div>
+              <div className="debtIntelTitle">{moneyTight(payment.amount)}</div>
+              <div className="debtIntelSub">
+                {shortDate(payment.paymentDate)} •{" "}
+                {payment.accountId
+                  ? accountNameById.get(payment.accountId) || "Account"
+                  : "No account linked"}
+              </div>
+            </div>
+
+            <MiniPill tone="green">Paid</MiniPill>
+          </div>
+
+          {payment.note ? (
+            <div className="debtIntelSub" style={{ marginTop: -2 }}>
+              {payment.note}
+            </div>
+          ) : null}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function FocusDebtCard({
+  debt,
+  editor,
+  setEditor,
+  accounts,
+  payments,
   saving,
+  paymentDraft,
+  setPaymentDraft,
+  onSave,
   onDuplicate,
-  onArchive,
   onDelete,
-  onQuickAdd,
-  onUndoLast,
-  customAmount,
-  customNote,
-  setCustomAmount,
-  setCustomNote,
-  onCustomAdd,
+  onToggleAutopay,
+  onMakePayment,
 }) {
-  if (!goal) {
+  if (!debt) {
     return (
       <GlassPane size="card">
         <PaneHeader
-          title="Focus Goal"
+          title="Selected Debt"
           subcopy="Choose one from the roster to work it here."
         />
-        <div className="savingsEmptyState" style={{ minHeight: 170 }}>
+        <div className="debtEmptyState" style={{ minHeight: 190 }}>
           <div>
-            <div className="savingsEmptyTitle">No goal selected</div>
-            <div className="savingsEmptyText">
+            <div className="debtEmptyTitle">No debt selected</div>
+            <div className="debtEmptyText">
               Pick one from the roster on the left.
             </div>
           </div>
@@ -707,30 +742,27 @@ function FocusGoalCard({
     );
   }
 
-  const dueStatusTone = dueTone(goal);
-  const progressStatusTone = progressTone(goal);
-  const left = amountLeft(goal);
-  const need = paceNeed(goal);
-  const projection = recentProjection(goal);
+  const due = dueMeta(daysUntil(editor.dueDate));
+  const meta = toneMeta(due.tone);
+  const accountNameById = new Map(accounts.map((a) => [a.id, a.name]));
+  const monthlyPay = round2(safeNum(editor.minPay, 0) + safeNum(editor.extraPay, 0) || safeNum(editor.amount, 0));
 
   return (
-    <GlassPane tone={progressStatusTone} size="card" style={{ height: "100%" }}>
+    <GlassPane tone={due.tone} size="card" style={{ height: "100%" }}>
       <PaneHeader
-        title={goal.name || "Untitled goal"}
-        subcopy="Focused controls for the goal you are actively touching."
+        title={debt.name || "Debt"}
+        subcopy="Edit the balance, payment pressure, and log a real payment right here."
         right={
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            {priority ? <MiniPill tone="amber">Rank #{priority}</MiniPill> : null}
-            <MiniPill tone={priorityTone(goal.priority)}>{goal.priority}</MiniPill>
-            <MiniPill tone={dueStatusTone}>{dueLabel(goal)}</MiniPill>
-            {goal.archived ? <MiniPill>Archived</MiniPill> : null}
+            <MiniPill tone={due.tone}>{due.label}</MiniPill>
+            {editor.autopay ? <MiniPill tone="green">Autopay</MiniPill> : null}
             {saving ? <MiniPill tone="amber">Saving...</MiniPill> : null}
           </div>
         }
       />
 
-      <div className="savingsFocusBox">
-        <div className="savingsTinyLabel">Current Saved</div>
+      <div className="debtFocusBox">
+        <div className="debtTinyLabel">Current Balance</div>
 
         <div
           style={{
@@ -739,10 +771,10 @@ function FocusGoalCard({
             lineHeight: 1,
             fontWeight: 850,
             letterSpacing: "-0.05em",
-            color: progressStatusTone === "green" ? "#97efc7" : "#fff",
+            color: due.tone === "neutral" ? "#fff" : meta.text,
           }}
         >
-          {fmtMoney(goal.current)}
+          {money(editor.balance)}
         </div>
 
         <div
@@ -752,135 +784,362 @@ function FocusGoalCard({
             color: "rgba(255,255,255,0.58)",
           }}
         >
-          Target {fmtMoney(goal.target)} • Updated {formatAgo(goal.updatedAt)}
+          Updated {fmtWhen(debt.updatedAt)}
         </div>
 
-        <div className="savingsInfoGrid" style={{ marginTop: 14 }}>
-          <div className="savingsInfoCell">
-            <div className="savingsTinyLabel">Left</div>
-            <div className="savingsInfoValue">{fmtMoney(left)}</div>
-            <div className="savingsInfoSub">Still needed to finish</div>
+        <div className="debtInfoGrid" style={{ marginTop: 14 }}>
+          <div className="debtInfoCell">
+            <div className="debtTinyLabel">APR</div>
+            <div className="debtInfoValue">{safeNum(editor.aprPct, 0)}%</div>
+            <div className="debtInfoSub">Current interest rate</div>
           </div>
 
-          <div className="savingsInfoCell">
-            <div className="savingsTinyLabel">Progress</div>
-            <div className="savingsInfoValue">{pct(progressPercent(goal))}</div>
-            <div className="savingsInfoSub">Of total target</div>
-          </div>
-
-          <div className="savingsInfoCell">
-            <div className="savingsTinyLabel">Monthly Pace</div>
-            <div className="savingsInfoValue">
-              {need.perMonth !== null ? fmtMoney(need.perMonth) : "—"}
-            </div>
-            <div className="savingsInfoSub">
-              {goal.dueDate ? "Needed to hit due date" : "No due date assigned"}
+          <div className="debtInfoCell">
+            <div className="debtTinyLabel">Monthly Payment</div>
+            <div className="debtInfoValue">{money(monthlyPay)}</div>
+            <div className="debtInfoSub">
+              Min {money(editor.minPay)} + Extra {money(editor.extraPay)}
             </div>
           </div>
 
-          <div className="savingsInfoCell">
-            <div className="savingsTinyLabel">Projection</div>
-            <div className="savingsInfoValue">
-              {projection.text}
+          <div className="debtInfoCell">
+            <div className="debtTinyLabel">Payoff Read</div>
+            <div className="debtInfoValue">
+              {payoffLabel(editor.balance, editor.aprPct, monthlyPay)}
             </div>
-            <div className="savingsInfoSub">Based on recent contribution pace</div>
+            <div className="debtInfoSub">Based on balance, APR, and payment</div>
+          </div>
+
+          <div className="debtInfoCell">
+            <div className="debtTinyLabel">Linked Account</div>
+            <div className="debtInfoValue">
+              {accountNameById.get(editor.accountId) || "None"}
+            </div>
+            <div className="debtInfoSub">Default pay-from account</div>
           </div>
         </div>
 
         <div style={{ marginTop: 12 }}>
-          <ProgressBar fill={progressPercent(goal)} tone={progressStatusTone} />
+          <ProgressBar fill={due.percent} tone={due.tone} />
         </div>
 
-        <div className="savingsQuickChipRow" style={{ marginTop: 14 }}>
-          {QUICK_AMOUNTS.map((amount) => (
-            <ActionBtn key={amount} onClick={() => onQuickAdd(amount)}>
-              +{fmtMoney(amount)}
-            </ActionBtn>
-          ))}
-        </div>
-
-        <div className="savingsContributionGrid" style={{ marginTop: 12 }}>
-          <input
-            className="savingsField"
-            inputMode="decimal"
-            placeholder="Custom amount"
-            value={customAmount}
-            onChange={(e) => setCustomAmount(e.target.value)}
-          />
-
-          <input
-            className="savingsField"
-            placeholder="Note (optional)"
-            value={customNote}
-            onChange={(e) => setCustomNote(e.target.value)}
-          />
-
-          <ActionBtn variant="primary" onClick={onCustomAdd}>
-            Add
-          </ActionBtn>
-        </div>
-
-        <div className="savingsActionGrid savingsActionGridTight" style={{ marginTop: 14 }}>
-          <ActionBtn onClick={onDuplicate} full>
-            <Copy size={14} /> Duplicate
-          </ActionBtn>
-          <ActionBtn onClick={onUndoLast} full>
-            Undo Last
-          </ActionBtn>
-          <ActionBtn onClick={onArchive} full>
-            <Archive size={14} /> {goal.archived ? "Unarchive" : "Archive"}
-          </ActionBtn>
-          <ActionBtn variant="danger" onClick={onDelete} full>
-            <Trash2 size={14} /> Delete
-          </ActionBtn>
-        </div>
-
-        <div className="savingsContributionList" style={{ marginTop: 14 }}>
-          <div className="savingsTinyLabel" style={{ marginBottom: 8 }}>
-            Recent Contributions
+        <div className="debtFormStack" style={{ marginTop: 14 }}>
+          <div>
+            <div className="debtTinyLabel">Debt Name</div>
+            <input
+              className="debtField"
+              value={editor.name}
+              onChange={(e) =>
+                setEditor((prev) => ({ ...prev, name: e.target.value }))
+              }
+              placeholder="Truck Loan"
+            />
           </div>
 
-          {Array.isArray(goal.contributions) && goal.contributions.length ? (
-            <div className="savingsIntelList">
-              {goal.contributions.slice(0, 5).map((item) => (
-                <div key={item.id} className="savingsIntelItem">
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      gap: 10,
-                      alignItems: "flex-start",
-                      flexWrap: "wrap",
-                    }}
-                  >
-                    <div>
-                      <div className="savingsIntelTitle">{fmtMoneyTight(item.amount)}</div>
-                      <div className="savingsIntelSub">
-                        {fmtDate(item.date)}
-                        {item.note ? ` • ${item.note}` : ""}
-                      </div>
-                    </div>
-
-                    <MiniPill tone="green">Logged</MiniPill>
-                  </div>
-                </div>
-              ))}
+          <div className="debtFormGrid4">
+            <div>
+              <div className="debtTinyLabel">Balance</div>
+              <input
+                className="debtField"
+                inputMode="decimal"
+                value={editor.balance}
+                onChange={(e) =>
+                  setEditor((prev) => ({ ...prev, balance: e.target.value }))
+                }
+                placeholder="0.00"
+              />
             </div>
-          ) : (
-            <div className="savingsEmptyText">No contributions yet.</div>
-          )}
+
+            <div>
+              <div className="debtTinyLabel">APR %</div>
+              <input
+                className="debtField"
+                inputMode="decimal"
+                value={editor.aprPct}
+                onChange={(e) =>
+                  setEditor((prev) => ({ ...prev, aprPct: e.target.value }))
+                }
+                placeholder="0"
+              />
+            </div>
+
+            <div>
+              <div className="debtTinyLabel">Min Payment</div>
+              <input
+                className="debtField"
+                inputMode="decimal"
+                value={editor.minPay}
+                onChange={(e) =>
+                  setEditor((prev) => ({ ...prev, minPay: e.target.value }))
+                }
+                placeholder="0.00"
+              />
+            </div>
+
+            <div>
+              <div className="debtTinyLabel">Extra Payment</div>
+              <input
+                className="debtField"
+                inputMode="decimal"
+                value={editor.extraPay}
+                onChange={(e) =>
+                  setEditor((prev) => ({ ...prev, extraPay: e.target.value }))
+                }
+                placeholder="0.00"
+              />
+            </div>
+          </div>
+
+          <div className="debtFormGrid3">
+            <div>
+              <div className="debtTinyLabel">Due Date</div>
+              <input
+                type="date"
+                className="debtField"
+                value={editor.dueDate}
+                onChange={(e) =>
+                  setEditor((prev) => ({ ...prev, dueDate: e.target.value }))
+                }
+              />
+            </div>
+
+            <div>
+              <div className="debtTinyLabel">Frequency</div>
+              <select
+                className="debtField"
+                value={editor.frequency}
+                onChange={(e) =>
+                  setEditor((prev) => ({ ...prev, frequency: e.target.value }))
+                }
+              >
+                {FREQUENCY_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <div className="debtTinyLabel">Linked Account</div>
+              <select
+                className="debtField"
+                value={editor.accountId}
+                onChange={(e) =>
+                  setEditor((prev) => ({ ...prev, accountId: e.target.value }))
+                }
+              >
+                <option value="">No linked account</option>
+                {accounts.map((account) => (
+                  <option key={account.id} value={account.id}>
+                    {account.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="debtFormGrid2">
+            <div>
+              <div className="debtTinyLabel">Category</div>
+              <input
+                className="debtField"
+                value={editor.category}
+                onChange={(e) =>
+                  setEditor((prev) => ({ ...prev, category: e.target.value }))
+                }
+                placeholder="Auto"
+              />
+            </div>
+
+            <div>
+              <div className="debtTinyLabel">Statement Amount</div>
+              <input
+                className="debtField"
+                inputMode="decimal"
+                value={editor.amount}
+                onChange={(e) =>
+                  setEditor((prev) => ({ ...prev, amount: e.target.value }))
+                }
+                placeholder="Optional"
+              />
+            </div>
+          </div>
+
+          <div>
+            <div className="debtTinyLabel">Notes</div>
+            <textarea
+              className="debtField"
+              rows={4}
+              value={editor.notes}
+              onChange={(e) =>
+                setEditor((prev) => ({ ...prev, notes: e.target.value }))
+              }
+              placeholder="Optional note..."
+            />
+          </div>
+
+          <div className="debtActionGrid debtActionGridQuad">
+            <ActionBtn variant="primary" onClick={onSave} full disabled={saving}>
+              <BadgeDollarSign size={14} /> Save
+            </ActionBtn>
+
+            <ActionBtn onClick={onToggleAutopay} full disabled={saving}>
+              <CreditCard size={14} /> {editor.autopay ? "Turn Off Autopay" : "Turn On Autopay"}
+            </ActionBtn>
+
+            <ActionBtn onClick={onDuplicate} full disabled={saving}>
+              <Copy size={14} /> Duplicate
+            </ActionBtn>
+
+            <ActionBtn variant="danger" onClick={onDelete} full disabled={saving}>
+              <Trash2 size={14} /> Delete
+            </ActionBtn>
+          </div>
+        </div>
+
+        <div className="debtPayBox">
+          <div className="debtPayHeader">
+            <div>
+              <div className="debtTinyLabel">Make Payment</div>
+              <div className="debtPaySub">
+                Log a debt payment, reduce the balance, and optionally subtract it from an account.
+              </div>
+            </div>
+
+            <MiniPill tone="green">
+              Last paid {editor.lastPaidDate ? shortDate(editor.lastPaidDate) : "—"}
+            </MiniPill>
+          </div>
+
+          <div className="debtPayGrid">
+            <div>
+              <div className="debtTinyLabel">Payment Amount</div>
+              <input
+                className="debtField"
+                inputMode="decimal"
+                placeholder="0.00"
+                value={paymentDraft.amount}
+                onChange={(e) =>
+                  setPaymentDraft((prev) => ({ ...prev, amount: e.target.value }))
+                }
+              />
+            </div>
+
+            <div>
+              <div className="debtTinyLabel">Payment Date</div>
+              <input
+                type="date"
+                className="debtField"
+                value={paymentDraft.paymentDate}
+                onChange={(e) =>
+                  setPaymentDraft((prev) => ({
+                    ...prev,
+                    paymentDate: e.target.value,
+                  }))
+                }
+              />
+            </div>
+          </div>
+
+          <div className="debtPayGrid">
+            <div>
+              <div className="debtTinyLabel">Pay From Account</div>
+              <select
+                className="debtField"
+                value={paymentDraft.accountId}
+                onChange={(e) =>
+                  setPaymentDraft((prev) => ({
+                    ...prev,
+                    accountId: e.target.value,
+                  }))
+                }
+              >
+                <option value="">No account linked</option>
+                {accounts.map((account) => (
+                  <option key={account.id} value={account.id}>
+                    {account.name} • {money(account.balance)}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <div className="debtTinyLabel">Advance Due Date</div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <ActionBtn
+                  variant={paymentDraft.advanceDue ? "primary" : "ghost"}
+                  onClick={() =>
+                    setPaymentDraft((prev) => ({ ...prev, advanceDue: true }))
+                  }
+                >
+                  Yes
+                </ActionBtn>
+                <ActionBtn
+                  variant={!paymentDraft.advanceDue ? "primary" : "ghost"}
+                  onClick={() =>
+                    setPaymentDraft((prev) => ({ ...prev, advanceDue: false }))
+                  }
+                >
+                  No
+                </ActionBtn>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <div className="debtTinyLabel">Payment Note</div>
+            <textarea
+              className="debtField"
+              rows={3}
+              placeholder="Optional payment note..."
+              value={paymentDraft.note}
+              onChange={(e) =>
+                setPaymentDraft((prev) => ({ ...prev, note: e.target.value }))
+              }
+            />
+          </div>
+
+          <div className="debtActionGrid">
+            <ActionBtn
+              variant="primary"
+              onClick={onMakePayment}
+              full
+              disabled={paymentDraft.saving}
+            >
+              <BadgeDollarSign size={14} />
+              {paymentDraft.saving ? "Saving..." : "Make Payment"}
+            </ActionBtn>
+          </div>
+        </div>
+
+        <div style={{ marginTop: 14 }}>
+          <PaneHeader
+            title="Payment History"
+            subcopy="Latest payments recorded for this debt."
+          />
+          <PaymentHistory
+            payments={payments}
+            accountNameById={accountNameById}
+          />
         </div>
       </div>
     </GlassPane>
   );
 }
 
-function AddGoalCard({ adding, setAdding, onAdd, saving }) {
+function AddDebtCard({
+  form,
+  setForm,
+  accounts,
+  saving,
+  onAdd,
+}) {
   return (
     <GlassPane size="card" style={{ height: "100%" }}>
       <PaneHeader
-        title="Add Goal"
-        subcopy="Keep this fast and simple."
+        title="Add Debt"
+        subcopy="Create a new controllable debt."
         right={
           <MiniPill>
             <Plus size={13} /> New
@@ -888,102 +1147,153 @@ function AddGoalCard({ adding, setAdding, onAdd, saving }) {
         }
       />
 
-      <div className="savingsFormStack">
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          {GOAL_PRESETS.slice(0, 4).map((item) => (
-            <ActionBtn
-              key={item}
-              variant={adding.preset === item ? "primary" : "ghost"}
-              onClick={() => setAdding((p) => ({ ...p, preset: item }))}
-            >
-              {item === "Truck / Car Fund" ? "Truck / Car" : item}
-            </ActionBtn>
-          ))}
-          <ActionBtn
-            variant={adding.preset === "Other" ? "primary" : "ghost"}
-            onClick={() => setAdding((p) => ({ ...p, preset: "Other" }))}
-          >
-            Other
-          </ActionBtn>
-        </div>
-
-        {adding.preset === "Other" ? (
-          <div>
-            <div className="savingsTinyLabel">Goal Name</div>
-            <input
-              className="savingsField"
-              placeholder="New goal name..."
-              value={adding.customName}
-              onChange={(e) =>
-                setAdding((p) => ({ ...p, customName: e.target.value }))
-              }
-            />
-          </div>
-        ) : null}
-
+      <div className="debtFormStack">
         <div>
-          <div className="savingsTinyLabel">Resolved Goal</div>
+          <div className="debtTinyLabel">Debt Name</div>
           <input
-            className="savingsField"
-            value={resolvedGoalName(adding.preset, adding.customName)}
-            readOnly
+            className="debtField"
+            placeholder="Truck Loan, Credit Card..."
+            value={form.name}
+            onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
           />
         </div>
 
-        <div className="savingsFormGrid2">
+        <div className="debtFormGrid4">
           <div>
-            <div className="savingsTinyLabel">Target</div>
+            <div className="debtTinyLabel">Balance</div>
             <input
-              className="savingsField"
+              className="debtField"
               inputMode="decimal"
               placeholder="0.00"
-              value={adding.target}
-              onChange={(e) => setAdding((p) => ({ ...p, target: e.target.value }))}
+              value={form.balance}
+              onChange={(e) => setForm((prev) => ({ ...prev, balance: e.target.value }))}
             />
           </div>
 
           <div>
-            <div className="savingsTinyLabel">Starting Saved</div>
+            <div className="debtTinyLabel">APR %</div>
             <input
-              className="savingsField"
+              className="debtField"
+              inputMode="decimal"
+              placeholder="0"
+              value={form.aprPct}
+              onChange={(e) => setForm((prev) => ({ ...prev, aprPct: e.target.value }))}
+            />
+          </div>
+
+          <div>
+            <div className="debtTinyLabel">Min Payment</div>
+            <input
+              className="debtField"
               inputMode="decimal"
               placeholder="0.00"
-              value={adding.current}
-              onChange={(e) => setAdding((p) => ({ ...p, current: e.target.value }))}
+              value={form.minPay}
+              onChange={(e) => setForm((prev) => ({ ...prev, minPay: e.target.value }))}
+            />
+          </div>
+
+          <div>
+            <div className="debtTinyLabel">Extra Payment</div>
+            <input
+              className="debtField"
+              inputMode="decimal"
+              placeholder="0.00"
+              value={form.extraPay}
+              onChange={(e) => setForm((prev) => ({ ...prev, extraPay: e.target.value }))}
             />
           </div>
         </div>
 
-        <div className="savingsFormGrid2">
+        <div className="debtFormGrid3">
           <div>
-            <div className="savingsTinyLabel">Due Date</div>
+            <div className="debtTinyLabel">Due Date</div>
             <input
-              className="savingsField"
               type="date"
-              value={adding.dueDate}
-              onChange={(e) => setAdding((p) => ({ ...p, dueDate: e.target.value }))}
+              className="debtField"
+              value={form.dueDate}
+              onChange={(e) => setForm((prev) => ({ ...prev, dueDate: e.target.value }))}
             />
           </div>
 
           <div>
-            <div className="savingsTinyLabel">Priority</div>
+            <div className="debtTinyLabel">Frequency</div>
             <select
-              className="savingsField"
-              value={adding.priority}
-              onChange={(e) => setAdding((p) => ({ ...p, priority: e.target.value }))}
+              className="debtField"
+              value={form.frequency}
+              onChange={(e) => setForm((prev) => ({ ...prev, frequency: e.target.value }))}
             >
-              {PRIORITY_OPTIONS.map((item) => (
-                <option key={item} value={item}>
-                  {item}
+              {FREQUENCY_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <div className="debtTinyLabel">Linked Account</div>
+            <select
+              className="debtField"
+              value={form.accountId}
+              onChange={(e) => setForm((prev) => ({ ...prev, accountId: e.target.value }))}
+            >
+              <option value="">No linked account</option>
+              {accounts.map((account) => (
+                <option key={account.id} value={account.id}>
+                  {account.name} • {accountTypeLabel(account.type)}
                 </option>
               ))}
             </select>
           </div>
         </div>
 
-        <div className="savingsActionGrid">
+        <div className="debtFormGrid2">
+          <div>
+            <div className="debtTinyLabel">Category</div>
+            <input
+              className="debtField"
+              placeholder="Auto, Card, Personal..."
+              value={form.category}
+              onChange={(e) => setForm((prev) => ({ ...prev, category: e.target.value }))}
+            />
+          </div>
+
+          <div>
+            <div className="debtTinyLabel">Statement Amount</div>
+            <input
+              className="debtField"
+              inputMode="decimal"
+              placeholder="Optional"
+              value={form.amount}
+              onChange={(e) => setForm((prev) => ({ ...prev, amount: e.target.value }))}
+            />
+          </div>
+        </div>
+
+        <div>
+          <div className="debtTinyLabel">Notes</div>
+          <textarea
+            className="debtField"
+            rows={4}
+            placeholder="Optional note..."
+            value={form.notes}
+            onChange={(e) => setForm((prev) => ({ ...prev, notes: e.target.value }))}
+          />
+        </div>
+
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <ActionBtn
+            variant={form.autopay ? "primary" : "ghost"}
+            onClick={() => setForm((prev) => ({ ...prev, autopay: !prev.autopay }))}
+          >
+            <CreditCard size={14} />
+            {form.autopay ? "Autopay On" : "Autopay Off"}
+          </ActionBtn>
+        </div>
+
+        <div className="debtActionGrid">
           <ActionBtn variant="primary" onClick={onAdd} full disabled={saving}>
-            <Plus size={14} /> {saving ? "Saving..." : "Add Goal"}
+            <Plus size={14} /> {saving ? "Saving..." : "Add Debt"}
           </ActionBtn>
         </div>
       </div>
@@ -991,256 +1301,64 @@ function AddGoalCard({ adding, setAdding, onAdd, saving }) {
   );
 }
 
-function QueueItem({ goal, onFocus }) {
-  const projection = recentProjection(goal);
-  const tone = progressTone(goal);
-
-  return (
-    <div className="savingsIntelItem">
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          gap: 10,
-          alignItems: "flex-start",
-          flexWrap: "wrap",
-        }}
-      >
-        <div>
-          <div className="savingsIntelTitle">{goal.name}</div>
-          <div className="savingsIntelSub">
-            {fmtMoneyTight(goal.current)} saved • {fmtMoneyTight(amountLeft(goal))} left •{" "}
-            {dueLabel(goal)}
-          </div>
-        </div>
-
-        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-          <MiniPill tone={priorityTone(goal.priority)}>{goal.priority}</MiniPill>
-          <MiniPill tone={tone}>{pct(progressPercent(goal))}</MiniPill>
-        </div>
-      </div>
-
-      <div style={{ marginTop: 2 }}>
-        <ProgressBar fill={progressPercent(goal)} tone={tone} />
-      </div>
-
-      <div className="savingsIntelMiniGrid">
-        <div className="savingsIntelMini">
-          <div className="savingsTinyLabel">Saved</div>
-          <div className="savingsIntelValue">{fmtMoney(goal.current)}</div>
-        </div>
-        <div className="savingsIntelMini">
-          <div className="savingsTinyLabel">Left</div>
-          <div className="savingsIntelValue">{fmtMoney(amountLeft(goal))}</div>
-        </div>
-        <div className="savingsIntelMini">
-          <div className="savingsTinyLabel">Pace</div>
-          <div className="savingsIntelValue">{projection.text}</div>
-        </div>
-      </div>
-
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-        <ActionBtn onClick={onFocus}>Focus</ActionBtn>
-      </div>
-    </div>
-  );
-}
-
-function DueItem({ goal, onFocus }) {
-  const tone = dueTone(goal);
-
-  return (
-    <div className="savingsIntelItem">
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          gap: 10,
-          alignItems: "flex-start",
-          flexWrap: "wrap",
-        }}
-      >
-        <div>
-          <div className="savingsIntelTitle">{goal.name}</div>
-          <div className="savingsIntelSub">
-            {fmtMoneyTight(amountLeft(goal))} left • Target {fmtMoneyTight(goal.target)}
-          </div>
-        </div>
-
-        <MiniPill tone={tone}>{dueLabel(goal)}</MiniPill>
-      </div>
-
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-        <ActionBtn onClick={onFocus}>Focus</ActionBtn>
-      </div>
-    </div>
-  );
-}
-
-function GoalEditorCard({ goal, saving, onPatch }) {
-  if (!goal) {
-    return (
-      <GlassPane size="card">
-        <PaneHeader
-          title="Goal Details"
-          subcopy="Select a goal to edit the deeper fields."
-        />
-        <div className="savingsEmptyState" style={{ minHeight: 150 }}>
-          <div>
-            <div className="savingsEmptyTitle">No goal selected</div>
-            <div className="savingsEmptyText">
-              Choose one from the roster to edit it here.
-            </div>
-          </div>
-        </div>
-      </GlassPane>
-    );
-  }
-
-  return (
-    <GlassPane size="card">
-      <PaneHeader
-        title="Goal Details"
-        subcopy="This section autosaves as you type."
-        right={saving ? <MiniPill tone="amber">Saving...</MiniPill> : null}
-      />
-
-      <div className="savingsFormStack">
-        <div className="savingsFormGrid3">
-          <div>
-            <div className="savingsTinyLabel">Goal Name</div>
-            <input
-              className="savingsField"
-              value={goal.name}
-              onChange={(e) => onPatch({ name: e.target.value })}
-            />
-          </div>
-
-          <div>
-            <div className="savingsTinyLabel">Priority</div>
-            <select
-              className="savingsField"
-              value={goal.priority}
-              onChange={(e) => onPatch({ priority: e.target.value })}
-            >
-              {PRIORITY_OPTIONS.map((item) => (
-                <option key={item} value={item}>
-                  {item}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <div className="savingsTinyLabel">Due Date</div>
-            <input
-              className="savingsField"
-              type="date"
-              value={goal.dueDate || ""}
-              onChange={(e) => onPatch({ dueDate: e.target.value })}
-            />
-          </div>
-        </div>
-
-        <div className="savingsFormGrid3">
-          <div>
-            <div className="savingsTinyLabel">Current Saved</div>
-            <input
-              className="savingsField"
-              value={String(goal.current || "")}
-              onChange={(e) =>
-                onPatch({ current: safeNum(parseMoneyInput(e.target.value), 0) })
-              }
-            />
-          </div>
-
-          <div>
-            <div className="savingsTinyLabel">Target</div>
-            <input
-              className="savingsField"
-              value={String(goal.target || "")}
-              onChange={(e) =>
-                onPatch({ target: safeNum(parseMoneyInput(e.target.value), 0) })
-              }
-            />
-          </div>
-
-          <div>
-            <div className="savingsTinyLabel">Archived</div>
-            <select
-              className="savingsField"
-              value={goal.archived ? "yes" : "no"}
-              onChange={(e) => onPatch({ archived: e.target.value === "yes" })}
-            >
-              <option value="no">No</option>
-              <option value="yes">Yes</option>
-            </select>
-          </div>
-        </div>
-
-        <div className="savingsInfoCell">
-          <div className="savingsTinyLabel">Computed Read</div>
-          <div className="savingsInfoValue">
-            {fmtMoney(goal.current)} / {fmtMoney(goal.target)} • {pct(progressPercent(goal))}
-          </div>
-          <div className="savingsInfoSub" style={{ marginTop: 6 }}>
-            {dueLabel(goal)} • {fmtMoney(amountLeft(goal))} left
-          </div>
-        </div>
-      </div>
-    </GlassPane>
-  );
-}
-
-export default function SavingsPage() {
-  const [goals, setGoals] = useState([]);
+export default function DebtPage() {
+  const [debts, setDebts] = useState([]);
+  const [accounts, setAccounts] = useState([]);
+  const [payments, setPayments] = useState([]);
+  const [selectedDebtId, setSelectedDebtId] = useState("");
+  const [defaultAccountId, setDefaultAccountId] = useState("");
   const [loading, setLoading] = useState(true);
+  const [pageError, setPageError] = useState("");
   const [userId, setUserId] = useState(null);
 
   const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState("active");
-  const [sort, setSort] = useState("priority");
-  const [showArchived, setShowArchived] = useState(false);
-  const [focusMode, setFocusMode] = useState("deadline");
+  const [scope, setScope] = useState("active");
+  const [sortBy, setSortBy] = useState("due_asc");
 
-  const [selectedGoalId, setSelectedGoalId] = useState("");
-  const [savingIds, setSavingIds] = useState({});
-  const [pageError, setPageError] = useState("");
-
-  const [adding, setAdding] = useState({
-    preset: "Emergency Fund",
-    customName: "",
-    target: "",
-    current: "",
-    dueDate: "",
-    priority: "Medium",
-  });
+  const [savingSelected, setSavingSelected] = useState(false);
   const [addingBusy, setAddingBusy] = useState(false);
 
-  const [ioText, setIoText] = useState("");
+  const [editor, setEditor] = useState({
+    name: "",
+    balance: "",
+    aprPct: "",
+    minPay: "",
+    extraPay: "",
+    amount: "",
+    dueDate: isoDate(),
+    frequency: "monthly",
+    category: "",
+    notes: "",
+    accountId: "",
+    autopay: false,
+    lastPaidDate: "",
+  });
 
-  const [customContribution, setCustomContribution] = useState({});
-  const [customContributionNote, setCustomContributionNote] = useState({});
+  const [addForm, setAddForm] = useState({
+    name: "",
+    balance: "",
+    aprPct: "",
+    minPay: "",
+    extraPay: "",
+    amount: "",
+    dueDate: isoDate(),
+    frequency: "monthly",
+    category: "",
+    notes: "",
+    accountId: "",
+    autopay: false,
+  });
 
-  const rowSaveTimers = useRef({});
+  const [paymentDraft, setPaymentDraft] = useState({
+    amount: "",
+    paymentDate: isoDate(),
+    accountId: "",
+    note: "",
+    advanceDue: true,
+    saving: false,
+  });
 
-  async function getCurrentUser() {
-    if (!supabase) return null;
-
-    const {
-      data: { user },
-      error,
-    } = await supabase.auth.getUser();
-
-    if (error) {
-      console.error("getUser error:", error);
-      return null;
-    }
-
-    return user ?? null;
-  }
-
-  async function loadSavingsPage() {
+  async function loadPage() {
     if (!supabase) {
       setLoading(false);
       return;
@@ -1249,590 +1367,659 @@ export default function SavingsPage() {
     setLoading(true);
     setPageError("");
 
-    const user = await getCurrentUser();
-    if (!user) {
-      setUserId(null);
-      setGoals([]);
-      setSelectedGoalId("");
+    try {
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
+
+      if (userError) throw userError;
+
+      if (!user) {
+        setUserId(null);
+        setDebts([]);
+        setAccounts([]);
+        setPayments([]);
+        setSelectedDebtId("");
+        setLoading(false);
+        return;
+      }
+
+      setUserId(user.id);
+
+      const [debtsRes, accountsRes, settingsRes, paymentsRes] = await Promise.all([
+        supabase
+          .from("bills")
+          .select("*")
+          .eq("user_id", user.id)
+          .eq("type", "controllable")
+          .order("due_date", { ascending: true }),
+        supabase
+          .from("accounts")
+          .select("*")
+          .eq("user_id", user.id)
+          .order("name", { ascending: true }),
+        supabase
+          .from("account_settings")
+          .select("primary_account_id")
+          .eq("user_id", user.id)
+          .maybeSingle(),
+        supabase
+          .from("bill_payments")
+          .select("*")
+          .eq("user_id", user.id)
+          .order("payment_date", { ascending: false }),
+      ]);
+
+      if (debtsRes.error) throw debtsRes.error;
+      if (accountsRes.error) throw accountsRes.error;
+      if (settingsRes.error) throw settingsRes.error;
+
+      const loadedDebts = (debtsRes.data || []).map(mapBillRowToClient);
+      const loadedAccounts = (accountsRes.data || []).map(mapAccountRowToClient);
+      const primaryAccountId =
+        settingsRes.data?.primary_account_id || loadedAccounts[0]?.id || "";
+
+      setDebts(loadedDebts);
+      setAccounts(loadedAccounts);
+      setDefaultAccountId(primaryAccountId);
+      setPayments(paymentsRes.error ? [] : (paymentsRes.data || []).map(mapPaymentRowToClient));
+      setSelectedDebtId((prev) => prev || loadedDebts[0]?.id || "");
+      setAddForm((prev) => ({ ...prev, accountId: prev.accountId || primaryAccountId }));
+    } catch (err) {
+      setPageError(err?.message || "Failed to load debts.");
+    } finally {
       setLoading(false);
-      return;
     }
-
-    setUserId(user.id);
-
-    const { data, error } = await supabase
-      .from("savings_goals")
-      .select("*")
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: false });
-
-    if (error) {
-      console.error("load savings error:", error);
-      setPageError(error.message || "Failed to load savings.");
-      setGoals([]);
-      setSelectedGoalId("");
-      setLoading(false);
-      return;
-    }
-
-    const mappedGoals = (data || []).map(mapGoalRow);
-    setGoals(mappedGoals);
-    setSelectedGoalId((prev) => prev || mappedGoals[0]?.id || "");
-    setLoading(false);
   }
 
   useEffect(() => {
-    loadSavingsPage();
+    loadPage();
 
     if (!supabase) return;
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(() => {
-      loadSavingsPage();
+      loadPage();
     });
 
-    return () => {
-      subscription?.unsubscribe?.();
-      Object.values(rowSaveTimers.current).forEach((timer) => clearTimeout(timer));
-    };
+    return () => subscription?.unsubscribe?.();
   }, []);
 
-  useEffect(() => {
-    if (!goals.length) {
-      setSelectedGoalId("");
-      return;
-    }
-
-    const exists = goals.some((g) => g.id === selectedGoalId);
-    if (!exists) {
-      setSelectedGoalId(goals[0]?.id || "");
-    }
-  }, [goals, selectedGoalId]);
-
-  async function persistGoal(nextGoal) {
-    if (!supabase || !userId) return;
-
-    setSavingIds((prev) => ({ ...prev, [nextGoal.id]: true }));
-
-    const { error } = await supabase
-      .from("savings_goals")
-      .upsert(mapGoalToRow(nextGoal, userId), { onConflict: "id" });
-
-    if (error) {
-      console.error("save goal error:", error);
-      setPageError(error.message || "Failed to save goal.");
-    }
-
-    setSavingIds((prev) => ({ ...prev, [nextGoal.id]: false }));
-  }
-
-  function scheduleGoalSave(nextGoal) {
-    if (rowSaveTimers.current[nextGoal.id]) {
-      clearTimeout(rowSaveTimers.current[nextGoal.id]);
-    }
-
-    rowSaveTimers.current[nextGoal.id] = setTimeout(() => {
-      persistGoal(nextGoal);
-    }, 300);
-  }
-
-  function updateGoal(id, patch) {
-    setGoals((prev) => {
-      const nextRows = prev.map((g) =>
-        g.id === id
-          ? { ...g, ...patch, updatedAt: new Date().toISOString() }
-          : g
-      );
-      const changed = nextRows.find((g) => g.id === id);
-      if (changed) scheduleGoalSave(changed);
-      return nextRows;
-    });
-  }
-
-  async function addGoalFromForm() {
-    if (!supabase || !userId || addingBusy) return;
-
-    const name = resolvedGoalName(adding.preset, adding.customName);
-    const target = safeNum(parseMoneyInput(adding.target), NaN);
-    const current = safeNum(parseMoneyInput(adding.current || "0"), 0);
-
-    if (!name) {
-      alert("Goal name is required.");
-      return;
-    }
-
-    if (!Number.isFinite(target) || target <= 0) {
-      alert("Target must be greater than 0.");
-      return;
-    }
-
-    if (!Number.isFinite(current) || current < 0) {
-      alert("Starting saved must be 0 or more.");
-      return;
-    }
-
-    const next = {
-      id: uid(),
-      name,
-      target,
-      current,
-      dueDate: adding.dueDate || "",
-      priority: adding.priority || "Medium",
-      archived: false,
-      createdAt: Date.now(),
-      updatedAt: new Date().toISOString(),
-      contributions:
-        current > 0
-          ? [
-              {
-                id: uid(),
-                date: todayISO(),
-                amount: current,
-                note: "Starting balance",
-              },
-            ]
-          : [],
-    };
-
-    setAddingBusy(true);
-    setGoals((prev) => [next, ...prev]);
-    setSelectedGoalId(next.id);
-
-    const { error } = await supabase
-      .from("savings_goals")
-      .insert(mapGoalToRow(next, userId));
-
-    if (error) {
-      console.error("add goal error:", error);
-      await loadSavingsPage();
-    } else {
-      setAdding({
-        preset: "Emergency Fund",
-        customName: "",
-        target: "",
-        current: "",
-        dueDate: "",
-        priority: "Medium",
-      });
-    }
-
-    setAddingBusy(false);
-  }
-
-  async function removeGoal(id) {
-    if (!supabase || !userId) return;
-    if (typeof window !== "undefined" && !window.confirm("Delete this goal?")) return;
-
-    const nextGoals = goals.filter((g) => g.id !== id);
-    setGoals(nextGoals);
-    if (selectedGoalId === id) {
-      setSelectedGoalId(nextGoals[0]?.id || "");
-    }
-
-    const { error } = await supabase
-      .from("savings_goals")
-      .delete()
-      .eq("id", id)
-      .eq("user_id", userId);
-
-    if (error) {
-      console.error("delete goal error:", error);
-      await loadSavingsPage();
-    }
-  }
-
-  async function duplicateGoal(goal) {
-    if (!supabase || !userId) return;
-
-    const cloned = {
-      ...goal,
-      id: uid(),
-      name: `${goal.name || "Goal"} Copy`,
-      createdAt: Date.now(),
-      updatedAt: new Date().toISOString(),
-      contributions: Array.isArray(goal.contributions)
-        ? goal.contributions.map((item) => ({
-            ...item,
-            id: uid(),
-          }))
-        : [],
-    };
-
-    setGoals((prev) => [cloned, ...prev]);
-    setSelectedGoalId(cloned.id);
-
-    const { error } = await supabase
-      .from("savings_goals")
-      .insert(mapGoalToRow(cloned, userId));
-
-    if (error) {
-      console.error("duplicate goal error:", error);
-      await loadSavingsPage();
-    }
-  }
-
-  function applyContribution(goalId, amount, note = "") {
-    const parsedAmount = safeNum(amount, NaN);
-
-    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
-      alert("Contribution amount must be greater than 0.");
-      return;
-    }
-
-    setGoals((prev) => {
-      const nextRows = prev.map((goal) => {
-        if (goal.id !== goalId) return goal;
-
-        const entry = {
-          id: uid(),
-          date: todayISO(),
-          amount: parsedAmount,
-          note: String(note || "").trim(),
-        };
-
-        return {
-          ...goal,
-          current: safeNum(goal.current, 0) + parsedAmount,
-          contributions: [entry, ...(Array.isArray(goal.contributions) ? goal.contributions : [])],
-          updatedAt: new Date().toISOString(),
-        };
-      });
-
-      const changed = nextRows.find((g) => g.id === goalId);
-      if (changed) scheduleGoalSave(changed);
-
-      return nextRows;
-    });
-
-    setCustomContribution((prev) => ({ ...prev, [goalId]: "" }));
-    setCustomContributionNote((prev) => ({ ...prev, [goalId]: "" }));
-  }
-
-  function undoLastContribution(goalId) {
-    setGoals((prev) => {
-      const nextRows = prev.map((goal) => {
-        if (goal.id !== goalId) return goal;
-        const list = Array.isArray(goal.contributions) ? goal.contributions : [];
-        if (!list.length) return goal;
-
-        const [last, ...rest] = list;
-
-        return {
-          ...goal,
-          current: Math.max(0, safeNum(goal.current, 0) - safeNum(last.amount, 0)),
-          contributions: rest,
-          updatedAt: new Date().toISOString(),
-        };
-      });
-
-      const changed = nextRows.find((g) => g.id === goalId);
-      if (changed) scheduleGoalSave(changed);
-
-      return nextRows;
-    });
-  }
-
-  async function exportGoals() {
-    const payload = JSON.stringify(goals, null, 2);
-    setIoText(payload);
-
-    try {
-      await navigator.clipboard.writeText(payload);
-    } catch {}
-  }
-
-  async function importReplaceGoals() {
-    if (!supabase || !userId) return;
-
-    let parsed;
-    try {
-      parsed = JSON.parse(ioText || "[]");
-    } catch {
-      setPageError("Import failed: invalid JSON.");
-      return;
-    }
-
-    if (!Array.isArray(parsed)) {
-      setPageError("Import failed: JSON must be an array of goals.");
-      return;
-    }
-
-    if (typeof window !== "undefined") {
-      const okay = window.confirm(
-        "Replace all current savings goals for this account?"
-      );
-      if (!okay) return;
-    }
-
-    const normalized = parsed.map((goal) => ({
-      id: goal.id ?? uid(),
-      name: String(goal.name ?? "").trim(),
-      target: safeNum(goal.target, 0),
-      current: safeNum(goal.current, 0),
-      dueDate: goal.dueDate || "",
-      priority: goal.priority || "Medium",
-      archived: !!goal.archived,
-      createdAt: goal.createdAt ?? Date.now(),
-      updatedAt: new Date().toISOString(),
-      contributions: Array.isArray(goal.contributions) ? goal.contributions : [],
-    }));
-
-    setGoals(normalized);
-    setSelectedGoalId(normalized[0]?.id || "");
-
-    const { error: deleteError } = await supabase
-      .from("savings_goals")
-      .delete()
-      .eq("user_id", userId);
-
-    if (deleteError) {
-      console.error("import delete savings goals error:", deleteError);
-      setPageError(deleteError.message || "Failed while clearing current goals.");
-      await loadSavingsPage();
-      return;
-    }
-
-    if (normalized.length > 0) {
-      const rows = normalized.map((goal) => mapGoalToRow(goal, userId));
-      const { error: insertError } = await supabase
-        .from("savings_goals")
-        .upsert(rows, { onConflict: "id" });
-
-      if (insertError) {
-        console.error("import upsert savings goals error:", insertError);
-        setPageError(insertError.message || "Import failed.");
-        await loadSavingsPage();
-      }
-    }
-  }
-
-  const activeGoals = useMemo(
-    () => goals.filter((g) => !g.archived),
-    [goals]
-  );
-
-  const totals = useMemo(() => {
-    const totalCurrent = activeGoals.reduce(
-      (sum, g) => sum + safeNum(g.current),
-      0
-    );
-    const totalTarget = activeGoals.reduce(
-      (sum, g) => sum + safeNum(g.target),
-      0
-    );
-    const totalLeft = Math.max(0, totalTarget - totalCurrent);
-    const completion =
-      totalTarget > 0 ? (totalCurrent / totalTarget) * 100 : 0;
-
-    const fundedCount = activeGoals.filter((g) => amountLeft(g) <= 0).length;
-    const dueSoonCount = activeGoals.filter((g) => {
-      const d = daysUntil(g.dueDate);
-      return d !== null && d >= 0 && d <= 14 && amountLeft(g) > 0;
-    }).length;
-
-    const overdueCount = activeGoals.filter((g) => {
-      const d = daysUntil(g.dueDate);
-      return d !== null && d < 0 && amountLeft(g) > 0;
-    }).length;
-
-    return {
-      totalCurrent,
-      totalTarget,
-      totalLeft,
-      completion,
-      fundedCount,
-      dueSoonCount,
-      overdueCount,
-    };
-  }, [activeGoals]);
-
-  const rankedGoals = useMemo(() => {
-    const rows = [...activeGoals];
-
-    if (focusMode === "gap") {
-      rows.sort((a, b) => {
-        const leftDiff = amountLeft(b) - amountLeft(a);
-        if (leftDiff !== 0) return leftDiff;
-        return priorityRank(a.priority) - priorityRank(b.priority);
-      });
-    } else if (focusMode === "progress") {
-      rows.sort((a, b) => {
-        const progressDiff = progressPercent(a) - progressPercent(b);
-        if (progressDiff !== 0) return progressDiff;
-        return amountLeft(b) - amountLeft(a);
-      });
-    } else {
-      rows.sort((a, b) => {
-        const aFunded = amountLeft(a) <= 0 ? 1 : 0;
-        const bFunded = amountLeft(b) <= 0 ? 1 : 0;
-        if (aFunded !== bFunded) return aFunded - bFunded;
-
-        const ad = daysUntil(a.dueDate);
-        const bd = daysUntil(b.dueDate);
-        const aDue = ad === null ? Number.POSITIVE_INFINITY : ad;
-        const bDue = bd === null ? Number.POSITIVE_INFINITY : bd;
-        if (aDue !== bDue) return aDue - bDue;
-
-        const pr = priorityRank(a.priority) - priorityRank(b.priority);
-        if (pr !== 0) return pr;
-
-        return amountLeft(b) - amountLeft(a);
-      });
-    }
-
-    return rows.map((g, i) => ({
-      ...g,
-      priorityRank: i + 1,
-    }));
-  }, [activeGoals, focusMode]);
-
-  const priorityMap = useMemo(() => {
-    const map = new Map();
-    rankedGoals.forEach((g) => map.set(g.id, g.priorityRank));
-    return map;
-  }, [rankedGoals]);
-
-  const dueSoonGoals = useMemo(() => {
-    return activeGoals
-      .filter((g) => {
-        const d = daysUntil(g.dueDate);
-        return d !== null && d <= 14 && amountLeft(g) > 0;
-      })
-      .sort((a, b) => {
-        const ad = daysUntil(a.dueDate);
-        const bd = daysUntil(b.dueDate);
-        return safeNum(ad, 9999) - safeNum(bd, 9999);
-      })
-      .slice(0, 6);
-  }, [activeGoals]);
-
-  const contributionFeed = useMemo(() => {
-    const items = activeGoals.flatMap((goal) =>
-      (Array.isArray(goal.contributions) ? goal.contributions : []).map((entry) => ({
-        id: entry.id,
-        goalId: goal.id,
-        goalName: goal.name,
-        amount: safeNum(entry.amount),
-        note: entry.note || "",
-        date: entry.date || "",
-      }))
-    );
-
-    return items
-      .sort((a, b) => String(b.date).localeCompare(String(a.date)))
-      .slice(0, 6);
-  }, [activeGoals]);
-
-  const quickStats = useMemo(() => {
-    const activeCount = activeGoals.length;
-    const dueDated = activeGoals.filter((g) => !!g.dueDate).length;
-    const noDate = activeGoals.filter((g) => !g.dueDate).length;
-    return { activeCount, dueDated, noDate };
-  }, [activeGoals]);
-
-  const visibleGoals = useMemo(() => {
+  const visibleDebts = useMemo(() => {
     const q = search.trim().toLowerCase();
 
-    let list = goals.filter((g) => {
-      if (filter === "active" && g.archived) return false;
-      if (filter === "archived" && !g.archived) return false;
-      if (filter === "due") {
-        const d = daysUntil(g.dueDate);
-        if (!(d !== null && d <= 14 && amountLeft(g) > 0)) return false;
-      }
-
-      if (!showArchived && filter !== "archived" && g.archived) return false;
+    let list = debts.filter((debt) => {
+      if (scope === "active" && !debt.active) return false;
+      if (scope === "inactive" && debt.active) return false;
 
       if (!q) return true;
 
-      return [g.name, g.priority, g.dueDate]
+      return [debt.name, debt.category, debt.notes]
         .join(" ")
         .toLowerCase()
         .includes(q);
     });
 
-    if (sort === "priority") {
-      list.sort((a, b) => {
-        const ar = priorityMap.get(a.id) ?? 999;
-        const br = priorityMap.get(b.id) ?? 999;
-        if (ar !== br) return ar - br;
-        return amountLeft(b) - amountLeft(a);
-      });
+    if (sortBy === "balance_desc") {
+      list.sort((a, b) => safeNum(b.balance) - safeNum(a.balance));
       return list;
     }
 
-    if (sort === "left") {
-      list.sort((a, b) => amountLeft(b) - amountLeft(a));
+    if (sortBy === "apr_desc") {
+      list.sort((a, b) => safeNum(b.aprPct) - safeNum(a.aprPct));
       return list;
     }
 
-    if (sort === "progress") {
-      list.sort((a, b) => progressPercent(a) - progressPercent(b));
+    if (sortBy === "name_asc") {
+      list.sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")));
       return list;
     }
 
-    if (sort === "updated") {
+    if (sortBy === "updated_desc") {
       list.sort(
         (a, b) =>
-          new Date(b.updatedAt || 0).getTime() -
-          new Date(a.updatedAt || 0).getTime()
+          new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime()
       );
-      return list;
-    }
-
-    if (sort === "name") {
-      list.sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")));
       return list;
     }
 
     list.sort((a, b) => {
       const ad = daysUntil(a.dueDate);
       const bd = daysUntil(b.dueDate);
-      return safeNum(ad, 9999) - safeNum(bd, 9999);
+      return (Number.isFinite(ad) ? ad : 999999) - (Number.isFinite(bd) ? bd : 999999);
     });
     return list;
-  }, [goals, showArchived, filter, search, sort, priorityMap]);
+  }, [debts, scope, search, sortBy]);
 
-  const selectedGoal =
-    goals.find((g) => g.id === selectedGoalId) || visibleGoals[0] || null;
-
-  const selectedPriority = selectedGoal
-    ? priorityMap.get(selectedGoal.id) ?? null
-    : null;
-
-  const monthLabel = fmtMonthLabel(monthKeyFromISO(todayISO()));
-
-  const focusText = useMemo(() => {
-    if (!activeGoals.length) {
-      return "No goals yet. Add one and start filling the page with real data.";
+  useEffect(() => {
+    if (!visibleDebts.length) {
+      setSelectedDebtId("");
+      return;
     }
 
-    if (totals.overdueCount > 0) {
-      return `${totals.overdueCount} goal${totals.overdueCount === 1 ? "" : "s"} overdue. Fix those first.`;
+    const exists = visibleDebts.some((debt) => debt.id === selectedDebtId);
+    if (!exists) setSelectedDebtId(visibleDebts[0].id);
+  }, [visibleDebts, selectedDebtId]);
+
+  const selectedDebt =
+    debts.find((debt) => debt.id === selectedDebtId) || visibleDebts[0] || null;
+
+  useEffect(() => {
+    if (!selectedDebt) {
+      setEditor({
+        name: "",
+        balance: "",
+        aprPct: "",
+        minPay: "",
+        extraPay: "",
+        amount: "",
+        dueDate: isoDate(),
+        frequency: "monthly",
+        category: "",
+        notes: "",
+        accountId: defaultAccountId || "",
+        autopay: false,
+        lastPaidDate: "",
+      });
+      setPaymentDraft({
+        amount: "",
+        paymentDate: isoDate(),
+        accountId: defaultAccountId || "",
+        note: "",
+        advanceDue: true,
+        saving: false,
+      });
+      return;
     }
 
-    if (dueSoonGoals.length > 0) {
-      return `${dueSoonGoals[0].name} is the closest deadline pressure.`;
+    setEditor({
+      name: selectedDebt.name || "",
+      balance: String(selectedDebt.balance ?? ""),
+      aprPct: String(selectedDebt.aprPct ?? ""),
+      minPay: String(selectedDebt.minPay ?? ""),
+      extraPay: String(selectedDebt.extraPay ?? ""),
+      amount: String(selectedDebt.amount ?? ""),
+      dueDate: selectedDebt.dueDate || isoDate(),
+      frequency: selectedDebt.frequency || "monthly",
+      category: selectedDebt.category || "",
+      notes: selectedDebt.notes || "",
+      accountId: selectedDebt.accountId || "",
+      autopay: selectedDebt.autopay === true,
+      lastPaidDate: selectedDebt.lastPaidDate || "",
+    });
+
+    setPaymentDraft({
+      amount: String(selectedDebt.minPay || selectedDebt.amount || ""),
+      paymentDate: isoDate(),
+      accountId: selectedDebt.accountId || defaultAccountId || "",
+      note: "",
+      advanceDue: true,
+      saving: false,
+    });
+  }, [selectedDebt?.id, defaultAccountId]);
+
+  const selectedDebtPayments = useMemo(() => {
+    if (!selectedDebt) return [];
+    return payments
+      .filter((payment) => payment.billId === selectedDebt.id)
+      .sort(
+        (a, b) =>
+          new Date(b.paymentDate || b.createdAt || 0).getTime() -
+          new Date(a.paymentDate || a.createdAt || 0).getTime()
+      );
+  }, [payments, selectedDebt?.id]);
+
+  const metrics = useMemo(() => {
+    const activeDebts = debts.filter((debt) => debt.active);
+    const monthKey = String(isoDate()).slice(0, 7);
+
+    const totalBalance = activeDebts.reduce(
+      (sum, debt) => sum + safeNum(debt.balance, 0),
+      0
+    );
+
+    const monthlyLoad = activeDebts.reduce(
+      (sum, debt) => sum + debtMonthlyPressure(debt),
+      0
+    );
+
+    const dueSoon = activeDebts.filter((debt) => {
+      const dueIn = daysUntil(debt.dueDate);
+      return Number.isFinite(dueIn) && dueIn <= 7;
+    });
+
+    const paidThisMonth = payments
+      .filter((payment) => String(payment.paymentDate || "").slice(0, 7) === monthKey)
+      .reduce((sum, payment) => sum + safeNum(payment.amount), 0);
+
+    const hottestAprDebt = [...activeDebts].sort(
+      (a, b) => safeNum(b.aprPct) - safeNum(a.aprPct)
+    )[0];
+
+    const nextDebt = [...activeDebts].sort((a, b) => {
+      const ad = Number.isFinite(daysUntil(a.dueDate)) ? daysUntil(a.dueDate) : 999999;
+      const bd = Number.isFinite(daysUntil(b.dueDate)) ? daysUntil(b.dueDate) : 999999;
+      return ad - bd;
+    })[0];
+
+    return {
+      activeCount: activeDebts.length,
+      totalBalance,
+      monthlyLoad,
+      dueSoonCount: dueSoon.length,
+      paidThisMonth,
+      hottestAprDebt,
+      nextDebt,
+    };
+  }, [debts, payments]);
+
+  async function addDebt() {
+    if (!supabase || !userId || addingBusy) return;
+
+    const name = String(addForm.name || "").trim();
+    const balance = parseMoneyInput(addForm.balance);
+    const minPay = parseMoneyInput(addForm.minPay || "0");
+    const extraPay = parseMoneyInput(addForm.extraPay || "0");
+    const aprPct = parseMoneyInput(addForm.aprPct || "0");
+    const statementAmount = parseMoneyInput(addForm.amount || "");
+
+    if (!name) {
+      window.alert("Debt name is required.");
+      return;
     }
 
-    return "No due-date pressure right now. Use this time to build momentum.";
-  }, [activeGoals, totals.overdueCount, dueSoonGoals]);
+    if (!Number.isFinite(balance) || balance < 0) {
+      window.alert("Balance must be 0 or greater.");
+      return;
+    }
 
-  const heroTone =
-    totals.overdueCount > 0
-      ? "red"
-      : totals.dueSoonCount > 0
-      ? "amber"
-      : "green";
+    if (!Number.isFinite(minPay) || minPay < 0) {
+      window.alert("Minimum payment must be 0 or greater.");
+      return;
+    }
+
+    if (!Number.isFinite(extraPay) || extraPay < 0) {
+      window.alert("Extra payment must be 0 or greater.");
+      return;
+    }
+
+    setAddingBusy(true);
+
+    const nextDebt = {
+      ...emptyDebt(addForm.accountId || defaultAccountId),
+      name,
+      balance: round2(balance),
+      minPay: round2(minPay),
+      extraPay: round2(extraPay),
+      aprPct: round2(Number.isFinite(aprPct) ? aprPct : 0),
+      dueDate: addForm.dueDate || isoDate(),
+      frequency: addForm.frequency || "monthly",
+      category: addForm.category || "",
+      notes: addForm.notes || "",
+      accountId: addForm.accountId || "",
+      autopay: addForm.autopay === true,
+      amount: round2(Number.isFinite(statementAmount) ? statementAmount : minPay),
+      lastPaidDate: "",
+    };
+
+    const res = await supabase
+      .from("bills")
+      .insert(mapDebtToRow(nextDebt, userId))
+      .select()
+      .single();
+
+    if (res.error) {
+      console.error("add debt error:", res.error);
+      setPageError(res.error.message || "Could not add debt.");
+      setAddingBusy(false);
+      return;
+    }
+
+    const saved = mapBillRowToClient(res.data);
+    setDebts((prev) => [saved, ...prev]);
+    setSelectedDebtId(saved.id);
+
+    setAddForm({
+      name: "",
+      balance: "",
+      aprPct: "",
+      minPay: "",
+      extraPay: "",
+      amount: "",
+      dueDate: isoDate(),
+      frequency: "monthly",
+      category: "",
+      notes: "",
+      accountId: defaultAccountId || "",
+      autopay: false,
+    });
+
+    setAddingBusy(false);
+  }
+
+  async function saveSelectedDebt() {
+    if (!supabase || !userId || !selectedDebt || savingSelected) return;
+
+    const name = String(editor.name || "").trim();
+    const balance = parseMoneyInput(editor.balance);
+    const aprPct = parseMoneyInput(editor.aprPct || "0");
+    const minPay = parseMoneyInput(editor.minPay || "0");
+    const extraPay = parseMoneyInput(editor.extraPay || "0");
+    const amount = parseMoneyInput(editor.amount || "");
+
+    if (!name) {
+      window.alert("Debt name is required.");
+      return;
+    }
+
+    if (!Number.isFinite(balance) || balance < 0) {
+      window.alert("Balance must be 0 or greater.");
+      return;
+    }
+
+    if (!Number.isFinite(minPay) || minPay < 0) {
+      window.alert("Minimum payment must be 0 or greater.");
+      return;
+    }
+
+    if (!Number.isFinite(extraPay) || extraPay < 0) {
+      window.alert("Extra payment must be 0 or greater.");
+      return;
+    }
+
+    setSavingSelected(true);
+
+    const payload = {
+      ...selectedDebt,
+      name,
+      balance: round2(balance),
+      aprPct: round2(Number.isFinite(aprPct) ? aprPct : 0),
+      minPay: round2(minPay),
+      extraPay: round2(extraPay),
+      amount: round2(Number.isFinite(amount) ? amount : minPay),
+      dueDate: editor.dueDate || isoDate(),
+      frequency: editor.frequency || "monthly",
+      category: editor.category || "",
+      notes: editor.notes || "",
+      accountId: editor.accountId || "",
+      autopay: editor.autopay === true,
+      lastPaidDate: editor.lastPaidDate || "",
+      updatedAt: new Date().toISOString(),
+    };
+
+    const res = await supabase
+      .from("bills")
+      .update(mapDebtToRow(payload, userId))
+      .eq("id", selectedDebt.id)
+      .eq("user_id", userId)
+      .select()
+      .single();
+
+    if (res.error) {
+      console.error("save debt error:", res.error);
+      setPageError(res.error.message || "Could not save debt.");
+      setSavingSelected(false);
+      return;
+    }
+
+    const saved = mapBillRowToClient(res.data);
+    setDebts((prev) => prev.map((debt) => (debt.id === saved.id ? saved : debt)));
+    setSavingSelected(false);
+  }
+
+  async function duplicateDebt(debt) {
+    if (!supabase || !userId) return;
+
+    const clone = {
+      ...debt,
+      id: uid(),
+      name: `${debt.name || "Debt"} Copy`,
+      createdAt: Date.now(),
+      updatedAt: new Date().toISOString(),
+      lastPaidDate: "",
+    };
+
+    const res = await supabase
+      .from("bills")
+      .insert(mapDebtToRow(clone, userId))
+      .select()
+      .single();
+
+    if (res.error) {
+      console.error("duplicate debt error:", res.error);
+      setPageError(res.error.message || "Could not duplicate debt.");
+      return;
+    }
+
+    const saved = mapBillRowToClient(res.data);
+    setDebts((prev) => [saved, ...prev]);
+    setSelectedDebtId(saved.id);
+  }
+
+  async function deleteDebt() {
+    if (!supabase || !userId || !selectedDebt) return;
+    if (typeof window !== "undefined" && !window.confirm("Delete this debt?")) return;
+
+    const { error } = await supabase
+      .from("bills")
+      .delete()
+      .eq("id", selectedDebt.id)
+      .eq("user_id", userId);
+
+    if (error) {
+      console.error("delete debt error:", error);
+      setPageError(error.message || "Could not delete debt.");
+      return;
+    }
+
+    const nextDebts = debts.filter((debt) => debt.id !== selectedDebt.id);
+    setDebts(nextDebts);
+    setSelectedDebtId(nextDebts[0]?.id || "");
+  }
+
+  async function toggleDebtActive(debt) {
+    if (!supabase || !userId) return;
+
+    const nextValue = !debt.active;
+
+    const res = await supabase
+      .from("bills")
+      .update({
+        active: nextValue,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", debt.id)
+      .eq("user_id", userId)
+      .select()
+      .single();
+
+    if (res.error) {
+      console.error("toggle debt active error:", res.error);
+      setPageError(res.error.message || "Could not update debt.");
+      return;
+    }
+
+    const saved = mapBillRowToClient(res.data);
+    setDebts((prev) => prev.map((row) => (row.id === saved.id ? saved : row)));
+  }
+
+  async function toggleSelectedAutopay() {
+    if (!supabase || !userId || !selectedDebt || savingSelected) return;
+
+    setSavingSelected(true);
+
+    const res = await supabase
+      .from("bills")
+      .update({
+        autopay: !editor.autopay,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", selectedDebt.id)
+      .eq("user_id", userId)
+      .select()
+      .single();
+
+    if (res.error) {
+      console.error("toggle autopay error:", res.error);
+      setPageError(res.error.message || "Could not update autopay.");
+      setSavingSelected(false);
+      return;
+    }
+
+    const saved = mapBillRowToClient(res.data);
+    setDebts((prev) => prev.map((row) => (row.id === saved.id ? saved : row)));
+    setSavingSelected(false);
+  }
+
+  async function makeDebtPayment() {
+    if (!supabase || !userId || !selectedDebt || paymentDraft.saving) return;
+
+    const amount = round2(parseMoneyInput(paymentDraft.amount));
+    if (!Number.isFinite(amount) || amount <= 0) {
+      window.alert("Enter a valid payment amount.");
+      return;
+    }
+
+    const paymentDate = paymentDraft.paymentDate || isoDate();
+    const payAccountId = paymentDraft.accountId || "";
+    const payNote = String(paymentDraft.note || "").trim();
+
+    setPaymentDraft((prev) => ({ ...prev, saving: true }));
+
+    if (payAccountId) {
+      const payAccount = accounts.find((account) => account.id === payAccountId);
+
+      if (!payAccount) {
+        window.alert("Selected payment account was not found.");
+        setPaymentDraft((prev) => ({ ...prev, saving: false }));
+        return;
+      }
+
+      const nextAccountBalance = round2(safeNum(payAccount.balance, 0) - amount);
+
+      const { error: accountError } = await supabase
+        .from("accounts")
+        .update({
+          balance: nextAccountBalance,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", payAccount.id)
+        .eq("user_id", userId);
+
+      if (accountError) {
+        console.error("debt payment account update error:", accountError);
+        setPageError(accountError.message || "Could not update payment account.");
+        setPaymentDraft((prev) => ({ ...prev, saving: false }));
+        return;
+      }
+
+      setAccounts((prev) =>
+        prev.map((account) =>
+          account.id === payAccount.id
+            ? {
+                ...account,
+                balance: nextAccountBalance,
+                updatedAt: Date.now(),
+              }
+            : account
+        )
+      );
+
+      await supabase.from("account_transactions").insert({
+        user_id: userId,
+        account_id: payAccount.id,
+        kind: "debt_payment",
+        amount,
+        delta: -amount,
+        resulting_balance: nextAccountBalance,
+        note: `${selectedDebt.name || "Debt"} payment${payNote ? ` • ${payNote}` : ""}`,
+        related_account_id: null,
+        related_account_name: null,
+        source_type: "debt_payment",
+        source_id: selectedDebt.id,
+        created_at: new Date().toISOString(),
+      });
+    }
+
+    let nextDueDate = selectedDebt.dueDate || "";
+    if (paymentDraft.advanceDue && selectedDebt.frequency !== "one_time" && selectedDebt.dueDate) {
+      nextDueDate = nextDueDateFromFrequency(selectedDebt.dueDate, selectedDebt.frequency);
+    }
+
+    const nextBalance = Math.max(0, round2(safeNum(selectedDebt.balance, 0) - amount));
+
+    const { data: updatedDebtRow, error: debtError } = await supabase
+      .from("bills")
+      .update({
+        last_paid_date: paymentDate,
+        due_date: nextDueDate || null,
+        balance: nextBalance,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", selectedDebt.id)
+      .eq("user_id", userId)
+      .select()
+      .single();
+
+    if (debtError) {
+      console.error("debt payment update error:", debtError);
+      setPageError(debtError.message || "Could not update debt after payment.");
+      setPaymentDraft((prev) => ({ ...prev, saving: false }));
+      return;
+    }
+
+    let savedPayment = {
+      id: uid(),
+      billId: selectedDebt.id,
+      amount,
+      paymentDate,
+      accountId: payAccountId,
+      note: payNote,
+      createdAt: new Date().toISOString(),
+    };
+
+    const paymentInsert = await supabase
+      .from("bill_payments")
+      .insert({
+        user_id: userId,
+        bill_id: selectedDebt.id,
+        amount,
+        payment_date: paymentDate,
+        payment_account_id: payAccountId || null,
+        note: payNote || null,
+      })
+      .select()
+      .single();
+
+    if (!paymentInsert.error && paymentInsert.data) {
+      savedPayment = mapPaymentRowToClient(paymentInsert.data);
+    }
+
+    const updatedDebt = mapBillRowToClient(updatedDebtRow);
+    setDebts((prev) =>
+      prev.map((debt) => (debt.id === updatedDebt.id ? updatedDebt : debt))
+    );
+    setPayments((prev) => [savedPayment, ...prev]);
+
+    setPaymentDraft({
+      amount: "",
+      paymentDate: isoDate(),
+      accountId: editor.accountId || defaultAccountId || "",
+      note: "",
+      advanceDue: true,
+      saving: false,
+    });
+  }
 
   if (loading) {
     return (
-      <main className="savingsPage">
-        <div className="savingsPageShell">
+      <main className="debtPage">
+        <div className="debtPageShell">
           <GlassPane size="card">
             <div style={{ fontWeight: 800, fontSize: 18, color: "#fff" }}>
-              Loading savings.
+              Loading debt.
             </div>
           </GlassPane>
         </div>
@@ -1843,430 +2030,226 @@ export default function SavingsPage() {
 
   return (
     <>
-      <main className="savingsPage">
-        <div className="savingsPageShell">
+      <main className="debtPage">
+        <div className="debtPageShell">
+          <GlassPane size="card">
+            <div className="debtHeroGrid">
+              <div style={{ minWidth: 0 }}>
+                <div className="debtEyebrow">Life Command Center</div>
+                <div className="debtHeroTitle">Debt Command</div>
+                <div className="debtHeroSub">
+                  Real debt balances, payment pressure, payoff read, and direct debt payments in the center focus card.
+                </div>
+
+                <div className="debtPillRow">
+                  <MiniPill>{metrics.activeCount} active debts</MiniPill>
+                  <MiniPill>{currentMonthLabel()}</MiniPill>
+                  <MiniPill tone="amber">{metrics.dueSoonCount} due soon</MiniPill>
+                  <MiniPill tone="green">{money(metrics.paidThisMonth)} paid this month</MiniPill>
+                </div>
+              </div>
+
+              <div className="debtHeroSide">
+                <MiniPill tone="red">{money(metrics.totalBalance)} total</MiniPill>
+                <MiniPill tone="amber">{money(metrics.monthlyLoad)} monthly</MiniPill>
+                <MiniPill tone={metrics.hottestAprDebt ? "red" : "neutral"}>
+                  {metrics.hottestAprDebt
+                    ? `Highest APR: ${metrics.hottestAprDebt.name}`
+                    : "No APR focus"}
+                </MiniPill>
+              </div>
+            </div>
+          </GlassPane>
+
           {pageError ? (
             <GlassPane tone="red" size="card">
-              <div style={{ fontWeight: 800, fontSize: 16, color: "#fff" }}>
-                Savings error
-              </div>
-              <div
-                style={{
-                  marginTop: 6,
-                  fontSize: 13,
-                  color: "rgba(255,255,255,0.74)",
-                }}
-              >
+              <div style={{ fontWeight: 800, fontSize: 15, color: "#fff" }}>
                 {pageError}
               </div>
             </GlassPane>
           ) : null}
 
-          <GlassPane size="card">
-            <div className="savingsHeroGrid">
-              <div style={{ minWidth: 0 }}>
-                <div className="savingsEyebrow">Life Command Center</div>
-                <div className="savingsHeroTitle">Savings Command</div>
-                <div className="savingsHeroSub">
-                  Cleaner goal pressure, tighter controls, stronger focus logic,
-                  and a layout that actually fills the page instead of leaving dead space.
-                </div>
-
-                <div className="savingsPillRow">
-                  <MiniPill>{quickStats.activeCount} active goals</MiniPill>
-                  <MiniPill>{monthLabel}</MiniPill>
-                  <MiniPill>{quickStats.dueDated} dated</MiniPill>
-                  <MiniPill>{quickStats.noDate} without date</MiniPill>
-                </div>
-              </div>
-
-              <div className="savingsHeroSide">
-                <MiniPill>{focusMode}</MiniPill>
-                <MiniPill tone="green">{fmtMoney(totals.totalCurrent)} saved</MiniPill>
-                <MiniPill tone={heroTone}>{totals.dueSoonCount} due soon</MiniPill>
-              </div>
-            </div>
-          </GlassPane>
-
-          <section className="savingsMetricGrid">
+          <section className="debtMetricGrid">
             <StatCard
-              icon={PiggyBank}
-              label="Saved"
-              value={fmtMoney(totals.totalCurrent)}
-              detail={`${quickStats.activeCount} active goal${quickStats.activeCount === 1 ? "" : "s"} on the board.`}
-              tone="green"
-            />
-            <StatCard
-              icon={Target}
-              label="Target"
-              value={fmtMoney(totals.totalTarget)}
-              detail="All active savings targets added together."
-              tone="neutral"
+              icon={Landmark}
+              label="Total Balance"
+              value={money(metrics.totalBalance)}
+              detail="Current live debt balance across active debts."
+              tone="red"
             />
             <StatCard
               icon={Wallet}
-              label="Still Needed"
-              value={fmtMoney(totals.totalLeft)}
-              detail="Total gap left before the active board is fully funded."
-              tone={totals.totalLeft > 0 ? "amber" : "green"}
-            />
-            <StatCard
-              icon={TrendingUp}
-              label="Funding Health"
-              value={pct(totals.completion)}
-              detail="Overall completion across active savings goals."
-              tone={toneByValue(totals.completion - 50)}
-              badge={`${totals.fundedCount} funded`}
+              label="Monthly Load"
+              value={money(metrics.monthlyLoad)}
+              detail="Minimum plus extra payment pressure this month."
+              tone="amber"
             />
             <StatCard
               icon={CalendarClock}
-              label="Due Soon"
-              value={String(totals.dueSoonCount)}
-              detail={
-                dueSoonGoals[0]
-                  ? `Top pressure: ${dueSoonGoals[0].name}`
-                  : "No dated goals creating short-term pressure."
-              }
-              tone={heroTone}
-              badge={totals.overdueCount > 0 ? `${totals.overdueCount} overdue` : ""}
+              label="Due In 7 Days"
+              value={String(metrics.dueSoonCount)}
+              detail="Debts with due dates in the next 7 days."
+              tone={metrics.dueSoonCount > 0 ? "amber" : "green"}
+            />
+            <StatCard
+              icon={Percent}
+              label="Highest APR"
+              value={metrics.hottestAprDebt ? `${safeNum(metrics.hottestAprDebt.aprPct, 0)}%` : "—"}
+              detail={metrics.hottestAprDebt ? metrics.hottestAprDebt.name : "No debt on the board yet."}
+              tone={metrics.hottestAprDebt ? "red" : "neutral"}
+            />
+            <StatCard
+              icon={ShieldAlert}
+              label="Next Due"
+              value={metrics.nextDebt ? shortDate(metrics.nextDebt.dueDate) : "—"}
+              detail={metrics.nextDebt ? metrics.nextDebt.name : "No debt due yet."}
+              tone={metrics.nextDebt ? dueMeta(daysUntil(metrics.nextDebt.dueDate)).tone : "neutral"}
             />
           </section>
 
           <GlassPane size="card">
             <PaneHeader
-              title="Goal Controls"
-              subcopy="Tune focus order, search the roster, and steer what the page attacks first."
+              title="Debt Controls"
+              subcopy="Search the roster, filter debt status, and sort how you want."
             />
 
-            <div className="savingsControlsGrid">
+            <div className="debtControlsGrid">
               <div>
-                <div className="savingsTinyLabel">Focus Order</div>
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  <ActionBtn
-                    variant={focusMode === "deadline" ? "primary" : "ghost"}
-                    onClick={() => setFocusMode("deadline")}
-                  >
-                    Deadline
-                  </ActionBtn>
-                  <ActionBtn
-                    variant={focusMode === "gap" ? "primary" : "ghost"}
-                    onClick={() => setFocusMode("gap")}
-                  >
-                    Biggest Gap
-                  </ActionBtn>
-                  <ActionBtn
-                    variant={focusMode === "progress" ? "primary" : "ghost"}
-                    onClick={() => setFocusMode("progress")}
-                  >
-                    Least Funded
-                  </ActionBtn>
-                </div>
-              </div>
-
-              <div>
-                <div className="savingsTinyLabel">Quick Read</div>
-                <input
-                  className="savingsField"
-                  readOnly
-                  value={focusText}
-                />
-              </div>
-
-              <div>
-                <div className="savingsTinyLabel">Show Archived</div>
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  <ActionBtn
-                    variant={!showArchived ? "primary" : "ghost"}
-                    onClick={() => setShowArchived(false)}
-                  >
-                    Hide
-                  </ActionBtn>
-                  <ActionBtn
-                    variant={showArchived ? "primary" : "ghost"}
-                    onClick={() => setShowArchived(true)}
-                  >
-                    Show
-                  </ActionBtn>
-                </div>
-              </div>
-            </div>
-          </GlassPane>
-
-          <section className="savingsWorkspaceGrid">
-            <GlassPane size="card" style={{ height: "100%" }}>
-              <PaneHeader
-                title="Goal Roster"
-                subcopy="Main roster fills the page now instead of shrinking into the left and leaving dead space."
-                right={<MiniPill>{visibleGoals.length} showing</MiniPill>}
-              />
-
-              <div className="savingsRosterControls">
-                <div className="savingsSearchWrap">
+                <div className="debtTinyLabel">Search</div>
+                <div className="debtSearchWrap">
                   <Search size={15} />
                   <input
-                    className="savingsField savingsSearchField"
-                    placeholder="Search goal"
+                    className="debtField debtSearchField"
+                    placeholder="Search debt"
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
                   />
                 </div>
-
-                <select
-                  className="savingsField"
-                  value={filter}
-                  onChange={(e) => setFilter(e.target.value)}
-                >
-                  <option value="active">Active only</option>
-                  <option value="all">All goals</option>
-                  <option value="archived">Archived</option>
-                  <option value="due">Due soon</option>
-                </select>
-
-                <select
-                  className="savingsField"
-                  value={sort}
-                  onChange={(e) => setSort(e.target.value)}
-                >
-                  <option value="priority">Priority</option>
-                  <option value="due">Due first</option>
-                  <option value="left">Amount left</option>
-                  <option value="progress">Least funded</option>
-                  <option value="updated">Recently updated</option>
-                  <option value="name">Name</option>
-                </select>
               </div>
 
-              {visibleGoals.length ? (
-                <div className="savingsRosterListCompact">
-                  {visibleGoals.map((goal) => (
-                    <CompactGoalRow
-                      key={goal.id}
-                      goal={goal}
-                      selected={goal.id === selectedGoal?.id}
-                      priority={priorityMap.get(goal.id) ?? null}
-                      onSelect={() => setSelectedGoalId(goal.id)}
-                      onDuplicate={() => duplicateGoal(goal)}
-                      onArchive={() => updateGoal(goal.id, { archived: !goal.archived })}
-                      onDelete={() => removeGoal(goal.id)}
+              <div>
+                <div className="debtTinyLabel">Scope</div>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <ActionBtn
+                    variant={scope === "active" ? "primary" : "ghost"}
+                    onClick={() => setScope("active")}
+                  >
+                    Active
+                  </ActionBtn>
+                  <ActionBtn
+                    variant={scope === "all" ? "primary" : "ghost"}
+                    onClick={() => setScope("all")}
+                  >
+                    All
+                  </ActionBtn>
+                  <ActionBtn
+                    variant={scope === "inactive" ? "primary" : "ghost"}
+                    onClick={() => setScope("inactive")}
+                  >
+                    Inactive
+                  </ActionBtn>
+                </div>
+              </div>
+
+              <div>
+                <div className="debtTinyLabel">Sort</div>
+                <select
+                  className="debtField"
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value)}
+                >
+                  <option value="due_asc">Due first</option>
+                  <option value="balance_desc">Balance high → low</option>
+                  <option value="apr_desc">APR high → low</option>
+                  <option value="name_asc">Name</option>
+                  <option value="updated_desc">Recently updated</option>
+                </select>
+              </div>
+            </div>
+          </GlassPane>
+
+          <section className="debtWorkspaceGrid">
+            <GlassPane size="card" style={{ height: "100%" }}>
+              <PaneHeader
+                title="Debt Roster"
+                subcopy="Main roster stays left. Work the selected debt in center."
+                right={<MiniPill>{visibleDebts.length} showing</MiniPill>}
+              />
+
+              {visibleDebts.length ? (
+                <div className="debtRosterListCompact">
+                  {visibleDebts.map((debt) => (
+                    <DebtRosterRow
+                      key={debt.id}
+                      debt={debt}
+                      selected={debt.id === selectedDebt?.id}
+                      onSelect={() => setSelectedDebtId(debt.id)}
+                      onDuplicate={() => duplicateDebt(debt)}
+                      onToggle={() => toggleDebtActive(debt)}
+                      onDelete={() => {
+                        setSelectedDebtId(debt.id);
+                        setTimeout(() => {
+                          if (
+                            typeof window !== "undefined" &&
+                            window.confirm(`Delete ${debt.name}?`)
+                          ) {
+                            supabase
+                              .from("bills")
+                              .delete()
+                              .eq("id", debt.id)
+                              .eq("user_id", userId)
+                              .then(({ error }) => {
+                                if (error) {
+                                  console.error(error);
+                                  setPageError(error.message || "Could not delete debt.");
+                                  return;
+                                }
+                                const nextDebts = debts.filter((row) => row.id !== debt.id);
+                                setDebts(nextDebts);
+                                if (selectedDebtId === debt.id) {
+                                  setSelectedDebtId(nextDebts[0]?.id || "");
+                                }
+                              });
+                          }
+                        }, 0);
+                      }}
                     />
                   ))}
                 </div>
               ) : (
-                <div className="savingsEmptyState">
+                <div className="debtEmptyState">
                   <div>
-                    <div className="savingsEmptyTitle">No goals found</div>
-                    <div className="savingsEmptyText">
-                      Clear filters or add a new savings goal.
+                    <div className="debtEmptyTitle">No debts found</div>
+                    <div className="debtEmptyText">
+                      Clear filters or add a new debt.
                     </div>
                   </div>
                 </div>
               )}
             </GlassPane>
 
-            <FocusGoalCard
-              goal={selectedGoal}
-              priority={selectedPriority}
-              saving={selectedGoal ? !!savingIds[selectedGoal.id] : false}
-              onDuplicate={() => selectedGoal && duplicateGoal(selectedGoal)}
-              onArchive={() =>
-                selectedGoal &&
-                updateGoal(selectedGoal.id, { archived: !selectedGoal.archived })
-              }
-              onDelete={() => selectedGoal && removeGoal(selectedGoal.id)}
-              onQuickAdd={(amount) => selectedGoal && applyContribution(selectedGoal.id, amount, "Quick add")}
-              onUndoLast={() => selectedGoal && undoLastContribution(selectedGoal.id)}
-              customAmount={selectedGoal ? customContribution[selectedGoal.id] ?? "" : ""}
-              customNote={selectedGoal ? customContributionNote[selectedGoal.id] ?? "" : ""}
-              setCustomAmount={(value) =>
-                selectedGoal &&
-                setCustomContribution((prev) => ({ ...prev, [selectedGoal.id]: value }))
-              }
-              setCustomNote={(value) =>
-                selectedGoal &&
-                setCustomContributionNote((prev) => ({ ...prev, [selectedGoal.id]: value }))
-              }
-              onCustomAdd={() =>
-                selectedGoal &&
-                applyContribution(
-                  selectedGoal.id,
-                  parseMoneyInput(customContribution[selectedGoal.id] ?? ""),
-                  customContributionNote[selectedGoal.id] ?? ""
-                )
-              }
+            <FocusDebtCard
+              debt={selectedDebt}
+              editor={editor}
+              setEditor={setEditor}
+              accounts={accounts}
+              payments={selectedDebtPayments}
+              saving={savingSelected}
+              paymentDraft={paymentDraft}
+              setPaymentDraft={setPaymentDraft}
+              onSave={saveSelectedDebt}
+              onDuplicate={() => selectedDebt && duplicateDebt(selectedDebt)}
+              onDelete={deleteDebt}
+              onToggleAutopay={toggleSelectedAutopay}
+              onMakePayment={makeDebtPayment}
             />
 
-            <AddGoalCard
-              adding={adding}
-              setAdding={setAdding}
-              onAdd={addGoalFromForm}
+            <AddDebtCard
+              form={addForm}
+              setForm={setAddForm}
+              accounts={accounts}
               saving={addingBusy}
-            />
-          </section>
-
-          <section className="savingsSectionGrid">
-            <GlassPane size="card" style={{ height: "100%" }}>
-              <PaneHeader
-                title="Funding Queue"
-                subcopy="The order this page should push your attention."
-                right={
-                  <MiniPill>
-                    {rankedGoals.length} item{rankedGoals.length === 1 ? "" : "s"}
-                  </MiniPill>
-                }
-              />
-
-              {rankedGoals.length ? (
-                <div className="savingsIntelList">
-                  {rankedGoals.slice(0, 5).map((goal) => (
-                    <QueueItem
-                      key={goal.id}
-                      goal={goal}
-                      onFocus={() => setSelectedGoalId(goal.id)}
-                    />
-                  ))}
-                </div>
-              ) : (
-                <div className="savingsEmptyState savingsInlineEmpty">
-                  <div>
-                    <div className="savingsEmptyTitle">Nothing to rank yet</div>
-                    <div className="savingsEmptyText">
-                      Add active goals and real target numbers to build a queue.
-                    </div>
-                  </div>
-                </div>
-              )}
-            </GlassPane>
-
-            <GlassPane size="card" style={{ height: "100%" }}>
-              <PaneHeader
-                title="Due Soon"
-                subcopy="Fast action view for the closest target dates."
-                right={
-                  <MiniPill>
-                    {dueSoonGoals.length} item{dueSoonGoals.length === 1 ? "" : "s"}
-                  </MiniPill>
-                }
-              />
-
-              {dueSoonGoals.length ? (
-                <div className="savingsIntelList">
-                  {dueSoonGoals.map((goal) => (
-                    <DueItem
-                      key={goal.id}
-                      goal={goal}
-                      onFocus={() => setSelectedGoalId(goal.id)}
-                    />
-                  ))}
-                </div>
-              ) : (
-                <div className="savingsEmptyState savingsInlineEmpty">
-                  <div>
-                    <div className="savingsEmptyTitle">Nothing urgent right now</div>
-                    <div className="savingsEmptyText">
-                      No active savings goal has immediate due pressure.
-                    </div>
-                  </div>
-                </div>
-              )}
-            </GlassPane>
-          </section>
-
-          <section className="savingsLowerGrid">
-            <GlassPane size="card" style={{ height: "100%" }}>
-              <PaneHeader
-                title="Savings Snapshot"
-                subcopy="Quick board view plus import and export."
-              />
-
-              <div className="savingsSnapshotGrid">
-                <div className="savingsSnapshotRow">
-                  <span>Total saved</span>
-                  <strong>{fmtMoney(totals.totalCurrent)}</strong>
-                </div>
-                <div className="savingsSnapshotRow">
-                  <span>Total target</span>
-                  <strong>{fmtMoney(totals.totalTarget)}</strong>
-                </div>
-                <div className="savingsSnapshotRow">
-                  <span>Total left</span>
-                  <strong>{fmtMoney(totals.totalLeft)}</strong>
-                </div>
-                <div className="savingsSnapshotRow">
-                  <span>Funding health</span>
-                  <strong>{pct(totals.completion)}</strong>
-                </div>
-                <div className="savingsSnapshotRow">
-                  <span>Due soon</span>
-                  <strong>{totals.dueSoonCount}</strong>
-                </div>
-                <div className="savingsSnapshotRow">
-                  <span>Recent contributions</span>
-                  <strong>{contributionFeed.length}</strong>
-                </div>
-              </div>
-
-              <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
-                <ActionBtn onClick={exportGoals}>
-                  <Download size={14} /> Export
-                </ActionBtn>
-                <ActionBtn onClick={importReplaceGoals}>
-                  Import / Replace
-                </ActionBtn>
-              </div>
-
-              <div style={{ marginTop: 12 }}>
-                <textarea
-                  className="savingsField"
-                  rows={6}
-                  placeholder="Paste exported JSON here to import..."
-                  value={ioText}
-                  onChange={(e) => setIoText(e.target.value)}
-                />
-              </div>
-
-              <div style={{ marginTop: 12 }}>
-                <div className="savingsTinyLabel" style={{ marginBottom: 8 }}>
-                  Recent Board Activity
-                </div>
-
-                {contributionFeed.length ? (
-                  <div className="savingsIntelList savingsFeedList">
-                    {contributionFeed.map((item) => (
-                      <div key={item.id} className="savingsIntelItem">
-                        <div
-                          style={{
-                            display: "flex",
-                            justifyContent: "space-between",
-                            gap: 10,
-                            alignItems: "flex-start",
-                            flexWrap: "wrap",
-                          }}
-                        >
-                          <div>
-                            <div className="savingsIntelTitle">{item.goalName}</div>
-                            <div className="savingsIntelSub">
-                              {fmtDate(item.date)}
-                              {item.note ? ` • ${item.note}` : ""}
-                            </div>
-                          </div>
-
-                          <MiniPill tone="green">{fmtMoneyTight(item.amount)}</MiniPill>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="savingsEmptyText">
-                    No recent contributions logged.
-                  </div>
-                )}
-              </div>
-            </GlassPane>
-
-            <GoalEditorCard
-              goal={selectedGoal}
-              saving={selectedGoal ? !!savingIds[selectedGoal.id] : false}
-              onPatch={(patch) => selectedGoal && updateGoal(selectedGoal.id, patch)}
+              onAdd={addDebt}
             />
           </section>
         </div>
@@ -2278,14 +2261,14 @@ export default function SavingsPage() {
 }
 
 const globalStyles = `
-  .savingsPage {
+  .debtPage {
     width: 100%;
     min-width: 0;
     color: var(--lcc-text);
     font-family: var(--lcc-font-sans);
   }
 
-  .savingsPageShell {
+  .debtPageShell {
     width: 100%;
     max-width: none;
     margin: 0;
@@ -2294,7 +2277,7 @@ const globalStyles = `
     gap: 14px;
   }
 
-  .savingsEyebrow {
+  .debtEyebrow {
     font-size: 10px;
     text-transform: uppercase;
     letter-spacing: .22em;
@@ -2302,7 +2285,7 @@ const globalStyles = `
     color: rgba(255,255,255,0.42);
   }
 
-  .savingsHeroTitle {
+  .debtHeroTitle {
     margin-top: 8px;
     font-size: clamp(24px, 3.2vw, 34px);
     line-height: 1.02;
@@ -2311,7 +2294,7 @@ const globalStyles = `
     color: #fff;
   }
 
-  .savingsHeroSub {
+  .debtHeroSub {
     margin-top: 8px;
     font-size: 13px;
     line-height: 1.55;
@@ -2319,14 +2302,14 @@ const globalStyles = `
     max-width: 840px;
   }
 
-  .savingsHeroGrid {
+  .debtHeroGrid {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
     gap: 14px;
     align-items: start;
   }
 
-  .savingsHeroSide {
+  .debtHeroSide {
     display: flex;
     gap: 8px;
     flex-wrap: wrap;
@@ -2334,69 +2317,39 @@ const globalStyles = `
     align-content: flex-start;
   }
 
-  .savingsPillRow {
+  .debtPillRow {
     margin-top: 12px;
     display: flex;
     gap: 8px;
     flex-wrap: wrap;
   }
 
-  .savingsMetricGrid {
+  .debtMetricGrid {
     display: grid;
     grid-template-columns: repeat(5, minmax(0, 1fr));
     gap: 14px;
   }
 
-  .savingsControlsGrid {
+  .debtControlsGrid {
     display: grid;
-    grid-template-columns: minmax(0, 1.02fr) minmax(0, 1.1fr) minmax(250px, 0.42fr);
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr) minmax(260px, 0.56fr);
     gap: 14px;
     align-items: end;
   }
 
-  .savingsWorkspaceGrid {
+  .debtWorkspaceGrid {
     display: grid;
-    grid-template-columns: minmax(500px, 1.45fr) minmax(420px, 1.18fr) minmax(360px, 1fr);
+    grid-template-columns: minmax(460px, 1.18fr) minmax(520px, 1.36fr) minmax(360px, 0.95fr);
     gap: 14px;
     align-items: stretch;
   }
 
-  .savingsWorkspaceGrid > * {
+  .debtWorkspaceGrid > * {
     min-width: 0;
     height: 100%;
   }
 
-  .savingsSectionGrid {
-    display: grid;
-    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
-    gap: 14px;
-    align-items: stretch;
-  }
-
-  .savingsSectionGrid > * {
-    min-width: 0;
-    height: 100%;
-  }
-
-  .savingsLowerGrid {
-    display: grid;
-    grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr);
-    gap: 14px;
-    align-items: start;
-  }
-
-  .savingsLowerGrid > * {
-    min-width: 0;
-  }
-
-  .savingsRosterControls {
-    display: grid;
-    grid-template-columns: 1.32fr 0.84fr 0.88fr;
-    gap: 10px;
-    margin-bottom: 10px;
-  }
-
-  .savingsSearchWrap {
+  .debtSearchWrap {
     position: relative;
     display: flex;
     align-items: center;
@@ -2411,7 +2364,7 @@ const globalStyles = `
     padding: 0 12px;
   }
 
-  .savingsSearchField {
+  .debtSearchField {
     min-height: 42px !important;
     border: 0 !important;
     background: transparent !important;
@@ -2419,7 +2372,7 @@ const globalStyles = `
     padding: 0 !important;
   }
 
-  .savingsRosterListCompact {
+  .debtRosterListCompact {
     display: grid;
     gap: 10px;
     min-height: 720px;
@@ -2428,7 +2381,7 @@ const globalStyles = `
     padding-right: 2px;
   }
 
-  .savingsCompactRow {
+  .debtCompactRow {
     display: grid;
     grid-template-columns: 42px minmax(0, 1fr) auto auto;
     gap: 10px;
@@ -2443,11 +2396,11 @@ const globalStyles = `
     transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
   }
 
-  .savingsCompactRow:hover {
+  .debtCompactRow:hover {
     transform: translateY(-1px);
   }
 
-  .savingsCompactAvatar {
+  .debtCompactAvatar {
     width: 42px;
     height: 42px;
     border-radius: 14px;
@@ -2462,7 +2415,7 @@ const globalStyles = `
     letter-spacing: .05em;
   }
 
-  .savingsCompactTitle {
+  .debtCompactTitle {
     font-size: 13.5px;
     font-weight: 800;
     color: #fff;
@@ -2470,27 +2423,27 @@ const globalStyles = `
     overflow-wrap: anywhere;
   }
 
-  .savingsCompactSub {
+  .debtCompactSub {
     margin-top: 4px;
     font-size: 11.5px;
     color: rgba(255,255,255,0.54);
     line-height: 1.35;
   }
 
-  .savingsCompactValue {
+  .debtCompactValue {
     font-size: 15px;
     font-weight: 850;
     color: #fff;
     white-space: nowrap;
   }
 
-  .savingsCompactActions {
+  .debtCompactActions {
     display: flex;
     gap: 6px;
     align-items: center;
   }
 
-  .savingsIconBtn {
+  .debtIconBtn {
     width: 34px;
     height: 34px;
     border-radius: 12px;
@@ -2503,12 +2456,12 @@ const globalStyles = `
     cursor: pointer;
   }
 
-  .savingsDangerBtn {
+  .debtDangerBtn {
     border-color: rgba(255,132,163,0.18);
     color: #ffd3df;
   }
 
-  .savingsFocusBox {
+  .debtFocusBox {
     border-radius: 22px;
     border: 1px solid rgba(214,226,255,0.12);
     background:
@@ -2517,82 +2470,113 @@ const globalStyles = `
     min-height: 100%;
   }
 
-  .savingsInfoGrid {
+  .debtInfoGrid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 10px;
   }
 
-  .savingsInfoCell {
+  .debtInfoCell {
     border-radius: 18px;
     border: 1px solid rgba(255,255,255,0.05);
     background: rgba(255,255,255,0.025);
     padding: 11px;
   }
 
-  .savingsInfoValue {
+  .debtInfoValue {
     font-size: 0.96rem;
     font-weight: 900;
     line-height: 1.15;
     color: #fff;
   }
 
-  .savingsInfoSub {
+  .debtInfoSub {
     margin-top: 5px;
     color: rgba(255,255,255,0.62);
     font-size: 0.79rem;
     line-height: 1.4;
   }
 
-  .savingsProgress {
+  .debtProgress {
     height: 8px;
     border-radius: 999px;
     overflow: hidden;
     background: rgba(255,255,255,0.1);
   }
 
-  .savingsProgressFill {
+  .debtProgressFill {
     height: 100%;
     border-radius: 999px;
     transition: width 0.4s ease;
   }
 
-  .savingsActionGrid {
+  .debtPayBox {
+    margin-top: 14px;
+    border-radius: 22px;
+    border: 1px solid rgba(214,226,255,0.12);
+    background:
+      linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01));
+    padding: 15px;
+    display: grid;
+    gap: 12px;
+  }
+
+  .debtPayHeader {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .debtPaySub {
+    margin-top: 4px;
+    font-size: 12px;
+    line-height: 1.45;
+    color: rgba(255,255,255,0.60);
+  }
+
+  .debtPayGrid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .debtActionGrid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 8px;
   }
 
-  .savingsActionGridTight {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+  .debtActionGridQuad {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .savingsFormStack {
+  .debtFormStack {
     display: grid;
     gap: 12px;
   }
 
-  .savingsFormGrid2,
-  .savingsFormGrid3 {
+  .debtFormGrid2,
+  .debtFormGrid3,
+  .debtFormGrid4 {
     display: grid;
     gap: 10px;
   }
 
-  .savingsFormGrid2 {
+  .debtFormGrid2 {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .savingsFormGrid3 {
+  .debtFormGrid3 {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
-  .savingsContributionGrid {
-    display: grid;
-    grid-template-columns: 180px minmax(0, 1fr) 130px;
-    gap: 10px;
+  .debtFormGrid4 {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 
-  .savingsTinyLabel {
+  .debtTinyLabel {
     display: block;
     margin-bottom: 8px;
     font-size: 10px;
@@ -2602,7 +2586,7 @@ const globalStyles = `
     font-weight: 800;
   }
 
-  .savingsField {
+  .debtField {
     width: 100%;
     min-height: 44px;
     border-radius: 14px;
@@ -2618,29 +2602,29 @@ const globalStyles = `
     transition: border-color 160ms ease, box-shadow 160ms ease, background 160ms ease;
   }
 
-  .savingsField:focus {
+  .debtField:focus {
     border-color: rgba(143,177,255,0.30);
     box-shadow:
       0 0 0 4px rgba(79,114,255,0.08),
       inset 0 1px 0 rgba(255,255,255,0.035);
   }
 
-  .savingsField::placeholder {
+  .debtField::placeholder {
     color: rgba(225,233,245,0.38);
   }
 
-  .savingsField option {
+  .debtField option {
     background: #08111f;
     color: #f4f7ff;
   }
 
-  textarea.savingsField {
+  textarea.debtField {
     min-height: 110px;
     resize: vertical;
     padding: 12px 13px;
   }
 
-  .savingsActionBtn {
+  .debtActionBtn {
     min-height: 40px;
     padding: 10px 13px;
     border-radius: 14px;
@@ -2654,25 +2638,20 @@ const globalStyles = `
     transition: transform 160ms ease, border-color 160ms ease, background 160ms ease, box-shadow 160ms ease;
   }
 
-  .savingsActionBtn:hover {
+  .debtActionBtn:hover {
     transform: translateY(-1px);
   }
 
-  .savingsIntelList {
+  .debtIntelList {
     display: grid;
     gap: 10px;
-    min-height: 360px;
-    max-height: 360px;
+    min-height: 240px;
+    max-height: 260px;
     overflow: auto;
     padding-right: 2px;
   }
 
-  .savingsFeedList {
-    min-height: 0;
-    max-height: 360px;
-  }
-
-  .savingsIntelItem {
+  .debtIntelItem {
     border-radius: 18px;
     border: 1px solid rgba(255,255,255,0.07);
     background:
@@ -2682,7 +2661,7 @@ const globalStyles = `
     gap: 10px;
   }
 
-  .savingsIntelTitle {
+  .debtIntelTitle {
     font-size: 13px;
     font-weight: 800;
     color: #fff;
@@ -2690,60 +2669,14 @@ const globalStyles = `
     overflow-wrap: anywhere;
   }
 
-  .savingsIntelSub {
+  .debtIntelSub {
     margin-top: 4px;
     font-size: 11.5px;
     color: rgba(255,255,255,0.54);
     line-height: 1.35;
   }
 
-  .savingsIntelValue {
-    font-size: 14px;
-    font-weight: 850;
-    color: #fff;
-  }
-
-  .savingsIntelMiniGrid {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 8px;
-  }
-
-  .savingsIntelMini {
-    border-radius: 14px;
-    border: 1px solid rgba(255,255,255,0.05);
-    background: rgba(255,255,255,0.022);
-    padding: 10px;
-  }
-
-  .savingsSnapshotGrid {
-    display: grid;
-    gap: 8px;
-  }
-
-  .savingsSnapshotRow {
-    display: flex;
-    justify-content: space-between;
-    gap: 12px;
-    padding: 12px 14px;
-    border-radius: 14px;
-    border: 1px solid rgba(255,255,255,0.08);
-    background: rgba(255,255,255,0.03);
-    color: rgba(255,255,255,0.78);
-  }
-
-  .savingsQuickChipRow {
-    display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
-  }
-
-  .savingsContributionList {
-    display: grid;
-    gap: 10px;
-  }
-
-  .savingsEmptyState {
+  .debtEmptyState {
     min-height: 150px;
     display: grid;
     place-items: center;
@@ -2751,17 +2684,17 @@ const globalStyles = `
     padding: 14px;
   }
 
-  .savingsInlineEmpty {
-    min-height: 360px;
+  .debtInlineEmpty {
+    min-height: 220px;
   }
 
-  .savingsEmptyTitle {
+  .debtEmptyTitle {
     font-size: 16px;
     font-weight: 850;
     color: #fff;
   }
 
-  .savingsEmptyText {
+  .debtEmptyText {
     margin-top: 6px;
     font-size: 13px;
     line-height: 1.5;
@@ -2770,103 +2703,92 @@ const globalStyles = `
   }
 
   @media (max-width: 1560px) {
-    .savingsWorkspaceGrid {
-      grid-template-columns: minmax(440px, 1.22fr) minmax(390px, 1fr) minmax(320px, 0.9fr);
+    .debtWorkspaceGrid {
+      grid-template-columns: minmax(420px, 1.08fr) minmax(460px, 1.18fr) minmax(320px, 0.9fr);
     }
   }
 
   @media (max-width: 1420px) {
-    .savingsControlsGrid {
+    .debtControlsGrid {
       grid-template-columns: 1fr;
     }
 
-    .savingsWorkspaceGrid {
+    .debtWorkspaceGrid {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
-    .savingsWorkspaceGrid > :nth-child(3) {
+    .debtWorkspaceGrid > :nth-child(3) {
       grid-column: 1 / -1;
-    }
-
-    .savingsLowerGrid {
-      grid-template-columns: 1fr;
     }
   }
 
   @media (max-width: 1260px) {
-    .savingsMetricGrid {
+    .debtMetricGrid {
       grid-template-columns: repeat(3, minmax(0, 1fr));
     }
 
-    .savingsSectionGrid {
-      grid-template-columns: 1fr;
-    }
-
-    .savingsRosterListCompact {
+    .debtRosterListCompact {
       min-height: 580px;
       max-height: 580px;
     }
   }
 
   @media (max-width: 1100px) {
-    .savingsHeroGrid,
-    .savingsWorkspaceGrid {
+    .debtHeroGrid,
+    .debtWorkspaceGrid {
       grid-template-columns: 1fr;
     }
 
-    .savingsHeroSide {
+    .debtHeroSide {
       justify-content: flex-start;
     }
   }
 
   @media (max-width: 1024px) {
-    .savingsRosterControls,
-    .savingsInfoGrid,
-    .savingsFormGrid2,
-    .savingsFormGrid3,
-    .savingsActionGrid,
-    .savingsActionGridTight,
-    .savingsIntelMiniGrid,
-    .savingsContributionGrid {
+    .debtInfoGrid,
+    .debtFormGrid2,
+    .debtFormGrid3,
+    .debtFormGrid4,
+    .debtActionGrid,
+    .debtActionGridQuad,
+    .debtPayGrid {
       grid-template-columns: 1fr;
     }
 
-    .savingsCompactRow {
+    .debtCompactRow {
       grid-template-columns: 42px minmax(0, 1fr);
     }
 
-    .savingsCompactValue {
+    .debtCompactValue {
       white-space: normal;
     }
 
-    .savingsCompactActions {
+    .debtCompactActions {
       grid-column: 2;
       justify-content: flex-start;
     }
 
-    .savingsRosterListCompact,
-    .savingsIntelList {
+    .debtRosterListCompact,
+    .debtIntelList {
       min-height: 0;
       max-height: none;
     }
   }
 
   @media (max-width: 760px) {
-    .savingsPageShell {
+    .debtPageShell {
       padding: 8px 0 14px;
     }
 
-    .savingsMetricGrid,
-    .savingsSectionGrid,
-    .savingsLowerGrid {
-      grid-template-columns: 1fr;
+    .debtMetricGrid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
     }
   }
 
   @media (max-width: 640px) {
-    .savingsMetricGrid,
-    .savingsActionGrid,
-    .savingsActionGridTight {
+    .debtMetricGrid,
+    .debtActionGrid,
+    .debtActionGridQuad {
       grid-template-columns: 1fr;
     }
   }
