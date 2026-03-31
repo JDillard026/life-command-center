@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ArrowRightLeft,
   ChevronRight,
@@ -73,8 +73,25 @@ function fmtWhen(ts) {
   });
 }
 
+function normalizeType(type) {
+  return String(type || "other").toLowerCase().trim();
+}
+
+function isCreditType(type) {
+  return normalizeType(type) === "credit";
+}
+
+function isLiquidType(type) {
+  const t = normalizeType(type);
+  return t === "checking" || t === "savings" || t === "cash";
+}
+
+function isInvestmentType(type) {
+  return normalizeType(type) === "investment";
+}
+
 function typeLabel(t) {
-  const v = String(t || "other").toLowerCase();
+  const v = normalizeType(t);
   if (v === "checking") return "Checking";
   if (v === "savings") return "Savings";
   if (v === "cash") return "Cash";
@@ -84,7 +101,7 @@ function typeLabel(t) {
 }
 
 function typeTone(type) {
-  const t = String(type || "other").toLowerCase();
+  const t = normalizeType(type);
   if (t === "savings") return "green";
   if (t === "cash") return "amber";
   if (t === "credit") return "red";
@@ -128,7 +145,7 @@ function toneMeta(tone = "neutral") {
 }
 
 function typeEmoji(type) {
-  const t = String(type || "other").toLowerCase();
+  const t = normalizeType(type);
   if (t === "checking") return "🏦";
   if (t === "savings") return "💰";
   if (t === "cash") return "💵";
@@ -149,41 +166,39 @@ function initialsFromLabel(label = "") {
 
 function transactionLabel(kind) {
   const k = String(kind || "").toLowerCase();
+
   if (k === "deposit") return "Deposit";
   if (k === "withdraw") return "Withdraw";
+  if (k === "payment") return "Payment";
+  if (k === "charge") return "Charge";
   if (k === "transfer_in") return "Transfer In";
   if (k === "transfer_out") return "Transfer Out";
+  if (k === "payment_in") return "Payment Applied";
+  if (k === "advance_out") return "Credit Advance";
+  if (k === "balance_transfer_out") return "Balance Transfer Out";
+  if (k === "balance_transfer_in") return "Balance Transfer In";
   if (k === "set") return "Set Balance";
   if (k === "create") return "Account Created";
-  if (k === "delete") return "Account Deleted";
   return "Transaction";
 }
 
 function transactionTone(kind) {
   const k = String(kind || "").toLowerCase();
-  if (["deposit", "transfer_in"].includes(k)) return "green";
-  if (["withdraw", "transfer_out", "delete"].includes(k)) return "red";
+
+  if (
+    ["deposit", "transfer_in", "payment", "payment_in", "balance_transfer_out"].includes(k)
+  ) {
+    return "green";
+  }
+
+  if (
+    ["withdraw", "charge", "transfer_out", "advance_out", "balance_transfer_in"].includes(k)
+  ) {
+    return "red";
+  }
+
   if (["set", "create"].includes(k)) return "amber";
   return "neutral";
-}
-
-function defaultAccounts() {
-  return [
-    {
-      id: uid(),
-      name: "Checking",
-      type: "checking",
-      balance: 0,
-      updatedAt: nowTs(),
-    },
-    {
-      id: uid(),
-      name: "Savings",
-      type: "savings",
-      balance: 0,
-      updatedAt: nowTs(),
-    },
-  ];
 }
 
 function mapAccountRowToClient(row) {
@@ -235,6 +250,61 @@ function mapLedgerClientToRow(entry, userId) {
     related_account_id: entry.relatedAccountId || null,
     related_account_name: entry.relatedAccountName || "",
     created_at: new Date(entry.ts || nowTs()).toISOString(),
+  };
+}
+
+function getAdjustDelta(accountType, mode, absAmount) {
+  const amount = Math.abs(safeNum(absAmount, 0));
+  if (isCreditType(accountType)) {
+    return mode === "decrease" ? -amount : amount;
+  }
+  return mode === "decrease" ? -amount : amount;
+}
+
+function getAdjustKind(accountType, mode) {
+  if (isCreditType(accountType)) {
+    return mode === "decrease" ? "payment" : "charge";
+  }
+  return mode === "decrease" ? "withdraw" : "deposit";
+}
+
+function getTransferPlan(fromAccount, toAccount, amount) {
+  const absAmount = Math.abs(safeNum(amount, 0));
+  const fromIsCredit = isCreditType(fromAccount?.type);
+  const toIsCredit = isCreditType(toAccount?.type);
+
+  if (!fromIsCredit && !toIsCredit) {
+    return {
+      fromDelta: -absAmount,
+      toDelta: absAmount,
+      fromKind: "transfer_out",
+      toKind: "transfer_in",
+    };
+  }
+
+  if (!fromIsCredit && toIsCredit) {
+    return {
+      fromDelta: -absAmount,
+      toDelta: -absAmount,
+      fromKind: "transfer_out",
+      toKind: "payment_in",
+    };
+  }
+
+  if (fromIsCredit && !toIsCredit) {
+    return {
+      fromDelta: absAmount,
+      toDelta: absAmount,
+      fromKind: "advance_out",
+      toKind: "transfer_in",
+    };
+  }
+
+  return {
+    fromDelta: -absAmount,
+    toDelta: absAmount,
+    fromKind: "balance_transfer_out",
+    toKind: "balance_transfer_in",
   };
 }
 
@@ -611,7 +681,7 @@ function FocusCard({
 
   const tone = typeTone(selectedAccount.type);
   const meta = toneMeta(tone);
-  const isCredit = String(selectedAccount.type || "").toLowerCase() === "credit";
+  const isCredit = isCreditType(selectedAccount.type);
 
   return (
     <GlassPane tone={tone} size="card">
@@ -680,7 +750,7 @@ function AddAccountCard({ adding, setAdding, addAccount }) {
     <GlassPane size="card">
       <PaneHeader
         title="Add Account"
-        subcopy="Keep this fast and simple."
+        subcopy="Keep this fast and real."
         right={<MiniPill><Plus size={13} /> New</MiniPill>}
       />
 
@@ -717,9 +787,7 @@ function AddAccountCard({ adding, setAdding, addAccount }) {
             className="accountsField"
             placeholder="Starting balance"
             value={adding.balance}
-            onChange={(e) =>
-              setAdding((p) => ({ ...p, balance: e.target.value }))
-            }
+            onChange={(e) => setAdding((p) => ({ ...p, balance: e.target.value }))}
           />
         </div>
 
@@ -728,7 +796,7 @@ function AddAccountCard({ adding, setAdding, addAccount }) {
         </ActionBtn>
 
         <div className="accountsFootnote">
-          Credit accounts should store the amount owed as a positive number.
+          Credit accounts should store the amount owed as a positive number. If you ever overpay one, it can go negative.
         </div>
       </form>
     </GlassPane>
@@ -805,6 +873,7 @@ export default function AccountsPage() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [pageError, setPageError] = useState("");
+  const [status, setStatus] = useState("");
 
   const [accounts, setAccounts] = useState([]);
   const [primaryId, setPrimaryId] = useState("");
@@ -828,17 +897,86 @@ export default function AccountsPage() {
   const [modalAccountId, setModalAccountId] = useState("");
   const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");
-  const [adjustSign, setAdjustSign] = useState("deposit");
+  const [adjustMode, setAdjustMode] = useState("increase");
   const [transferToId, setTransferToId] = useState("");
   const [editName, setEditName] = useState("");
   const [editType, setEditType] = useState("checking");
 
   useEffect(() => {
+    if (!status) return undefined;
+    const id = window.setTimeout(() => setStatus(""), 3000);
+    return () => window.clearTimeout(id);
+  }, [status]);
+
+  const loadData = useCallback(
+    async (userId, preferredSelectedId = "") => {
+      if (!userId || !supabase) return;
+
+      const [accRes, settingsRes, ledgerRes] = await Promise.all([
+        supabase
+          .from("accounts")
+          .select("*")
+          .eq("user_id", userId)
+          .order("updated_at", { ascending: false }),
+
+        supabase
+          .from("account_settings")
+          .select("*")
+          .eq("user_id", userId)
+          .maybeSingle(),
+
+        supabase
+          .from("account_transactions")
+          .select("*")
+          .eq("user_id", userId)
+          .order("created_at", { ascending: false }),
+      ]);
+
+      if (accRes.error) throw accRes.error;
+      if (settingsRes.error) throw settingsRes.error;
+      if (ledgerRes.error) throw ledgerRes.error;
+
+      const loadedAccounts = (accRes.data || []).map(mapAccountRowToClient);
+      const storedPrimary = settingsRes.data?.primary_account_id || "";
+
+      const resolvedPrimary =
+        storedPrimary && loadedAccounts.some((a) => a.id === storedPrimary)
+          ? storedPrimary
+          : loadedAccounts[0]?.id || "";
+
+      if (resolvedPrimary && resolvedPrimary !== storedPrimary) {
+        await supabase.from("account_settings").upsert(
+          {
+            user_id: userId,
+            primary_account_id: resolvedPrimary,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "user_id" }
+        );
+      }
+
+      const nextSelected =
+        preferredSelectedId && loadedAccounts.some((a) => a.id === preferredSelectedId)
+          ? preferredSelectedId
+          : selectedAccountId && loadedAccounts.some((a) => a.id === selectedAccountId)
+          ? selectedAccountId
+          : resolvedPrimary || loadedAccounts[0]?.id || "";
+
+      setAccounts(loadedAccounts);
+      setPrimaryId(resolvedPrimary);
+      setSelectedAccountId(nextSelected);
+      setLedger((ledgerRes.data || []).map(mapLedgerRowToClient));
+    },
+    [selectedAccountId]
+  );
+
+  useEffect(() => {
     let mounted = true;
 
-    async function loadAll() {
+    async function bootstrap() {
       try {
         setPageError("");
+        setLoading(true);
 
         if (!supabase) throw new Error("Supabase is not configured.");
 
@@ -857,70 +995,7 @@ export default function AccountsPage() {
           return;
         }
 
-        const [accRes, settingsRes, ledgerRes] = await Promise.all([
-          supabase
-            .from("accounts")
-            .select("*")
-            .eq("user_id", currentUser.id)
-            .order("updated_at", { ascending: false }),
-
-          supabase
-            .from("account_settings")
-            .select("*")
-            .eq("user_id", currentUser.id)
-            .maybeSingle(),
-
-          supabase
-            .from("account_transactions")
-            .select("*")
-            .eq("user_id", currentUser.id)
-            .order("created_at", { ascending: false }),
-        ]);
-
-        if (accRes.error) throw accRes.error;
-        if (settingsRes.error) throw settingsRes.error;
-        if (ledgerRes.error) throw ledgerRes.error;
-
-        let loadedAccounts = (accRes.data || []).map(mapAccountRowToClient);
-
-        if (loadedAccounts.length === 0) {
-          const seeded = defaultAccounts();
-          const insertRows = seeded.map((a) =>
-            mapAccountClientToRow(a, currentUser.id)
-          );
-
-          const insertRes = await supabase
-            .from("accounts")
-            .insert(insertRows)
-            .select("*");
-
-          if (insertRes.error) throw insertRes.error;
-          loadedAccounts = (insertRes.data || []).map(mapAccountRowToClient);
-        }
-
-        const primary =
-          settingsRes.data?.primary_account_id &&
-          loadedAccounts.some((a) => a.id === settingsRes.data.primary_account_id)
-            ? settingsRes.data.primary_account_id
-            : loadedAccounts[0]?.id || "";
-
-        if (!settingsRes.data && primary) {
-          await supabase.from("account_settings").upsert(
-            {
-              user_id: currentUser.id,
-              primary_account_id: primary,
-              updated_at: new Date().toISOString(),
-            },
-            { onConflict: "user_id" }
-          );
-        }
-
-        if (!mounted) return;
-
-        setAccounts(loadedAccounts);
-        setPrimaryId(primary);
-        setSelectedAccountId(primary || loadedAccounts[0]?.id || "");
-        setLedger((ledgerRes.data || []).map(mapLedgerRowToClient));
+        await loadData(currentUser.id);
       } catch (err) {
         if (!mounted) return;
         setPageError(err?.message || "Failed to load accounts.");
@@ -929,11 +1004,11 @@ export default function AccountsPage() {
       }
     }
 
-    loadAll();
+    bootstrap();
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [loadData]);
 
   const selectedAccount = useMemo(
     () => accounts.find((a) => a.id === selectedAccountId) || null,
@@ -946,32 +1021,28 @@ export default function AccountsPage() {
   );
 
   const totals = useMemo(() => {
-    const checking = accounts
-      .filter((a) => String(a.type || "").toLowerCase() === "checking")
-      .reduce((s, a) => s + safeNum(a.balance, 0), 0);
-
-    const savings = accounts
-      .filter((a) => String(a.type || "").toLowerCase() === "savings")
-      .reduce((s, a) => s + safeNum(a.balance, 0), 0);
-
-    const cash = accounts
-      .filter((a) => String(a.type || "").toLowerCase() === "cash")
-      .reduce((s, a) => s + safeNum(a.balance, 0), 0);
+    const liquid = accounts
+      .filter((a) => isLiquidType(a.type))
+      .reduce((sum, a) => sum + safeNum(a.balance, 0), 0);
 
     const invest = accounts
-      .filter((a) => String(a.type || "").toLowerCase() === "investment")
-      .reduce((s, a) => s + safeNum(a.balance, 0), 0);
+      .filter((a) => isInvestmentType(a.type))
+      .reduce((sum, a) => sum + safeNum(a.balance, 0), 0);
 
-    const debts = accounts
-      .filter((a) => String(a.type || "").toLowerCase() === "credit")
-      .reduce((s, a) => s + safeNum(a.balance, 0), 0);
+    const creditExposure = accounts
+      .filter((a) => isCreditType(a.type))
+      .reduce((sum, a) => sum + Math.max(safeNum(a.balance, 0), 0), 0);
 
-    const assets = accounts
-      .filter((a) => String(a.type || "").toLowerCase() !== "credit")
-      .reduce((s, a) => s + safeNum(a.balance, 0), 0);
+    const assetBalances = accounts
+      .filter((a) => !isCreditType(a.type))
+      .reduce((sum, a) => sum + safeNum(a.balance, 0), 0);
 
-    const liquid = checking + savings + cash;
-    const netWorth = assets - debts;
+    const liabilityNet = accounts
+      .filter((a) => isCreditType(a.type))
+      .reduce((sum, a) => sum + safeNum(a.balance, 0), 0);
+
+    const netWorth = assetBalances - liabilityNet;
+
     const updatedMax = accounts.reduce(
       (mx, a) => Math.max(mx, safeNum(a.updatedAt, 0)),
       0
@@ -980,8 +1051,8 @@ export default function AccountsPage() {
     return {
       liquid,
       invest,
-      debts,
-      assets,
+      creditExposure,
+      assetBalances,
       netWorth,
       updatedMax,
     };
@@ -999,23 +1070,19 @@ export default function AccountsPage() {
     }
 
     if (typeFilter !== "all") {
-      list = list.filter(
-        (a) => String(a.type || "other").toLowerCase() === typeFilter
-      );
+      list = list.filter((a) => normalizeType(a.type) === typeFilter);
     }
 
     if (sort === "name") {
       list.sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")));
     } else if (sort === "balance") {
-      list.sort((a, b) => safeNum(b.balance, 0) - safeNum(a.balance, 0));
+      list.sort((a, b) => Math.abs(safeNum(b.balance, 0)) - Math.abs(safeNum(a.balance, 0)));
     } else {
       list.sort((a, b) => safeNum(b.updatedAt, 0) - safeNum(a.updatedAt, 0));
     }
 
     if (primaryId) {
-      list.sort((a, b) =>
-        a.id === primaryId ? -1 : b.id === primaryId ? 1 : 0
-      );
+      list.sort((a, b) => (a.id === primaryId ? -1 : b.id === primaryId ? 1 : 0));
     }
 
     return list;
@@ -1043,9 +1110,46 @@ export default function AccountsPage() {
       .sort((a, b) => safeNum(b.ts, 0) - safeNum(a.ts, 0));
   }, [ledger, selectedAccountId, ledgerSearch]);
 
+  async function insertLedgerEntries(entries) {
+    if (!user || !supabase || !entries.length) {
+      return { ok: false, error: "Missing ledger data." };
+    }
+
+    const rows = entries.map((entry) => mapLedgerClientToRow(entry, user.id));
+    const { error } = await supabase.from("account_transactions").insert(rows);
+
+    if (error) {
+      return { ok: false, error: error.message || "Failed to save ledger." };
+    }
+
+    return { ok: true };
+  }
+
+  async function updateAccountColumns(accountId, patch) {
+    if (!user || !supabase) {
+      return { ok: false, error: "Missing user." };
+    }
+
+    const { error } = await supabase
+      .from("accounts")
+      .update({
+        ...patch,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", accountId)
+      .eq("user_id", user.id);
+
+    if (error) {
+      return { ok: false, error: error.message || "Failed to save account." };
+    }
+
+    return { ok: true };
+  }
+
   async function savePrimary(nextId) {
     if (!user || !supabase || !nextId) return;
 
+    setPageError("");
     setPrimaryId(nextId);
 
     const { error } = await supabase.from("account_settings").upsert(
@@ -1059,53 +1163,11 @@ export default function AccountsPage() {
 
     if (error) {
       setPageError(error.message || "Failed to save primary account.");
-    }
-  }
-
-  async function createLedgerEntry(entry) {
-    if (!user || !supabase) return { ok: false, error: "Missing user." };
-
-    const { data, error } = await supabase
-      .from("account_transactions")
-      .insert([mapLedgerClientToRow(entry, user.id)])
-      .select()
-      .single();
-
-    if (error) {
-      return { ok: false, error: error.message || "Failed to save transaction." };
+      await loadData(user.id, nextId);
+      return;
     }
 
-    setLedger((prev) => [mapLedgerRowToClient(data), ...prev]);
-    return { ok: true };
-  }
-
-  async function saveAccountPatch(accountId, patch) {
-    if (!user || !supabase) return { ok: false, error: "Missing user." };
-
-    const payload = {
-      ...patch,
-      updated_at: new Date().toISOString(),
-    };
-
-    const { data, error } = await supabase
-      .from("accounts")
-      .update(payload)
-      .eq("id", accountId)
-      .eq("user_id", user.id)
-      .select()
-      .single();
-
-    if (error) {
-      return { ok: false, error: error.message || "Failed to save account." };
-    }
-
-    const saved = mapAccountRowToClient(data);
-    setAccounts((prev) => prev.map((a) => (a.id === accountId ? saved : a)));
-    return { ok: true, account: saved };
-  }
-
-  async function saveAccountBalance(accountId, nextBalance) {
-    return saveAccountPatch(accountId, { balance: safeNum(nextBalance, 0) });
+    setStatus("Primary account updated.");
   }
 
   async function addAccount(e) {
@@ -1115,9 +1177,16 @@ export default function AccountsPage() {
     if (!user || !supabase) return;
 
     const name = adding.name.trim();
-    if (!name) return;
+    if (!name) {
+      setPageError("Account name is required.");
+      return;
+    }
 
     const bal = adding.balance.trim() ? parseMoneyInput(adding.balance) : 0;
+    if (adding.balance.trim() && !Number.isFinite(bal)) {
+      setPageError("Enter a valid starting balance.");
+      return;
+    }
 
     const nextAcc = {
       id: uid(),
@@ -1139,75 +1208,84 @@ export default function AccountsPage() {
     }
 
     const saved = mapAccountRowToClient(data);
-    setAccounts((prev) => [...prev, saved]);
-    setSelectedAccountId(saved.id);
 
-    await createLedgerEntry({
-      id: uid(),
-      ts: nowTs(),
-      kind: "create",
-      accountId: saved.id,
-      amount: 0,
-      delta: 0,
-      resultingBalance: saved.balance,
-      note: "Account created",
-      relatedAccountId: "",
-      relatedAccountName: "",
-    });
+    const ledgerRes = await insertLedgerEntries([
+      {
+        id: uid(),
+        ts: nowTs(),
+        kind: "create",
+        accountId: saved.id,
+        amount: Math.abs(safeNum(saved.balance, 0)),
+        delta: safeNum(saved.balance, 0),
+        resultingBalance: safeNum(saved.balance, 0),
+        note: "Account created",
+        relatedAccountId: "",
+        relatedAccountName: "",
+      },
+    ]);
+
+    if (!ledgerRes.ok) {
+      setPageError(ledgerRes.error || "Account was added but ledger creation failed.");
+    }
 
     if (!primaryId) {
       await savePrimary(saved.id);
     }
 
+    await loadData(user.id, saved.id);
     setAdding({ name: "", type: "checking", balance: "" });
+    setStatus("Account added.");
   }
 
   async function deleteAccount(id) {
     if (!user || !supabase) return;
+
+    const acc = accounts.find((a) => a.id === id);
+    if (!acc) return;
+
     if (accounts.length <= 1) {
-      alert("You need at least 1 account.");
+      setPageError("You need at least one account.");
       return;
     }
 
-    const acc = accounts.find((a) => a.id === id);
-    const ok = confirm(`Delete "${acc?.name || "account"}"?`);
+    const ok = window.confirm(`Delete "${acc.name}" and its ledger history?`);
     if (!ok) return;
 
-    const next = accounts.filter((a) => a.id !== id);
-    setAccounts(next);
+    setPageError("");
 
-    const { error } = await supabase
+    const nextPrimary =
+      primaryId === id
+        ? accounts.find((a) => a.id !== id)?.id || ""
+        : primaryId;
+
+    const deleteLedgerRes = await supabase
+      .from("account_transactions")
+      .delete()
+      .eq("user_id", user.id)
+      .eq("account_id", id);
+
+    if (deleteLedgerRes.error) {
+      setPageError(deleteLedgerRes.error.message || "Failed to remove ledger.");
+      return;
+    }
+
+    const deleteAccountRes = await supabase
       .from("accounts")
       .delete()
       .eq("id", id)
       .eq("user_id", user.id);
 
-    if (error) {
-      setPageError(error.message || "Failed to delete account.");
+    if (deleteAccountRes.error) {
+      setPageError(deleteAccountRes.error.message || "Failed to delete account.");
       return;
     }
 
-    await createLedgerEntry({
-      id: uid(),
-      ts: nowTs(),
-      kind: "delete",
-      accountId: id,
-      amount: 0,
-      delta: 0,
-      resultingBalance: 0,
-      note: `${acc?.name || "Account"} deleted`,
-      relatedAccountId: "",
-      relatedAccountName: "",
-    });
-
-    if (primaryId === id) {
-      const newPrimary = next[0]?.id || "";
-      if (newPrimary) await savePrimary(newPrimary);
+    if (nextPrimary) {
+      await savePrimary(nextPrimary);
     }
 
-    if (selectedAccountId === id) {
-      setSelectedAccountId(next[0]?.id || "");
-    }
+    await loadData(user.id, nextPrimary);
+    setStatus("Account deleted.");
   }
 
   function openModal(type, accountId) {
@@ -1217,7 +1295,7 @@ export default function AccountsPage() {
     setModalOpen(true);
     setAmount("");
     setNote("");
-    setAdjustSign("deposit");
+    setAdjustMode("increase");
     setTransferToId("");
     setEditName(acc?.name || "");
     setEditType(acc?.type || "checking");
@@ -1225,146 +1303,222 @@ export default function AccountsPage() {
 
   async function applyModal() {
     setPageError("");
-    if (!modalAccount) return;
+    if (!modalAccount || !user || !supabase) return;
 
     if (modalType === "edit") {
       const name = editName.trim();
-      if (!name) return;
+      if (!name) {
+        setPageError("Account name is required.");
+        return;
+      }
 
-      const saveRes = await saveAccountPatch(modalAccount.id, {
+      const res = await updateAccountColumns(modalAccount.id, {
         name,
         account_type: editType,
       });
 
-      if (!saveRes.ok) {
-        setPageError(saveRes.error || "Failed to update account.");
+      if (!res.ok) {
+        setPageError(res.error || "Failed to update account.");
         return;
       }
 
+      await loadData(user.id, modalAccount.id);
       setModalOpen(false);
+      setStatus("Account updated.");
       return;
     }
-
-    const amt = parseMoneyInput(amount);
-    const cur = safeNum(modalAccount.balance, 0);
 
     if (modalType === "set") {
-      if (!Number.isFinite(amt) || amt < 0) return;
+      const exact = parseMoneyInput(amount);
 
-      const saveRes = await saveAccountBalance(modalAccount.id, amt);
-      if (!saveRes.ok) {
-        setPageError(saveRes.error || "Failed to set balance.");
+      if (!Number.isFinite(exact)) {
+        setPageError("Enter a valid balance.");
         return;
       }
 
-      await createLedgerEntry({
-        id: uid(),
-        ts: nowTs(),
-        kind: "set",
-        accountId: modalAccount.id,
-        amount: amt,
-        delta: amt - cur,
-        resultingBalance: amt,
-        note: note?.trim() || "Manual balance set",
-        relatedAccountId: "",
-        relatedAccountName: "",
+      const oldBalance = safeNum(modalAccount.balance, 0);
+
+      const updateRes = await updateAccountColumns(modalAccount.id, {
+        balance: exact,
       });
 
+      if (!updateRes.ok) {
+        setPageError(updateRes.error || "Failed to set balance.");
+        return;
+      }
+
+      const ledgerRes = await insertLedgerEntries([
+        {
+          id: uid(),
+          ts: nowTs(),
+          kind: "set",
+          accountId: modalAccount.id,
+          amount: Math.abs(exact),
+          delta: exact - oldBalance,
+          resultingBalance: exact,
+          note: note.trim() || "Manual balance set",
+          relatedAccountId: "",
+          relatedAccountName: "",
+        },
+      ]);
+
+      if (!ledgerRes.ok) {
+        await updateAccountColumns(modalAccount.id, { balance: oldBalance });
+        await loadData(user.id, modalAccount.id);
+        setPageError(ledgerRes.error || "Failed to save ledger. Balance rolled back.");
+        return;
+      }
+
+      await loadData(user.id, modalAccount.id);
       setModalOpen(false);
+      setStatus("Balance updated.");
       return;
     }
 
-    if (!Number.isFinite(amt) || amt <= 0) return;
+    if (modalType === "adjust") {
+      const absAmount = parseMoneyInput(amount);
+      if (!Number.isFinite(absAmount) || absAmount <= 0) {
+        setPageError("Enter a valid amount.");
+        return;
+      }
+
+      const current = safeNum(modalAccount.balance, 0);
+      const delta = getAdjustDelta(modalAccount.type, adjustMode, absAmount);
+      const nextBalance = current + delta;
+      const kind = getAdjustKind(modalAccount.type, adjustMode);
+
+      const updateRes = await updateAccountColumns(modalAccount.id, {
+        balance: nextBalance,
+      });
+
+      if (!updateRes.ok) {
+        setPageError(updateRes.error || "Failed to update balance.");
+        return;
+      }
+
+      const ledgerRes = await insertLedgerEntries([
+        {
+          id: uid(),
+          ts: nowTs(),
+          kind,
+          accountId: modalAccount.id,
+          amount: Math.abs(absAmount),
+          delta,
+          resultingBalance: nextBalance,
+          note: note.trim() || "",
+          relatedAccountId: "",
+          relatedAccountName: "",
+        },
+      ]);
+
+      if (!ledgerRes.ok) {
+        await updateAccountColumns(modalAccount.id, { balance: current });
+        await loadData(user.id, modalAccount.id);
+        setPageError(ledgerRes.error || "Failed to save ledger. Balance rolled back.");
+        return;
+      }
+
+      await loadData(user.id, modalAccount.id);
+      setModalOpen(false);
+      setStatus("Transaction applied.");
+      return;
+    }
 
     if (modalType === "transfer") {
+      const absAmount = parseMoneyInput(amount);
       const target = accounts.find((a) => a.id === transferToId);
+
+      if (!Number.isFinite(absAmount) || absAmount <= 0) {
+        setPageError("Enter a valid amount.");
+        return;
+      }
+
       if (!target) {
-        alert("Choose the account receiving the transfer.");
+        setPageError("Choose the destination account.");
         return;
       }
 
       if (target.id === modalAccount.id) {
-        alert("Cannot transfer to the same account.");
+        setPageError("Cannot transfer to the same account.");
         return;
       }
 
-      const fromCur = safeNum(modalAccount.balance, 0);
-      const toCur = safeNum(target.balance, 0);
-      const fromNext = fromCur - Math.abs(amt);
-      const toNext = toCur + Math.abs(amt);
+      const plan = getTransferPlan(modalAccount, target, absAmount);
+      const fromCurrent = safeNum(modalAccount.balance, 0);
+      const toCurrent = safeNum(target.balance, 0);
+      const fromNext = fromCurrent + plan.fromDelta;
+      const toNext = toCurrent + plan.toDelta;
+      const sharedNote = note.trim() || "Transfer between accounts";
 
-      const [fromRes, toRes] = await Promise.all([
-        saveAccountBalance(modalAccount.id, fromNext),
-        saveAccountBalance(target.id, toNext),
-      ]);
+      const fromRes = await updateAccountColumns(modalAccount.id, {
+        balance: fromNext,
+      });
 
-      if (!fromRes.ok || !toRes.ok) {
-        setPageError(fromRes.error || toRes.error || "Transfer failed.");
+      if (!fromRes.ok) {
+        setPageError(fromRes.error || "Failed to update source account.");
         return;
       }
 
-      const commonNote = note?.trim() || "Transfer between accounts";
+      const toRes = await updateAccountColumns(target.id, {
+        balance: toNext,
+      });
 
-      await Promise.all([
-        createLedgerEntry({
+      if (!toRes.ok) {
+        await updateAccountColumns(modalAccount.id, { balance: fromCurrent });
+        await loadData(user.id, modalAccount.id);
+        setPageError(toRes.error || "Failed to update destination account.");
+        return;
+      }
+
+      const ledgerRes = await insertLedgerEntries([
+        {
           id: uid(),
           ts: nowTs(),
-          kind: "transfer_out",
+          kind: plan.fromKind,
           accountId: modalAccount.id,
-          amount: Math.abs(amt),
-          delta: -Math.abs(amt),
+          amount: Math.abs(absAmount),
+          delta: plan.fromDelta,
           resultingBalance: fromNext,
-          note: commonNote,
+          note: sharedNote,
           relatedAccountId: target.id,
           relatedAccountName: target.name,
-        }),
-        createLedgerEntry({
+        },
+        {
           id: uid(),
           ts: nowTs(),
-          kind: "transfer_in",
+          kind: plan.toKind,
           accountId: target.id,
-          amount: Math.abs(amt),
-          delta: Math.abs(amt),
+          amount: Math.abs(absAmount),
+          delta: plan.toDelta,
           resultingBalance: toNext,
-          note: commonNote,
+          note: sharedNote,
           relatedAccountId: modalAccount.id,
           relatedAccountName: modalAccount.name,
-        }),
+        },
       ]);
 
+      if (!ledgerRes.ok) {
+        await updateAccountColumns(modalAccount.id, { balance: fromCurrent });
+        await updateAccountColumns(target.id, { balance: toCurrent });
+        await loadData(user.id, modalAccount.id);
+        setPageError(ledgerRes.error || "Failed to save ledger. Transfer rolled back.");
+        return;
+      }
+
+      await loadData(user.id, modalAccount.id);
       setModalOpen(false);
-      return;
+      setStatus("Transfer completed.");
     }
-
-    const delta = adjustSign === "withdraw" ? -Math.abs(amt) : Math.abs(amt);
-    const nextBal = cur + delta;
-
-    const saveRes = await saveAccountBalance(modalAccount.id, nextBal);
-    if (!saveRes.ok) {
-      setPageError(saveRes.error || "Failed to update balance.");
-      return;
-    }
-
-    await createLedgerEntry({
-      id: uid(),
-      ts: nowTs(),
-      kind: adjustSign === "withdraw" ? "withdraw" : "deposit",
-      accountId: modalAccount.id,
-      amount: Math.abs(amt),
-      delta,
-      resultingBalance: nextBal,
-      note: note?.trim() || "",
-      relatedAccountId: "",
-      relatedAccountName: "",
-    });
-
-    setModalOpen(false);
   }
 
   const currentMonth = new Date().toLocaleString(undefined, {
     month: "long",
     year: "numeric",
   });
+
+  const modalIsCredit = isCreditType(modalAccount?.type);
+  const adjustIncreaseLabel = modalIsCredit ? "Charge" : "Deposit";
+  const adjustDecreaseLabel = modalIsCredit ? "Payment" : "Withdraw";
 
   if (loading) {
     return (
@@ -1417,13 +1571,27 @@ export default function AccountsPage() {
             </GlassPane>
           ) : null}
 
+          {status ? (
+            <GlassPane tone="green" size="card">
+              <div
+                style={{
+                  fontWeight: 800,
+                  fontSize: 14,
+                  color: "#9ef0c0",
+                }}
+              >
+                {status}
+              </div>
+            </GlassPane>
+          ) : null}
+
           <GlassPane size="card">
             <div className="accountsHeroGrid">
               <div style={{ minWidth: 0 }}>
                 <div className="accountsEyebrow">Life Command Center</div>
                 <div className="accountsHeroTitle">Accounts Command</div>
                 <div className="accountsHeroSub">
-                  Clean balances, faster controls, and a tighter account roster.
+                  Clean balances, faster controls, and better money math.
                 </div>
 
                 <div className="accountsPillRow">
@@ -1447,8 +1615,8 @@ export default function AccountsPage() {
               >
                 <MiniPill>{fmtWhen(totals.updatedMax)}</MiniPill>
                 <MiniPill tone="green">{fmtMoney(totals.liquid)} liquid</MiniPill>
-                <MiniPill tone={totals.debts > 0 ? "red" : "green"}>
-                  {fmtMoney(totals.debts)} credit
+                <MiniPill tone={totals.creditExposure > 0 ? "red" : "green"}>
+                  {fmtMoney(totals.creditExposure)} credit
                 </MiniPill>
               </div>
             </div>
@@ -1459,8 +1627,10 @@ export default function AccountsPage() {
               icon={Landmark}
               label="Net Worth"
               value={fmtMoney(totals.netWorth)}
-              detail={`Assets ${fmtMoney(totals.assets)} minus credit debt ${fmtMoney(
-                totals.debts
+              detail={`Assets ${fmtMoney(totals.assetBalances)} minus credit net ${fmtMoney(
+                accounts
+                  .filter((a) => isCreditType(a.type))
+                  .reduce((sum, a) => sum + safeNum(a.balance, 0), 0)
               )}.`}
               tone={totals.netWorth >= 0 ? "green" : "red"}
             />
@@ -1481,9 +1651,9 @@ export default function AccountsPage() {
             <StatCard
               icon={CreditCard}
               label="Credit Exposure"
-              value={fmtMoney(totals.debts)}
-              detail="Credit accounts should store the amount owed."
-              tone={totals.debts > 0 ? "red" : "green"}
+              value={fmtMoney(totals.creditExposure)}
+              detail="Only positive credit balances count as debt exposure."
+              tone={totals.creditExposure > 0 ? "red" : "green"}
             />
           </section>
 
@@ -1527,7 +1697,7 @@ export default function AccountsPage() {
                 >
                   <option value="updated">Recently updated</option>
                   <option value="name">Name</option>
-                  <option value="balance">Balance high → low</option>
+                  <option value="balance">Largest impact</option>
                 </select>
               </div>
 
@@ -1545,6 +1715,15 @@ export default function AccountsPage() {
                       onDelete={() => deleteAccount(a.id)}
                     />
                   ))}
+                </div>
+              ) : accounts.length === 0 ? (
+                <div className="accountsEmptyState">
+                  <div>
+                    <div className="accountsEmptyTitle">No accounts yet</div>
+                    <div className="accountsEmptyText">
+                      Start by adding a real account. This page no longer seeds fake ones.
+                    </div>
+                  </div>
                 </div>
               ) : (
                 <div className="accountsEmptyState">
@@ -1646,7 +1825,7 @@ export default function AccountsPage() {
             ? `Set exact balance for ${modalAccount?.name || "account"}`
             : `Adjust ${modalAccount?.name || "account"}`
         }
-        subtitle="This writes to the account and saves a matching ledger entry where relevant."
+        subtitle="This writes to the account and saves matching ledger entries."
       >
         {modalType === "edit" ? (
           <div className="accountsFormStack">
@@ -1683,16 +1862,16 @@ export default function AccountsPage() {
               <div className="accountsTinyLabel">Direction</div>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 <ActionBtn
-                  variant={adjustSign === "deposit" ? "primary" : "ghost"}
-                  onClick={() => setAdjustSign("deposit")}
+                  variant={adjustMode === "increase" ? "primary" : "ghost"}
+                  onClick={() => setAdjustMode("increase")}
                 >
-                  Deposit
+                  {adjustIncreaseLabel}
                 </ActionBtn>
                 <ActionBtn
-                  variant={adjustSign === "withdraw" ? "primary" : "ghost"}
-                  onClick={() => setAdjustSign("withdraw")}
+                  variant={adjustMode === "decrease" ? "primary" : "ghost"}
+                  onClick={() => setAdjustMode("decrease")}
                 >
-                  Withdraw
+                  {adjustDecreaseLabel}
                 </ActionBtn>
               </div>
             </div>
@@ -1760,6 +1939,10 @@ export default function AccountsPage() {
                 rows={4}
               />
             </div>
+
+            <div className="accountsFootnote">
+              Cash → credit reduces debt. Credit → cash increases debt. Credit → credit works like a balance transfer.
+            </div>
           </div>
         ) : null}
 
@@ -1811,16 +1994,20 @@ export default function AccountsPage() {
 
 const globalStyles = `
   .accountsPage {
+    width: 100%;
     color: var(--lcc-text);
     font-family: var(--lcc-font-sans);
+    box-sizing: border-box;
   }
 
   .accountsPageShell {
-    width: min(100%, 1320px);
-    margin: 0 auto;
-    padding: 12px 0 20px;
+    width: 100%;
+    max-width: none;
+    margin: 0;
+    padding: 0 0 20px;
     display: grid;
     gap: 12px;
+    box-sizing: border-box;
   }
 
   .accountsEyebrow {
@@ -1870,7 +2057,7 @@ const globalStyles = `
 
   .accountsMainGrid {
     display: grid;
-    grid-template-columns: minmax(360px, 0.92fr) minmax(0, 1.08fr);
+    grid-template-columns: minmax(360px, 0.94fr) minmax(0, 1.06fr);
     gap: 12px;
     align-items: start;
   }
@@ -1920,7 +2107,7 @@ const globalStyles = `
   .accountsRosterListCompact {
     display: grid;
     gap: 8px;
-    max-height: 560px;
+    max-height: 620px;
     overflow: auto;
     padding-right: 2px;
   }
@@ -2096,7 +2283,7 @@ const globalStyles = `
   }
 
   .accountsLedgerListTight {
-    max-height: 420px;
+    max-height: 460px;
     overflow: auto;
     padding-right: 2px;
   }
@@ -2241,7 +2428,7 @@ const globalStyles = `
 
   @media (max-width: 760px) {
     .accountsPageShell {
-      padding: 8px 0 14px;
+      padding: 0 0 14px;
     }
 
     .accountsMetricGrid,

@@ -204,11 +204,83 @@ function mapCategoryRowToClient(row) {
 function mapCategoryClientToRow(cat, userId) {
   return { id: cat.id, user_id: userId, name: cat.name, group_name: cat.group, color: cat.color, is_budgeted: cat.isBudgeted !== false, updated_at: new Date().toISOString() };
 }
+
+function roundMoneyValue(n) { return Math.round((Number(n) || 0) * 100) / 100; }
+function mapAccountRowToClient(row) {
+  return {
+    id: row.id,
+    name: String(row.name || "Account"),
+    accountType: String(row.account_type || ""),
+    balance: roundMoneyValue(row.balance),
+  };
+}
+function normalizeAccountMatch(v) {
+  return String(v || "").trim().toLowerCase();
+}
+function findAccountByName(accounts, name) {
+  const target = normalizeAccountMatch(name);
+  if (!target) return null;
+  return accounts.find((account) => normalizeAccountMatch(account.name) === target) || null;
+}
+function parseStoredAccount(value, type) {
+  const raw = String(value || "").trim();
+  if (!raw) {
+    return {
+      display: "",
+      accountName: "",
+      transferAccountName: "",
+    };
+  }
+  if (type === "transfer" && raw.includes("→")) {
+    const [accountName = "", transferAccountName = ""] = raw.split("→").map((part) => part.trim());
+    return {
+      display: raw,
+      accountName,
+      transferAccountName,
+    };
+  }
+  return {
+    display: raw,
+    accountName: raw,
+    transferAccountName: "",
+  };
+}
 function mapTransactionRowToClient(row) {
-  return { id: row.id, type: row.type, amount: Number(row.amount) || 0, categoryId: row.category_id || "", date: row.tx_date, time: normalizeTime(row.tx_time || ""), merchant: row.merchant || "", note: row.note || "", paymentMethod: row.payment_method || "", account: row.account_name || "", createdAt: row.created_at ? new Date(row.created_at).getTime() : Date.now() };
+  const accountMeta = parseStoredAccount(row.account_name, row.type);
+  return {
+    id: row.id,
+    type: row.type,
+    amount: Number(row.amount) || 0,
+    categoryId: row.category_id || "",
+    date: row.tx_date,
+    time: normalizeTime(row.tx_time || ""),
+    merchant: row.merchant || "",
+    note: row.note || "",
+    paymentMethod: row.payment_method || "",
+    account: accountMeta.display,
+    accountId: "",
+    accountName: accountMeta.accountName,
+    transferAccountId: "",
+    transferAccountName: accountMeta.transferAccountName,
+    createdAt: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
+  };
 }
 function mapTransactionClientToRow(tx, userId) {
-  return { id: tx.id, user_id: userId, type: tx.type, amount: Number(tx.amount) || 0, category_id: tx.categoryId || null, tx_date: tx.date, tx_time: normalizeTime(tx.time || "") || null, merchant: tx.merchant || "", note: tx.note || "", payment_method: tx.paymentMethod || "", account_name: tx.account || "", created_at: tx.createdAt ? new Date(tx.createdAt).toISOString() : new Date().toISOString(), updated_at: new Date().toISOString() };
+  return {
+    id: tx.id,
+    user_id: userId,
+    type: tx.type,
+    amount: Number(tx.amount) || 0,
+    category_id: tx.categoryId || null,
+    tx_date: tx.date,
+    tx_time: normalizeTime(tx.time || "") || null,
+    merchant: tx.merchant || "",
+    note: tx.note || "",
+    payment_method: tx.paymentMethod || "",
+    account_name: tx.account || "",
+    created_at: tx.createdAt ? new Date(tx.createdAt).toISOString() : new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
 }
 function mapPlannedRowToClient(row) {
   return { id: row.id, amount: Number(row.amount) || 0, categoryId: row.category_id || "", date: row.planned_date, time: normalizeTime(row.planned_time || ""), merchant: row.merchant || "", note: row.note || "", createdAt: row.created_at ? new Date(row.created_at).getTime() : Date.now() };
@@ -389,6 +461,7 @@ export default function SpendingPage() {
   const [selectedRecord, setSelectedRecord] = React.useState({ kind: "tx", id: null });
   const [categories, setCategories] = React.useState(DEFAULT_CATEGORIES);
   const [budgets, setBudgets] = React.useState(DEFAULT_BUDGETS);
+  const [accounts, setAccounts] = React.useState([]);
   const [transactions, setTransactions] = React.useState([]);
   const [plannedItems, setPlannedItems] = React.useState([]);
   const [mode, setMode] = React.useState("now");
@@ -400,7 +473,8 @@ export default function SpendingPage() {
   const [qaMerchant, setQaMerchant] = React.useState("");
   const [qaNote, setQaNote] = React.useState("");
   const [qaPayment, setQaPayment] = React.useState("Card");
-  const [qaAccount, setQaAccount] = React.useState("Checking");
+  const [qaAccountId, setQaAccountId] = React.useState("");
+  const [qaTransferToAccountId, setQaTransferToAccountId] = React.useState("");
   const [newCategoryName, setNewCategoryName] = React.useState("");
   const [newCategoryGroup, setNewCategoryGroup] = React.useState("Other");
 
@@ -425,16 +499,19 @@ export default function SpendingPage() {
           setLoading(false);
           return;
         }
-        const [catRes, budgetRes, txRes, plannedRes] = await Promise.all([
+        const [catRes, budgetRes, accountRes, txRes, plannedRes] = await Promise.all([
           supabase.from("spending_categories").select("*").eq("user_id", currentUser.id).order("group_name").order("name"),
           supabase.from("spending_budgets").select("*").eq("user_id", currentUser.id),
+          supabase.from("accounts").select("id,name,account_type,balance,updated_at").eq("user_id", currentUser.id).order("name"),
           supabase.from("spending_transactions").select("*").eq("user_id", currentUser.id).order("tx_date", { ascending: false }).order("tx_time", { ascending: false }).order("created_at", { ascending: false }),
           supabase.from("spending_planned_items").select("*").eq("user_id", currentUser.id).order("planned_date", { ascending: true }).order("planned_time", { ascending: true }).order("created_at", { ascending: false }),
         ]);
         if (catRes.error) throw catRes.error;
         if (budgetRes.error) throw budgetRes.error;
+        if (accountRes.error) throw accountRes.error;
         if (txRes.error) throw txRes.error;
         if (plannedRes.error) throw plannedRes.error;
+
         const loadedCategories = (catRes.data || []).length > 0 ? (catRes.data || []).map(mapCategoryRowToClient) : DEFAULT_CATEGORIES;
         const nextBudgets = { weekly: {}, monthly: {}, yearly: {} };
         if ((budgetRes.data || []).length > 0) {
@@ -447,9 +524,11 @@ export default function SpendingPage() {
           nextBudgets.monthly = { ...DEFAULT_BUDGETS.monthly };
           nextBudgets.yearly = { ...DEFAULT_BUDGETS.yearly };
         }
+
         if (!mounted) return;
         setCategories(loadedCategories);
         setBudgets(nextBudgets);
+        setAccounts((accountRes.data || []).map(mapAccountRowToClient));
         setTransactions((txRes.data || []).map(mapTransactionRowToClient));
         setPlannedItems((plannedRes.data || []).map(mapPlannedRowToClient));
       } catch (err) {
@@ -470,6 +549,25 @@ export default function SpendingPage() {
     if (categories.some((c) => c.id === qaCategoryId)) return;
     setQaCategoryId(categories[0].id);
   }, [categories, qaCategoryId]);
+  React.useEffect(() => {
+    if (!accounts.length) {
+      setQaAccountId("");
+      return;
+    }
+    setQaAccountId((prev) => (accounts.some((account) => account.id === prev) ? prev : accounts[0].id));
+  }, [accounts]);
+
+  React.useEffect(() => {
+    if (accounts.length < 2) {
+      setQaTransferToAccountId("");
+      return;
+    }
+    setQaTransferToAccountId((prev) => {
+      if (prev && accounts.some((account) => account.id === prev) && prev !== qaAccountId) return prev;
+      return accounts.find((account) => account.id !== qaAccountId)?.id || "";
+    });
+  }, [accounts, qaAccountId]);
+
 
   const filteredTransactions = React.useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -586,6 +684,111 @@ export default function SpendingPage() {
   const selectedForecast = selectedSpent + selectedPlannedTotal;
   const selectedLoadPct = selectedBudget > 0 ? (selectedForecast / selectedBudget) * 100 : 0;
 
+  function getAccountById(accountId) {
+    return accounts.find((account) => account.id === accountId) || null;
+  }
+
+  function getTransactionAccountSelection(tx) {
+    const fromAccount =
+      (tx.accountId ? getAccountById(tx.accountId) : null) ||
+      (tx.accountName ? findAccountByName(accounts, tx.accountName) : null) ||
+      (tx.account ? findAccountByName(accounts, tx.account) : null);
+
+    const toAccount =
+      tx.type === "transfer"
+        ? (tx.transferAccountId ? getAccountById(tx.transferAccountId) : null) ||
+          (tx.transferAccountName ? findAccountByName(accounts, tx.transferAccountName) : null)
+        : null;
+
+    return {
+      fromAccount,
+      toAccount,
+    };
+  }
+
+  async function updateSingleAccountBalance(accountId, delta) {
+    const account = getAccountById(accountId);
+    if (!account) throw new Error("Selected account could not be found.");
+    const nextBalance = roundMoneyValue((Number(account.balance) || 0) + delta);
+    const { error } = await supabase
+      .from("accounts")
+      .update({ balance: nextBalance, updated_at: new Date().toISOString() })
+      .eq("user_id", user.id)
+      .eq("id", accountId);
+    if (error) throw error;
+    return { accountId, nextBalance };
+  }
+
+  function applyAccountStateUpdates(balanceUpdates) {
+    if (!balanceUpdates.length) return;
+    setAccounts((prev) =>
+      prev.map((account) => {
+        const match = balanceUpdates.find((entry) => entry.accountId === account.id);
+        return match ? { ...account, balance: match.nextBalance } : account;
+      }),
+    );
+  }
+
+  async function applyAccountImpact({ type, amount, fromAccountId, toAccountId, reverse = false }) {
+    const roundedAmount = roundMoneyValue(amount);
+    if (!(roundedAmount > 0)) return;
+
+    if (type === "expense") {
+      const delta = reverse ? roundedAmount : -roundedAmount;
+      const result = await updateSingleAccountBalance(fromAccountId, delta);
+      applyAccountStateUpdates([result]);
+      return;
+    }
+
+    if (type === "income") {
+      const delta = reverse ? -roundedAmount : roundedAmount;
+      const result = await updateSingleAccountBalance(fromAccountId, delta);
+      applyAccountStateUpdates([result]);
+      return;
+    }
+
+    if (type === "transfer") {
+      if (!fromAccountId || !toAccountId) throw new Error("Pick both transfer accounts.");
+      if (fromAccountId === toAccountId) throw new Error("Transfer accounts must be different.");
+
+      const fromAccount = getAccountById(fromAccountId);
+      const toAccount = getAccountById(toAccountId);
+      if (!fromAccount || !toAccount) throw new Error("One of the selected transfer accounts no longer exists.");
+
+      const fromDelta = reverse ? roundedAmount : -roundedAmount;
+      const toDelta = reverse ? -roundedAmount : roundedAmount;
+      const nextFromBalance = roundMoneyValue((Number(fromAccount.balance) || 0) + fromDelta);
+      const nextToBalance = roundMoneyValue((Number(toAccount.balance) || 0) + toDelta);
+
+      const { error: fromError } = await supabase
+        .from("accounts")
+        .update({ balance: nextFromBalance, updated_at: new Date().toISOString() })
+        .eq("user_id", user.id)
+        .eq("id", fromAccountId);
+      if (fromError) throw fromError;
+
+      const { error: toError } = await supabase
+        .from("accounts")
+        .update({ balance: nextToBalance, updated_at: new Date().toISOString() })
+        .eq("user_id", user.id)
+        .eq("id", toAccountId);
+
+      if (toError) {
+        await supabase
+          .from("accounts")
+          .update({ balance: fromAccount.balance, updated_at: new Date().toISOString() })
+          .eq("user_id", user.id)
+          .eq("id", fromAccountId);
+        throw toError;
+      }
+
+      applyAccountStateUpdates([
+        { accountId: fromAccountId, nextBalance: nextFromBalance },
+        { accountId: toAccountId, nextBalance: nextToBalance },
+      ]);
+    }
+  }
+
   function clearQuickAdd() {
     setQaAmount("");
     setQaDate(todayISO());
@@ -593,25 +796,65 @@ export default function SpendingPage() {
     setQaMerchant("");
     setQaNote("");
     setQaPayment("Card");
-    setQaAccount("Checking");
     setQaType("expense");
     setQaCategoryId(categories[0]?.id || "groceries");
+    setQaAccountId(accounts[0]?.id || "");
+    setQaTransferToAccountId(accounts.find((account) => account.id !== (accounts[0]?.id || ""))?.id || "");
     setMode("now");
   }
 
   async function addNow() {
     setPageError("");
     if (!user) return;
+    if (!accounts.length) return alert("Add at least one account first.");
     const amt = parseMoneyInput(qaAmount);
     if (!Number.isFinite(amt) || amt <= 0) return alert("Enter a valid amount.");
     if (!qaDate) return alert("Date required.");
     if (qaType === "expense" && !qaCategoryId) return alert("Pick a category.");
+    if ((qaType === "expense" || qaType === "income") && !qaAccountId) return alert("Pick an account.");
+    if (qaType === "transfer" && (!qaAccountId || !qaTransferToAccountId)) return alert("Pick both transfer accounts.");
+
+    const roundedAmount = roundMoneyValue(amt);
+    const fromAccount = getAccountById(qaAccountId);
+    const toAccount = getAccountById(qaTransferToAccountId);
+
     setSaving(true);
     try {
-      const tx = { id: uid(), type: qaType, amount: Math.round(amt * 100) / 100, categoryId: qaType === "expense" ? qaCategoryId : "", date: qaDate, time: normalizeTime(qaTime), merchant: qaMerchant.trim(), note: qaNote.trim(), paymentMethod: qaPayment, account: qaAccount, createdAt: Date.now() };
+      const tx = {
+        id: uid(),
+        type: qaType,
+        amount: roundedAmount,
+        categoryId: qaType === "expense" ? qaCategoryId : "",
+        date: qaDate,
+        time: normalizeTime(qaTime),
+        merchant: qaMerchant.trim(),
+        note: qaNote.trim(),
+        paymentMethod: qaType === "transfer" ? "Transfer" : qaPayment,
+        account: qaType === "transfer" ? [fromAccount?.name, toAccount?.name].filter(Boolean).join(" → ") : fromAccount?.name || "",
+        accountId: qaType === "transfer" ? fromAccount?.id || "" : fromAccount?.id || "",
+        accountName: qaType === "transfer" ? fromAccount?.name || "" : fromAccount?.name || "",
+        transferAccountId: qaType === "transfer" ? toAccount?.id || "" : "",
+        transferAccountName: qaType === "transfer" ? toAccount?.name || "" : "",
+        createdAt: Date.now(),
+      };
+
       const { data, error } = await supabase.from("spending_transactions").insert([mapTransactionClientToRow(tx, user.id)]).select().single();
       if (error) throw error;
+
       const saved = mapTransactionRowToClient(data);
+
+      try {
+        await applyAccountImpact({
+          type: saved.type,
+          amount: saved.amount,
+          fromAccountId: saved.accountId || fromAccount?.id || "",
+          toAccountId: saved.transferAccountId || toAccount?.id || "",
+        });
+      } catch (accountError) {
+        await supabase.from("spending_transactions").delete().eq("id", saved.id).eq("user_id", user.id);
+        throw accountError;
+      }
+
       const category = categoriesById.get(saved.categoryId);
       await upsertCalendarEventForTransaction(saved, user.id, category);
       setTransactions((prev) => [saved, ...prev]);
@@ -651,27 +894,64 @@ export default function SpendingPage() {
 
   async function deleteTransaction(id) {
     if (!user) return;
+    const tx = transactions.find((entry) => entry.id === id);
+    if (!tx) return;
     if (!confirm("Delete this transaction?")) return;
-    const previous = transactions;
-    setTransactions((prev) => prev.filter((t) => t.id !== id));
+
     try {
+      const { fromAccount, toAccount } = getTransactionAccountSelection(tx);
+      await applyAccountImpact({
+        type: tx.type,
+        amount: tx.amount,
+        fromAccountId: fromAccount?.id || "",
+        toAccountId: toAccount?.id || "",
+        reverse: true,
+      });
+
       const { error } = await supabase.from("spending_transactions").delete().eq("id", id).eq("user_id", user.id);
       if (error) throw error;
+
+      setTransactions((prev) => prev.filter((entry) => entry.id !== id));
       await deleteCalendarEventBySource(user.id, "spending", id);
       await deleteCalendarEventBySource(user.id, "income", id);
     } catch (err) {
-      setTransactions(previous);
       setPageError(err?.message || "Failed to delete transaction.");
     }
   }
 
   async function duplicateTransaction(tx) {
     if (!user) return;
+
     try {
-      const clone = { ...tx, id: uid(), createdAt: Date.now() };
+      const { fromAccount, toAccount } = getTransactionAccountSelection(tx);
+      const clone = {
+        ...tx,
+        id: uid(),
+        createdAt: Date.now(),
+        account: tx.type === "transfer" ? [fromAccount?.name || tx.accountName, toAccount?.name || tx.transferAccountName].filter(Boolean).join(" → ") : fromAccount?.name || tx.accountName || tx.account,
+        accountId: fromAccount?.id || tx.accountId || "",
+        accountName: fromAccount?.name || tx.accountName || tx.account || "",
+        transferAccountId: toAccount?.id || tx.transferAccountId || "",
+        transferAccountName: toAccount?.name || tx.transferAccountName || "",
+      };
+
       const { data, error } = await supabase.from("spending_transactions").insert([mapTransactionClientToRow(clone, user.id)]).select().single();
       if (error) throw error;
+
       const saved = mapTransactionRowToClient(data);
+
+      try {
+        await applyAccountImpact({
+          type: saved.type,
+          amount: saved.amount,
+          fromAccountId: clone.accountId,
+          toAccountId: clone.transferAccountId,
+        });
+      } catch (accountError) {
+        await supabase.from("spending_transactions").delete().eq("id", saved.id).eq("user_id", user.id);
+        throw accountError;
+      }
+
       const category = categoriesById.get(saved.categoryId);
       await upsertCalendarEventForTransaction(saved, user.id, category);
       setTransactions((prev) => [saved, ...prev]);
@@ -698,14 +978,59 @@ export default function SpendingPage() {
 
   async function convertPlanned(planned) {
     if (!user) return;
+    if (!accounts.length) return alert("Add at least one account first.");
     if (!confirm("Convert this planned item into a real transaction?")) return;
+
+    const account = getAccountById(qaAccountId) || accounts[0] || null;
+    if (!account) return alert("Pick an account first.");
+
     try {
-      const tx = { id: uid(), type: "expense", amount: planned.amount, categoryId: planned.categoryId, date: planned.date, time: normalizeTime(planned.time || ""), merchant: planned.merchant || "", note: planned.note || "", paymentMethod: "Card", account: "Checking", createdAt: Date.now() };
+      const tx = {
+        id: uid(),
+        type: "expense",
+        amount: planned.amount,
+        categoryId: planned.categoryId,
+        date: planned.date,
+        time: normalizeTime(planned.time || ""),
+        merchant: planned.merchant || "",
+        note: planned.note || "",
+        paymentMethod: "Card",
+        account: account.name,
+        accountId: account.id,
+        accountName: account.name,
+        transferAccountId: "",
+        transferAccountName: "",
+        createdAt: Date.now(),
+      };
+
       const { data: insertedTx, error: txErr } = await supabase.from("spending_transactions").insert([mapTransactionClientToRow(tx, user.id)]).select().single();
       if (txErr) throw txErr;
-      const { error: plannedErr } = await supabase.from("spending_planned_items").delete().eq("id", planned.id).eq("user_id", user.id);
-      if (plannedErr) throw plannedErr;
+
       const savedTx = mapTransactionRowToClient(insertedTx);
+
+      try {
+        await applyAccountImpact({
+          type: "expense",
+          amount: savedTx.amount,
+          fromAccountId: account.id,
+        });
+      } catch (accountError) {
+        await supabase.from("spending_transactions").delete().eq("id", savedTx.id).eq("user_id", user.id);
+        throw accountError;
+      }
+
+      const { error: plannedErr } = await supabase.from("spending_planned_items").delete().eq("id", planned.id).eq("user_id", user.id);
+      if (plannedErr) {
+        await applyAccountImpact({
+          type: "expense",
+          amount: savedTx.amount,
+          fromAccountId: account.id,
+          reverse: true,
+        });
+        await supabase.from("spending_transactions").delete().eq("id", savedTx.id).eq("user_id", user.id);
+        throw plannedErr;
+      }
+
       const category = categoriesById.get(savedTx.categoryId);
       await deleteCalendarEventBySource(user.id, "planned_expense", planned.id);
       await upsertCalendarEventForTransaction(savedTx, user.id, category);
@@ -939,10 +1264,10 @@ export default function SpendingPage() {
 
               <div className="spStickyRail">
                 <article className="spPanel">
-                  <div className="spPanelHead"><div><h2 className="spSectionMini">Quick Add</h2><div className="spSectionText">Tighter rail. Same language as bills.</div></div><div className="spSegment"><button type="button" className={`spSegmentBtn ${mode === "now" ? "active" : ""}`} onClick={() => setMode("now")}>Now</button><button type="button" className={`spSegmentBtn ${mode === "planned" ? "active" : ""}`} onClick={() => { setMode("planned"); setQaType("expense"); }}>Planned</button></div></div>
+                  <div className="spPanelHead"><div><h2 className="spSectionMini">Quick Add</h2><div className="spSectionText">This now hits the real account balance, not just the account label.</div></div><div className="spSegment"><button type="button" className={`spSegmentBtn ${mode === "now" ? "active" : ""}`} onClick={() => setMode("now")}>Now</button><button type="button" className={`spSegmentBtn ${mode === "planned" ? "active" : ""}`} onClick={() => { setMode("planned"); setQaType("expense"); }}>Planned</button></div></div>
                   <div className="spStack">
                     <div className="spFormCard"><div className="spGrid2">{mode === "now" ? <div><div className="spTinyLabel">Type</div><select className="spSelect" value={qaType} onChange={(e) => setQaType(e.target.value)}><option value="expense">Expense</option><option value="income">Income</option><option value="transfer">Transfer</option></select></div> : <div><div className="spTinyLabel">Type</div><div className="spChip" style={{ width: "100%" }}>PLANNED EXPENSE</div></div>}<div><div className="spTinyLabel">Amount</div><input className="spField" inputMode="decimal" placeholder="0.00" value={qaAmount} onChange={(e) => setQaAmount(e.target.value)} /></div><div><div className="spTinyLabel">Date</div><input className="spField" type="date" value={qaDate} onChange={(e) => setQaDate(e.target.value)} /></div><div><div className="spTinyLabel">Time</div><input className="spField" type="time" value={qaTime} onChange={(e) => setQaTime(e.target.value)} /></div></div></div>
-                    <div className="spFormCard"><div className="spGrid2"><div><div className="spTinyLabel">Category</div><select className="spSelect" value={qaCategoryId} onChange={(e) => setQaCategoryId(e.target.value)}>{categories.map((c) => <option key={c.id} value={c.id}>{c.group} • {c.name}</option>)}</select></div><div><div className="spTinyLabel">Merchant / Source</div><input className="spField" placeholder="Where did it go?" value={qaMerchant} onChange={(e) => setQaMerchant(e.target.value)} /></div><div><div className="spTinyLabel">Payment Method</div><select className="spSelect" value={qaPayment} onChange={(e) => setQaPayment(e.target.value)}><option>Card</option><option>Cash</option><option>ACH</option><option>Transfer</option></select></div><div><div className="spTinyLabel">Account</div><input className="spField" value={qaAccount} onChange={(e) => setQaAccount(e.target.value)} placeholder="Checking" /></div></div></div>
+                    <div className="spFormCard"><div className="spGrid2"><div><div className="spTinyLabel">Category</div><select className="spSelect" value={qaCategoryId} onChange={(e) => setQaCategoryId(e.target.value)} disabled={mode === "now" && qaType !== "expense"}>{categories.map((c) => <option key={c.id} value={c.id}>{c.group} • {c.name}</option>)}</select></div><div><div className="spTinyLabel">Merchant / Source</div><input className="spField" placeholder={qaType === "income" ? "Where did it come from?" : qaType === "transfer" ? "Optional transfer note" : "Where did it go?"} value={qaMerchant} onChange={(e) => setQaMerchant(e.target.value)} /></div><div><div className="spTinyLabel">Payment Method</div><select className="spSelect" value={qaType === "transfer" ? "Transfer" : qaPayment} onChange={(e) => setQaPayment(e.target.value)} disabled={qaType === "transfer"}><option>Card</option><option>Cash</option><option>ACH</option><option>Transfer</option></select></div>{mode === "planned" ? <div><div className="spTinyLabel">Account</div><div className="spChip" style={{ width: "100%" }}>BALANCE DOES NOT MOVE UNTIL CONVERTED</div></div> : qaType === "transfer" ? <div><div className="spTinyLabel">From Account</div><select className="spSelect" value={qaAccountId} onChange={(e) => setQaAccountId(e.target.value)}><option value="">Select account</option>{accounts.map((account) => <option key={account.id} value={account.id}>{account.name} • {money(account.balance)}</option>)}</select></div> : <div><div className="spTinyLabel">Account</div><select className="spSelect" value={qaAccountId} onChange={(e) => setQaAccountId(e.target.value)}><option value="">Select account</option>{accounts.map((account) => <option key={account.id} value={account.id}>{account.name} • {money(account.balance)}</option>)}</select></div>}</div>{mode === "now" && qaType === "transfer" ? <div className="spGrid2" style={{ marginTop: 12 }}><div><div className="spTinyLabel">To Account</div><select className="spSelect" value={qaTransferToAccountId} onChange={(e) => setQaTransferToAccountId(e.target.value)}><option value="">Select account</option>{accounts.filter((account) => account.id !== qaAccountId).map((account) => <option key={account.id} value={account.id}>{account.name} • {money(account.balance)}</option>)}</select></div><div className="spMiniCard"><div className="spTinyLabel">Balance Move</div><div className="spSectionText">Saving this transfer subtracts from the first account and adds to the second one immediately.</div></div></div> : null}</div>
                     <div className="spFormCard"><div className="spTinyLabel">Note</div><textarea className="spTextarea" placeholder="Optional note" value={qaNote} onChange={(e) => setQaNote(e.target.value)} /></div>
                     <div className="spActionRow"><button className="spSolidBtn" type="button" onClick={quickAddSave} disabled={saving}>{saving ? "Saving..." : mode === "planned" ? "Save Planned" : "Save Transaction"}</button><button className="spGhostBtn" type="button" onClick={clearQuickAdd} disabled={saving}>Reset</button></div>
                   </div>

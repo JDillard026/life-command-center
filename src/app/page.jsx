@@ -17,13 +17,13 @@ import GlassPane from "./components/GlassPane";
 
 export const dynamic = "force-dynamic";
 
-function safeNum(n, fallback = 0) {
-  const x = Number(n);
-  return Number.isFinite(x) ? x : fallback;
+function safeNum(value, fallback = 0) {
+  const num = Number(value);
+  return Number.isFinite(num) ? num : fallback;
 }
 
-function money(n) {
-  const num = Number(n);
+function money(value) {
+  const num = Number(value);
   if (!Number.isFinite(num)) return "—";
   return num.toLocaleString(undefined, {
     style: "currency",
@@ -32,8 +32,8 @@ function money(n) {
   });
 }
 
-function signedMoney(n) {
-  const num = Number(n);
+function signedMoney(value) {
+  const num = Number(value);
   if (!Number.isFinite(num)) return "—";
   const abs = Math.abs(num).toLocaleString(undefined, {
     style: "currency",
@@ -45,73 +45,166 @@ function signedMoney(n) {
   return abs;
 }
 
-function isoDate(d = new Date()) {
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
+function startOfToday() {
+  const now = new Date();
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate());
+}
+
+function toISODateLocal(date = new Date()) {
+  const yyyy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  const dd = String(date.getDate()).padStart(2, "0");
   return `${yyyy}-${mm}-${dd}`;
 }
 
-function startOfMonthISO(d = new Date()) {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
+function parseISODateLocal(iso) {
+  const raw = String(iso || "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return null;
+
+  const [y, m, d] = raw.split("-").map(Number);
+  const out = new Date(y, m - 1, d);
+
+  if (
+    out.getFullYear() !== y ||
+    out.getMonth() !== m - 1 ||
+    out.getDate() !== d
+  ) {
+    return null;
+  }
+
+  return out;
 }
 
-function endOfMonthISO(d = new Date()) {
-  const end = new Date(d.getFullYear(), d.getMonth() + 1, 0);
-  return isoDate(end);
+function startOfMonthISO(date = new Date()) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(
+    2,
+    "0"
+  )}-01`;
+}
+
+function endOfMonthISO(date = new Date()) {
+  const end = new Date(date.getFullYear(), date.getMonth() + 1, 0);
+  return toISODateLocal(end);
 }
 
 function monthKeyFromISO(iso) {
-  const s = String(iso || "");
-  return s.length >= 7 ? s.slice(0, 7) : "";
+  const value = String(iso || "");
+  return value.length >= 7 ? value.slice(0, 7) : "";
 }
 
 function fmtMonthLabel(ym) {
   if (!ym || ym.length < 7) return "—";
-  const [y, m] = ym.split("-").map(Number);
-  if (!Number.isFinite(y) || !Number.isFinite(m)) return ym;
-  const d = new Date(y, m - 1, 1);
-  return d.toLocaleDateString(undefined, {
+  const [year, month] = ym.split("-").map(Number);
+  if (!Number.isFinite(year) || !Number.isFinite(month)) return ym;
+
+  return new Date(year, month - 1, 1).toLocaleDateString(undefined, {
     month: "long",
     year: "numeric",
   });
 }
 
 function fmtShort(iso) {
-  if (!iso) return "—";
-  const d = new Date(`${iso}T00:00:00`);
-  if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleDateString(undefined, {
+  const date = parseISODateLocal(iso);
+  if (!date) return "—";
+  return date.toLocaleDateString(undefined, {
     month: "short",
     day: "numeric",
   });
 }
 
 function fmtDateTime(iso) {
-  if (!iso) return "—";
-  const d = new Date(`${iso}T00:00:00`);
-  if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleDateString(undefined, {
+  const date = parseISODateLocal(iso);
+  if (!date) return "—";
+  return date.toLocaleDateString(undefined, {
     month: "short",
     day: "numeric",
   });
 }
 
-function daysUntil(iso) {
-  if (!iso) return null;
-  const now = new Date();
-  const today = new Date(
-    now.getFullYear(),
-    now.getMonth(),
-    now.getDate()
+function diffCalendarDays(left, right = startOfToday()) {
+  const leftDate = left instanceof Date ? left : parseISODateLocal(left);
+  const rightDate = right instanceof Date ? right : parseISODateLocal(right);
+
+  if (!leftDate || !rightDate) return null;
+
+  const a = new Date(
+    leftDate.getFullYear(),
+    leftDate.getMonth(),
+    leftDate.getDate()
   ).getTime();
-  const due = new Date(`${iso}T00:00:00`).getTime();
-  if (!Number.isFinite(due)) return null;
-  return Math.round((due - today) / 86400000);
+  const b = new Date(
+    rightDate.getFullYear(),
+    rightDate.getMonth(),
+    rightDate.getDate()
+  ).getTime();
+
+  return Math.round((a - b) / 86400000);
+}
+
+function addDays(date, days) {
+  const out = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  out.setDate(out.getDate() + days);
+  return out;
+}
+
+function addMonthsClamped(date, months) {
+  const baseYear = date.getFullYear();
+  const baseMonth = date.getMonth() + months;
+  const baseDay = date.getDate();
+
+  const monthStart = new Date(baseYear, baseMonth, 1);
+  const monthEndDay = new Date(
+    monthStart.getFullYear(),
+    monthStart.getMonth() + 1,
+    0
+  ).getDate();
+
+  return new Date(
+    monthStart.getFullYear(),
+    monthStart.getMonth(),
+    Math.min(baseDay, monthEndDay)
+  );
+}
+
+function addYearsClamped(date, years) {
+  return addMonthsClamped(date, years * 12);
+}
+
+function normalizeFrequency(freq) {
+  const value = String(freq || "").toLowerCase().trim();
+  if (
+    value === "weekly" ||
+    value === "biweekly" ||
+    value === "monthly" ||
+    value === "quarterly" ||
+    value === "yearly" ||
+    value === "one_time"
+  ) {
+    return value;
+  }
+  return "monthly";
+}
+
+function addByFrequency(date, freq) {
+  switch (normalizeFrequency(freq)) {
+    case "weekly":
+      return addDays(date, 7);
+    case "biweekly":
+      return addDays(date, 14);
+    case "quarterly":
+      return addMonthsClamped(date, 3);
+    case "yearly":
+      return addYearsClamped(date, 1);
+    case "one_time":
+      return date;
+    case "monthly":
+    default:
+      return addMonthsClamped(date, 1);
+  }
 }
 
 function freqToMonthlyMult(freq) {
-  switch (String(freq || "").toLowerCase()) {
+  switch (normalizeFrequency(freq)) {
     case "weekly":
       return 4.333;
     case "biweekly":
@@ -126,6 +219,125 @@ function freqToMonthlyMult(freq) {
     default:
       return 1;
   }
+}
+
+function isSameOrAfter(left, right) {
+  if (!left || !right) return false;
+  return (
+    new Date(left.getFullYear(), left.getMonth(), left.getDate()).getTime() >=
+    new Date(right.getFullYear(), right.getMonth(), right.getDate()).getTime()
+  );
+}
+
+function getLastOccurrenceOnOrBefore(anchor, freq, reference) {
+  let current = new Date(anchor.getTime());
+  let previous = null;
+  let guard = 0;
+
+  while (current <= reference && guard < 800) {
+    previous = new Date(current.getTime());
+    current = addByFrequency(current, freq);
+    guard += 1;
+  }
+
+  return previous;
+}
+
+function getEffectiveBillAmount(bill) {
+  const amount = safeNum(bill.amount, 0);
+  const balance = safeNum(bill.balance, 0);
+  const minPay = safeNum(bill.minPay, 0);
+  const extraPay = safeNum(bill.extraPay, 0);
+
+  if (bill.type === "controllable") {
+    let planned = minPay + extraPay;
+    if (planned <= 0) planned = amount > 0 ? amount : balance > 0 ? balance : 0;
+    if (balance > 0) planned = Math.min(planned, balance);
+    return Math.max(planned, 0);
+  }
+
+  if (amount > 0) return amount;
+  if (minPay + extraPay > 0) return minPay + extraPay;
+  return 0;
+}
+
+function getBillDueMeta(bill, reference = startOfToday()) {
+  if (bill.active === false) {
+    return {
+      dueDate: null,
+      days: null,
+      isOverdue: false,
+      amountDue: 0,
+    };
+  }
+
+  const anchor = parseISODateLocal(bill.dueDate);
+  const lastPaid = parseISODateLocal(bill.lastPaidDate);
+  const freq = normalizeFrequency(bill.frequency);
+  const amountDue = getEffectiveBillAmount(bill);
+
+  if (!anchor) {
+    return {
+      dueDate: null,
+      days: null,
+      isOverdue: false,
+      amountDue,
+    };
+  }
+
+  if (freq === "one_time") {
+    if (lastPaid && isSameOrAfter(lastPaid, anchor)) {
+      return {
+        dueDate: null,
+        days: null,
+        isOverdue: false,
+        amountDue: 0,
+      };
+    }
+
+    const days = diffCalendarDays(anchor, reference);
+    return {
+      dueDate: toISODateLocal(anchor),
+      days,
+      isOverdue: days != null && days < 0,
+      amountDue,
+    };
+  }
+
+  const currentCycleDue =
+    getLastOccurrenceOnOrBefore(anchor, freq, reference) || anchor;
+
+  let effectiveDue = currentCycleDue;
+
+  if (currentCycleDue <= reference && lastPaid && isSameOrAfter(lastPaid, currentCycleDue)) {
+    effectiveDue = addByFrequency(currentCycleDue, freq);
+  }
+
+  const days = diffCalendarDays(effectiveDue, reference);
+
+  return {
+    dueDate: toISODateLocal(effectiveDue),
+    days,
+    isOverdue: days != null && days < 0,
+    amountDue,
+  };
+}
+
+function getBillMonthlyPressureAmount(bill, reference = startOfToday()) {
+  const amount = getEffectiveBillAmount(bill);
+  if (amount <= 0 || bill.active === false) return 0;
+
+  const freq = normalizeFrequency(bill.frequency);
+
+  if (freq === "one_time") {
+    const dueMeta = getBillDueMeta(bill, reference);
+    if (!dueMeta.dueDate) return 0;
+    return monthKeyFromISO(dueMeta.dueDate) === monthKeyFromISO(toISODateLocal(reference))
+      ? amount
+      : 0;
+  }
+
+  return amount * freqToMonthlyMult(freq);
 }
 
 function toneByValue(value, inverse = false) {
@@ -175,6 +387,180 @@ function toneMeta(tone = "neutral") {
   };
 }
 
+function normalizeText(value = "") {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+}
+
+function makeAmountKey(amount) {
+  return safeNum(amount, 0).toFixed(2);
+}
+
+function buildCanonicalIncomeRows(spendingTx, incomeDeposits) {
+  const strictDepositCounts = new Map();
+  const looseDepositCounts = new Map();
+
+  function addCount(map, key) {
+    map.set(key, safeNum(map.get(key), 0) + 1);
+  }
+
+  function useCount(map, key) {
+    const count = safeNum(map.get(key), 0);
+    if (count <= 0) return false;
+    if (count === 1) map.delete(key);
+    else map.set(key, count - 1);
+    return true;
+  }
+
+  const deposits = incomeDeposits.map((row) => ({
+    id: `deposit-${row.id}`,
+    sourceRowId: row.id,
+    kind: "deposit",
+    date: row.date || "",
+    label: row.source || "Income",
+    note: row.note || "",
+    amount: safeNum(row.amount, 0),
+  }));
+
+  deposits.forEach((row) => {
+    const amountKey = makeAmountKey(row.amount);
+    const strictKey = `${row.date}|${amountKey}|${normalizeText(
+      row.label || row.note
+    )}`;
+    const looseKey = `${row.date}|${amountKey}`;
+    addCount(strictDepositCounts, strictKey);
+    addCount(looseDepositCounts, looseKey);
+  });
+
+  const extraIncomeTx = [];
+
+  spendingTx
+    .filter((row) => String(row.type || "").toLowerCase() === "income")
+    .forEach((row) => {
+      const amountKey = makeAmountKey(row.amount);
+      const strictKey = `${row.date}|${amountKey}|${normalizeText(
+        row.merchant || row.note
+      )}`;
+      const looseKey = `${row.date}|${amountKey}`;
+
+      if (useCount(strictDepositCounts, strictKey)) return;
+      if (useCount(looseDepositCounts, looseKey)) return;
+
+      extraIncomeTx.push({
+        id: `spending-income-${row.id}`,
+        sourceRowId: row.id,
+        kind: "spending_income",
+        date: row.date || "",
+        label: row.merchant || "Income",
+        note: row.note || "",
+        amount: safeNum(row.amount, 0),
+      });
+    });
+
+  return [...deposits, ...extraIncomeTx];
+}
+
+function samplePoints(points, maxPoints = 6) {
+  if (points.length <= maxPoints) return points;
+  if (maxPoints < 3) return [points[0], points[points.length - 1]];
+
+  const sampled = [points[0]];
+  const middleCount = maxPoints - 2;
+  const step = (points.length - 2) / middleCount;
+
+  for (let i = 1; i <= middleCount; i += 1) {
+    const index = Math.min(
+      points.length - 2,
+      Math.max(1, Math.round(i * step))
+    );
+    sampled.push(points[index]);
+  }
+
+  sampled.push(points[points.length - 1]);
+
+  const seen = new Set();
+  const out = [];
+
+  sampled.forEach((point) => {
+    const key = `${point.iso}-${point.value}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push(point);
+  });
+
+  return out;
+}
+
+function buildCashMovementPoints(monthStart, today, incomeRows, expenseRows) {
+  const daily = new Map();
+
+  function addDelta(date, delta) {
+    if (!date) return;
+    daily.set(date, safeNum(daily.get(date), 0) + safeNum(delta, 0));
+  }
+
+  incomeRows.forEach((row) => addDelta(row.date, row.amount));
+  expenseRows.forEach((row) => addDelta(row.date, -safeNum(row.amount, 0)));
+
+  const dates = [...daily.keys()].sort((a, b) => String(a).localeCompare(String(b)));
+  let running = 0;
+
+  const raw = [{ iso: monthStart, label: "Start", value: 0 }];
+
+  dates.forEach((date) => {
+    running += safeNum(daily.get(date), 0);
+    raw.push({
+      iso: date,
+      label: fmtShort(date),
+      value: running,
+    });
+  });
+
+  const last = raw[raw.length - 1];
+  if (!last || last.iso !== today) {
+    raw.push({
+      iso: today,
+      label: fmtShort(today),
+      value: running,
+    });
+  }
+
+  return samplePoints(raw, 6);
+}
+
+function normalizeAccountType(type) {
+  return String(type || "").trim().toLowerCase();
+}
+
+function isInvestmentAccount(type) {
+  const value = normalizeAccountType(type);
+  return (
+    value === "investment" ||
+    value.includes("brokerage") ||
+    value.includes("retirement") ||
+    value.includes("ira") ||
+    value.includes("401")
+  );
+}
+
+function isDebtAccount(type) {
+  const value = normalizeAccountType(type);
+  return value === "credit" || value.includes("loan") || value.includes("debt");
+}
+
+function isLiquidCashAccount(type) {
+  const value = normalizeAccountType(type);
+  return (
+    value === "checking" ||
+    value === "savings" ||
+    value === "cash" ||
+    value.includes("money") ||
+    value.includes("wallet")
+  );
+}
+
 function mapAccountRowToClient(row) {
   return {
     id: row.id,
@@ -192,6 +578,7 @@ function mapBillRowToClient(row) {
     type: row.type === "controllable" ? "controllable" : "noncontrollable",
     frequency: row.frequency || "monthly",
     dueDate: row.due_date || "",
+    lastPaidDate: row.last_paid_date || "",
     amount: safeNum(row.amount, 0),
     active: row.active !== false,
     balance: safeNum(row.balance, 0),
@@ -211,6 +598,8 @@ function mapSpendingTxRowToClient(row) {
     date: row.tx_date || "",
     merchant: row.merchant || "",
     note: row.note || "",
+    paymentMethod: row.payment_method || "",
+    accountName: row.account_name || "",
   };
 }
 
@@ -248,9 +637,11 @@ function mapInvestmentTxnRow(row) {
 function initialsFromLabel(label = "") {
   const clean = String(label).trim();
   if (!clean) return "—";
-  const parts = clean.split(/\s+/).slice(0, 2);
-  return parts
-    .map((p) => p[0])
+
+  return clean
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part[0])
     .join("")
     .toUpperCase();
 }
@@ -259,81 +650,6 @@ function severityRank(severity) {
   if (severity === "critical") return 0;
   if (severity === "warning") return 1;
   return 2;
-}
-
-function samplePoints(points, maxPoints = 6) {
-  if (points.length <= maxPoints) return points;
-  if (maxPoints < 3) return [points[0], points[points.length - 1]];
-
-  const sampled = [points[0]];
-  const middleCount = maxPoints - 2;
-  const step = (points.length - 2) / middleCount;
-
-  for (let i = 1; i <= middleCount; i += 1) {
-    const index = Math.min(
-      points.length - 2,
-      Math.max(1, Math.round(i * step))
-    );
-    sampled.push(points[index]);
-  }
-
-  sampled.push(points[points.length - 1]);
-
-  const deduped = [];
-  const seen = new Set();
-
-  for (const point of sampled) {
-    const key = `${point.iso}-${point.value}`;
-    if (!seen.has(key)) {
-      seen.add(key);
-      deduped.push(point);
-    }
-  }
-
-  return deduped;
-}
-
-function buildCashMovementPoints(monthStart, today, spendingTx, incomeDeposits) {
-  const daily = new Map();
-
-  function addDelta(date, delta) {
-    if (!date) return;
-    const current = safeNum(daily.get(date), 0);
-    daily.set(date, current + safeNum(delta, 0));
-  }
-
-  incomeDeposits.forEach((row) => addDelta(row.date, row.amount));
-
-  spendingTx.forEach((row) => {
-    const type = String(row.type || "").toLowerCase();
-    if (type === "income") addDelta(row.date, row.amount);
-    else addDelta(row.date, -safeNum(row.amount, 0));
-  });
-
-  const dates = [...daily.keys()].sort((a, b) => String(a).localeCompare(String(b)));
-  let running = 0;
-
-  const rawPoints = [{ iso: monthStart, label: "Start", value: 0 }];
-
-  dates.forEach((date) => {
-    running += safeNum(daily.get(date), 0);
-    rawPoints.push({
-      iso: date,
-      label: fmtShort(date),
-      value: running,
-    });
-  });
-
-  const last = rawPoints[rawPoints.length - 1];
-  if (!last || last.iso !== today) {
-    rawPoints.push({
-      iso: today,
-      label: fmtShort(today),
-      value: running,
-    });
-  }
-
-  return samplePoints(rawPoints, 6);
 }
 
 function buildPositionMap(assets, txns, quoteMap) {
@@ -349,9 +665,7 @@ function buildPositionMap(assets, txns, quoteMap) {
     });
   });
 
-  const ordered = [...txns].sort((a, b) =>
-    String(a.date).localeCompare(String(b.date))
-  );
+  const ordered = [...txns].sort((a, b) => String(a.date).localeCompare(String(b.date)));
 
   ordered.forEach((tx) => {
     const entry = byAsset.get(tx.assetId);
@@ -397,10 +711,11 @@ async function fetchQuoteMap(symbols) {
   const unique = [
     ...new Set(
       symbols
-        .map((s) => String(s || "").trim().toUpperCase())
+        .map((symbol) => String(symbol || "").trim().toUpperCase())
         .filter(Boolean)
     ),
   ];
+
   if (!unique.length) return {};
 
   try {
@@ -464,10 +779,12 @@ async function fetchQuoteMap(symbols) {
     if (json && typeof json === "object" && !Array.isArray(json)) {
       Object.entries(json).forEach(([symbol, value]) => {
         if (out[String(symbol).toUpperCase()]) return;
+
         if (typeof value === "number") {
           assign(symbol, value);
           return;
         }
+
         if (value && typeof value === "object") {
           assign(
             value.symbol ?? symbol,
@@ -1046,7 +1363,7 @@ function CashMovementCard({
   const padTop = 14;
   const padBottom = 32;
 
-  const values = safePoints.map((p) => safeNum(p.value, 0));
+  const values = safePoints.map((point) => safeNum(point.value, 0));
   const minVal = Math.min(0, ...values);
   const maxVal = Math.max(0, ...values);
   const range = Math.max(maxVal - minVal, 1);
@@ -1061,16 +1378,17 @@ function CashMovementCard({
       height -
       padBottom -
       ((safeNum(point.value, 0) - minVal) / range) * innerH;
+
     return { ...point, x, y };
   });
 
   const linePath = coords
-    .map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`)
+    .map((point, index) => `${index === 0 ? "M" : "L"} ${point.x} ${point.y}`)
     .join(" ");
 
   const areaPath = [
     `M ${coords[0]?.x || padLeft} ${height - padBottom}`,
-    ...coords.map((p) => `L ${p.x} ${p.y}`),
+    ...coords.map((point) => `L ${point.x} ${point.y}`),
     `L ${coords[coords.length - 1]?.x || width - padRight} ${height - padBottom}`,
     "Z",
   ].join(" ");
@@ -1099,17 +1417,13 @@ function CashMovementCard({
     <GlassPane size="card">
       <PaneHeader
         title="Cash Movement"
-        subcopy="Month-to-date cash movement from logged income and spending."
+        subcopy="Month-to-date income minus true spending. Transfers are ignored so the math stops lying."
       />
 
       <div className="lccDashChartSummaryGrid" style={{ marginBottom: 10 }}>
         <ChartSummaryTile label="Movement" value={chartValue} tone={chartTone} />
         <ChartSummaryTile label="Income" value={money(monthIncome)} tone="green" />
-        <ChartSummaryTile
-          label="Spending"
-          value={money(monthSpending)}
-          tone="neutral"
-        />
+        <ChartSummaryTile label="Spending" value={money(monthSpending)} tone="neutral" />
         <ChartSummaryTile
           label="Bill Pressure"
           value={money(monthPressure)}
@@ -1166,11 +1480,11 @@ function CashMovementCard({
             );
           })}
 
-          {coords.map((p) => (
+          {coords.map((point) => (
             <line
-              key={`${p.iso}-grid`}
-              x1={p.x}
-              x2={p.x}
+              key={`${point.iso}-grid`}
+              x1={point.x}
+              x2={point.x}
               y1={padTop}
               y2={height - padBottom}
               stroke="rgba(255,255,255,0.009)"
@@ -1190,31 +1504,31 @@ function CashMovementCard({
             filter={`url(#lcc-chart-glow-${chartId})`}
           />
 
-          {coords.map((p) => (
-            <g key={`${p.iso}-dot`}>
+          {coords.map((point) => (
+            <g key={`${point.iso}-dot`}>
               <circle
-                cx={p.x}
-                cy={p.y}
+                cx={point.x}
+                cy={point.y}
                 r="5"
                 fill="rgba(8,10,14,0.9)"
                 stroke="rgba(245,248,255,0.92)"
                 strokeWidth="2"
               />
-              <circle cx={p.x} cy={p.y} r="1.7" fill="rgba(255,255,255,0.98)" />
+              <circle cx={point.x} cy={point.y} r="1.7" fill="rgba(255,255,255,0.98)" />
             </g>
           ))}
 
-          {coords.map((p) => (
+          {coords.map((point) => (
             <text
-              key={`${p.iso}-label`}
-              x={p.x}
+              key={`${point.iso}-label`}
+              x={point.x}
               y={height - 8}
               fill="rgba(255,255,255,0.40)"
               fontSize="10"
               fontWeight="700"
               textAnchor="middle"
             >
-              {p.label}
+              {point.label}
             </text>
           ))}
         </svg>
@@ -1251,6 +1565,7 @@ function SignalBadge({ severity }) {
       : severity === "warning"
       ? "amber"
       : "green";
+
   const label =
     severity === "critical"
       ? "Critical"
@@ -1429,7 +1744,7 @@ function SignalCenterModal({
             <ChartSummaryTile
               label="Cash Position"
               value={money(cashPosition)}
-              tone={cashPosition < 0 ? "red" : "neutral"}
+              tone={cashPosition < 0 ? "red" : cashPosition < 500 ? "amber" : "neutral"}
             />
             <ChartSummaryTile
               label="Month Movement"
@@ -1596,11 +1911,11 @@ export default function DashboardPage() {
 
         const nextPrimary =
           settingsRes.data?.primary_account_id &&
-          loadedAccounts.some((a) => a.id === settingsRes.data.primary_account_id)
+          loadedAccounts.some((account) => account.id === settingsRes.data.primary_account_id)
             ? settingsRes.data.primary_account_id
             : loadedAccounts[0]?.id || "";
 
-        const symbols = loadedAssets.map((a) => a.symbol).filter(Boolean);
+        const symbols = loadedAssets.map((asset) => asset.symbol).filter(Boolean);
         const nextQuotes = await fetchQuoteMap(symbols);
 
         if (!mounted) return;
@@ -1629,63 +1944,70 @@ export default function DashboardPage() {
   }, []);
 
   const computed = useMemo(() => {
-    const today = isoDate();
-    const thisMonth = monthKeyFromISO(today);
-    const monthStart = startOfMonthISO();
+    const todayDate = startOfToday();
+    const todayISO = toISODateLocal(todayDate);
+    const monthStart = startOfMonthISO(todayDate);
+    const thisMonth = monthKeyFromISO(todayISO);
 
-    const primary = accounts.find((a) => a.id === primaryId) || accounts[0] || null;
+    const primary = accounts.find((account) => account.id === primaryId) || accounts[0] || null;
 
-    const liquidAccounts = accounts.filter((a) =>
-      ["checking", "savings", "cash"].includes(String(a.type || "").toLowerCase())
+    const cashPositionAccounts = accounts.filter(
+      (account) => !isInvestmentAccount(account.type) && !isDebtAccount(account.type)
     );
-
-    const cashPositionAccounts = accounts.filter((a) => {
-      const type = String(a.type || "").toLowerCase();
-      return type !== "credit" && type !== "investment";
-    });
 
     const creditAccounts = accounts.filter(
-      (a) => String(a.type || "").toLowerCase() === "credit"
+      (account) => normalizeAccountType(account.type) === "credit"
     );
 
-    const monthlyIncome =
-      incomeDeposits.reduce((sum, row) => sum + safeNum(row.amount, 0), 0) +
-      spendingTx
-        .filter((row) => String(row.type || "").toLowerCase() === "income")
-        .reduce((sum, row) => sum + safeNum(row.amount, 0), 0);
+    const liquidAccounts = accounts.filter((account) => isLiquidCashAccount(account.type));
 
-    const monthlySpending = spendingTx
-      .filter((row) => String(row.type || "").toLowerCase() !== "income")
-      .reduce((sum, row) => sum + safeNum(row.amount, 0), 0);
+    const incomeRows = buildCanonicalIncomeRows(spendingTx, incomeDeposits);
 
-    const monthlyBillPressure = bills
-      .filter((b) => b.active !== false)
-      .reduce(
-        (sum, b) => sum + safeNum(b.amount, 0) * freqToMonthlyMult(b.frequency),
-        0
-      );
+    const expenseRows = spendingTx.filter((row) => {
+      const type = String(row.type || "").toLowerCase();
+      return type !== "income" && type !== "transfer";
+    });
+
+    const monthlyIncome = incomeRows.reduce(
+      (sum, row) => sum + safeNum(row.amount, 0),
+      0
+    );
+
+    const monthlySpending = expenseRows.reduce(
+      (sum, row) => sum + safeNum(row.amount, 0),
+      0
+    );
+
+    const billMetaList = bills
+      .filter((bill) => bill.active !== false)
+      .map((bill) => {
+        const dueMeta = getBillDueMeta(bill, todayDate);
+        return {
+          ...bill,
+          ...dueMeta,
+        };
+      });
+
+    const monthlyBillPressure = billMetaList.reduce(
+      (sum, bill) => sum + getBillMonthlyPressureAmount(bill, todayDate),
+      0
+    );
 
     const accountBalancesExInvestments = cashPositionAccounts.reduce(
-      (sum, a) => sum + safeNum(a.balance, 0),
+      (sum, account) => sum + safeNum(account.balance, 0),
       0
     );
 
     const creditDebt = creditAccounts.reduce(
-      (sum, a) => sum + safeNum(a.balance, 0),
+      (sum, account) => sum + Math.abs(Math.min(safeNum(account.balance, 0), 0)) + Math.max(safeNum(account.balance, 0), 0),
       0
     );
 
-    const positionMap = buildPositionMap(
-      investmentAssets,
-      investmentTxns,
-      quoteMap
-    );
-
+    const positionMap = buildPositionMap(investmentAssets, investmentTxns, quoteMap);
     const positions = [...positionMap.values()].filter((entry) => entry.shares > 0);
+
     const holdingCount = positions.length;
-    const pricedHoldingCount = positions.filter(
-      (entry) => entry.currentValue != null
-    ).length;
+    const pricedHoldingCount = positions.filter((entry) => entry.currentValue != null).length;
 
     const portfolioMarketValue = positions.reduce(
       (sum, entry) => sum + safeNum(entry.currentValue, 0),
@@ -1702,54 +2024,37 @@ export default function DashboardPage() {
       0
     );
 
-    const investmentTotal = pricedHoldingCount
-      ? portfolioMarketValue
-      : portfolioCostBasis;
-
+    const investmentTotal = pricedHoldingCount ? portfolioMarketValue : portfolioCostBasis;
     const netWorth = accountBalancesExInvestments + investmentTotal - creditDebt;
 
-    const upcomingBills = bills
-      .filter((b) => b.active !== false && b.dueDate)
-      .map((bill) => {
-        const days = daysUntil(bill.dueDate);
-        return {
-          ...bill,
-          days,
-        };
-      })
-      .filter((bill) => bill.days == null || bill.days <= 21)
-      .sort((a, b) => {
-        const ad = a.days == null ? 9999 : a.days;
-        const bd = b.days == null ? 9999 : b.days;
-        return ad - bd;
-      })
+    const upcomingBills = billMetaList
+      .filter((bill) => bill.dueDate && bill.days != null && bill.days <= 21)
+      .sort((a, b) => safeNum(a.days, 9999) - safeNum(b.days, 9999))
       .slice(0, 4);
 
     const dueSoonTotal = upcomingBills
       .filter((bill) => bill.days != null && bill.days >= 0 && bill.days <= 14)
-      .reduce((sum, bill) => sum + safeNum(bill.amount, 0), 0);
+      .reduce((sum, bill) => sum + safeNum(bill.amountDue, 0), 0);
 
     const recentActivity = [
-      ...incomeDeposits.map((row) => ({
-        id: `income-${row.id}`,
-        title: row.source || "Income",
+      ...incomeRows.map((row) => ({
+        id: row.id,
+        title: row.label || "Income",
         subtitle: `${fmtDateTime(row.date)} • deposit`,
         value: signedMoney(row.amount),
         tone: "green",
-        initials: initialsFromLabel(row.source || "Income"),
+        initials: initialsFromLabel(row.label || "Income"),
         sortDate: row.date || "",
       })),
-      ...spendingTx
-        .filter((row) => String(row.type || "").toLowerCase() !== "income")
-        .map((row) => ({
-          id: `spending-${row.id}`,
-          title: row.merchant || "Expense",
-          subtitle: `${fmtDateTime(row.date)} • ${row.note || "spending"}`,
-          value: signedMoney(-safeNum(row.amount, 0)),
-          tone: "red",
-          initials: initialsFromLabel(row.merchant || "Expense"),
-          sortDate: row.date || "",
-        })),
+      ...expenseRows.map((row) => ({
+        id: `expense-${row.id}`,
+        title: row.merchant || "Expense",
+        subtitle: `${fmtDateTime(row.date)} • ${row.note || "spending"}`,
+        value: signedMoney(-safeNum(row.amount, 0)),
+        tone: "red",
+        initials: initialsFromLabel(row.merchant || "Expense"),
+        sortDate: row.date || "",
+      })),
     ]
       .sort((a, b) => String(b.sortDate).localeCompare(String(a.sortDate)))
       .slice(0, 4);
@@ -1759,21 +2064,22 @@ export default function DashboardPage() {
         (a, b) => Math.abs(safeNum(b.balance, 0)) - Math.abs(safeNum(a.balance, 0))
       )
       .slice(0, 4)
-      .map((a) => ({
-        id: a.id,
-        title: a.name || "Account",
-        subtitle: String(a.type || "other").replace(/_/g, " "),
-        value: money(a.balance),
-        tone: safeNum(a.balance, 0) < 0 ? "red" : "neutral",
-        initials: initialsFromLabel(a.name || "A"),
+      .map((account) => ({
+        id: account.id,
+        title: account.name || "Account",
+        subtitle: String(account.type || "other").replace(/_/g, " "),
+        value: money(account.balance),
+        tone: safeNum(account.balance, 0) < 0 ? "red" : "neutral",
+        initials: initialsFromLabel(account.name || "A"),
       }));
 
     const cashMovement = monthlyIncome - monthlySpending;
+
     const chartPoints = buildCashMovementPoints(
       monthStart,
-      today,
-      spendingTx,
-      incomeDeposits
+      todayISO,
+      incomeRows,
+      expenseRows
     );
 
     const signalItems = [];
@@ -1789,12 +2095,13 @@ export default function DashboardPage() {
       });
     }
 
-    const overdueBills = upcomingBills.filter(
-      (bill) => bill.days != null && bill.days < 0
-    );
-    const dueSoonBills = upcomingBills.filter(
-      (bill) => bill.days != null && bill.days >= 0 && bill.days <= 7
-    );
+    const overdueBills = billMetaList
+      .filter((bill) => bill.days != null && bill.days < 0)
+      .sort((a, b) => safeNum(a.days, 0) - safeNum(b.days, 0));
+
+    const dueSoonBills = billMetaList
+      .filter((bill) => bill.days != null && bill.days >= 0 && bill.days <= 7)
+      .sort((a, b) => safeNum(a.days, 9999) - safeNum(b.days, 9999));
 
     overdueBills.forEach((bill) => {
       signalItems.push({
@@ -1804,7 +2111,7 @@ export default function DashboardPage() {
         detail: `${Math.abs(bill.days)} day${
           Math.abs(bill.days) === 1 ? "" : "s"
         } late.`,
-        amount: money(bill.amount),
+        amount: money(bill.amountDue),
       });
     });
 
@@ -1816,7 +2123,7 @@ export default function DashboardPage() {
           bill.days === 0 ? "today" : `in ${bill.days} day${bill.days === 1 ? "" : "s"}`
         }`,
         detail: "This one is close enough that it should already be on your radar.",
-        amount: money(bill.amount),
+        amount: money(bill.amountDue),
       });
     });
 
@@ -1828,10 +2135,7 @@ export default function DashboardPage() {
         detail: "Your non-investment balances are underwater right now.",
         amount: money(accountBalancesExInvestments),
       });
-    } else if (
-      accountBalancesExInvestments > 0 &&
-      accountBalancesExInvestments < 500
-    ) {
+    } else if (accountBalancesExInvestments > 0 && accountBalancesExInvestments < 500) {
       signalItems.push({
         id: "cash-low",
         severity: "warning",
@@ -1846,8 +2150,7 @@ export default function DashboardPage() {
         id: "cash-burn",
         severity: "warning",
         title: "Spending is outrunning income",
-        detail:
-          "This month is currently burning more cash than it is bringing in.",
+        detail: "This month is currently burning more cash than it is bringing in.",
         amount: signedMoney(cashMovement),
       });
     }
@@ -1925,7 +2228,7 @@ export default function DashboardPage() {
       investmentTotal,
       creditDebt,
       liquidTotal: liquidAccounts.reduce(
-        (sum, a) => sum + safeNum(a.balance, 0),
+        (sum, account) => sum + safeNum(account.balance, 0),
         0
       ),
       portfolioPnLText: signedMoney(portfolioPnL),
@@ -2042,23 +2345,27 @@ export default function DashboardPage() {
               icon={Landmark}
               label="Net Worth"
               value={money(computed.netWorth)}
-              detail="Non-investment balances plus portfolio value minus credit debt."
+              detail="Cash-position accounts plus portfolio value minus credit debt."
               tone={toneByValue(computed.netWorth)}
             />
             <StatCard
               icon={Wallet}
               label="Cash Position"
               value={money(computed.accountBalancesExInvestments)}
-              detail="Total account balances minus investments and credit debt buckets."
+              detail="Only true cash-position accounts. Debt and investment buckets are excluded."
               tone={
-                computed.accountBalancesExInvestments < 500 ? "amber" : "neutral"
+                computed.accountBalancesExInvestments < 0
+                  ? "red"
+                  : computed.accountBalancesExInvestments < 500
+                  ? "amber"
+                  : "neutral"
               }
             />
             <StatCard
               icon={PiggyBank}
               label="Bill Pressure"
               value={money(computed.monthlyBillPressure)}
-              detail="Estimated monthly weight from your active recurring bills."
+              detail="Recurring bill pressure using real payment amounts, not raw stale due dates."
               tone={computed.monthlyBillPressure > 0 ? "amber" : "green"}
               badge={
                 computed.dueSoonTotal > 0
@@ -2183,7 +2490,7 @@ export default function DashboardPage() {
               <GlassPane size="card">
                 <PaneHeader
                   title="Upcoming Bills"
-                  subcopy="Bills close enough to matter this month."
+                  subcopy="Bills close enough to matter right now."
                   right={
                     <MiniPill tone={computed.dueSoonTotal > 0 ? "amber" : "green"}>
                       {money(computed.dueSoonTotal)} due soon
@@ -2208,7 +2515,7 @@ export default function DashboardPage() {
                             ? "Due today"
                             : `Due in ${bill.days} day${bill.days === 1 ? "" : "s"}`
                         }
-                        value={money(bill.amount)}
+                        value={money(bill.amountDue)}
                         tone={
                           bill.days != null && bill.days < 0
                             ? "red"
@@ -2234,7 +2541,7 @@ export default function DashboardPage() {
             <GlassPane size="card">
               <PaneHeader
                 title="Recent Activity"
-                subcopy="Latest logged movement across income and spending."
+                subcopy="Latest true income and spending movement this month."
                 right={<MiniPill>{recentActivityLabel(computed.recentActivity.length)}</MiniPill>}
               />
 
@@ -2295,7 +2602,10 @@ export default function DashboardPage() {
 
               <div style={{ height: 10 }} />
 
-              <div className="lccDashActionGrid" style={{ gridTemplateColumns: "repeat(2, minmax(0, 1fr))" }}>
+              <div
+                className="lccDashActionGrid"
+                style={{ gridTemplateColumns: "repeat(2, minmax(0, 1fr))" }}
+              >
                 <ActionLink href="/investments" full>
                   Open Investments <ArrowRight size={14} />
                 </ActionLink>
@@ -2310,15 +2620,19 @@ export default function DashboardPage() {
 
       <style jsx global>{`
         .lccDashRoot {
-          padding: 12px 0 20px;
+          width: 100%;
+          padding: 0 0 20px;
           font-family: var(--lcc-font-sans);
+          box-sizing: border-box;
         }
 
         .lccDashInner {
-          width: min(100%, 1320px);
-          margin: 0 auto;
+          width: 100%;
+          max-width: none;
+          margin: 0;
           display: grid;
           gap: 12px;
+          box-sizing: border-box;
         }
 
         .lccDashStack {
@@ -2419,7 +2733,7 @@ export default function DashboardPage() {
 
         @media (max-width: 640px) {
           .lccDashRoot {
-            padding: 8px 0 14px;
+            padding: 0 0 14px;
           }
 
           .lccDashMetricGrid,

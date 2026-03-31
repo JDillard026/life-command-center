@@ -4,17 +4,17 @@ import * as React from "react";
 import { supabase } from "@/lib/supabaseClient";
 import GlassPane from "../components/GlassPane";
 import {
+  AlertTriangle,
   CalendarDays,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  Copy,
+  Pencil,
   Plus,
   Search,
-  X,
-  AlertTriangle,
-  Copy,
   Trash2,
-  Pencil,
+  X,
 } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -57,6 +57,7 @@ function parseISO(iso) {
   const [y, m, d] = String(iso || "")
     .split("-")
     .map(Number);
+
   if (!y || !m || !d) return null;
   return new Date(y, m - 1, d);
 }
@@ -87,11 +88,6 @@ function startOfWeekISO(iso, weekStartsOn = 0) {
   const diff = (day - weekStartsOn + 7) % 7;
   d.setDate(d.getDate() - diff);
   return toISODate(d);
-}
-
-function endOfGridISO(monthStartISO) {
-  const gridStart = startOfWeekISO(monthStartISO, 0);
-  return addDaysISO(gridStart, 41);
 }
 
 function monthLabel(monthStartISO) {
@@ -401,10 +397,10 @@ function MiniPill({ children, tone = "neutral" }) {
   );
 }
 
-function GhostButton({ children, onClick, icon, active = false, style }) {
+function GhostButton({ children, onClick, icon, active = false, style, type = "button" }) {
   return (
     <button
-      type="button"
+      type={type}
       onClick={onClick}
       style={{
         minHeight: 40,
@@ -589,15 +585,7 @@ function HeaderBar({
 }) {
   return (
     <GlassPane size="hero">
-      <div
-        style={{
-          minHeight: 96,
-          display: "grid",
-          gridTemplateColumns: "minmax(0, 1fr) auto",
-          gap: 14,
-          alignItems: "center",
-        }}
-      >
+      <div className="lccCalHeroGrid">
         <div style={{ minWidth: 0 }}>
           <div style={eyebrowStyle()}>Live calendar board</div>
 
@@ -665,7 +653,7 @@ function MetricCard({ label, value, detail, tone = "neutral" }) {
     <GlassPane tone={tone} size="card" style={{ height: "100%" }}>
       <div
         style={{
-          minHeight: 128,
+          minHeight: 118,
           height: "100%",
           display: "grid",
           gridTemplateRows: "auto auto 1fr",
@@ -686,7 +674,7 @@ function MetricCard({ label, value, detail, tone = "neutral" }) {
 
         <div
           style={{
-            fontSize: "clamp(30px, 4vw, 42px)",
+            fontSize: "clamp(28px, 3vw, 40px)",
             lineHeight: 0.96,
             fontWeight: 950,
             letterSpacing: "-0.055em",
@@ -737,9 +725,7 @@ function PaneHeader({ title, subcopy, right }) {
           {title}
         </div>
 
-        {subcopy ? (
-          <div style={{ ...mutedStyle(), marginTop: 6 }}>{subcopy}</div>
-        ) : null}
+        {subcopy ? <div style={{ ...mutedStyle(), marginTop: 6 }}>{subcopy}</div> : null}
       </div>
 
       {right || null}
@@ -861,12 +847,12 @@ function DayCell({ dayISO, monthStart, events, selected, onOpen }) {
       type="button"
       onClick={() => onOpen(dayISO)}
       style={{
-        minHeight: 158,
+        minHeight: 170,
         padding: 16,
         borderRadius: 24,
         textAlign: "left",
         border: selected
-          ? "1px solid rgba(255,255,255,0.16)"
+          ? "1px solid rgba(255,255,255,0.18)"
           : today
           ? "1px solid rgba(158,240,192,0.24)"
           : "1px solid rgba(255,255,255,0.09)",
@@ -895,7 +881,7 @@ function DayCell({ dayISO, monthStart, events, selected, onOpen }) {
         <div>
           <div
             style={{
-              fontSize: 30,
+              fontSize: 32,
               fontWeight: 950,
               lineHeight: 1,
               color: "#fff",
@@ -1162,9 +1148,7 @@ function TimelineItem({ ev, onEdit, onDelete, onDuplicate }) {
               }}
             >
               <DotBadge tone="neutral">{fmtTime(ev.event_time)}</DotBadge>
-              {ev.end_time ? (
-                <DotBadge tone="neutral">Ends {fmtTime(ev.end_time)}</DotBadge>
-              ) : null}
+              {ev.end_time ? <DotBadge tone="neutral">Ends {fmtTime(ev.end_time)}</DotBadge> : null}
               {ev.amount ? <DotBadge tone={t.tone}>{money(ev.amount)}</DotBadge> : null}
               {ev.category ? <DotBadge tone="neutral">{ev.category}</DotBadge> : null}
               <DotBadge tone="neutral">{sourceLabel(ev)}</DotBadge>
@@ -1289,7 +1273,7 @@ function ModalShell({ open, title, onClose, children, width = "min(860px, 100%)"
   );
 }
 
-function DayDrawer({
+function DayPopup({
   open,
   onClose,
   selectedDate,
@@ -1313,62 +1297,44 @@ function DayDrawer({
     };
   }, [open]);
 
+  if (!open) return null;
+
   const allDay = events.filter((ev) => !ev.event_time);
   const timed = events.filter((ev) => !!ev.event_time);
 
   return (
     <div
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose?.();
+      }}
       style={{
         position: "fixed",
         inset: 0,
-        zIndex: 75,
-        pointerEvents: open ? "auto" : "none",
+        zIndex: 78,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        background: "rgba(0,0,0,0.60)",
+        backdropFilter: "blur(10px)",
+        padding: 18,
       }}
     >
-      <div
-        onClick={onClose}
-        style={{
-          position: "absolute",
-          inset: 0,
-          background: "rgba(0,0,0,0.55)",
-          backdropFilter: "blur(8px)",
-          opacity: open ? 1 : 0,
-          transition: "opacity 220ms ease",
-        }}
-      />
-
-      <div
-        style={{
-          position: "absolute",
-          top: 0,
-          right: 0,
-          height: "100%",
-          width: "min(760px, 100%)",
-          padding: 12,
-          transform: open ? "translateX(0)" : "translateX(100%)",
-          transition: "transform 260ms ease",
-        }}
-      >
+      <div style={{ width: "min(1040px, 100%)", maxHeight: "88vh" }}>
         <GlassPane size="hero" style={{ height: "100%", overflow: "hidden" }}>
           <div
             style={{
-              height: "100%",
               display: "flex",
               flexDirection: "column",
+              maxHeight: "calc(88vh - 36px)",
             }}
           >
-            <div
-              style={{
-                borderBottom: "1px solid rgba(255,255,255,0.10)",
-                paddingBottom: 18,
-              }}
-            >
+            <div style={{ borderBottom: "1px solid rgba(255,255,255,0.10)", paddingBottom: 18 }}>
               <div
                 style={{
                   display: "flex",
                   alignItems: "flex-start",
                   justifyContent: "space-between",
-                  gap: 12,
+                  gap: 14,
                 }}
               >
                 <div>
@@ -1376,7 +1342,7 @@ function DayDrawer({
                   <div
                     style={{
                       marginTop: 6,
-                      fontSize: 28,
+                      fontSize: "clamp(24px, 3vw, 32px)",
                       fontWeight: 950,
                       color: "#fff",
                       letterSpacing: "-0.04em",
@@ -1494,6 +1460,72 @@ function DayDrawer({
   );
 }
 
+function QueueCard({ ev, onOpen }) {
+  const tone = toneForEvent(ev);
+
+  return (
+    <button
+      type="button"
+      onClick={() => onOpen(ev)}
+      style={{
+        textAlign: "left",
+        padding: 14,
+        borderRadius: 18,
+        border: "1px solid rgba(255,255,255,0.08)",
+        background:
+          "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.012))",
+        cursor: "pointer",
+        minHeight: 110,
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          gap: 10,
+          alignItems: "flex-start",
+        }}
+      >
+        <div style={{ minWidth: 0 }}>
+          <div
+            style={{
+              color: "#fff",
+              fontWeight: 900,
+              fontSize: 14,
+              minWidth: 0,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {ev.title}
+          </div>
+
+          <div style={{ ...mutedStyle(), marginTop: 4 }}>
+            {fmtShortDate(ev.event_date)}
+            {ev.event_time ? ` · ${fmtTime(ev.event_time)}` : " · All day"}
+          </div>
+        </div>
+
+        <StatusDot tone={tone.tone} size={10} />
+      </div>
+
+      <div
+        style={{
+          marginTop: 10,
+          display: "flex",
+          gap: 6,
+          flexWrap: "wrap",
+        }}
+      >
+        <DotBadge tone={tone.tone}>{tone.label}</DotBadge>
+        {ev.amount ? <DotBadge tone={tone.tone}>{money(ev.amount)}</DotBadge> : null}
+        {ev.category ? <DotBadge tone="neutral">{ev.category}</DotBadge> : null}
+      </div>
+    </button>
+  );
+}
+
 export default function CalendarPage() {
   const [loading, setLoading] = React.useState(true);
   const [pageError, setPageError] = React.useState("");
@@ -1510,7 +1542,7 @@ export default function CalendarPage() {
   const [search, setSearch] = React.useState("");
   const [filter, setFilter] = React.useState("All");
 
-  const [drawerOpen, setDrawerOpen] = React.useState(false);
+  const [dayPopupOpen, setDayPopupOpen] = React.useState(false);
   const [manageOpen, setManageOpen] = React.useState(false);
   const [editorOpen, setEditorOpen] = React.useState(false);
 
@@ -1530,7 +1562,7 @@ export default function CalendarPage() {
     try {
       setPageError("");
       const gridStart = startOfWeekISO(monthStart, 0);
-      const gridEnd = endOfGridISO(monthStart);
+      const gridEnd = addDaysISO(gridStart, 41);
 
       const { data, error } = await supabase
         .from("calendar_events")
@@ -1608,6 +1640,7 @@ export default function CalendarPage() {
         if (!alive) return;
 
         setProfiles(loadedProfiles);
+
         const chosen =
           loadedProfiles.find((p) => p.is_default)?.id || loadedProfiles[0]?.id || "";
 
@@ -1840,7 +1873,7 @@ export default function CalendarPage() {
         if (aTime !== bTime) return aTime - bTime;
         return String(a.title).localeCompare(String(b.title));
       })
-      .slice(0, 7);
+      .slice(0, 8);
   }, [filteredEvents]);
 
   const openEditorForNew = React.useCallback(
@@ -1919,6 +1952,7 @@ export default function CalendarPage() {
     try {
       setPageError("");
       const parsedAmount = parseMoneyInput(draft.amount);
+
       const payload = {
         user_id: user.id,
         profile_id: draft.profile_id,
@@ -1967,7 +2001,7 @@ export default function CalendarPage() {
       setEditorOpen(false);
       await refreshEvents();
       setSelectedDate(draft.event_date);
-      setDrawerOpen(true);
+      setDayPopupOpen(true);
     } catch (err) {
       setPageError(err?.message || "Failed to save event.");
     }
@@ -2048,6 +2082,7 @@ export default function CalendarPage() {
 
     try {
       setPageError("");
+
       const { error: clearErr } = await supabase
         .from("calendar_profiles")
         .update({ is_default: false })
@@ -2117,8 +2152,7 @@ export default function CalendarPage() {
       }
 
       setProfiles(loaded);
-      const nextId =
-        loaded.find((p) => p.is_default)?.id || loaded[0]?.id || "";
+      const nextId = loaded.find((p) => p.is_default)?.id || loaded[0]?.id || "";
       setProfileId(nextId);
       setDraft((prev) => ({ ...prev, profile_id: nextId }));
       setStatus("Profile deleted.");
@@ -2131,12 +2165,13 @@ export default function CalendarPage() {
     const t = todayISO();
     setMonthStart(startOfMonthISO(t));
     setSelectedDate(t);
-    setDrawerOpen(false);
+    setDayPopupOpen(false);
   }
 
   function shiftMonth(delta) {
     const nextMonth = addMonthsISO(monthStart, delta);
     setMonthStart(nextMonth);
+
     if (!inSameMonth(selectedDate, nextMonth)) {
       setSelectedDate(nextMonth);
     }
@@ -2144,474 +2179,258 @@ export default function CalendarPage() {
 
   function openDay(dayISO) {
     setSelectedDate(dayISO);
-    setDrawerOpen(true);
+    setDayPopupOpen(true);
+  }
+
+  function openFromQueue(ev) {
+    setSelectedDate(ev.event_date);
+    setDayPopupOpen(true);
   }
 
   if (loading) {
     return (
-      <div style={{ padding: 20 }}>
-        <GlassPane size="hero">
-          <div style={{ color: "#fff", fontWeight: 900, fontSize: 20 }}>
-            Loading calendar…
-          </div>
-        </GlassPane>
-      </div>
+      <main className="lccCalRoot">
+        <div className="lccCalInner">
+          <GlassPane size="hero">
+            <div style={{ color: "#fff", fontWeight: 900, fontSize: 20 }}>
+              Loading calendar…
+            </div>
+          </GlassPane>
+        </div>
+      </main>
     );
   }
 
   if (!user) {
     return (
-      <div style={{ padding: 20 }}>
-        <GlassPane size="hero">
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 10,
-              color: "#fff",
-              fontWeight: 900,
-              fontSize: 20,
-            }}
-          >
-            <AlertTriangle size={18} />
-            Sign in to use your calendar
-          </div>
-        </GlassPane>
-      </div>
+      <main className="lccCalRoot">
+        <div className="lccCalInner">
+          <GlassPane size="hero">
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
+                color: "#fff",
+                fontWeight: 900,
+                fontSize: 20,
+              }}
+            >
+              <AlertTriangle size={18} />
+              Sign in to use your calendar
+            </div>
+          </GlassPane>
+        </div>
+      </main>
     );
   }
 
   return (
     <>
-      <div
-        style={{
-          maxWidth: 1560,
-          margin: "0 auto",
-          padding: "18px clamp(14px, 2vw, 24px) 34px",
-          display: "grid",
-          gap: 18,
-        }}
-      >
-        <HeaderBar
-          monthLabelText={monthLabel(monthStart)}
-          profileName={activeProfile?.name || "Default"}
-          focusTitle={focusTitle}
-          focusTone={focusTone}
-          onManage={() => setManageOpen(true)}
-          onToday={goToday}
-          onAdd={() => openEditorForNew(selectedDate)}
-        />
-
-        {pageError ? (
-          <GlassPane tone="red" size="card">
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 10,
-                color: "#ffb2c2",
-                fontWeight: 900,
-              }}
-            >
-              <AlertTriangle size={16} />
-              {pageError}
-            </div>
-          </GlassPane>
-        ) : null}
-
-        {status ? (
-          <GlassPane tone="green" size="card">
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 10,
-                color: "#9ef0c0",
-                fontWeight: 900,
-              }}
-            >
-              <StatusDot tone="green" size={9} />
-              {status}
-            </div>
-          </GlassPane>
-        ) : null}
-
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-            gap: 16,
-          }}
-        >
-          <MetricCard
-            label="Month inflow"
-            value={money(monthIncome)}
-            detail="Visible income events in the current month view."
-            tone="green"
-          />
-          <MetricCard
-            label="Month outflow"
-            value={money(monthExpense)}
-            detail="Actual expense hits in the current month view."
-            tone="red"
-          />
-          <MetricCard
-            label="Planned spending"
-            value={money(monthPlanned)}
-            detail="Planned expense items currently landing in this month."
-            tone="amber"
-          />
-          <MetricCard
-            label="Visible events"
-            value={String(visibleMonthEvents.length)}
-            detail={`${monthManualCount} manual entries across this month view.`}
-            tone="blue"
-          />
-        </div>
-
-        <GlassPane size="card">
-          <PaneHeader
-            title="Controls"
-            subcopy="Move the month, switch profiles, then filter what actually matters."
+      <main className="lccCalRoot">
+        <div className="lccCalInner">
+          <HeaderBar
+            monthLabelText={monthLabel(monthStart)}
+            profileName={activeProfile?.name || "Default"}
+            focusTitle={focusTitle}
+            focusTone={focusTone}
+            onManage={() => setManageOpen(true)}
+            onToday={goToday}
+            onAdd={() => openEditorForNew(selectedDate)}
           />
 
-          <div
-            style={{
-              display: "flex",
-              gap: 12,
-              flexWrap: "wrap",
-              alignItems: "center",
-            }}
-          >
-            <GhostButton onClick={() => shiftMonth(-1)} icon={<ChevronLeft size={15} />}>
-              Prev
-            </GhostButton>
-
-            <MiniPill>{monthLabel(monthStart)}</MiniPill>
-
-            <GhostButton onClick={() => shiftMonth(1)} icon={<ChevronRight size={15} />}>
-              Next
-            </GhostButton>
-
-            <div style={{ width: 220, minWidth: 180 }}>
-              <FieldSelect
-                value={profileId}
-                onChange={(e) => {
-                  setProfileId(e.target.value);
-                  setDraft((prev) => ({ ...prev, profile_id: e.target.value }));
+          {pageError ? (
+            <GlassPane tone="red" size="card">
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
+                  color: "#ffb2c2",
+                  fontWeight: 900,
                 }}
               >
-                {profiles.map((profile) => (
-                  <option key={profile.id} value={profile.id}>
-                    {profile.name}
-                  </option>
-                ))}
-              </FieldSelect>
-            </div>
+                <AlertTriangle size={16} />
+                {pageError}
+              </div>
+            </GlassPane>
+          ) : null}
 
-            <div style={{ flex: "1 1 260px", minWidth: 240 }}>
-              <SearchBox value={search} onChange={(e) => setSearch(e.target.value)} />
-            </div>
-          </div>
-
-          <div
-            style={{
-              marginTop: 14,
-              display: "flex",
-              gap: 8,
-              flexWrap: "wrap",
-            }}
-          >
-            {["All", "Paydays", "Expenses", "Planned", "Manual"].map((chip) => (
-              <FilterChip
-                key={chip}
-                active={filter === chip}
-                onClick={() => setFilter(chip)}
+          {status ? (
+            <GlassPane tone="green" size="card">
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
+                  color: "#9ef0c0",
+                  fontWeight: 900,
+                }}
               >
-                {chip}
-              </FilterChip>
-            ))}
-          </div>
-        </GlassPane>
+                <StatusDot tone="green" size={9} />
+                {status}
+              </div>
+            </GlassPane>
+          ) : null}
 
-        <div
-          style={{
-            display: "flex",
-            gap: 18,
-            flexWrap: "wrap",
-            alignItems: "stretch",
-          }}
-        >
-          <div style={{ flex: "1 1 860px", minWidth: 0 }}>
-            <GlassPane size="hero">
-              <PaneHeader
-                title="Month grid"
-                subcopy="Tap a day to open the full subwindow timeline."
-                right={
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <DotBadge tone="green">Income</DotBadge>
-                    <DotBadge tone="red">Expense</DotBadge>
-                    <DotBadge tone="amber">Planned</DotBadge>
-                  </div>
-                }
-              />
+          <section className="lccCalMetrics">
+            <MetricCard
+              label="Month inflow"
+              value={money(monthIncome)}
+              detail="Visible income events in the current month view."
+              tone="green"
+            />
+            <MetricCard
+              label="Month outflow"
+              value={money(monthExpense)}
+              detail="Actual expense hits in the current month view."
+              tone="red"
+            />
+            <MetricCard
+              label="Planned spending"
+              value={money(monthPlanned)}
+              detail="Planned expense items currently landing in this month."
+              tone="amber"
+            />
+            <MetricCard
+              label="Visible events"
+              value={String(visibleMonthEvents.length)}
+              detail={`${monthManualCount} manual entries across this month view.`}
+              tone="blue"
+            />
+          </section>
 
-              <div style={{ overflowX: "auto", paddingBottom: 4 }}>
-                <div style={{ minWidth: 920 }}>
-                  <div
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "repeat(7, minmax(0, 1fr))",
-                      gap: 10,
-                      marginBottom: 10,
-                    }}
-                  >
-                    {Array.from({ length: 7 }, (_, i) => (
-                      <div
-                        key={i}
-                        style={{
-                          padding: "0 4px 0 6px",
-                          fontSize: 11,
-                          fontWeight: 900,
-                          textTransform: "uppercase",
-                          letterSpacing: ".16em",
-                          color: "rgba(255,255,255,0.36)",
-                        }}
-                      >
-                        {weekdayShort(i)}
-                      </div>
-                    ))}
-                  </div>
+          <GlassPane size="card">
+            <PaneHeader
+              title="Controls"
+              subcopy="Move the month, switch profiles, then filter what actually matters."
+            />
 
-                  <div
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "repeat(7, minmax(0, 1fr))",
-                      gap: 12,
-                    }}
-                  >
-                    {monthGridDays.map((dayISO) => (
-                      <DayCell
-                        key={dayISO}
-                        dayISO={dayISO}
-                        monthStart={monthStart}
-                        events={filteredEventsByDate.get(dayISO) || []}
-                        selected={selectedDate === dayISO}
-                        onOpen={openDay}
-                      />
-                    ))}
-                  </div>
+            <div className="lccCalControlsRow">
+              <GhostButton onClick={() => shiftMonth(-1)} icon={<ChevronLeft size={15} />}>
+                Prev
+              </GhostButton>
+
+              <MiniPill>{monthLabel(monthStart)}</MiniPill>
+
+              <GhostButton onClick={() => shiftMonth(1)} icon={<ChevronRight size={15} />}>
+                Next
+              </GhostButton>
+
+              <div style={{ minWidth: 180 }}>
+                <FieldSelect
+                  value={profileId}
+                  onChange={(e) => {
+                    setProfileId(e.target.value);
+                    setDraft((prev) => ({ ...prev, profile_id: e.target.value }));
+                  }}
+                >
+                  {profiles.map((profile) => (
+                    <option key={profile.id} value={profile.id}>
+                      {profile.name}
+                    </option>
+                  ))}
+                </FieldSelect>
+              </div>
+
+              <div style={{ minWidth: 240 }}>
+                <SearchBox value={search} onChange={(e) => setSearch(e.target.value)} />
+              </div>
+            </div>
+
+            <div
+              style={{
+                marginTop: 14,
+                display: "flex",
+                gap: 8,
+                flexWrap: "wrap",
+              }}
+            >
+              {["All", "Paydays", "Expenses", "Planned", "Manual"].map((chip) => (
+                <FilterChip
+                  key={chip}
+                  active={filter === chip}
+                  onClick={() => setFilter(chip)}
+                >
+                  {chip}
+                </FilterChip>
+              ))}
+            </div>
+          </GlassPane>
+
+          <GlassPane size="hero">
+            <PaneHeader
+              title="Month grid"
+              subcopy="Tap a day to open the popup timeline."
+              right={
+                <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                  <DotBadge tone="green">Income</DotBadge>
+                  <DotBadge tone="red">Expense</DotBadge>
+                  <DotBadge tone="amber">Planned</DotBadge>
+                  <DotBadge tone="neutral">{fmtLongDate(selectedDate)}</DotBadge>
+                </div>
+              }
+            />
+
+            <div style={{ overflowX: "auto", paddingBottom: 4 }}>
+              <div style={{ minWidth: 960 }}>
+                <div className="lccCalWeekdays">
+                  {Array.from({ length: 7 }, (_, i) => (
+                    <div
+                      key={i}
+                      style={{
+                        padding: "0 4px 0 6px",
+                        fontSize: 11,
+                        fontWeight: 900,
+                        textTransform: "uppercase",
+                        letterSpacing: ".16em",
+                        color: "rgba(255,255,255,0.36)",
+                      }}
+                    >
+                      {weekdayShort(i)}
+                    </div>
+                  ))}
+                </div>
+
+                <div className="lccCalGrid">
+                  {monthGridDays.map((dayISO) => (
+                    <DayCell
+                      key={dayISO}
+                      dayISO={dayISO}
+                      monthStart={monthStart}
+                      events={filteredEventsByDate.get(dayISO) || []}
+                      selected={selectedDate === dayISO}
+                      onOpen={openDay}
+                    />
+                  ))}
                 </div>
               </div>
-            </GlassPane>
-          </div>
+            </div>
+          </GlassPane>
 
-          <div
-            style={{
-              flex: "1 1 360px",
-              minWidth: 320,
-              display: "grid",
-              gap: 18,
-              alignContent: "start",
-            }}
-          >
-            <GlassPane size="card">
-              <PaneHeader
-                title="Selected day"
-                subcopy={fmtLongDate(selectedDate)}
-                right={<DotBadge tone="neutral">{selectedDayEvents.length} events</DotBadge>}
-              />
+          <GlassPane size="card">
+            <PaneHeader
+              title="Upcoming queue"
+              subcopy="Next visible events from this loaded date window."
+              right={<MiniPill>{upcomingEvents.length} loaded</MiniPill>}
+            />
 
-              <div
-                style={{
-                  display: "flex",
-                  flexWrap: "wrap",
-                  gap: 6,
-                  marginBottom: 14,
-                }}
-              >
-                <DotBadge tone="green">In {money(selectedDayIn)}</DotBadge>
-                <DotBadge tone="red">Out {money(selectedDayOut)}</DotBadge>
-                <DotBadge tone="amber">Planned {money(selectedDayPlanned)}</DotBadge>
+            {upcomingEvents.length === 0 ? (
+              <div style={mutedStyle()}>No upcoming items match the current filter.</div>
+            ) : (
+              <div className="lccCalQueueGrid">
+                {upcomingEvents.map((ev) => (
+                  <QueueCard key={ev.id} ev={ev} onOpen={openFromQueue} />
+                ))}
               </div>
-
-              <div style={{ display: "grid", gap: 10 }}>
-                {selectedDayEvents.length === 0 ? (
-                  <div
-                    style={{
-                      padding: 16,
-                      borderRadius: 18,
-                      border: "1px solid rgba(255,255,255,0.08)",
-                      background: "rgba(255,255,255,0.02)",
-                    }}
-                  >
-                    <div
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 8,
-                        color: "#fff",
-                        fontWeight: 900,
-                      }}
-                    >
-                      <CalendarDays size={15} />
-                      Clean day
-                    </div>
-                    <div style={{ ...mutedStyle(), marginTop: 6 }}>
-                      Nothing is hitting this date right now.
-                    </div>
-                  </div>
-                ) : (
-                  selectedDayEvents.slice(0, 5).map((ev) => (
-                    <div
-                      key={ev.id}
-                      style={{
-                        padding: 14,
-                        borderRadius: 18,
-                        border: "1px solid rgba(255,255,255,0.08)",
-                        background:
-                          "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.012))",
-                      }}
-                    >
-                      <div
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "space-between",
-                          gap: 10,
-                        }}
-                      >
-                        <div
-                          style={{
-                            color: "#fff",
-                            fontWeight: 900,
-                            fontSize: 14,
-                            minWidth: 0,
-                          }}
-                        >
-                          {ev.title}
-                        </div>
-                        <DotBadge tone={toneForEvent(ev).tone}>
-                          {fmtTime(ev.event_time)}
-                        </DotBadge>
-                      </div>
-
-                      <div
-                        style={{
-                          marginTop: 8,
-                          display: "flex",
-                          flexWrap: "wrap",
-                          gap: 6,
-                        }}
-                      >
-                        {ev.amount ? (
-                          <DotBadge tone={toneForEvent(ev).tone}>{money(ev.amount)}</DotBadge>
-                        ) : null}
-                        {ev.category ? <DotBadge tone="neutral">{ev.category}</DotBadge> : null}
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-
-              <div
-                style={{
-                  marginTop: 14,
-                  display: "flex",
-                  flexWrap: "wrap",
-                  gap: 8,
-                }}
-              >
-                <SolidButton onClick={() => openEditorForNew(selectedDate)} icon={<Plus size={15} />}>
-                  Add
-                </SolidButton>
-                <GhostButton onClick={() => setDrawerOpen(true)}>Open day</GhostButton>
-                <GhostButton onClick={() => openEditorForPayday(selectedDate)}>Quick payday</GhostButton>
-              </div>
-            </GlassPane>
-
-            <GlassPane size="card">
-              <PaneHeader
-                title="Upcoming queue"
-                subcopy="Next visible events from this loaded date window."
-              />
-
-              <div style={{ display: "grid", gap: 12 }}>
-                {upcomingEvents.length === 0 ? (
-                  <div style={mutedStyle()}>No upcoming items match the current filter.</div>
-                ) : (
-                  upcomingEvents.map((ev) => (
-                    <button
-                      key={ev.id}
-                      type="button"
-                      onClick={() => {
-                        setSelectedDate(ev.event_date);
-                        setDrawerOpen(true);
-                      }}
-                      style={{
-                        textAlign: "left",
-                        padding: 14,
-                        borderRadius: 18,
-                        border: "1px solid rgba(255,255,255,0.08)",
-                        background:
-                          "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.012))",
-                        cursor: "pointer",
-                      }}
-                    >
-                      <div
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          gap: 10,
-                          alignItems: "center",
-                        }}
-                      >
-                        <div style={{ minWidth: 0 }}>
-                          <div
-                            style={{
-                              color: "#fff",
-                              fontWeight: 900,
-                              fontSize: 14,
-                              minWidth: 0,
-                            }}
-                          >
-                            {ev.title}
-                          </div>
-                          <div style={{ ...mutedStyle(), marginTop: 4 }}>
-                            {fmtShortDate(ev.event_date)}
-                            {ev.event_time ? ` · ${fmtTime(ev.event_time)}` : " · All day"}
-                          </div>
-                        </div>
-
-                        <StatusDot tone={toneForEvent(ev).tone} size={10} />
-                      </div>
-
-                      <div
-                        style={{
-                          marginTop: 8,
-                          display: "flex",
-                          gap: 6,
-                          flexWrap: "wrap",
-                        }}
-                      >
-                        <DotBadge tone={toneForEvent(ev).tone}>{toneForEvent(ev).label}</DotBadge>
-                        {ev.amount ? (
-                          <DotBadge tone={toneForEvent(ev).tone}>{money(ev.amount)}</DotBadge>
-                        ) : null}
-                        {ev.category ? <DotBadge tone="neutral">{ev.category}</DotBadge> : null}
-                      </div>
-                    </button>
-                  ))
-                )}
-              </div>
-            </GlassPane>
-          </div>
+            )}
+          </GlassPane>
         </div>
-      </div>
+      </main>
 
-      <DayDrawer
-        open={drawerOpen}
-        onClose={() => setDrawerOpen(false)}
+      <DayPopup
+        open={dayPopupOpen}
+        onClose={() => setDayPopupOpen(false)}
         selectedDate={selectedDate}
         events={selectedDayEvents}
         dayIn={selectedDayIn}
@@ -2631,13 +2450,7 @@ export default function CalendarPage() {
         title="Manage calendar profiles"
         width="min(920px, 100%)"
       >
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "minmax(0, 1.2fr) minmax(280px, 0.8fr)",
-            gap: 18,
-          }}
-        >
+        <div className="lccCalManageGrid">
           <div>
             <div style={{ ...eyebrowStyle(), marginBottom: 12 }}>Profiles</div>
 
@@ -2663,6 +2476,7 @@ export default function CalendarPage() {
                         justifyContent: "space-between",
                         gap: 12,
                         alignItems: "center",
+                        flexWrap: "wrap",
                       }}
                     >
                       <div style={{ minWidth: 0 }}>
@@ -2693,9 +2507,7 @@ export default function CalendarPage() {
                           >
                             {profile.name}
                           </div>
-                          {profile.is_default ? (
-                            <DotBadge tone="green">Default</DotBadge>
-                          ) : null}
+                          {profile.is_default ? <DotBadge tone="green">Default</DotBadge> : null}
                           {active ? <DotBadge tone="blue">Active</DotBadge> : null}
                         </div>
                       </div>
@@ -2779,13 +2591,7 @@ export default function CalendarPage() {
             </GlassPane>
           ) : null}
 
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-              gap: 14,
-            }}
-          >
+          <div className="lccCalEditorGrid">
             <div style={{ gridColumn: "1 / -1" }}>
               <FieldLabel>Title</FieldLabel>
               <FieldInput
@@ -2930,6 +2736,107 @@ export default function CalendarPage() {
           </div>
         </form>
       </ModalShell>
+
+      <style jsx global>{`
+        .lccCalRoot {
+          width: 100%;
+          padding: 0 0 28px;
+          font-family: var(--lcc-font-sans);
+          box-sizing: border-box;
+        }
+
+        .lccCalInner {
+          width: 100%;
+          max-width: none;
+          margin: 0;
+          display: grid;
+          gap: 16px;
+          box-sizing: border-box;
+        }
+
+        .lccCalHeroGrid {
+          min-height: 96px;
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) auto;
+          gap: 14px;
+          align-items: center;
+        }
+
+        .lccCalMetrics {
+          display: grid;
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+          gap: 16px;
+        }
+
+        .lccCalControlsRow {
+          display: grid;
+          grid-template-columns: auto auto auto minmax(180px, 220px) minmax(240px, 1fr);
+          gap: 12px;
+          align-items: center;
+        }
+
+        .lccCalWeekdays {
+          display: grid;
+          grid-template-columns: repeat(7, minmax(0, 1fr));
+          gap: 10px;
+          margin-bottom: 10px;
+        }
+
+        .lccCalGrid {
+          display: grid;
+          grid-template-columns: repeat(7, minmax(0, 1fr));
+          gap: 12px;
+        }
+
+        .lccCalQueueGrid {
+          display: grid;
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+          gap: 12px;
+        }
+
+        .lccCalManageGrid {
+          display: grid;
+          grid-template-columns: minmax(0, 1.2fr) minmax(280px, 0.8fr);
+          gap: 18px;
+        }
+
+        .lccCalEditorGrid {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 14px;
+        }
+
+        @media (max-width: 1320px) {
+          .lccCalMetrics {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+          }
+
+          .lccCalQueueGrid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+          }
+
+          .lccCalControlsRow {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+          }
+        }
+
+        @media (max-width: 980px) {
+          .lccCalHeroGrid,
+          .lccCalManageGrid,
+          .lccCalEditorGrid,
+          .lccCalMetrics,
+          .lccCalQueueGrid,
+          .lccCalControlsRow {
+            grid-template-columns: 1fr;
+          }
+        }
+
+        @media (max-width: 640px) {
+          .lccCalRoot {
+            padding: 0 0 18px;
+          }
+        }
+      `}</style>
     </>
   );
 }
