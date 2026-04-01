@@ -5,7 +5,6 @@ import { supabase } from "@/lib/supabaseClient";
 import GlassPane from "../components/GlassPane";
 import {
   AlertTriangle,
-  CalendarDays,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -40,8 +39,14 @@ function money(n) {
   return num.toLocaleString(undefined, {
     style: "currency",
     currency: "USD",
-    maximumFractionDigits: 0,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
   });
+}
+
+function safeNum(n, fallback = 0) {
+  const num = Number(n);
+  return Number.isFinite(num) ? num : fallback;
 }
 
 function pad2(n) {
@@ -70,6 +75,7 @@ function startOfMonthISO(iso) {
   const d = parseISO(iso) ?? new Date();
   return toISODate(new Date(d.getFullYear(), d.getMonth(), 1));
 }
+
 
 function addMonthsISO(monthStartISO, delta) {
   const d = parseISO(monthStartISO) ?? new Date();
@@ -159,6 +165,18 @@ function parseMoneyInput(v) {
   return Number.isFinite(num) ? num : NaN;
 }
 
+
+function buildFetchWindow(monthStart) {
+  const firstVisible = startOfWeekISO(monthStart, 0);
+  const lastVisible = addDaysISO(firstVisible, 41);
+  return {
+    gridStart: firstVisible,
+    gridEnd: lastVisible,
+    loadStart: addDaysISO(firstVisible, -14),
+    loadEnd: addDaysISO(lastVisible, 84),
+  };
+}
+
 function mapProfileRow(row) {
   return {
     id: row.id,
@@ -178,7 +196,7 @@ function mapEventRow(row) {
     end_time: row.end_time || "",
     category: row.category || "General",
     flow: row.flow || "none",
-    amount: Number(row.amount || 0),
+    amount: safeNum(row.amount, 0),
     note: row.note || "",
     status: row.status || "scheduled",
     color: row.color || "#94a3b8",
@@ -832,22 +850,22 @@ function DayCell({ dayISO, monthStart, events, selected, onOpen }) {
 
   const incomeTotal = events
     .filter((ev) => String(ev.flow) === "income")
-    .reduce((sum, ev) => sum + Number(ev.amount || 0), 0);
+    .reduce((sum, ev) => sum + safeNum(ev.amount, 0), 0);
 
   const expenseTotal = events
     .filter((ev) => String(ev.flow) === "expense" && ev.source !== "planned_expense")
-    .reduce((sum, ev) => sum + Number(ev.amount || 0), 0);
+    .reduce((sum, ev) => sum + safeNum(ev.amount, 0), 0);
 
   const plannedTotal = events
     .filter((ev) => ev.source === "planned_expense")
-    .reduce((sum, ev) => sum + Number(ev.amount || 0), 0);
+    .reduce((sum, ev) => sum + safeNum(ev.amount, 0), 0);
 
   return (
     <button
       type="button"
       onClick={() => onOpen(dayISO)}
       style={{
-        minHeight: 170,
+        minHeight: 176,
         padding: 16,
         borderRadius: 24,
         textAlign: "left",
@@ -943,11 +961,11 @@ function DayCell({ dayISO, monthStart, events, selected, onOpen }) {
             gap: 6,
           }}
         >
-          {events.slice(0, 2).map((ev) => (
+          {events.slice(0, 3).map((ev) => (
             <EventPreview key={ev.id} ev={ev} />
           ))}
 
-          {events.length > 2 ? (
+          {events.length > 3 ? (
             <div
               style={{
                 fontSize: 11,
@@ -955,7 +973,7 @@ function DayCell({ dayISO, monthStart, events, selected, onOpen }) {
                 color: "rgba(255,255,255,0.36)",
               }}
             >
-              +{events.length - 2} more
+              +{events.length - 3} more
             </div>
           ) : null}
         </div>
@@ -1004,7 +1022,7 @@ function ActionMenu({ children }) {
             right: 0,
             top: 42,
             zIndex: 10,
-            width: 210,
+            width: 218,
             borderRadius: 18,
             border: "1px solid rgba(214,226,255,0.10)",
             background: "rgba(10,16,28,0.96)",
@@ -1273,6 +1291,38 @@ function ModalShell({ open, title, onClose, children, width = "min(860px, 100%)"
   );
 }
 
+function DayInsightsCard({ label, value, subcopy, tone = "neutral" }) {
+  const meta = toneMeta(tone);
+
+  return (
+    <div
+      style={{
+        borderRadius: 18,
+        border: `1px solid ${meta.border}`,
+        background:
+          "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.012))",
+        boxShadow: `0 0 18px ${meta.glow}`,
+        padding: 14,
+      }}
+    >
+      <div style={eyebrowStyle()}>{label}</div>
+      <div
+        style={{
+          marginTop: 8,
+          fontSize: 22,
+          lineHeight: 1,
+          fontWeight: 950,
+          letterSpacing: "-0.04em",
+          color: tone === "neutral" ? "#fff" : meta.text,
+        }}
+      >
+        {value}
+      </div>
+      <div style={{ ...mutedStyle(), marginTop: 8 }}>{subcopy}</div>
+    </div>
+  );
+}
+
 function DayPopup({
   open,
   onClose,
@@ -1281,6 +1331,7 @@ function DayPopup({
   dayIn,
   dayOut,
   dayPlanned,
+  activeProfile,
   onAdd,
   onPayday,
   onExpense,
@@ -1301,6 +1352,10 @@ function DayPopup({
 
   const allDay = events.filter((ev) => !ev.event_time);
   const timed = events.filter((ev) => !!ev.event_time);
+  const manualCount = events.filter((ev) => ev.source === "manual").length;
+  const syncedCount = events.length - manualCount;
+  const firstTimed = timed[0]?.event_time || "";
+  const lastTimed = timed[timed.length - 1]?.end_time || timed[timed.length - 1]?.event_time || "";
 
   return (
     <div
@@ -1319,7 +1374,7 @@ function DayPopup({
         padding: 18,
       }}
     >
-      <div style={{ width: "min(1040px, 100%)", maxHeight: "88vh" }}>
+      <div style={{ width: "min(1180px, 100%)", maxHeight: "88vh" }}>
         <GlassPane size="hero" style={{ height: "100%", overflow: "hidden" }}>
           <div
             style={{
@@ -1363,6 +1418,7 @@ function DayPopup({
                     <DotBadge tone="red">Out {money(dayOut)}</DotBadge>
                     <DotBadge tone="amber">Planned {money(dayPlanned)}</DotBadge>
                     <DotBadge tone="neutral">{events.length} events</DotBadge>
+                    {activeProfile?.name ? <DotBadge tone="blue">{activeProfile.name}</DotBadge> : null}
                   </div>
                 </div>
 
@@ -1387,71 +1443,98 @@ function DayPopup({
               </div>
             </div>
 
-            <div
-              style={{
-                flex: 1,
-                overflowY: "auto",
-                paddingTop: 18,
-              }}
-            >
-              {events.length === 0 ? (
-                <GlassPane size="card">
-                  <div
-                    style={{
-                      fontSize: 15,
-                      fontWeight: 900,
-                      color: "#fff",
-                    }}
-                  >
-                    No events for this day
-                  </div>
-                  <div
-                    style={{
-                      marginTop: 6,
-                      fontSize: 13,
-                      color: "rgba(255,255,255,0.62)",
-                    }}
-                  >
-                    Add something manually or let the synced items land here.
-                  </div>
-                </GlassPane>
-              ) : (
-                <div style={{ display: "grid", gap: 24 }}>
-                  {allDay.length > 0 ? (
-                    <div>
-                      <div style={{ ...eyebrowStyle(), marginBottom: 12 }}>All day</div>
-                      <div style={{ display: "grid", gap: 16 }}>
-                        {allDay.map((ev) => (
-                          <TimelineItem
-                            key={ev.id}
-                            ev={ev}
-                            onEdit={onEdit}
-                            onDelete={onDelete}
-                            onDuplicate={onDuplicate}
-                          />
-                        ))}
+            <div className="lccCalPopupGrid">
+              <div className="lccCalPopupTimelineWrap">
+                <div className="lccCalPopupScroll">
+                  {events.length === 0 ? (
+                    <GlassPane size="card">
+                      <div
+                        style={{
+                          fontSize: 15,
+                          fontWeight: 900,
+                          color: "#fff",
+                        }}
+                      >
+                        No events for this day
                       </div>
-                    </div>
-                  ) : null}
+                      <div
+                        style={{
+                          marginTop: 6,
+                          fontSize: 13,
+                          color: "rgba(255,255,255,0.62)",
+                        }}
+                      >
+                        Add something manually or let the synced items land here.
+                      </div>
+                    </GlassPane>
+                  ) : (
+                    <div style={{ display: "grid", gap: 24 }}>
+                      {allDay.length > 0 ? (
+                        <div>
+                          <div style={{ ...eyebrowStyle(), marginBottom: 12 }}>All day</div>
+                          <div style={{ display: "grid", gap: 16 }}>
+                            {allDay.map((ev) => (
+                              <TimelineItem
+                                key={ev.id}
+                                ev={ev}
+                                onEdit={onEdit}
+                                onDelete={onDelete}
+                                onDuplicate={onDuplicate}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
 
-                  {timed.length > 0 ? (
-                    <div>
-                      <div style={{ ...eyebrowStyle(), marginBottom: 12 }}>Timed</div>
-                      <div style={{ display: "grid", gap: 16 }}>
-                        {timed.map((ev) => (
-                          <TimelineItem
-                            key={ev.id}
-                            ev={ev}
-                            onEdit={onEdit}
-                            onDelete={onDelete}
-                            onDuplicate={onDuplicate}
-                          />
-                        ))}
-                      </div>
+                      {timed.length > 0 ? (
+                        <div>
+                          <div style={{ ...eyebrowStyle(), marginBottom: 12 }}>Timed</div>
+                          <div style={{ display: "grid", gap: 16 }}>
+                            {timed.map((ev) => (
+                              <TimelineItem
+                                key={ev.id}
+                                ev={ev}
+                                onEdit={onEdit}
+                                onDelete={onDelete}
+                                onDuplicate={onDuplicate}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
                     </div>
-                  ) : null}
+                  )}
                 </div>
-              )}
+              </div>
+
+              <div className="lccCalPopupRail">
+                <div style={{ display: "grid", gap: 12 }}>
+                  <DayInsightsCard
+                    label="Income"
+                    value={money(dayIn)}
+                    subcopy="Money-in events landing on this exact day."
+                    tone="green"
+                  />
+                  <DayInsightsCard
+                    label="Actual outflow"
+                    value={money(dayOut)}
+                    subcopy="Real expense hits only. Planned items stay separate."
+                    tone="red"
+                  />
+                  <DayInsightsCard
+                    label="Planned"
+                    value={money(dayPlanned)}
+                    subcopy="Planned expense items scheduled here."
+                    tone="amber"
+                  />
+                  <DayInsightsCard
+                    label="Timeline window"
+                    value={events.length ? `${firstTimed ? fmtTime(firstTimed) : "All day"} → ${lastTimed ? fmtTime(lastTimed) : "Open"}` : "—"}
+                    subcopy={`${manualCount} manual • ${syncedCount} synced`}
+                    tone="blue"
+                  />
+                </div>
+              </div>
             </div>
           </div>
         </GlassPane>
@@ -1550,6 +1633,8 @@ export default function CalendarPage() {
   const [newProfileColor, setNewProfileColor] = React.useState("#8b5cf6");
   const [draft, setDraft] = React.useState(emptyEvent(todayISO(), ""));
 
+  const fetchWindow = React.useMemo(() => buildFetchWindow(monthStart), [monthStart]);
+
   React.useEffect(() => {
     if (!status) return undefined;
     const id = window.setTimeout(() => setStatus(""), 3200);
@@ -1561,16 +1646,15 @@ export default function CalendarPage() {
 
     try {
       setPageError("");
-      const gridStart = startOfWeekISO(monthStart, 0);
-      const gridEnd = addDaysISO(gridStart, 41);
+      const { loadStart, loadEnd } = buildFetchWindow(monthStart);
 
       const { data, error } = await supabase
         .from("calendar_events")
         .select("*")
         .eq("user_id", user.id)
         .eq("profile_id", profileId)
-        .gte("event_date", gridStart)
-        .lte("event_date", gridEnd)
+        .gte("event_date", loadStart)
+        .lte("event_date", loadEnd)
         .order("event_date", { ascending: true })
         .order("event_time", { ascending: true });
 
@@ -1671,9 +1755,8 @@ export default function CalendarPage() {
   );
 
   const monthGridDays = React.useMemo(() => {
-    const firstCell = startOfWeekISO(monthStart, 0);
-    return Array.from({ length: 42 }, (_, i) => addDaysISO(firstCell, i));
-  }, [monthStart]);
+    return Array.from({ length: 42 }, (_, i) => addDaysISO(fetchWindow.gridStart, i));
+  }, [fetchWindow.gridStart]);
 
   const filteredEvents = React.useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -1714,6 +1797,7 @@ export default function CalendarPage() {
         ev.source,
         ev.event_date,
         ev.event_time,
+        money(ev.amount),
       ]
         .join(" ")
         .toLowerCase();
@@ -1765,7 +1849,7 @@ export default function CalendarPage() {
     () =>
       visibleMonthEvents
         .filter((ev) => String(ev.flow) === "income")
-        .reduce((sum, ev) => sum + Number(ev.amount || 0), 0),
+        .reduce((sum, ev) => sum + safeNum(ev.amount, 0), 0),
     [visibleMonthEvents]
   );
 
@@ -1773,7 +1857,7 @@ export default function CalendarPage() {
     () =>
       visibleMonthEvents
         .filter((ev) => String(ev.flow) === "expense" && ev.source !== "planned_expense")
-        .reduce((sum, ev) => sum + Number(ev.amount || 0), 0),
+        .reduce((sum, ev) => sum + safeNum(ev.amount, 0), 0),
     [visibleMonthEvents]
   );
 
@@ -1781,7 +1865,7 @@ export default function CalendarPage() {
     () =>
       visibleMonthEvents
         .filter((ev) => ev.source === "planned_expense")
-        .reduce((sum, ev) => sum + Number(ev.amount || 0), 0),
+        .reduce((sum, ev) => sum + safeNum(ev.amount, 0), 0),
     [visibleMonthEvents]
   );
 
@@ -1789,7 +1873,7 @@ export default function CalendarPage() {
     () =>
       selectedDayEvents
         .filter((ev) => String(ev.flow) === "income")
-        .reduce((sum, ev) => sum + Number(ev.amount || 0), 0),
+        .reduce((sum, ev) => sum + safeNum(ev.amount, 0), 0),
     [selectedDayEvents]
   );
 
@@ -1797,7 +1881,7 @@ export default function CalendarPage() {
     () =>
       selectedDayEvents
         .filter((ev) => String(ev.flow) === "expense" && ev.source !== "planned_expense")
-        .reduce((sum, ev) => sum + Number(ev.amount || 0), 0),
+        .reduce((sum, ev) => sum + safeNum(ev.amount, 0), 0),
     [selectedDayEvents]
   );
 
@@ -1805,7 +1889,7 @@ export default function CalendarPage() {
     () =>
       selectedDayEvents
         .filter((ev) => ev.source === "planned_expense")
-        .reduce((sum, ev) => sum + Number(ev.amount || 0), 0),
+        .reduce((sum, ev) => sum + safeNum(ev.amount, 0), 0),
     [selectedDayEvents]
   );
 
@@ -1999,8 +2083,9 @@ export default function CalendarPage() {
       }
 
       setEditorOpen(false);
-      await refreshEvents();
+      setMonthStart(startOfMonthISO(draft.event_date));
       setSelectedDate(draft.event_date);
+      await refreshEvents();
       setDayPopupOpen(true);
     } catch (err) {
       setPageError(err?.message || "Failed to save event.");
@@ -2142,12 +2227,13 @@ export default function CalendarPage() {
 
       if (!loaded.some((p) => p.is_default) && loaded[0]) {
         const replacement = loaded[0];
-        await supabase
+        const { error: repairErr } = await supabase
           .from("calendar_profiles")
           .update({ is_default: true })
           .eq("user_id", user.id)
           .eq("id", replacement.id);
 
+        if (repairErr) throw repairErr;
         loaded = await refreshProfiles(user.id);
       }
 
@@ -2183,6 +2269,7 @@ export default function CalendarPage() {
   }
 
   function openFromQueue(ev) {
+    setMonthStart(startOfMonthISO(ev.event_date));
     setSelectedDate(ev.event_date);
     setDayPopupOpen(true);
   }
@@ -2304,6 +2391,7 @@ export default function CalendarPage() {
             <PaneHeader
               title="Controls"
               subcopy="Move the month, switch profiles, then filter what actually matters."
+              right={<MiniPill>{fetchWindow.loadStart} → {fetchWindow.loadEnd}</MiniPill>}
             />
 
             <div className="lccCalControlsRow">
@@ -2436,6 +2524,7 @@ export default function CalendarPage() {
         dayIn={selectedDayIn}
         dayOut={selectedDayOut}
         dayPlanned={selectedDayPlanned}
+        activeProfile={activeProfile}
         onAdd={openEditorForNew}
         onPayday={openEditorForPayday}
         onExpense={openEditorForExpense}
@@ -2519,7 +2608,14 @@ export default function CalendarPage() {
                           </GhostButton>
                         ) : null}
                         {!active ? (
-                          <GhostButton onClick={() => setProfileId(profile.id)}>Use</GhostButton>
+                          <GhostButton
+                            onClick={() => {
+                              setProfileId(profile.id);
+                              setDraft((prev) => ({ ...prev, profile_id: profile.id }));
+                            }}
+                          >
+                            Use
+                          </GhostButton>
                         ) : null}
                         {profiles.length > 1 ? (
                           <GhostButton
@@ -2673,7 +2769,7 @@ export default function CalendarPage() {
               <FieldInput
                 value={draft.amount}
                 onChange={(e) => setDraft((prev) => ({ ...prev, amount: e.target.value }))}
-                placeholder="$0"
+                placeholder="$0.00"
                 inputMode="decimal"
               />
             </div>
@@ -2806,6 +2902,26 @@ export default function CalendarPage() {
           gap: 14px;
         }
 
+        .lccCalPopupGrid {
+          display: grid;
+          grid-template-columns: minmax(0, 1.2fr) minmax(300px, 0.8fr);
+          gap: 18px;
+          padding-top: 18px;
+          min-height: 0;
+          flex: 1;
+        }
+
+        .lccCalPopupTimelineWrap,
+        .lccCalPopupRail {
+          min-height: 0;
+        }
+
+        .lccCalPopupScroll {
+          height: 100%;
+          overflow-y: auto;
+          padding-right: 4px;
+        }
+
         @media (max-width: 1320px) {
           .lccCalMetrics {
             grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2826,7 +2942,8 @@ export default function CalendarPage() {
           .lccCalEditorGrid,
           .lccCalMetrics,
           .lccCalQueueGrid,
-          .lccCalControlsRow {
+          .lccCalControlsRow,
+          .lccCalPopupGrid {
             grid-template-columns: 1fr;
           }
         }

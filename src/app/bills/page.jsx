@@ -8,7 +8,6 @@ import {
   BadgeDollarSign,
   CalendarClock,
   Copy,
-  CreditCard,
   Landmark,
   Link2,
   MoreHorizontal,
@@ -561,6 +560,17 @@ function buildBillEditorState(bill, linkedDebt, defaultAccountId = "") {
   };
 }
 
+function buildPaymentDraft(bill, fallbackAccountId = "") {
+  return {
+    amount: bill ? String(bill.amount || "") : "",
+    paymentDate: isoDate(),
+    accountId: bill?.accountId || fallbackAccountId || "",
+    note: "",
+    advanceDue: true,
+    saving: false,
+  };
+}
+
 function emptyBill(defaultAccountId = "") {
   return {
     id: uid(),
@@ -862,6 +872,24 @@ function SectionCard({ title, subcopy, children, right }) {
 }
 
 function DrawerShell({ open, title, subcopy, onClose, children, footer }) {
+  useEffect(() => {
+    if (!open) return undefined;
+
+    const previousOverflow = document.body.style.overflow;
+
+    function handleKeyDown(event) {
+      if (event.key === "Escape") onClose?.();
+    }
+
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [open, onClose]);
+
   if (!open) return null;
 
   return (
@@ -1313,6 +1341,24 @@ function PaymentHistory({
 }
 
 function ModalShell({ open, title, subcopy, onClose, children, footer }) {
+  useEffect(() => {
+    if (!open) return undefined;
+
+    const previousOverflow = document.body.style.overflow;
+
+    function handleKeyDown(event) {
+      if (event.key === "Escape") onClose?.();
+    }
+
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [open, onClose]);
+
   if (!open) return null;
 
   return (
@@ -1386,54 +1432,73 @@ function BillMoreMenu({
   onDelete,
   disabled = false,
 }) {
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    if (!open) return undefined;
+
+    function handleWindowClick() {
+      setOpen(false);
+    }
+
+    window.addEventListener("click", handleWindowClick);
+    return () => window.removeEventListener("click", handleWindowClick);
+  }, [open]);
+
+  function run(action) {
+    setOpen(false);
+    action?.();
+  }
+
   return (
-    <details className="billMoreMenu">
-      <summary className="billMoreTrigger" aria-label="More bill tools">
+    <div className="billMoreMenu" onClick={(event) => event.stopPropagation()}>
+      <button
+        type="button"
+        className="billMoreTrigger"
+        aria-label="More bill tools"
+        aria-expanded={open}
+        onClick={() => setOpen((prev) => !prev)}
+        disabled={disabled}
+      >
         <MoreHorizontal size={16} />
-      </summary>
+      </button>
 
-      <div className="billMorePanel">
-        <button
-          type="button"
-          className="billMoreItem"
-          onClick={onEdit}
-          disabled={disabled}
-        >
-          <PencilLine size={14} />
-          Edit bill
-        </button>
+      {open ? (
+        <div className="billMorePanel">
+          <button type="button" className="billMoreItem" onClick={() => run(onEdit)}>
+            <PencilLine size={14} />
+            Edit bill
+          </button>
 
-        <button
-          type="button"
-          className="billMoreItem"
-          onClick={onDuplicate}
-          disabled={disabled}
-        >
-          <Copy size={14} />
-          Duplicate
-        </button>
+          <button
+            type="button"
+            className="billMoreItem"
+            onClick={() => run(onDuplicate)}
+          >
+            <Copy size={14} />
+            Duplicate
+          </button>
 
-        <button
-          type="button"
-          className="billMoreItem"
-          onClick={onToggle}
-          disabled={disabled}
-        >
-          <ArrowUpRight size={14} />
-          {bill?.active ? "Archive bill" : "Activate bill"}
-        </button>
+          <button
+            type="button"
+            className="billMoreItem"
+            onClick={() => run(onToggle)}
+          >
+            <ArrowUpRight size={14} />
+            {bill?.active ? "Archive bill" : "Activate bill"}
+          </button>
 
-        <button
-          type="button"
-          className="billMoreItem billMoreDanger"
-          onClick={onDelete}
-          disabled={disabled}
-        >
-          <Trash2 size={14} />
-          Delete bill
-        </button>
-      </div>
-    </details>
+          <button
+            type="button"
+            className="billMoreItem billMoreDanger"
+            onClick={() => run(onDelete)}
+          >
+            <Trash2 size={14} />
+            Delete bill
+          </button>
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -2045,14 +2110,9 @@ export default function BillsPage() {
   const [drawerMode, setDrawerMode] = useState(null);
   const [historyOpen, setHistoryOpen] = useState(false);
 
-  const [paymentDraft, setPaymentDraft] = useState({
-    amount: "",
-    paymentDate: isoDate(),
-    accountId: "",
-    note: "",
-    advanceDue: true,
-    saving: false,
-  });
+  const [paymentDraft, setPaymentDraft] = useState(() =>
+    buildPaymentDraft(null, "")
+  );
 
   useEffect(() => {
     if (!status) return undefined;
@@ -2249,27 +2309,13 @@ export default function BillsPage() {
   useEffect(() => {
     if (!selectedBill) {
       setEditor(buildEmptyBillForm(defaultAccountId || ""));
-      setPaymentDraft({
-        amount: "",
-        paymentDate: isoDate(),
-        accountId: defaultAccountId || "",
-        note: "",
-        advanceDue: true,
-        saving: false,
-      });
+      setPaymentDraft(buildPaymentDraft(null, defaultAccountId));
       return;
     }
 
     setEditor(buildBillEditorState(selectedBill, selectedLinkedDebt, defaultAccountId));
 
-    setPaymentDraft({
-      amount: String(selectedBill.amount || ""),
-      paymentDate: isoDate(),
-      accountId: selectedBill.accountId || defaultAccountId || "",
-      note: "",
-      advanceDue: true,
-      saving: false,
-    });
+    setPaymentDraft(buildPaymentDraft(selectedBill, defaultAccountId));
   }, [selectedBill, selectedLinkedDebt, defaultAccountId]);
 
   const selectedBillPayments = useMemo(() => {
@@ -2932,14 +2978,7 @@ export default function BillsPage() {
         linkedDebtUpdated = true;
       }
 
-      setPaymentDraft({
-        amount: "",
-        paymentDate: isoDate(),
-        accountId: selectedBill.accountId || defaultAccountId || "",
-        note: "",
-        advanceDue: true,
-        saving: false,
-      });
+      setPaymentDraft(buildPaymentDraft(null, selectedBill.accountId || defaultAccountId || ""));
 
       setStatus(linkedDebt ? "Payment logged and debt synced." : "Payment logged.");
       await refreshPage(selectedBill.id);
@@ -3706,10 +3745,10 @@ const globalStyles = `
   .billCompactRow {
     width: 100%;
     display: grid;
-    grid-template-columns: 42px minmax(0, 1fr) auto;
+    grid-template-columns: 84px minmax(0, 1fr) auto;
     gap: 10px;
     align-items: center;
-    min-height: 92px;
+    min-height: 108px;
     padding: 12px 14px;
     border-radius: 20px;
     border: 1px solid rgba(255,255,255,0.07);
@@ -3724,20 +3763,6 @@ const globalStyles = `
     transform: translateY(-1px);
   }
 
-  .billCompactAvatar {
-    width: 42px;
-    height: 42px;
-    border-radius: 14px;
-    display: grid;
-    place-items: center;
-    border: 1px solid rgba(255,255,255,0.08);
-    background:
-      linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.012)),
-      rgba(9, 14, 23, 0.68);
-    font-size: 12px;
-    font-weight: 800;
-    letter-spacing: .05em;
-  }
 
   .billCompactTitle {
     font-size: 13.5px;
@@ -3901,6 +3926,31 @@ const globalStyles = `
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 10px;
+  }
+
+  .billPaymentGridBetter {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .billPaymentSectionHead {
+    display: grid;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+
+  .billHistoryMetaRow {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .billPaymentActionBar {
+    margin-top: 14px;
+    display: flex;
+    justify-content: space-between;
+    gap: 14px;
+    align-items: flex-end;
+    flex-wrap: wrap;
   }
 
   .billPaymentNoteSpan {
@@ -4149,14 +4199,6 @@ const globalStyles = `
     position: relative;
   }
 
-  .billMoreMenu summary {
-    list-style: none;
-  }
-
-  .billMoreMenu summary::-webkit-details-marker {
-    display: none;
-  }
-
   .billMoreTrigger {
     width: 36px;
     height: 36px;
@@ -4169,6 +4211,11 @@ const globalStyles = `
     place-items: center;
     cursor: pointer;
     transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+  }
+
+  .billMoreTrigger:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
   }
 
   .billMoreTrigger:hover {
@@ -4283,6 +4330,7 @@ const globalStyles = `
 
   .billDrawerBody {
     overflow: auto;
+    overscroll-behavior: contain;
     padding: 18px;
     display: grid;
     gap: 14px;
@@ -4372,7 +4420,7 @@ const globalStyles = `
     }
 
     .billCompactRow {
-      grid-template-columns: 42px minmax(0, 1fr);
+      grid-template-columns: 84px minmax(0, 1fr);
     }
 
     .billCompactValue {
@@ -4386,6 +4434,14 @@ const globalStyles = `
     .billIntelList {
       min-height: 0;
       max-height: none;
+    }
+
+    .billPaymentGridBetter {
+      grid-template-columns: 1fr;
+    }
+
+    .billPaymentActionBar {
+      align-items: stretch;
     }
   }
 
@@ -4420,13 +4476,18 @@ const globalStyles = `
     .billDrawerFooter {
       flex-direction: column;
     }
+
+    .billModalRoot {
+      padding: 12px;
+    }
+
+    .billModalHeader,
+    .billModalBody,
+    .billModalFooter {
+      padding: 14px;
+    }
   }
 
-
-  .billCompactRow {
-    grid-template-columns: 84px minmax(0, 1fr) auto;
-    min-height: 108px;
-  }
 
   .billStatusRow {
     display: flex;
@@ -4474,30 +4535,9 @@ const globalStyles = `
     letter-spacing: .04em;
   }
 
-  .billPaymentGridBetter {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
 
-  .billPaymentSectionHead {
-    display: grid;
-    gap: 10px;
-    margin-bottom: 12px;
-  }
 
-  .billHistoryMetaRow {
-    display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
-  }
 
-  .billPaymentActionBar {
-    margin-top: 14px;
-    display: flex;
-    justify-content: space-between;
-    gap: 14px;
-    align-items: flex-end;
-    flex-wrap: wrap;
-  }
 
   .billModalRoot {
     position: fixed;
@@ -4550,40 +4590,10 @@ const globalStyles = `
   .billModalBody {
     min-height: 0;
     overflow: auto;
+    overscroll-behavior: contain;
     padding: 18px;
   }
 
-  @media (max-width: 1024px) {
-    .billCompactRow {
-      grid-template-columns: 84px minmax(0, 1fr);
-    }
 
-    .billCompactValue {
-      grid-column: 2;
-      white-space: normal;
-      font-size: 13px;
-      color: rgba(255,255,255,0.74);
-    }
-
-    .billPaymentGridBetter {
-      grid-template-columns: 1fr;
-    }
-
-    .billPaymentActionBar {
-      align-items: stretch;
-    }
-  }
-
-  @media (max-width: 640px) {
-    .billModalRoot {
-      padding: 12px;
-    }
-
-    .billModalHeader,
-    .billModalBody,
-    .billModalFooter {
-      padding: 14px;
-    }
-  }
 
 `;

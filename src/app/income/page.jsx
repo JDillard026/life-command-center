@@ -9,6 +9,7 @@ import {
   CalendarClock,
   Copy,
   Landmark,
+  MoreHorizontal,
   Plus,
   Save,
   Search,
@@ -87,13 +88,6 @@ function formatAgo(value) {
 
   const days = Math.round(hours / 24);
   return `${days}d ago`;
-}
-
-function currentMonthLabel() {
-  return new Intl.DateTimeFormat("en-US", {
-    month: "long",
-    year: "numeric",
-  }).format(new Date());
 }
 
 function monthInputToday() {
@@ -532,96 +526,6 @@ function splitSummaryText(item) {
   )}`;
 }
 
-function CompactIncomeRow({
-  item,
-  selected,
-  maxAmount,
-  onSelect,
-  onDuplicate,
-  onDelete,
-}) {
-  const scheduled = isScheduledItem(item);
-  const posted = !!item.posted;
-  const tone = scheduled ? "blue" : "green";
-  const meta = toneMeta(tone);
-  const fill = maxAmount > 0 ? (safeNum(item.amount) / maxAmount) * 100 : 0;
-
-  return (
-    <div
-      className="incomeCompactRow"
-      onClick={onSelect}
-      style={{
-        borderColor: selected ? meta.border : "rgba(255,255,255,0.07)",
-        boxShadow: selected
-          ? `inset 0 1px 0 rgba(255,255,255,0.03), 0 0 0 1px rgba(255,255,255,0.01), 0 0 24px ${meta.glow}`
-          : "inset 0 1px 0 rgba(255,255,255,0.025)",
-      }}
-    >
-      <div
-        className="incomeCompactAvatar"
-        style={{
-          borderColor: meta.border,
-          color: tone === "neutral" ? "#fff" : meta.text,
-          boxShadow: `0 0 12px ${meta.glow}`,
-        }}
-      >
-        {sourceInitial(item.source)}
-      </div>
-
-      <div style={{ minWidth: 0 }}>
-        <div
-          style={{
-            display: "flex",
-            gap: 8,
-            alignItems: "center",
-            flexWrap: "wrap",
-          }}
-        >
-          <div className="incomeCompactTitle">{item.source || "Income"}</div>
-          <MiniPill tone={scheduled ? "blue" : "green"}>
-            {scheduled ? "Scheduled" : "Received"}
-          </MiniPill>
-          <MiniPill tone={posted ? "green" : "amber"}>
-            {posted ? "Posted" : "Unposted"}
-          </MiniPill>
-        </div>
-
-        <div className="incomeCompactSub">
-          {shortDate(item.deposit_date)} • {splitSummaryText(item)} • Updated{" "}
-          {formatAgo(item.updated_at || item.created_at)}
-        </div>
-
-        <div style={{ marginTop: 10 }}>
-          <ProgressBar fill={fill} tone={tone} />
-        </div>
-      </div>
-
-      <div className="incomeCompactValue">{fmtMoney(item.amount)}</div>
-
-      <div className="incomeCompactActions" onClick={(e) => e.stopPropagation()}>
-        <button
-          type="button"
-          className="incomeIconBtn"
-          onClick={onDuplicate}
-          aria-label="Duplicate income"
-          title="Duplicate income"
-        >
-          <Copy size={14} />
-        </button>
-        <button
-          type="button"
-          className="incomeIconBtn incomeDangerBtn"
-          onClick={onDelete}
-          aria-label="Delete income"
-          title="Delete income"
-        >
-          <Trash2 size={14} />
-        </button>
-      </div>
-    </div>
-  );
-}
-
 function SplitPlanner({
   title = "Split Plan",
   accounts,
@@ -662,7 +566,9 @@ function SplitPlanner({
         }}
       >
         <div>
-          <div className="incomeTinyLabel">{title}</div>
+          <div className="incomeTinyLabel" style={{ marginBottom: 4 }}>
+            {title}
+          </div>
           <div className="incomeInfoSub" style={{ marginTop: 0 }}>
             Split one paycheck across accounts by exact dollar amount.
           </div>
@@ -735,13 +641,128 @@ function SplitPlanner({
   );
 }
 
-function FocusIncomeCard({
+function AdvancedRouting({ children }) {
+  return (
+    <details className="incomeDetailsBlock">
+      <summary className="incomeDetailsToggle">
+        <span>Advanced routing</span>
+        <MoreHorizontal size={14} />
+      </summary>
+      <div className="incomeDetailsBody">{children}</div>
+    </details>
+  );
+}
+
+function CompactIncomeRow({
+  item,
+  selected,
+  maxAmount,
+  menuOpen,
+  onSelect,
+  onToggleMenu,
+  onDuplicate,
+  onDelete,
+}) {
+  const scheduled = isScheduledItem(item);
+  const posted = !!item.posted;
+  const tone = scheduled ? "blue" : "green";
+  const meta = toneMeta(tone);
+  const fill = maxAmount > 0 ? (safeNum(item.amount) / maxAmount) * 100 : 0;
+
+  return (
+    <div
+      className="incomeCompactRow"
+      onClick={onSelect}
+      style={{
+        borderColor: selected ? meta.border : "rgba(255,255,255,0.07)",
+        boxShadow: selected
+          ? `inset 0 1px 0 rgba(255,255,255,0.03), 0 0 0 1px rgba(255,255,255,0.01), 0 0 24px ${meta.glow}`
+          : "inset 0 1px 0 rgba(255,255,255,0.025)",
+      }}
+    >
+      <div
+        className="incomeCompactAvatar"
+        style={{
+          borderColor: meta.border,
+          color: tone === "neutral" ? "#fff" : meta.text,
+          boxShadow: `0 0 12px ${meta.glow}`,
+        }}
+      >
+        {sourceInitial(item.source)}
+      </div>
+
+      <div style={{ minWidth: 0 }}>
+        <div
+          style={{
+            display: "flex",
+            gap: 8,
+            alignItems: "center",
+            flexWrap: "wrap",
+          }}
+        >
+          <div className="incomeCompactTitle">{item.source || "Income"}</div>
+          <MiniPill tone={scheduled ? "blue" : "green"}>
+            {scheduled ? "Scheduled" : "Received"}
+          </MiniPill>
+          <MiniPill tone={posted ? "green" : "amber"}>
+            {posted ? "Posted" : "Unposted"}
+          </MiniPill>
+        </div>
+
+        <div className="incomeCompactSub">
+          {shortDate(item.deposit_date)} • {splitSummaryText(item)} • Updated{" "}
+          {formatAgo(item.updated_at || item.created_at)}
+        </div>
+
+        <div style={{ marginTop: 10 }}>
+          <ProgressBar fill={fill} tone={tone} />
+        </div>
+      </div>
+
+      <div className="incomeCompactValue">{fmtMoney(item.amount)}</div>
+
+      <div
+        className="incomeMenuWrap"
+        onClick={(e) => {
+          e.stopPropagation();
+        }}
+      >
+        <button
+          type="button"
+          className="incomeIconBtn"
+          aria-label="More actions"
+          title="More actions"
+          onClick={onToggleMenu}
+        >
+          <MoreHorizontal size={14} />
+        </button>
+
+        {menuOpen ? (
+          <div className="incomeMenuPanel">
+            <button type="button" className="incomeMenuItem" onClick={onDuplicate}>
+              <Copy size={14} />
+              Duplicate
+            </button>
+            <button type="button" className="incomeMenuItem danger" onClick={onDelete}>
+              <Trash2 size={14} />
+              Delete
+            </button>
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function SelectedIncomeCard({
   item,
   editor,
   setEditor,
   accounts,
   defaultAccountName,
   saving,
+  menuOpen,
+  setMenuOpen,
   onSave,
   onDuplicate,
   onDelete,
@@ -749,12 +770,12 @@ function FocusIncomeCard({
 }) {
   if (!item) {
     return (
-      <GlassPane size="card">
+      <GlassPane size="card" style={{ height: "100%" }}>
         <PaneHeader
           title="Selected Income"
           subcopy="Choose one from the roster to work it here."
         />
-        <div className="incomeEmptyState" style={{ minHeight: 170 }}>
+        <div className="incomeEmptyState" style={{ minHeight: 300 }}>
           <div>
             <div className="incomeEmptyTitle">No income selected</div>
             <div className="incomeEmptyText">
@@ -770,6 +791,7 @@ function FocusIncomeCard({
   const tone = scheduled ? "blue" : "green";
   const meta = toneMeta(tone);
   const posted = !!editor.posted;
+  const lockFinancialFields = posted;
 
   return (
     <GlassPane
@@ -781,7 +803,7 @@ function FocusIncomeCard({
         title={item.source || "Income"}
         subcopy="Focused controls for the income entry you are actively touching."
         right={
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
             <MiniPill tone={scheduled ? "blue" : "green"}>
               {scheduled ? "Scheduled" : "Received"}
             </MiniPill>
@@ -789,6 +811,60 @@ function FocusIncomeCard({
               {posted ? "Posted" : "Unposted"}
             </MiniPill>
             {saving ? <MiniPill tone="amber">Saving...</MiniPill> : null}
+
+            <div className="incomeMenuWrap">
+              <button
+                type="button"
+                className="incomeIconBtn"
+                onClick={() => setMenuOpen((prev) => !prev)}
+                aria-label="More actions"
+                title="More actions"
+              >
+                <MoreHorizontal size={14} />
+              </button>
+
+              {menuOpen ? (
+                <div className="incomeMenuPanel incomeMenuPanelRight">
+                  {!posted ? (
+                    <button
+                      type="button"
+                      className="incomeMenuItem"
+                      onClick={() => {
+                        setMenuOpen(false);
+                        onPostToAccounts();
+                      }}
+                    >
+                      <Landmark size={14} />
+                      {scheduled ? "Mark Received + Post" : "Post To Accounts"}
+                    </button>
+                  ) : null}
+
+                  <button
+                    type="button"
+                    className="incomeMenuItem"
+                    onClick={() => {
+                      setMenuOpen(false);
+                      onDuplicate();
+                    }}
+                  >
+                    <Copy size={14} />
+                    Duplicate
+                  </button>
+
+                  <button
+                    type="button"
+                    className="incomeMenuItem danger"
+                    onClick={() => {
+                      setMenuOpen(false);
+                      onDelete();
+                    }}
+                  >
+                    <Trash2 size={14} />
+                    Delete
+                  </button>
+                </div>
+              ) : null}
+            </div>
           </div>
         }
       />
@@ -842,8 +918,8 @@ function FocusIncomeCard({
               {editor.postedAt ? fmtWhen(editor.postedAt) : "Yes"}
             </div>
             <div className="incomeInfoSub">
-              This paycheck has already been posted to account balances. Split rows are locked
-              so you do not double-post money.
+              This income already hit account balances. Core money fields are locked so you do
+              not create a mismatch.
             </div>
           </div>
         ) : null}
@@ -854,19 +930,15 @@ function FocusIncomeCard({
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               <ActionBtn
                 variant={editor.status === "received" ? "primary" : "ghost"}
-                onClick={() =>
-                  setEditor((prev) => ({ ...prev, status: "received" }))
-                }
-                disabled={posted}
+                onClick={() => setEditor((prev) => ({ ...prev, status: "received" }))}
+                disabled={lockFinancialFields}
               >
                 Received
               </ActionBtn>
               <ActionBtn
                 variant={editor.status === "scheduled" ? "primary" : "ghost"}
-                onClick={() =>
-                  setEditor((prev) => ({ ...prev, status: "scheduled" }))
-                }
-                disabled={posted}
+                onClick={() => setEditor((prev) => ({ ...prev, status: "scheduled" }))}
+                disabled={lockFinancialFields}
               >
                 Scheduled
               </ActionBtn>
@@ -878,8 +950,12 @@ function FocusIncomeCard({
             <input
               className="incomeField"
               value={editor.source}
+              disabled={lockFinancialFields}
               onChange={(e) =>
-                setEditor((prev) => ({ ...prev, source: e.target.value }))
+                setEditor((prev) => ({
+                  ...prev,
+                  source: e.target.value,
+                }))
               }
               placeholder="Paycheck"
             />
@@ -892,8 +968,12 @@ function FocusIncomeCard({
                 className="incomeField"
                 inputMode="decimal"
                 value={editor.amount}
+                disabled={lockFinancialFields}
                 onChange={(e) =>
-                  setEditor((prev) => ({ ...prev, amount: e.target.value }))
+                  setEditor((prev) => ({
+                    ...prev,
+                    amount: e.target.value,
+                  }))
                 }
                 placeholder="0.00"
               />
@@ -905,6 +985,7 @@ function FocusIncomeCard({
                 type="date"
                 className="incomeField"
                 value={editor.deposit_date}
+                disabled={lockFinancialFields}
                 onChange={(e) =>
                   setEditor((prev) => ({
                     ...prev,
@@ -922,47 +1003,35 @@ function FocusIncomeCard({
               rows={5}
               value={editor.note}
               onChange={(e) =>
-                setEditor((prev) => ({ ...prev, note: e.target.value }))
+                setEditor((prev) => ({
+                  ...prev,
+                  note: e.target.value,
+                }))
               }
               placeholder="Optional deposit note..."
             />
           </div>
 
-          <SplitPlanner
-            title="Split Planner"
-            accounts={accounts}
-            lines={editor.splits}
-            setLines={(updater) =>
-              setEditor((prev) => ({
-                ...prev,
-                splits: typeof updater === "function" ? updater(prev.splits) : updater,
-              }))
-            }
-            grossAmount={editor.amount}
-            locked={posted}
-            defaultAccountName={defaultAccountName}
-          />
+          <AdvancedRouting>
+            <SplitPlanner
+              title="Split Planner"
+              accounts={accounts}
+              lines={editor.splits}
+              setLines={(updater) =>
+                setEditor((prev) => ({
+                  ...prev,
+                  splits: typeof updater === "function" ? updater(prev.splits) : updater,
+                }))
+              }
+              grossAmount={editor.amount}
+              locked={lockFinancialFields}
+              defaultAccountName={defaultAccountName}
+            />
+          </AdvancedRouting>
 
-          <div className="incomeActionGrid incomeActionGridQuad">
+          <div className="incomeActionGridSingle">
             <ActionBtn variant="primary" onClick={onSave} full disabled={saving}>
               <Save size={14} /> Save
-            </ActionBtn>
-
-            <ActionBtn
-              onClick={onPostToAccounts}
-              full
-              disabled={saving || posted}
-            >
-              <Landmark size={14} />
-              {editor.status === "scheduled" ? "Mark Received + Post" : "Post To Accounts"}
-            </ActionBtn>
-
-            <ActionBtn onClick={onDuplicate} full disabled={saving}>
-              <Copy size={14} /> Duplicate
-            </ActionBtn>
-
-            <ActionBtn variant="danger" onClick={onDelete} full disabled={saving}>
-              <Trash2 size={14} /> Delete
             </ActionBtn>
           </div>
         </div>
@@ -984,7 +1053,7 @@ function AddIncomeCard({
     <GlassPane size="card" style={{ height: "100%" }}>
       <PaneHeader
         title="Add Income"
-        subcopy="Add a paycheck, choose scheduled or received, and split it exactly."
+        subcopy="Keep this fast and clean."
         right={
           <MiniPill>
             <Plus size={13} /> New
@@ -1015,7 +1084,7 @@ function AddIncomeCard({
           <div className="incomeTinyLabel">Source</div>
           <input
             className="incomeField"
-            placeholder="Paycheck, Bonus, Side Work..."
+            placeholder="Paycheck"
             value={form.source}
             onChange={(e) => setForm((prev) => ({ ...prev, source: e.target.value }))}
           />
@@ -1040,7 +1109,10 @@ function AddIncomeCard({
               className="incomeField"
               value={form.deposit_date}
               onChange={(e) =>
-                setForm((prev) => ({ ...prev, deposit_date: e.target.value }))
+                setForm((prev) => ({
+                  ...prev,
+                  deposit_date: e.target.value,
+                }))
               }
             />
           </div>
@@ -1050,26 +1122,28 @@ function AddIncomeCard({
           <div className="incomeTinyLabel">Notes</div>
           <textarea
             className="incomeField"
-            rows={5}
+            rows={4}
             placeholder="Optional note..."
             value={form.note}
             onChange={(e) => setForm((prev) => ({ ...prev, note: e.target.value }))}
           />
         </div>
 
-        <SplitPlanner
-          title="Split Planner"
-          accounts={accounts}
-          lines={form.splits}
-          setLines={(updater) =>
-            setForm((prev) => ({
-              ...prev,
-              splits: typeof updater === "function" ? updater(prev.splits) : updater,
-            }))
-          }
-          grossAmount={form.amount}
-          defaultAccountName={defaultAccountName}
-        />
+        <AdvancedRouting>
+          <SplitPlanner
+            title="Split Planner"
+            accounts={accounts}
+            lines={form.splits}
+            setLines={(updater) =>
+              setForm((prev) => ({
+                ...prev,
+                splits: typeof updater === "function" ? updater(prev.splits) : updater,
+              }))
+            }
+            grossAmount={form.amount}
+            defaultAccountName={defaultAccountName}
+          />
+        </AdvancedRouting>
 
         <div className="incomeInfoCell">
           <div className="incomeTinyLabel">Default Deposit Account</div>
@@ -1081,7 +1155,7 @@ function AddIncomeCard({
           </div>
         </div>
 
-        <div className="incomeActionGrid">
+        <div className="incomeActionGridSingle">
           <ActionBtn variant="primary" onClick={onAdd} full disabled={saving}>
             <Plus size={14} /> {saving ? "Saving..." : "Add Income"}
           </ActionBtn>
@@ -1129,12 +1203,13 @@ export default function IncomePage() {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
   const [sort, setSort] = useState("recent");
-  const [view, setView] = useState("overview");
   const [monthValue, setMonthValue] = useState(monthInputToday());
   const [loading, setLoading] = useState(true);
   const [savingSelected, setSavingSelected] = useState(false);
   const [addingBusy, setAddingBusy] = useState(false);
   const [userId, setUserId] = useState(null);
+  const [rowMenuId, setRowMenuId] = useState("");
+  const [selectedMenuOpen, setSelectedMenuOpen] = useState(false);
 
   const [editor, setEditor] = useState({
     source: "",
@@ -1307,6 +1382,22 @@ export default function IncomePage() {
     };
   }, []);
 
+  useEffect(() => {
+    setForm((prev) => {
+      const untouched =
+        prev.splits.length === 1 &&
+        !String(prev.splits[0]?.accountId || "").trim() &&
+        !String(prev.splits[0]?.amount || "").trim();
+
+      if (!untouched) return prev;
+
+      return {
+        ...prev,
+        splits: [emptySplitLine(defaultAccountId)],
+      };
+    });
+  }, [defaultAccountId]);
+
   const monthItems = useMemo(() => {
     return items.filter((item) => monthKeyOf(item.deposit_date) === monthValue);
   }, [items, monthValue]);
@@ -1320,14 +1411,8 @@ export default function IncomePage() {
   }, [monthItems]);
 
   const totals = useMemo(() => {
-    const received = receivedItems.reduce(
-      (sum, item) => sum + safeNum(item.amount),
-      0
-    );
-    const scheduled = scheduledItems.reduce(
-      (sum, item) => sum + safeNum(item.amount),
-      0
-    );
+    const received = receivedItems.reduce((sum, item) => sum + safeNum(item.amount), 0);
+    const scheduled = scheduledItems.reduce((sum, item) => sum + safeNum(item.amount), 0);
 
     return {
       received,
@@ -1378,25 +1463,21 @@ export default function IncomePage() {
     }
 
     if (sort === "source") {
-      list.sort((a, b) =>
-        String(a.source || "").localeCompare(String(b.source || ""))
-      );
+      list.sort((a, b) => String(a.source || "").localeCompare(String(b.source || "")));
       return list;
     }
 
     if (sort === "date") {
       list.sort(
         (a, b) =>
-          new Date(a.deposit_date || 0).getTime() -
-          new Date(b.deposit_date || 0).getTime()
+          new Date(a.deposit_date || 0).getTime() - new Date(b.deposit_date || 0).getTime()
       );
       return list;
     }
 
     list.sort(
       (a, b) =>
-        new Date(b.deposit_date || 0).getTime() -
-        new Date(a.deposit_date || 0).getTime()
+        new Date(b.deposit_date || 0).getTime() - new Date(a.deposit_date || 0).getTime()
     );
     return list;
   }, [monthItems, filter, search, sort]);
@@ -1415,6 +1496,11 @@ export default function IncomePage() {
 
   const selectedItem =
     items.find((item) => item.id === selectedIncomeId) || visibleItems[0] || null;
+
+  useEffect(() => {
+    setRowMenuId("");
+    setSelectedMenuOpen(false);
+  }, [selectedIncomeId]);
 
   useEffect(() => {
     if (!selectedItem) {
@@ -1451,13 +1537,12 @@ export default function IncomePage() {
   }, [selectedItem?.id, defaultAccountId]);
 
   const maxVisibleAmount = useMemo(() => {
-    return visibleItems.reduce(
-      (max, item) => Math.max(max, safeNum(item.amount)),
-      0
-    );
+    return visibleItems.reduce((max, item) => Math.max(max, safeNum(item.amount)), 0);
   }, [visibleItems]);
 
-  async function applySplitsToAccounts({ incomeId, source, note, deposit_date, splits }) {
+  const showInsights = monthItems.length > 0;
+
+  async function applySplitsToAccounts({ incomeId, source, note, splits }) {
     if (!supabase || !userId || !splits.length) {
       return { ok: true };
     }
@@ -1568,7 +1653,6 @@ export default function IncomePage() {
         incomeId: nextRow.id,
         source: nextRow.source,
         note: nextRow.note,
-        deposit_date: nextRow.deposit_date,
         splits: nextRow.splits,
       });
 
@@ -1668,9 +1752,7 @@ export default function IncomePage() {
 
     const nextItem = mapIncomeRow(res.data);
 
-    setItems((prev) =>
-      prev.map((item) => (item.id === selectedItem.id ? nextItem : item))
-    );
+    setItems((prev) => prev.map((item) => (item.id === selectedItem.id ? nextItem : item)));
 
     setSavingSelected(false);
   }
@@ -1681,7 +1763,7 @@ export default function IncomePage() {
 
     const amount = round2(parseMoneyInput(editor.amount));
     const source = String(editor.source || "").trim();
-    const depositDate = dateInputToday();
+    const depositDate = editor.deposit_date || dateInputToday();
 
     if (!source || !Number.isFinite(amount) || amount <= 0) return;
 
@@ -1697,7 +1779,6 @@ export default function IncomePage() {
       incomeId: selectedItem.id,
       source,
       note: editor.note.trim(),
-      deposit_date: depositDate,
       splits: splitCheck.splits,
     });
 
@@ -1741,104 +1822,12 @@ export default function IncomePage() {
 
     const nextItem = mapIncomeRow(res.data);
 
-    setItems((prev) =>
-      prev.map((item) => (item.id === selectedItem.id ? nextItem : item))
-    );
+    setItems((prev) => prev.map((item) => (item.id === selectedItem.id ? nextItem : item)));
 
     setSavingSelected(false);
   }
 
-  async function duplicateSelectedIncome() {
-    if (!supabase || !userId || !selectedItem || savingSelected) return;
-
-    setSavingSelected(true);
-
-    const payload = mapIncomeToRow(
-      {
-        source: selectedItem.source || "Income",
-        amount: safeNum(selectedItem.amount, 0),
-        note: selectedItem.note || "",
-        deposit_date: selectedItem.deposit_date || dateInputToday(),
-        status: selectedItem.status || "received",
-        posted: false,
-        postedAt: null,
-        splits: selectedItem.splits || [],
-      },
-      userId
-    );
-
-    const res = await supabase
-      .from("income_deposits")
-      .insert(payload)
-      .select("id, user_id, source, amount, note, deposit_date, created_at, updated_at")
-      .single();
-
-    if (res.error) {
-      console.error("duplicate income error:", res.error);
-      await loadIncomePage();
-      setSavingSelected(false);
-      return;
-    }
-
-    const nextRow = mapIncomeRow(res.data);
-    setItems((prev) => [nextRow, ...prev]);
-    setSelectedIncomeId(nextRow.id);
-    setSavingSelected(false);
-  }
-
-  async function removeSelectedIncome() {
-    if (!supabase || !userId || !selectedItem || savingSelected) return;
-    if (typeof window !== "undefined" && !window.confirm("Delete this income entry?")) {
-      return;
-    }
-
-    setSavingSelected(true);
-
-    const { error } = await supabase
-      .from("income_deposits")
-      .delete()
-      .eq("id", selectedItem.id)
-      .eq("user_id", userId);
-
-    if (error) {
-      console.error("delete income error:", error);
-      await loadIncomePage();
-      setSavingSelected(false);
-      return;
-    }
-
-    const nextItems = items.filter((item) => item.id !== selectedItem.id);
-    setItems(nextItems);
-    setSelectedIncomeId(nextItems[0]?.id || "");
-    setSavingSelected(false);
-  }
-
-  async function removeRowIncome(id) {
-    if (!supabase || !userId) return;
-    if (typeof window !== "undefined" && !window.confirm("Delete this income entry?")) {
-      return;
-    }
-
-    const { error } = await supabase
-      .from("income_deposits")
-      .delete()
-      .eq("id", id)
-      .eq("user_id", userId);
-
-    if (error) {
-      console.error("delete income row error:", error);
-      await loadIncomePage();
-      return;
-    }
-
-    const nextItems = items.filter((item) => item.id !== id);
-    setItems(nextItems);
-    if (selectedIncomeId === id) {
-      setSelectedIncomeId(nextItems[0]?.id || "");
-    }
-  }
-
-  async function duplicateRowIncome(item) {
+  async function duplicateIncomeFromItem(item) {
     if (!supabase || !userId) return;
 
     const payload = mapIncomeToRow(
@@ -1862,7 +1851,7 @@ export default function IncomePage() {
       .single();
 
     if (res.error) {
-      console.error("duplicate income row error:", res.error);
+      console.error("duplicate income error:", res.error);
       await loadIncomePage();
       return;
     }
@@ -1870,6 +1859,67 @@ export default function IncomePage() {
     const nextRow = mapIncomeRow(res.data);
     setItems((prev) => [nextRow, ...prev]);
     setSelectedIncomeId(nextRow.id);
+  }
+
+  async function removeIncomeById(id) {
+    if (!supabase || !userId) return;
+
+    const target = items.find((item) => item.id === id);
+    if (!target) return;
+
+    if (target.posted) {
+      window.alert(
+        "Posted income is locked because it already changed account balances. Duplicate it or add a correcting entry instead."
+      );
+      return;
+    }
+
+    if (typeof window !== "undefined" && !window.confirm("Delete this income entry?")) {
+      return;
+    }
+
+    const { error } = await supabase
+      .from("income_deposits")
+      .delete()
+      .eq("id", id)
+      .eq("user_id", userId);
+
+    if (error) {
+      console.error("delete income error:", error);
+      await loadIncomePage();
+      return;
+    }
+
+    const nextItems = items.filter((item) => item.id !== id);
+    setItems(nextItems);
+
+    if (selectedIncomeId === id) {
+      setSelectedIncomeId(nextItems[0]?.id || "");
+    }
+  }
+
+  async function duplicateSelectedIncome() {
+    if (!selectedItem || savingSelected) return;
+    setSavingSelected(true);
+    await duplicateIncomeFromItem(selectedItem);
+    setSavingSelected(false);
+  }
+
+  async function removeSelectedIncome() {
+    if (!selectedItem || savingSelected) return;
+    setSavingSelected(true);
+    await removeIncomeById(selectedItem.id);
+    setSavingSelected(false);
+  }
+
+  async function duplicateRowIncome(item) {
+    setRowMenuId("");
+    await duplicateIncomeFromItem(item);
+  }
+
+  async function removeRowIncome(id) {
+    setRowMenuId("");
+    await removeIncomeById(id);
   }
 
   if (loading) {
@@ -1889,7 +1939,13 @@ export default function IncomePage() {
 
   return (
     <>
-      <main className="incomePage">
+      <main
+        className="incomePage"
+        onClick={() => {
+          if (rowMenuId) setRowMenuId("");
+          if (selectedMenuOpen) setSelectedMenuOpen(false);
+        }}
+      >
         <div className="incomePageShell">
           <GlassPane size="card">
             <div className="incomeHeroGrid">
@@ -1897,36 +1953,21 @@ export default function IncomePage() {
                 <div className="incomeEyebrow">Life Command Center</div>
                 <div className="incomeHeroTitle">Income Command</div>
                 <div className="incomeHeroSub">
-                  Split paycheck routing, explicit scheduled paychecks, and a full-width layout
-                  that matches the rest of the app.
+                  Clean income routing, exact paycheck splits, and a tighter layout that stops
+                  wasting space.
                 </div>
 
                 <div className="incomePillRow">
                   <MiniPill>{monthItems.length} income items</MiniPill>
-                  <MiniPill>{currentMonthLabel()}</MiniPill>
+                  <MiniPill>{prettyMonth(monthValue)}</MiniPill>
                   <MiniPill tone="green">{receivedItems.length} received</MiniPill>
                   <MiniPill tone="blue">{scheduledItems.length} scheduled</MiniPill>
-                </div>
-
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 }}>
-                  <ActionBtn
-                    variant={view === "overview" ? "primary" : "ghost"}
-                    onClick={() => setView("overview")}
-                  >
-                    Overview
-                  </ActionBtn>
-                  <ActionBtn
-                    variant={view === "manage" ? "primary" : "ghost"}
-                    onClick={() => setView("manage")}
-                  >
-                    Manage
-                  </ActionBtn>
                 </div>
               </div>
 
               <div className="incomeHeroSide">
-                <MiniPill>{monthValue}</MiniPill>
-                <MiniPill tone="green">{fmtMoney(totals.received)} monthly</MiniPill>
+                <MiniPill>{fmtWhen(new Date().toISOString())}</MiniPill>
+                <MiniPill tone="green">{fmtMoney(totals.received)} received</MiniPill>
                 <MiniPill tone={totals.scheduled > 0 ? "blue" : "neutral"}>
                   {fmtMoney(totals.scheduled)} pending
                 </MiniPill>
@@ -1964,77 +2005,20 @@ export default function IncomePage() {
             />
             <StatCard
               icon={ArrowUpRight}
-              label="Projected Finish"
+              label="Projected Total"
               value={fmtMoney(totals.projected)}
-              detail={`${totals.count} income item${
-                totals.count === 1 ? "" : "s"
-              } in ${prettyMonth(monthValue)}.`}
+              detail={`${totals.count} income item${totals.count === 1 ? "" : "s"} in ${prettyMonth(
+                monthValue
+              )}.`}
               tone="neutral"
             />
           </section>
-
-          <GlassPane size="card">
-            <PaneHeader
-              title="Income Controls"
-              subcopy="Filter the month, search the roster, and steer the page without wasting space."
-            />
-
-            <div className="incomeControlsGrid">
-              <div>
-                <div className="incomeTinyLabel">Month</div>
-                <input
-                  type="month"
-                  className="incomeField"
-                  value={monthValue}
-                  onChange={(e) => setMonthValue(e.target.value)}
-                />
-              </div>
-
-              <div>
-                <div className="incomeTinyLabel">Type Filter</div>
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  <ActionBtn
-                    variant={filter === "all" ? "primary" : "ghost"}
-                    onClick={() => setFilter("all")}
-                  >
-                    All
-                  </ActionBtn>
-                  <ActionBtn
-                    variant={filter === "received" ? "primary" : "ghost"}
-                    onClick={() => setFilter("received")}
-                  >
-                    Received
-                  </ActionBtn>
-                  <ActionBtn
-                    variant={filter === "scheduled" ? "primary" : "ghost"}
-                    onClick={() => setFilter("scheduled")}
-                  >
-                    Scheduled
-                  </ActionBtn>
-                </div>
-              </div>
-
-              <div>
-                <div className="incomeTinyLabel">Sort</div>
-                <select
-                  className="incomeField"
-                  value={sort}
-                  onChange={(e) => setSort(e.target.value)}
-                >
-                  <option value="recent">Recent first</option>
-                  <option value="amount">Amount high → low</option>
-                  <option value="source">Source</option>
-                  <option value="date">Date ascending</option>
-                </select>
-              </div>
-            </div>
-          </GlassPane>
 
           <section className="incomeWorkspaceGrid">
             <GlassPane size="card" style={{ height: "100%" }}>
               <PaneHeader
                 title="Income Roster"
-                subcopy="Main roster fills the page and shows split/posting state."
+                subcopy="Compact list on the left. Work the selected income on the right."
                 right={<MiniPill>{visibleItems.length} showing</MiniPill>}
               />
 
@@ -2046,12 +2030,22 @@ export default function IncomePage() {
                     placeholder="Search income"
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
+                    onClick={(e) => e.stopPropagation()}
                   />
                 </div>
+
+                <input
+                  type="month"
+                  className="incomeField"
+                  value={monthValue}
+                  onClick={(e) => e.stopPropagation()}
+                  onChange={(e) => setMonthValue(e.target.value)}
+                />
 
                 <select
                   className="incomeField"
                   value={filter}
+                  onClick={(e) => e.stopPropagation()}
                   onChange={(e) => setFilter(e.target.value)}
                 >
                   <option value="all">All income</option>
@@ -2062,6 +2056,7 @@ export default function IncomePage() {
                 <select
                   className="incomeField"
                   value={sort}
+                  onClick={(e) => e.stopPropagation()}
                   onChange={(e) => setSort(e.target.value)}
                 >
                   <option value="recent">Recent first</option>
@@ -2079,7 +2074,14 @@ export default function IncomePage() {
                       item={item}
                       selected={item.id === selectedItem?.id}
                       maxAmount={maxVisibleAmount}
-                      onSelect={() => setSelectedIncomeId(item.id)}
+                      menuOpen={rowMenuId === item.id}
+                      onSelect={() => {
+                        setSelectedIncomeId(item.id);
+                        setRowMenuId("");
+                      }}
+                      onToggleMenu={() =>
+                        setRowMenuId((prev) => (prev === item.id ? "" : item.id))
+                      }
                       onDuplicate={() => duplicateRowIncome(item)}
                       onDelete={() => removeRowIncome(item.id)}
                     />
@@ -2097,13 +2099,15 @@ export default function IncomePage() {
               )}
             </GlassPane>
 
-            <FocusIncomeCard
+            <SelectedIncomeCard
               item={selectedItem}
               editor={editor}
               setEditor={setEditor}
               accounts={accounts}
               defaultAccountName={defaultAccountName}
               saving={savingSelected}
+              menuOpen={selectedMenuOpen}
+              setMenuOpen={setSelectedMenuOpen}
               onSave={saveSelectedIncome}
               onDuplicate={duplicateSelectedIncome}
               onDelete={removeSelectedIncome}
@@ -2121,21 +2125,20 @@ export default function IncomePage() {
             />
           </section>
 
-          {view === "overview" ? (
+          {showInsights ? (
             <section className="incomeSectionGrid">
-              <GlassPane size="card" style={{ height: "100%" }}>
-                <PaneHeader
-                  title="Upcoming Deposits"
-                  subcopy="Scheduled paychecks and split plans waiting to hit."
-                  right={
-                    <MiniPill tone="blue">
-                      {scheduledItems.length} item
-                      {scheduledItems.length === 1 ? "" : "s"}
-                    </MiniPill>
-                  }
-                />
+              {scheduledItems.length ? (
+                <GlassPane size="card" style={{ height: "100%" }}>
+                  <PaneHeader
+                    title="Upcoming Deposits"
+                    subcopy="Scheduled paychecks and split plans waiting to hit."
+                    right={
+                      <MiniPill tone="blue">
+                        {scheduledItems.length} item{scheduledItems.length === 1 ? "" : "s"}
+                      </MiniPill>
+                    }
+                  />
 
-                {scheduledItems.length ? (
                   <div className="incomeIntelList">
                     {scheduledItems
                       .slice()
@@ -2158,17 +2161,57 @@ export default function IncomePage() {
                         />
                       ))}
                   </div>
-                ) : (
-                  <div className="incomeEmptyState incomeInlineEmpty">
-                    <div>
-                      <div className="incomeEmptyTitle">Nothing scheduled</div>
-                      <div className="incomeEmptyText">
-                        No future deposits are queued for this month.
+                </GlassPane>
+              ) : (
+                <GlassPane size="card" style={{ height: "100%" }}>
+                  <PaneHeader
+                    title="Source Breakdown"
+                    subcopy="See which income source is carrying the month."
+                    right={
+                      <MiniPill>
+                        {sourceBreakdown.length} source
+                        {sourceBreakdown.length === 1 ? "" : "s"}
+                      </MiniPill>
+                    }
+                  />
+
+                  {sourceBreakdown.length ? (
+                    <div className="incomeIntelList">
+                      {sourceBreakdown.map((row) => (
+                        <div key={row.source} className="incomeIntelItem">
+                          <div
+                            style={{
+                              display: "flex",
+                              justifyContent: "space-between",
+                              gap: 10,
+                              alignItems: "flex-start",
+                              flexWrap: "wrap",
+                            }}
+                          >
+                            <div>
+                              <div className="incomeIntelTitle">{row.source}</div>
+                              <div className="incomeIntelSub">
+                                Total in {prettyMonth(monthValue)}
+                              </div>
+                            </div>
+
+                            <MiniPill tone="green">{fmtMoney(row.total)}</MiniPill>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="incomeEmptyState incomeInlineEmpty">
+                      <div>
+                        <div className="incomeEmptyTitle">No source data</div>
+                        <div className="incomeEmptyText">
+                          Add deposits to build a source breakdown.
+                        </div>
                       </div>
                     </div>
-                  </div>
-                )}
-              </GlassPane>
+                  )}
+                </GlassPane>
+              )}
 
               <GlassPane size="card" style={{ height: "100%" }}>
                 <PaneHeader
@@ -2177,127 +2220,25 @@ export default function IncomePage() {
                   right={<MiniPill>{monthItems.length} entries</MiniPill>}
                 />
 
-                {monthItems.length ? (
-                  <div className="incomeIntelList">
-                    {monthItems.slice(0, 5).map((item) => (
-                      <IntelItem
-                        key={item.id}
-                        title={item.source || "Income"}
-                        subcopy={`${fmtMoneyTight(item.amount)} • ${shortDate(
-                          item.deposit_date
-                        )} • ${splitSummaryText(item)} • Updated ${formatAgo(
-                          item.updated_at || item.created_at
-                        )}`}
-                        right={isScheduledItem(item) ? "Scheduled" : "Received"}
-                        tone={isScheduledItem(item) ? "blue" : "green"}
-                        onClick={() => setSelectedIncomeId(item.id)}
-                      />
-                    ))}
-                  </div>
-                ) : (
-                  <div className="incomeEmptyState incomeInlineEmpty">
-                    <div>
-                      <div className="incomeEmptyTitle">Nothing recent</div>
-                      <div className="incomeEmptyText">
-                        Add income to start building history.
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </GlassPane>
-            </section>
-          ) : (
-            <section className="incomeSectionGrid">
-              <GlassPane size="card" style={{ height: "100%" }}>
-                <PaneHeader
-                  title="Source Breakdown"
-                  subcopy="See which income source is carrying the month."
-                  right={
-                    <MiniPill>
-                      {sourceBreakdown.length} source
-                      {sourceBreakdown.length === 1 ? "" : "s"}
-                    </MiniPill>
-                  }
-                />
-
-                {sourceBreakdown.length ? (
-                  <div className="incomeIntelList">
-                    {sourceBreakdown.map((row) => (
-                      <div key={row.source} className="incomeIntelItem">
-                        <div
-                          style={{
-                            display: "flex",
-                            justifyContent: "space-between",
-                            gap: 10,
-                            alignItems: "flex-start",
-                            flexWrap: "wrap",
-                          }}
-                        >
-                          <div>
-                            <div className="incomeIntelTitle">{row.source}</div>
-                            <div className="incomeIntelSub">
-                              Total in {prettyMonth(monthValue)}
-                            </div>
-                          </div>
-
-                          <MiniPill tone="green">{fmtMoney(row.total)}</MiniPill>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="incomeEmptyState incomeInlineEmpty">
-                    <div>
-                      <div className="incomeEmptyTitle">No source data</div>
-                      <div className="incomeEmptyText">
-                        Add deposits to build a source breakdown.
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </GlassPane>
-
-              <GlassPane size="card" style={{ height: "100%" }}>
-                <PaneHeader
-                  title="Income Snapshot"
-                  subcopy="Quick monthly view of the whole income stack."
-                />
-
-                <div className="incomeSnapshotGrid">
-                  <div className="incomeSnapshotRow">
-                    <span>Received total</span>
-                    <strong>{fmtMoney(totals.received)}</strong>
-                  </div>
-                  <div className="incomeSnapshotRow">
-                    <span>Scheduled total</span>
-                    <strong>{fmtMoney(totals.scheduled)}</strong>
-                  </div>
-                  <div className="incomeSnapshotRow">
-                    <span>Projected total</span>
-                    <strong>{fmtMoney(totals.projected)}</strong>
-                  </div>
-                  <div className="incomeSnapshotRow">
-                    <span>Largest deposit</span>
-                    <strong>
-                      {monthItems.length
-                        ? fmtMoney(
-                            Math.max(...monthItems.map((item) => safeNum(item.amount)))
-                          )
-                        : "$0"}
-                    </strong>
-                  </div>
-                  <div className="incomeSnapshotRow">
-                    <span>Default account</span>
-                    <strong>{defaultAccountName || "Not set"}</strong>
-                  </div>
-                  <div className="incomeSnapshotRow">
-                    <span>Month count</span>
-                    <strong>{monthItems.length}</strong>
-                  </div>
+                <div className="incomeIntelList">
+                  {monthItems.slice(0, 5).map((item) => (
+                    <IntelItem
+                      key={item.id}
+                      title={item.source || "Income"}
+                      subcopy={`${fmtMoneyTight(item.amount)} • ${shortDate(
+                        item.deposit_date
+                      )} • ${splitSummaryText(item)} • Updated ${formatAgo(
+                        item.updated_at || item.created_at
+                      )}`}
+                      right={isScheduledItem(item) ? "Scheduled" : "Received"}
+                      tone={isScheduledItem(item) ? "blue" : "green"}
+                      onClick={() => setSelectedIncomeId(item.id)}
+                    />
+                  ))}
                 </div>
               </GlassPane>
             </section>
-          )}
+          ) : null}
         </div>
       </main>
 
@@ -2376,16 +2317,9 @@ const globalStyles = `
     gap: 14px;
   }
 
-  .incomeControlsGrid {
-    display: grid;
-    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.15fr) minmax(0, 0.72fr);
-    gap: 14px;
-    align-items: end;
-  }
-
   .incomeWorkspaceGrid {
     display: grid;
-    grid-template-columns: minmax(500px, 1.45fr) minmax(440px, 1.18fr) minmax(380px, 1fr);
+    grid-template-columns: minmax(520px, 1.5fr) minmax(400px, 1fr) minmax(320px, 0.82fr);
     gap: 14px;
     align-items: stretch;
   }
@@ -2397,7 +2331,7 @@ const globalStyles = `
 
   .incomeSectionGrid {
     display: grid;
-    grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     gap: 14px;
     align-items: stretch;
   }
@@ -2409,7 +2343,7 @@ const globalStyles = `
 
   .incomeRosterControls {
     display: grid;
-    grid-template-columns: 1.32fr 0.84fr 0.88fr;
+    grid-template-columns: 1.28fr 0.92fr 0.9fr 0.9fr;
     gap: 10px;
     margin-bottom: 10px;
   }
@@ -2440,8 +2374,8 @@ const globalStyles = `
   .incomeRosterListCompact {
     display: grid;
     gap: 10px;
-    min-height: 720px;
-    max-height: 720px;
+    min-height: 640px;
+    max-height: 640px;
     overflow: auto;
     padding-right: 2px;
   }
@@ -2451,7 +2385,7 @@ const globalStyles = `
     grid-template-columns: 42px minmax(0, 1fr) auto auto;
     gap: 10px;
     align-items: center;
-    min-height: 118px;
+    min-height: 110px;
     padding: 12px 14px;
     border-radius: 18px;
     border: 1px solid rgba(255,255,255,0.07);
@@ -2502,10 +2436,53 @@ const globalStyles = `
     white-space: nowrap;
   }
 
-  .incomeCompactActions {
-    display: flex;
+  .incomeMenuWrap {
+    position: relative;
+  }
+
+  .incomeMenuPanel {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    z-index: 40;
+    min-width: 190px;
+    border-radius: 16px;
+    border: 1px solid rgba(214,226,255,0.12);
+    background:
+      linear-gradient(180deg, rgba(12,18,30,0.96), rgba(7,11,20,0.94));
+    box-shadow:
+      0 18px 45px rgba(0,0,0,0.42),
+      inset 0 1px 0 rgba(255,255,255,0.03);
+    padding: 8px;
+    display: grid;
     gap: 6px;
+  }
+
+  .incomeMenuPanelRight {
+    right: 0;
+  }
+
+  .incomeMenuItem {
+    width: 100%;
+    min-height: 38px;
+    border-radius: 12px;
+    border: 1px solid rgba(214,226,255,0.08);
+    background:
+      linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.012));
+    color: rgba(247,251,255,0.9);
+    display: inline-flex;
     align-items: center;
+    gap: 8px;
+    padding: 0 12px;
+    cursor: pointer;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 800;
+  }
+
+  .incomeMenuItem.danger {
+    border-color: rgba(255,132,163,0.18);
+    color: #ffd3df;
   }
 
   .incomeIconBtn {
@@ -2519,11 +2496,6 @@ const globalStyles = `
     display: grid;
     place-items: center;
     cursor: pointer;
-  }
-
-  .incomeDangerBtn {
-    border-color: rgba(255,132,163,0.18);
-    color: #ffd3df;
   }
 
   .incomeFocusBox {
@@ -2592,18 +2564,10 @@ const globalStyles = `
     transition: width 0.4s ease;
   }
 
-  .incomeActionGrid {
+  .incomeActionGridSingle {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: 1fr;
     gap: 8px;
-  }
-
-  .incomeActionGridTight {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-
-  .incomeActionGridQuad {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .incomeFormStack {
@@ -2611,18 +2575,10 @@ const globalStyles = `
     gap: 12px;
   }
 
-  .incomeFormGrid2,
-  .incomeFormGrid3 {
+  .incomeFormGrid2 {
     display: grid;
     gap: 10px;
-  }
-
-  .incomeFormGrid2 {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .incomeFormGrid3 {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .incomeTinyLabel {
@@ -2667,8 +2623,13 @@ const globalStyles = `
     color: #f4f7ff;
   }
 
+  .incomeField:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
   textarea.incomeField {
-    min-height: 110px;
+    min-height: 96px;
     resize: vertical;
     padding: 12px 13px;
   }
@@ -2691,11 +2652,40 @@ const globalStyles = `
     transform: translateY(-1px);
   }
 
+  .incomeDetailsBlock {
+    border-radius: 16px;
+    border: 1px solid rgba(214,226,255,0.08);
+    background: rgba(255,255,255,0.02);
+    overflow: hidden;
+  }
+
+  .incomeDetailsToggle {
+    list-style: none;
+    cursor: pointer;
+    min-height: 46px;
+    padding: 0 14px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    color: rgba(247,251,255,0.88);
+    font-size: 12px;
+    font-weight: 800;
+  }
+
+  .incomeDetailsToggle::-webkit-details-marker {
+    display: none;
+  }
+
+  .incomeDetailsBody {
+    padding: 0 12px 12px;
+  }
+
   .incomeIntelList {
     display: grid;
     gap: 10px;
-    min-height: 360px;
-    max-height: 360px;
+    min-height: 320px;
+    max-height: 320px;
     overflow: auto;
     padding-right: 2px;
   }
@@ -2725,22 +2715,6 @@ const globalStyles = `
     line-height: 1.35;
   }
 
-  .incomeSnapshotGrid {
-    display: grid;
-    gap: 8px;
-  }
-
-  .incomeSnapshotRow {
-    display: flex;
-    justify-content: space-between;
-    gap: 12px;
-    padding: 12px 14px;
-    border-radius: 14px;
-    border: 1px solid rgba(255,255,255,0.08);
-    background: rgba(255,255,255,0.03);
-    color: rgba(255,255,255,0.78);
-  }
-
   .incomeEmptyState {
     min-height: 150px;
     display: grid;
@@ -2750,7 +2724,7 @@ const globalStyles = `
   }
 
   .incomeInlineEmpty {
-    min-height: 360px;
+    min-height: 320px;
   }
 
   .incomeEmptyTitle {
@@ -2769,13 +2743,13 @@ const globalStyles = `
 
   @media (max-width: 1560px) {
     .incomeWorkspaceGrid {
-      grid-template-columns: minmax(440px, 1.22fr) minmax(390px, 1fr) minmax(320px, 0.9fr);
+      grid-template-columns: minmax(450px, 1.32fr) minmax(380px, 1fr) minmax(300px, 0.82fr);
     }
   }
 
-  @media (max-width: 1420px) {
-    .incomeControlsGrid {
-      grid-template-columns: 1fr;
+  @media (max-width: 1380px) {
+    .incomeMetricGrid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
     .incomeWorkspaceGrid {
@@ -2785,26 +2759,16 @@ const globalStyles = `
     .incomeWorkspaceGrid > :nth-child(3) {
       grid-column: 1 / -1;
     }
-  }
 
-  @media (max-width: 1260px) {
-    .incomeMetricGrid {
+    .incomeRosterControls {
       grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-
-    .incomeSectionGrid {
-      grid-template-columns: 1fr;
-    }
-
-    .incomeRosterListCompact {
-      min-height: 580px;
-      max-height: 580px;
     }
   }
 
   @media (max-width: 1100px) {
     .incomeHeroGrid,
-    .incomeWorkspaceGrid {
+    .incomeWorkspaceGrid,
+    .incomeSectionGrid {
       grid-template-columns: 1fr;
     }
 
@@ -2814,14 +2778,10 @@ const globalStyles = `
   }
 
   @media (max-width: 1024px) {
-    .incomeRosterControls,
     .incomeInfoGrid,
     .incomeFormGrid2,
-    .incomeFormGrid3,
-    .incomeActionGrid,
-    .incomeActionGridTight,
-    .incomeActionGridQuad,
-    .incomeSplitRow {
+    .incomeSplitRow,
+    .incomeRosterControls {
       grid-template-columns: 1fr;
     }
 
@@ -2831,11 +2791,6 @@ const globalStyles = `
 
     .incomeCompactValue {
       white-space: normal;
-    }
-
-    .incomeCompactActions {
-      grid-column: 2;
-      justify-content: flex-start;
     }
 
     .incomeRosterListCompact,
@@ -2850,17 +2805,7 @@ const globalStyles = `
       padding: 8px 0 14px;
     }
 
-    .incomeMetricGrid,
-    .incomeSectionGrid {
-      grid-template-columns: 1fr;
-    }
-  }
-
-  @media (max-width: 640px) {
-    .incomeMetricGrid,
-    .incomeActionGrid,
-    .incomeActionGridTight,
-    .incomeActionGridQuad {
+    .incomeMetricGrid {
       grid-template-columns: 1fr;
     }
   }
