@@ -65,6 +65,11 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+body.lcc-nav-open {
+  overflow: hidden;
+  touch-action: none;
+}
+
 body,
 button,
 input,

@@ -20,6 +20,10 @@
   border-radius: 26px;
 }
 
+.shellMobile {
+  border-radius: 28px;
+}
+
 .shellGlow {
   position: absolute;
   inset: -2px;
@@ -127,17 +131,33 @@
 }
 
 .mobileClose {
-  display: none;
   width: 42px;
   height: 42px;
-  margin-left: auto;
   border-radius: 14px;
   border: 1px solid rgba(214, 226, 255, 0.1);
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.016)),
     rgba(7, 12, 20, 0.76);
   color: rgba(247, 251, 255, 0.9);
+  display: grid;
+  place-items: center;
   cursor: pointer;
+}
+
+.mobileSectionLabel {
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(214, 226, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  color: rgba(247, 251, 255, 0.7);
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
 }
 
 .navList {
@@ -274,14 +294,16 @@
     0 0 18px var(--nav-glow);
 }
 
-@media (max-width: 1024px) {
+@media (max-width: 1100px) {
   .shell {
-    border-radius: 26px;
-    height: calc(100svh - 24px);
+    height: 100%;
   }
 
-  .mobileClose {
-    display: inline-grid;
-    place-items: center;
+  .inner {
+    padding: 12px;
+  }
+
+  .navItemMain {
+    min-height: 56px;
   }
 }
