@@ -292,6 +292,7 @@ function strategySubtitle(strategy) {
 
 function sortDebtsForStrategy(list, strategy) {
   const clone = [...list];
+
   if (strategy === "snowball") {
     clone.sort((a, b) => {
       const balanceDiff = safeNum(a.balance, 0) - safeNum(b.balance, 0);
@@ -302,11 +303,12 @@ function sortDebtsForStrategy(list, strategy) {
     });
     return clone;
   }
+
   if (strategy === "urgent") {
     clone.sort((a, b) => {
-      const dueDiff =
-        (Number.isFinite(daysUntil(a.dueDate)) ? daysUntil(a.dueDate) : 999999) -
-        (Number.isFinite(daysUntil(b.dueDate)) ? daysUntil(b.dueDate) : 999999);
+      const aDue = Number.isFinite(daysUntil(a.dueDate)) ? daysUntil(a.dueDate) : 999999;
+      const bDue = Number.isFinite(daysUntil(b.dueDate)) ? daysUntil(b.dueDate) : 999999;
+      const dueDiff = aDue - bDue;
       if (dueDiff !== 0) return dueDiff;
       const aprDiff = safeNum(b.aprPct, 0) - safeNum(a.aprPct, 0);
       if (aprDiff !== 0) return aprDiff;
@@ -314,6 +316,7 @@ function sortDebtsForStrategy(list, strategy) {
     });
     return clone;
   }
+
   clone.sort((a, b) => {
     const aprDiff = safeNum(b.aprPct, 0) - safeNum(a.aprPct, 0);
     if (aprDiff !== 0) return aprDiff;
@@ -405,6 +408,7 @@ function buildDebtEditorState(debt, defaultAccountId = "") {
       lastPaidDate: "",
     };
   }
+
   return {
     name: debt.name || "",
     balance: String(debt.balance ?? ""),
@@ -420,6 +424,28 @@ function buildDebtEditorState(debt, defaultAccountId = "") {
     autopay: debt.autopay === true,
     lastPaidDate: debt.lastPaidDate || "",
   };
+}
+
+function useLockBodyScroll(open) {
+  useEffect(() => {
+    if (!open) return undefined;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previous;
+    };
+  }, [open]);
+}
+
+function useEscapeToClose(open, onClose) {
+  useEffect(() => {
+    if (!open) return undefined;
+    const onKeyDown = (event) => {
+      if (event.key === "Escape") onClose?.();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [open, onClose]);
 }
 
 function MiniPill({ children, tone = "neutral" }) {
@@ -643,11 +669,15 @@ function SectionCard({ title, subcopy, children, right }) {
 }
 
 function DrawerShell({ open, title, subcopy, onClose, children, footer }) {
+  useLockBodyScroll(open);
+  useEscapeToClose(open, onClose);
+
   if (!open) return null;
+
   return (
     <div className="debtDrawerRoot">
       <button type="button" className="debtDrawerBackdrop" onClick={onClose} />
-      <div className="debtDrawerPanel">
+      <div className="debtDrawerPanel" role="dialog" aria-modal="true" aria-label={title}>
         <div className="debtDrawerHeader">
           <div>
             <div className="debtDrawerEyebrow">Debt Workspace</div>
@@ -665,42 +695,62 @@ function DrawerShell({ open, title, subcopy, onClose, children, footer }) {
   );
 }
 
-function DebtMoreMenu({ debt, disabled, onEdit, onToggleActive, onDelete }) {
+function RowMenuItem({ children, onClick, danger = false, icon }) {
   return (
-    <details className="debtMoreMenu">
-      <summary className="debtMoreTrigger" aria-label="More debt tools">
+    <button
+      type="button"
+      className={`debtMoreItem${danger ? " debtMoreDanger" : ""}`}
+      onClick={onClick}
+    >
+      {icon || null}
+      {children}
+    </button>
+  );
+}
+
+function DebtMoreMenu({ debt, disabled, onEdit, onToggleActive, onDelete }) {
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const close = () => setOpen(false);
+    window.addEventListener("click", close);
+    return () => window.removeEventListener("click", close);
+  }, [open]);
+
+  function wrap(action) {
+    return () => {
+      setOpen(false);
+      action?.();
+    };
+  }
+
+  return (
+    <div className="debtMoreMenu" onClick={(event) => event.stopPropagation()}>
+      <button
+        type="button"
+        className="debtMoreTrigger"
+        aria-label="More debt tools"
+        onClick={() => setOpen((prev) => !prev)}
+        disabled={disabled}
+      >
         <MoreHorizontal size={16} />
-      </summary>
-      <div className="debtMorePanel">
-        <button
-          type="button"
-          className="debtMoreItem"
-          onClick={onEdit}
-          disabled={disabled}
-        >
-          <PencilLine size={14} />
-          Edit debt
-        </button>
-        <button
-          type="button"
-          className="debtMoreItem"
-          onClick={onToggleActive}
-          disabled={disabled}
-        >
-          <ShieldAlert size={14} />
-          {debt?.active ? "Archive debt" : "Activate debt"}
-        </button>
-        <button
-          type="button"
-          className="debtMoreItem debtMoreDanger"
-          onClick={onDelete}
-          disabled={disabled}
-        >
-          <Trash2 size={14} />
-          Delete debt
-        </button>
-      </div>
-    </details>
+      </button>
+
+      {open ? (
+        <div className="debtMorePanel">
+          <RowMenuItem icon={<PencilLine size={14} />} onClick={wrap(onEdit)}>
+            Edit debt
+          </RowMenuItem>
+          <RowMenuItem icon={<ShieldAlert size={14} />} onClick={wrap(onToggleActive)}>
+            {debt?.active ? "Archive debt" : "Activate debt"}
+          </RowMenuItem>
+          <RowMenuItem danger icon={<Trash2 size={14} />} onClick={wrap(onDelete)}>
+            Delete debt
+          </RowMenuItem>
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -738,6 +788,7 @@ function DebtDueTile({ debt }) {
 
 function DebtStackRow({ debt, selected, onSelect, isTarget, strategy }) {
   const due = dueMeta(daysUntil(debt.dueDate));
+  const dueMetaStyle = toneMeta(due.tone);
   const monthly = monthlyScheduledPayment(debt);
   const interest = estimatedMonthlyInterest(debt.balance, debt.aprPct);
   const payoff = payoffLabel(debt.balance, debt.aprPct, monthly);
@@ -748,11 +799,9 @@ function DebtStackRow({ debt, selected, onSelect, isTarget, strategy }) {
       className="debtStackRow"
       onClick={onSelect}
       style={{
-        borderColor: selected
-          ? toneMeta(due.tone).border
-          : "rgba(255,255,255,0.07)",
+        borderColor: selected ? dueMetaStyle.border : "rgba(255,255,255,0.07)",
         boxShadow: selected
-          ? `inset 0 1px 0 rgba(255,255,255,0.03), 0 0 0 1px rgba(255,255,255,0.01), 0 0 24px ${toneMeta(due.tone).glow}`
+          ? `inset 0 1px 0 rgba(255,255,255,0.03), 0 0 0 1px rgba(255,255,255,0.01), 0 0 24px ${dueMetaStyle.glow}`
           : "inset 0 1px 0 rgba(255,255,255,0.025)",
       }}
     >
@@ -827,6 +876,7 @@ function PaymentHistory({ payments, accountNameById }) {
       </div>
     );
   }
+
   return (
     <div className="debtIntelList">
       {payments.map((payment) => (
@@ -843,7 +893,7 @@ function PaymentHistory({ payments, accountNameById }) {
             <div>
               <div className="debtIntelTitle">{moneyTight(payment.amount)}</div>
               <div className="debtIntelSub">
-                {shortDate(payment.paymentDate)} • {" "}
+                {shortDate(payment.paymentDate)} •{" "}
                 {payment.accountId
                   ? accountNameById.get(payment.accountId) || "Account"
                   : "No account linked"}
@@ -946,7 +996,12 @@ function DebtSummaryCard({
           <div className="debtHeroChips">
             {targetDebtId === debt.id ? (
               <MiniPill tone="red">
-                <Target size={12} /> {strategy === "snowball" ? "Snowball target" : strategy === "urgent" ? "Urgent target" : "Avalanche target"}
+                <Target size={12} />{" "}
+                {strategy === "snowball"
+                  ? "Snowball target"
+                  : strategy === "urgent"
+                  ? "Urgent target"
+                  : "Avalanche target"}
               </MiniPill>
             ) : null}
             <MiniPill tone={due.tone}>{due.label}</MiniPill>
@@ -978,7 +1033,8 @@ function DebtSummaryCard({
           <div className="debtInfoCell">
             <div className="debtTinyLabel">Due Cycle</div>
             <div className="debtInfoValue">
-              {shortDate(debt.dueDate)} • {FREQUENCY_OPTIONS.find((opt) => opt.value === debt.frequency)?.label || debt.frequency}
+              {shortDate(debt.dueDate)} •{" "}
+              {FREQUENCY_OPTIONS.find((opt) => opt.value === debt.frequency)?.label || debt.frequency}
             </div>
             <div className="debtInfoSub">Debt billing schedule</div>
           </div>
@@ -1047,10 +1103,7 @@ function DebtSummaryCard({
             title="Payment History"
             subcopy="Linked bill payments and legacy direct debt payments both show here."
           >
-            <PaymentHistory
-              payments={selectedDebtPayments}
-              accountNameById={accountNameById}
-            />
+            <PaymentHistory payments={selectedDebtPayments} accountNameById={accountNameById} />
           </SectionCard>
         </div>
       </div>
@@ -1271,14 +1324,18 @@ export default function DebtPage() {
       setLoading(false);
       return;
     }
+
     setLoading(true);
     setPageError("");
+
     try {
       const {
         data: { user },
         error: userError,
       } = await supabase.auth.getUser();
+
       if (userError) throw userError;
+
       if (!user) {
         setUserId(null);
         setDebts([]);
@@ -1288,6 +1345,7 @@ export default function DebtPage() {
         setLoading(false);
         return;
       }
+
       setUserId(user.id);
 
       const [debtsRes, accountsRes, settingsRes, paymentsRes] = await Promise.all([
@@ -1347,10 +1405,15 @@ export default function DebtPage() {
 
   useEffect(() => {
     refreshPage();
+
     if (!supabase) return undefined;
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(() => {
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(() => {
       refreshPage();
     });
+
     return () => subscription?.unsubscribe?.();
   }, [refreshPage]);
 
@@ -1430,6 +1493,7 @@ export default function DebtPage() {
     const paidThisMonth = payments
       .filter((payment) => monthKeyOf(payment.paymentDate) === monthKey)
       .reduce((sum, payment) => sum + safeNum(payment.amount, 0), 0);
+
     return {
       totalBalance,
       totalMinimum,
@@ -1443,7 +1507,10 @@ export default function DebtPage() {
   }, [activeDebts, payments]);
 
   const selectedDebtPaymentSummary = useMemo(() => {
-    const totalPaid = selectedDebtPayments.reduce((sum, payment) => sum + safeNum(payment.amount, 0), 0);
+    const totalPaid = selectedDebtPayments.reduce(
+      (sum, payment) => sum + safeNum(payment.amount, 0),
+      0
+    );
     const thisMonth = selectedDebtPayments
       .filter((payment) => monthKeyOf(payment.paymentDate) === monthKeyOf(isoDate()))
       .reduce((sum, payment) => sum + safeNum(payment.amount, 0), 0);
@@ -1452,6 +1519,7 @@ export default function DebtPage() {
       (max, payment) => Math.max(max, safeNum(payment.amount, 0)),
       0
     );
+
     return { totalPaid, thisMonth, avg, largest };
   }, [selectedDebtPayments]);
 
@@ -1532,8 +1600,10 @@ export default function DebtPage() {
 
   async function toggleSelectedDebtActive() {
     if (!supabase || !userId || !selectedDebt || savingSelected || deletingSelected) return;
+
     setSavingSelected(true);
     setPageError("");
+
     const res = await supabase
       .from("bills")
       .update({ active: !selectedDebt.active, updated_at: new Date().toISOString() })
@@ -1635,7 +1705,6 @@ export default function DebtPage() {
     );
   }
 
-  const accountNameById = new Map(accounts.map((account) => [account.id, account.name]));
   const linkedAccount = accounts.find((account) => account.id === selectedDebt?.accountId) || null;
   const syncedFromBillsCount = selectedDebtPayments.filter(
     (payment) => payment.linkedDebtId === selectedDebt?.id
@@ -1643,6 +1712,7 @@ export default function DebtPage() {
   const legacyDirectCount = selectedDebtPayments.filter(
     (payment) => payment.billId === selectedDebt?.id && !payment.linkedDebtId
   ).length;
+  const selectedDueMeta = selectedDebt ? dueMeta(daysUntil(selectedDebt.dueDate)) : null;
 
   return (
     <>
@@ -1685,36 +1755,93 @@ export default function DebtPage() {
           ) : null}
 
           <section className="debtMetricGrid">
-            <StatCard icon={Landmark} label="Total Balance" value={money(metrics.totalBalance)} detail="Current live debt balance across active debts." tone="red" />
-            <StatCard icon={BadgeDollarSign} label="Minimum Load" value={money(metrics.totalMinimum)} detail="What you have to cover before any extra attack." tone="amber" />
-            <StatCard icon={Flame} label="Extra Attack" value={money(metrics.totalExtra)} detail="Recurring extra being thrown at debt each month." tone={metrics.totalExtra > 0 ? "green" : "neutral"} />
-            <StatCard icon={Percent} label="Weighted APR" value={`${metrics.weightedApr}%`} detail="Balance-weighted average rate across active debt." tone={metrics.weightedApr > 10 ? "red" : "amber"} />
-            <StatCard icon={TrendingDown} label="Monthly Plan" value={money(metrics.totalPlan)} detail="Minimums plus saved recurring extra." tone="green" />
+            <StatCard
+              icon={Landmark}
+              label="Total Balance"
+              value={money(metrics.totalBalance)}
+              detail="Current live debt balance across active debts."
+              tone="red"
+            />
+            <StatCard
+              icon={BadgeDollarSign}
+              label="Minimum Load"
+              value={money(metrics.totalMinimum)}
+              detail="What you have to cover before any extra attack."
+              tone="amber"
+            />
+            <StatCard
+              icon={Flame}
+              label="Extra Attack"
+              value={money(metrics.totalExtra)}
+              detail="Recurring extra being thrown at debt each month."
+              tone={metrics.totalExtra > 0 ? "green" : "neutral"}
+            />
+            <StatCard
+              icon={Percent}
+              label="Weighted APR"
+              value={`${metrics.weightedApr}%`}
+              detail="Balance-weighted average rate across active debt."
+              tone={metrics.weightedApr > 10 ? "red" : "amber"}
+            />
+            <StatCard
+              icon={TrendingDown}
+              label="Monthly Plan"
+              value={money(metrics.totalPlan)}
+              detail="Minimums plus saved recurring extra."
+              tone="green"
+            />
           </section>
 
           <GlassPane size="card">
-            <PaneHeader title="Debt Controls" subcopy="Search the stack, filter status, and choose the payoff strategy." />
+            <PaneHeader
+              title="Debt Controls"
+              subcopy="Search the stack, filter status, and choose the payoff strategy."
+            />
             <div className="debtControlsGrid">
               <div>
                 <div className="debtTinyLabel">Search</div>
                 <div className="debtSearchWrap">
                   <Search size={15} />
-                  <input className="debtField debtSearchField" placeholder="Search debt" value={search} onChange={(e) => setSearch(e.target.value)} />
+                  <input
+                    className="debtField debtSearchField"
+                    placeholder="Search debt"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                  />
                 </div>
               </div>
               <div>
                 <div className="debtTinyLabel">Scope</div>
                 <div className="debtInlineTools">
-                  <ActionBtn variant={scope === "active" ? "primary" : "ghost"} onClick={() => setScope("active")}>Active</ActionBtn>
-                  <ActionBtn variant={scope === "all" ? "primary" : "ghost"} onClick={() => setScope("all")}>All</ActionBtn>
-                  <ActionBtn variant={scope === "inactive" ? "primary" : "ghost"} onClick={() => setScope("inactive")}>Inactive</ActionBtn>
+                  <ActionBtn
+                    variant={scope === "active" ? "primary" : "ghost"}
+                    onClick={() => setScope("active")}
+                  >
+                    Active
+                  </ActionBtn>
+                  <ActionBtn
+                    variant={scope === "all" ? "primary" : "ghost"}
+                    onClick={() => setScope("all")}
+                  >
+                    All
+                  </ActionBtn>
+                  <ActionBtn
+                    variant={scope === "inactive" ? "primary" : "ghost"}
+                    onClick={() => setScope("inactive")}
+                  >
+                    Inactive
+                  </ActionBtn>
                 </div>
               </div>
               <div>
                 <div className="debtTinyLabel">Strategy</div>
                 <div className="debtInlineTools">
                   {STRATEGY_OPTIONS.map((option) => (
-                    <ActionBtn key={option.value} variant={strategy === option.value ? "primary" : "ghost"} onClick={() => setStrategy(option.value)}>
+                    <ActionBtn
+                      key={option.value}
+                      variant={strategy === option.value ? "primary" : "ghost"}
+                      onClick={() => setStrategy(option.value)}
+                    >
                       {option.label}
                     </ActionBtn>
                   ))}
@@ -1726,25 +1853,48 @@ export default function DebtPage() {
           <section className="debtWorkspaceGrid">
             <GlassPane size="card" style={{ height: "100%" }}>
               <div className="debtRosterPane">
-                <PaneHeader title="Debt Stack" subcopy={strategySubtitle(strategy)} right={<MiniPill>{visibleDebts.length} showing</MiniPill>} />
+                <PaneHeader
+                  title="Debt Stack"
+                  subcopy={strategySubtitle(strategy)}
+                  right={<MiniPill>{visibleDebts.length} showing</MiniPill>}
+                />
                 {visibleDebts.length ? (
                   <div className="debtRosterListCompact">
                     {visibleDebts.map((debt) => (
-                      <DebtStackRow key={debt.id} debt={debt} selected={debt.id === selectedDebt?.id} onSelect={() => setSelectedDebtId(debt.id)} isTarget={targetedDebt?.id === debt.id} strategy={strategy} />
+                      <DebtStackRow
+                        key={debt.id}
+                        debt={debt}
+                        selected={debt.id === selectedDebt?.id}
+                        onSelect={() => setSelectedDebtId(debt.id)}
+                        isTarget={targetedDebt?.id === debt.id}
+                        strategy={strategy}
+                      />
                     ))}
                   </div>
                 ) : (
                   <div className="debtEmptyState debtGrowEmpty">
                     <div>
                       <div className="debtEmptyTitle">No debt found</div>
-                      <div className="debtEmptyText">This page focuses on managing payoff pressure for debt already on the board.</div>
+                      <div className="debtEmptyText">
+                        This page focuses on managing payoff pressure for debt already on the board.
+                      </div>
                     </div>
                   </div>
                 )}
               </div>
             </GlassPane>
 
-            <DebtSummaryCard debt={selectedDebt} strategy={strategy} targetDebtId={targetedDebt?.id || ""} selectedDebtPayments={selectedDebtPayments} accounts={accounts} onOpenEdit={openEditDrawer} onToggleActive={toggleSelectedDebtActive} onDelete={deleteSelectedDebt} busy={savingSelected || deletingSelected} />
+            <DebtSummaryCard
+              debt={selectedDebt}
+              strategy={strategy}
+              targetDebtId={targetedDebt?.id || ""}
+              selectedDebtPayments={selectedDebtPayments}
+              accounts={accounts}
+              onOpenEdit={openEditDrawer}
+              onToggleActive={toggleSelectedDebtActive}
+              onDelete={deleteSelectedDebt}
+              busy={savingSelected || deletingSelected}
+            />
 
             <div className="debtRailStack">
               <RailCard title="Quick Tools" subcopy="Keep the page clean and open full editing only when needed.">
@@ -1766,7 +1916,9 @@ export default function DebtPage() {
                     <div className="debtInsightTitle">Target balance</div>
                     <div className="debtInsightValue">{targetedDebt ? money(targetedDebt.balance) : "—"}</div>
                     <div className="debtInsightSub">
-                      {targetedDebt ? `${safeNum(targetedDebt.aprPct, 0)}% APR • ${payoffLabel(targetedDebt.balance, targetedDebt.aprPct, monthlyScheduledPayment(targetedDebt))}` : "No active debt target"}
+                      {targetedDebt
+                        ? `${safeNum(targetedDebt.aprPct, 0)}% APR • ${payoffLabel(targetedDebt.balance, targetedDebt.aprPct, monthlyScheduledPayment(targetedDebt))}`
+                        : "No active debt target"}
                     </div>
                   </div>
                   <div className="debtInsightItem">
@@ -1782,18 +1934,30 @@ export default function DebtPage() {
                 </div>
               </RailCard>
 
-              <RailCard title="Selected Debt Snapshot" subcopy="The current pulse of the focused debt." right={selectedDebt ? <MiniPill tone={dueMeta(daysUntil(selectedDebt.dueDate)).tone}>{dueMeta(daysUntil(selectedDebt.dueDate)).label}</MiniPill> : null}>
+              <RailCard
+                title="Selected Debt Snapshot"
+                subcopy="The current pulse of the focused debt."
+                right={selectedDebt && selectedDueMeta ? <MiniPill tone={selectedDueMeta.tone}>{selectedDueMeta.label}</MiniPill> : null}
+              >
                 {selectedDebt ? (
                   <div className="debtInsightList">
                     <div className="debtInsightItem">
                       <div className="debtInsightTitle">Linked account</div>
                       <div className="debtInsightValue">{linkedAccount ? linkedAccount.name : "None linked"}</div>
-                      <div className="debtInsightSub">{linkedAccount ? `${accountTypeLabel(linkedAccount.type)} • ${money(linkedAccount.balance)}` : "No pay-from account selected on this debt"}</div>
+                      <div className="debtInsightSub">
+                        {linkedAccount
+                          ? `${accountTypeLabel(linkedAccount.type)} • ${money(linkedAccount.balance)}`
+                          : "No pay-from account selected on this debt"}
+                      </div>
                     </div>
                     <div className="debtInsightItem">
                       <div className="debtInsightTitle">Payment history</div>
-                      <div className="debtInsightValue">{selectedDebtPayments.length} item{selectedDebtPayments.length === 1 ? "" : "s"}</div>
-                      <div className="debtInsightSub">From bills {syncedFromBillsCount} • legacy direct {legacyDirectCount}</div>
+                      <div className="debtInsightValue">
+                        {selectedDebtPayments.length} item{selectedDebtPayments.length === 1 ? "" : "s"}
+                      </div>
+                      <div className="debtInsightSub">
+                        From bills {syncedFromBillsCount} • legacy direct {legacyDirectCount}
+                      </div>
                     </div>
                     <div className="debtInsightItem">
                       <div className="debtInsightTitle">Average payment</div>
@@ -1810,7 +1974,15 @@ export default function DebtPage() {
         </div>
       </main>
 
-      <DebtDrawer open={editDrawerOpen} form={editor} setForm={setEditor} onClose={closeEditDrawer} onSave={saveSelectedDebt} saving={savingSelected} accounts={accounts} />
+      <DebtDrawer
+        open={editDrawerOpen}
+        form={editor}
+        setForm={setEditor}
+        onClose={closeEditDrawer}
+        onSave={saveSelectedDebt}
+        saving={savingSelected}
+        accounts={accounts}
+      />
 
       <style jsx global>{globalStyles}</style>
     </>
@@ -2350,14 +2522,6 @@ const globalStyles = `
 
   .debtMoreMenu {
     position: relative;
-  }
-
-  .debtMoreMenu summary {
-    list-style: none;
-  }
-
-  .debtMoreMenu summary::-webkit-details-marker {
-    display: none;
   }
 
   .debtMoreTrigger {

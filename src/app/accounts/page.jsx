@@ -2,25 +2,26 @@
 
 export const dynamic = "force-dynamic";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
+  AlertTriangle,
   ArrowRightLeft,
   ChevronRight,
-  CreditCard,
-  History,
   Landmark,
-  MoreHorizontal,
-  PencilLine,
   PiggyBank,
   Plus,
+  RefreshCw,
+  Save,
   Search,
-  Star,
-  Trash2,
+  ShieldAlert,
+  Sparkles,
   Wallet,
-  X,
 } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import GlassPane from "../components/GlassPane";
+
+const META_PREFIX = "__LCC_META__";
+const SAFE_BUFFER_STORAGE_KEY = "lcc-account-safe-buffers";
 
 function uid() {
   return (
@@ -29,17 +30,13 @@ function uid() {
   );
 }
 
-function nowTs() {
-  return Date.now();
+function round2(n) {
+  return Math.round((Number(n || 0) + Number.EPSILON) * 100) / 100;
 }
 
 function safeNum(n, fallback = 0) {
   const x = Number(n);
   return Number.isFinite(x) ? x : fallback;
-}
-
-function round2(n) {
-  return Math.round((Number(n || 0) + Number.EPSILON) * 100) / 100;
 }
 
 function parseMoneyInput(v) {
@@ -48,17 +45,10 @@ function parseMoneyInput(v) {
   return Number.isFinite(num) ? num : NaN;
 }
 
-function normalizeLooseText(value = "") {
-  return String(value || "")
-    .toLowerCase()
-    .trim()
-    .replace(/\s+/g, " ");
-}
-
 function fmtMoney(n) {
   const num = Number(n);
-  if (!Number.isFinite(num)) return "—";
-  return round2(num).toLocaleString(undefined, {
+  if (!Number.isFinite(num)) return "$0.00";
+  return num.toLocaleString(undefined, {
     style: "currency",
     currency: "USD",
     minimumFractionDigits: 2,
@@ -66,24 +56,15 @@ function fmtMoney(n) {
   });
 }
 
-function fmtMoneyTight(n) {
-  return fmtMoney(n);
-}
-
-function fmtMoneySigned(n) {
-  const num = Number(n);
-  if (!Number.isFinite(num)) return "—";
-
-  const abs = Math.abs(round2(num)).toLocaleString(undefined, {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
+function shortDate(dateValue) {
+  if (!dateValue) return "—";
+  const d = new Date(dateValue);
+  if (!Number.isFinite(d.getTime())) return "—";
+  return d.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
   });
-
-  if (num > 0) return `+${abs}`;
-  if (num < 0) return `−${abs}`;
-  return abs;
 }
 
 function fmtWhen(ts) {
@@ -99,62 +80,62 @@ function fmtWhen(ts) {
   });
 }
 
-function shortDate(dateValue) {
-  if (!dateValue) return "—";
-  const d = String(dateValue).includes("T")
-    ? new Date(dateValue)
-    : new Date(`${String(dateValue).slice(0, 10)}T12:00:00`);
-  if (!Number.isFinite(d.getTime())) return "—";
-  return d.toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
+function formatAgo(value) {
+  if (!value) return "—";
+  const ms = Date.now() - new Date(value).getTime();
+  const minutes = Math.round(ms / 60000);
+
+  if (!Number.isFinite(minutes)) return "—";
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes}m ago`;
+
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+
+  const days = Math.round(hours / 24);
+  return `${days}d ago`;
 }
 
-function normalizeType(type) {
-  return String(type || "other").toLowerCase().trim();
+function dateInputToday() {
+  return new Date().toISOString().slice(0, 10);
 }
 
-function isCreditType(type) {
-  return normalizeType(type) === "credit";
+function addDays(dateValue, days) {
+  const d = new Date(dateValue);
+  d.setDate(d.getDate() + days);
+  return d;
 }
 
-function isLiquidType(type) {
-  const t = normalizeType(type);
-  return t === "checking" || t === "savings" || t === "cash";
+function isFutureDate(dateValue) {
+  if (!dateValue) return false;
+  const target = new Date(`${String(dateValue).slice(0, 10)}T12:00:00`);
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12);
+  return target.getTime() > today.getTime();
 }
 
-function isInvestmentType(type) {
-  return normalizeType(type) === "investment";
+function daysUntil(dateValue) {
+  if (!dateValue) return null;
+  const target = new Date(`${String(dateValue).slice(0, 10)}T12:00:00`);
+  if (!Number.isFinite(target.getTime())) return null;
+
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12);
+  return Math.round((target.getTime() - today.getTime()) / 86400000);
 }
 
-function typeLabel(t) {
-  const v = normalizeType(t);
-  if (v === "checking") return "Checking";
-  if (v === "savings") return "Savings";
-  if (v === "cash") return "Cash";
-  if (v === "credit") return "Credit Card";
-  if (v === "investment") return "Investment";
-  return "Other";
+function monthStart(value = new Date()) {
+  return new Date(value.getFullYear(), value.getMonth(), 1);
 }
 
-function typeTone(type) {
-  const t = normalizeType(type);
-  if (t === "savings") return "green";
-  if (t === "cash") return "amber";
-  if (t === "credit") return "red";
-  return "neutral";
+function monthEnd(value = new Date()) {
+  return new Date(value.getFullYear(), value.getMonth() + 1, 0, 23, 59, 59, 999);
 }
 
-function typeEmoji(type) {
-  const t = normalizeType(type);
-  if (t === "checking") return "🏦";
-  if (t === "savings") return "💰";
-  if (t === "cash") return "💵";
-  if (t === "credit") return "💳";
-  if (t === "investment") return "📈";
-  return "📁";
+function dayKey(value) {
+  const d = new Date(value);
+  if (!Number.isFinite(d.getTime())) return "";
+  return d.toISOString().slice(0, 10);
 }
 
 function toneMeta(tone = "neutral") {
@@ -164,6 +145,15 @@ function toneMeta(tone = "neutral") {
       border: "rgba(143, 240, 191, 0.18)",
       glow: "rgba(110, 229, 173, 0.10)",
       bg: "rgba(11, 22, 17, 0.66)",
+    };
+  }
+
+  if (tone === "blue") {
+    return {
+      text: "#bcd7ff",
+      border: "rgba(143, 177, 255, 0.18)",
+      glow: "rgba(110, 163, 255, 0.10)",
+      bg: "rgba(10, 16, 28, 0.66)",
     };
   }
 
@@ -191,277 +181,6 @@ function toneMeta(tone = "neutral") {
     glow: "rgba(140, 170, 255, 0.08)",
     bg: "rgba(10, 15, 24, 0.66)",
   };
-}
-
-function initialsFromLabel(label = "") {
-  const clean = String(label).trim();
-  if (!clean) return "—";
-  const parts = clean.split(/\s+/).slice(0, 2);
-  return parts
-    .map((p) => p[0])
-    .join("")
-    .toUpperCase();
-}
-
-function transactionLabel(kind) {
-  const k = String(kind || "").toLowerCase();
-
-  if (k === "deposit") return "Deposit";
-  if (k === "withdraw") return "Withdraw";
-  if (k === "payment") return "Payment";
-  if (k === "charge") return "Charge";
-  if (k === "transfer_in") return "Transfer In";
-  if (k === "transfer_out") return "Transfer Out";
-  if (k === "payment_in") return "Payment Applied";
-  if (k === "advance_out") return "Credit Advance";
-  if (k === "balance_transfer_out") return "Balance Transfer Out";
-  if (k === "balance_transfer_in") return "Balance Transfer In";
-  if (k === "set") return "Set Balance";
-  if (k === "create") return "Account Created";
-  return "Transaction";
-}
-
-function transactionTone(kind) {
-  const k = String(kind || "").toLowerCase();
-
-  if (
-    ["deposit", "transfer_in", "payment", "payment_in", "balance_transfer_out"].includes(k)
-  ) {
-    return "green";
-  }
-
-  if (
-    ["withdraw", "charge", "transfer_out", "advance_out", "balance_transfer_in"].includes(k)
-  ) {
-    return "red";
-  }
-
-  if (["set", "create"].includes(k)) return "amber";
-  return "neutral";
-}
-
-function resolveSpendingCategoryLabel(row) {
-  return (
-    row.category_name ||
-    row.category_label ||
-    row.category ||
-    (row.category_id ? `Category ${row.category_id}` : "") ||
-    row.merchant ||
-    row.payment_method ||
-    "Uncategorized"
-  );
-}
-
-function isExpenseLikeSpending(row) {
-  const t = String(row.type || "expense").toLowerCase().trim();
-  if (t === "income") return false;
-  if (t === "transfer") return false;
-  return safeNum(row.amount, 0) > 0;
-}
-
-function mapAccountRowToClient(row) {
-  return {
-    id: row.id,
-    name: row.name || "",
-    type: row.account_type || "other",
-    balance: round2(safeNum(row.balance, 0)),
-    updatedAt: row.updated_at ? new Date(row.updated_at).getTime() : nowTs(),
-  };
-}
-
-function mapAccountClientToRow(account, userId) {
-  return {
-    id: account.id,
-    user_id: userId,
-    name: account.name || "",
-    account_type: account.type || "other",
-    balance: round2(safeNum(account.balance, 0)),
-    updated_at: new Date(account.updatedAt || nowTs()).toISOString(),
-  };
-}
-
-function mapLedgerRowToClient(row) {
-  return {
-    id: row.id,
-    accountId: row.account_id,
-    ts: row.created_at ? new Date(row.created_at).getTime() : nowTs(),
-    kind: row.kind || "transaction",
-    amount: round2(safeNum(row.amount, 0)),
-    delta: round2(safeNum(row.delta, 0)),
-    resultingBalance: round2(safeNum(row.resulting_balance, 0)),
-    note: row.note || "",
-    relatedAccountId: row.related_account_id || "",
-    relatedAccountName: row.related_account_name || "",
-  };
-}
-
-function mapLedgerClientToRow(entry, userId) {
-  return {
-    id: entry.id,
-    user_id: userId,
-    account_id: entry.accountId,
-    kind: entry.kind || "transaction",
-    amount: round2(safeNum(entry.amount, 0)),
-    delta: round2(safeNum(entry.delta, 0)),
-    resulting_balance: round2(safeNum(entry.resultingBalance, 0)),
-    note: entry.note || "",
-    related_account_id: entry.relatedAccountId || null,
-    related_account_name: entry.relatedAccountName || "",
-    created_at: new Date(entry.ts || nowTs()).toISOString(),
-  };
-}
-
-function mapSpendingRowToClient(row) {
-  const rawDate = row.tx_date || row.date || row.created_at || null;
-  const ts = rawDate
-    ? String(rawDate).includes("T")
-      ? new Date(rawDate).getTime()
-      : new Date(`${rawDate}T12:00:00`).getTime()
-    : nowTs();
-
-  return {
-    id: row.id,
-    ts: Number.isFinite(ts) ? ts : nowTs(),
-    txDate: row.tx_date || row.date || row.created_at || "",
-    type: row.type || "expense",
-    amount: round2(Math.abs(safeNum(row.amount, 0))),
-    merchant: row.merchant || row.payee || row.description || "Spending",
-    note: row.note || "",
-    accountId: row.account_id || row.accountId || "",
-    accountName: row.account_name || row.accountName || "",
-    categoryLabel: resolveSpendingCategoryLabel(row),
-    categoryKey: String(
-      row.category_id ||
-        row.category_name ||
-        row.category_label ||
-        row.category ||
-        "uncategorized"
-    ),
-    paymentMethod: row.payment_method || "",
-  };
-}
-
-function mapBillRowToClient(row) {
-  return {
-    id: row.id,
-    name: row.name || row.title || row.label || row.source || "Bill",
-    amount: round2(safeNum(row.amount, 0)),
-    dueDate: row.due_date || row.next_due_date || "",
-    lastPaidDate: row.last_paid_date || "",
-    category: row.category || "",
-    accountId: row.account_id || row.accountId || "",
-    accountName: row.account_name || row.accountName || "",
-    autopay: !!row.autopay,
-    active: row.active !== false,
-    updatedAt: row.updated_at ? new Date(row.updated_at).getTime() : nowTs(),
-  };
-}
-
-function spendingMatchesAccount(tx, account) {
-  if (!tx || !account) return false;
-
-  if (tx.accountId && account.id) {
-    return String(tx.accountId) === String(account.id);
-  }
-
-  if (tx.accountName && account.name) {
-    return normalizeLooseText(tx.accountName) === normalizeLooseText(account.name);
-  }
-
-  return false;
-}
-
-function billMatchesAccount(bill, account) {
-  if (!bill || !account) return false;
-
-  if (bill.accountId && account.id) {
-    return String(bill.accountId) === String(account.id);
-  }
-
-  if (bill.accountName && account.name) {
-    return normalizeLooseText(bill.accountName) === normalizeLooseText(account.name);
-  }
-
-  return false;
-}
-
-function getAdjustDelta(accountType, mode, absAmount) {
-  const amount = Math.abs(round2(safeNum(absAmount, 0)));
-  if (isCreditType(accountType)) {
-    return mode === "decrease" ? -amount : amount;
-  }
-  return mode === "decrease" ? -amount : amount;
-}
-
-function getAdjustKind(accountType, mode) {
-  if (isCreditType(accountType)) {
-    return mode === "decrease" ? "payment" : "charge";
-  }
-  return mode === "decrease" ? "withdraw" : "deposit";
-}
-
-function getTransferPlan(fromAccount, toAccount, amount) {
-  const absAmount = Math.abs(round2(safeNum(amount, 0)));
-  const fromIsCredit = isCreditType(fromAccount?.type);
-  const toIsCredit = isCreditType(toAccount?.type);
-
-  if (!fromIsCredit && !toIsCredit) {
-    return {
-      fromDelta: -absAmount,
-      toDelta: absAmount,
-      fromKind: "transfer_out",
-      toKind: "transfer_in",
-    };
-  }
-
-  if (!fromIsCredit && toIsCredit) {
-    return {
-      fromDelta: -absAmount,
-      toDelta: -absAmount,
-      fromKind: "transfer_out",
-      toKind: "payment_in",
-    };
-  }
-
-  if (fromIsCredit && !toIsCredit) {
-    return {
-      fromDelta: absAmount,
-      toDelta: absAmount,
-      fromKind: "advance_out",
-      toKind: "transfer_in",
-    };
-  }
-
-  return {
-    fromDelta: -absAmount,
-    toDelta: absAmount,
-    fromKind: "balance_transfer_out",
-    toKind: "balance_transfer_in",
-  };
-}
-
-function daysUntilDate(dateValue) {
-  if (!dateValue) return null;
-  const target = new Date(`${String(dateValue).slice(0, 10)}T12:00:00`);
-  if (!Number.isFinite(target.getTime())) return null;
-  const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12);
-  return Math.round((target.getTime() - today.getTime()) / 86400000);
-}
-
-function rangeMatches(ts, range) {
-  const time = safeNum(ts, 0);
-  if (!time) return false;
-
-  const now = new Date();
-  const nowMs = now.getTime();
-
-  if (range === "all") return true;
-  if (range === "30") return time >= nowMs - 30 * 86400000;
-  if (range === "90") return time >= nowMs - 90 * 86400000;
-
-  const d = new Date(time);
-  return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
 }
 
 function MiniPill({ children, tone = "neutral" }) {
@@ -535,14 +254,53 @@ function PaneHeader({ title, subcopy, right }) {
   );
 }
 
-function StatCard({ icon: Icon, label, value, detail, tone = "neutral" }) {
+function ActionBtn({
+  children,
+  onClick,
+  variant = "ghost",
+  full = false,
+  type = "button",
+  disabled = false,
+}) {
+  const isPrimary = variant === "primary";
+  const isDanger = variant === "danger";
+
+  return (
+    <button
+      type={type}
+      onClick={onClick}
+      disabled={disabled}
+      className="accountActionBtn"
+      style={{
+        width: full ? "100%" : undefined,
+        border: isDanger
+          ? "1px solid rgba(255,132,163,0.18)"
+          : isPrimary
+          ? "1px solid rgba(143,177,255,0.18)"
+          : "1px solid rgba(214,226,255,0.10)",
+        background: isDanger
+          ? "linear-gradient(180deg, rgba(255,132,163,0.10), rgba(255,132,163,0.05))"
+          : isPrimary
+          ? "linear-gradient(180deg, rgba(143,177,255,0.14), rgba(143,177,255,0.06))"
+          : "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.012))",
+        color: isDanger ? "#ffd3df" : "#f7fbff",
+        opacity: disabled ? 0.55 : 1,
+        cursor: disabled ? "not-allowed" : "pointer",
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
+function MetricCard({ icon: Icon, label, value, detail, tone = "neutral" }) {
   const meta = toneMeta(tone);
 
   return (
-    <GlassPane tone={tone} size="card" style={{ height: "100%" }}>
+    <GlassPane tone={tone === "blue" ? "neutral" : tone} size="card" style={{ height: "100%" }}>
       <div
         style={{
-          minHeight: 112,
+          minHeight: 110,
           display: "grid",
           gridTemplateRows: "auto auto 1fr",
           gap: 7,
@@ -605,136 +363,170 @@ function StatCard({ icon: Icon, label, value, detail, tone = "neutral" }) {
   );
 }
 
-function ActionBtn({
-  children,
-  onClick,
-  variant = "ghost",
-  full = false,
-  type = "button",
-  disabled = false,
-}) {
-  const isPrimary = variant === "primary";
-  const isDanger = variant === "danger";
+function extractStoredNote(rawNote) {
+  const text = String(rawNote ?? "");
+  const idx = text.indexOf(META_PREFIX);
 
-  return (
-    <button
-      type={type}
-      onClick={onClick}
-      disabled={disabled}
-      className="accountsActionBtn"
-      style={{
-        width: full ? "100%" : undefined,
-        border: isDanger
-          ? "1px solid rgba(255,132,163,0.18)"
-          : isPrimary
-          ? "1px solid rgba(143,177,255,0.18)"
-          : "1px solid rgba(214,226,255,0.10)",
-        background: isDanger
-          ? "linear-gradient(180deg, rgba(255,132,163,0.10), rgba(255,132,163,0.05))"
-          : isPrimary
-          ? "linear-gradient(180deg, rgba(143,177,255,0.14), rgba(143,177,255,0.06))"
-          : "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.012))",
-        color: isDanger ? "#ffd3df" : "#f7fbff",
-        opacity: disabled ? 0.55 : 1,
-        cursor: disabled ? "not-allowed" : "pointer",
-      }}
-    >
-      {children}
-    </button>
-  );
+  if (idx === -1) {
+    return { userNote: text, meta: {} };
+  }
+
+  const userNote = text.slice(0, idx).trimEnd();
+  const payload = text.slice(idx + META_PREFIX.length);
+
+  try {
+    const parsed = JSON.parse(decodeURIComponent(payload));
+    return { userNote, meta: parsed || {} };
+  } catch {
+    return { userNote, meta: {} };
+  }
 }
 
-function MenuItem({ icon: Icon, children, onClick, danger = false }) {
+function normalizeAccountType(type = "") {
+  const value = String(type || "").trim().toLowerCase();
+
+  if (value.includes("checking")) return "Checking";
+  if (value.includes("savings")) return "Savings";
+  if (value.includes("credit")) return "Credit";
+  if (value.includes("cash")) return "Cash";
+  if (value.includes("broker")) return "Brokerage";
+  if (value.includes("invest")) return "Investment";
+  if (value.includes("debt")) return "Debt";
+  if (!value) return "Account";
+
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+function accountTone(accountType = "") {
+  const value = String(accountType || "").toLowerCase();
+
+  if (value.includes("savings")) return "green";
+  if (value.includes("credit")) return "red";
+  if (value.includes("cash")) return "amber";
+  return "blue";
+}
+
+function typeMatches(type, filter) {
+  const value = String(type || "").toLowerCase();
+
+  if (filter === "all") return true;
+  if (filter === "checking") return value.includes("checking");
+  if (filter === "savings") return value.includes("savings");
+  if (filter === "credit") return value.includes("credit");
+  if (filter === "cash") return value.includes("cash");
+  return true;
+}
+
+function getIncomeRouting(row, defaultAccountId) {
+  const { meta } = extractStoredNote(row.note);
+  const posted = !!meta?.posted;
+  const status =
+    meta?.status === "scheduled" || isFutureDate(row.deposit_date) ? "scheduled" : "received";
+
+  let shares = [];
+  if (Array.isArray(meta?.splits) && meta.splits.length) {
+    shares = meta.splits
+      .filter((split) => split?.accountId && safeNum(split.amount, 0) > 0)
+      .map((split) => ({
+        accountId: split.accountId,
+        accountName: split.accountName || "",
+        amount: round2(split.amount),
+      }));
+  } else if (defaultAccountId) {
+    shares = [
+      {
+        accountId: defaultAccountId,
+        accountName: "",
+        amount: round2(row.amount),
+      },
+    ];
+  }
+
+  return {
+    id: row.id,
+    source: row.source || "Income",
+    deposit_date: row.deposit_date || "",
+    amount: round2(row.amount),
+    posted,
+    status,
+    shares,
+  };
+}
+
+function amountFromBill(bill) {
+  return round2(safeNum(bill.amount, 0) + safeNum(bill.extra_pay, 0));
+}
+
+function billTitle(bill) {
+  return bill.category || bill.notes || "Bill";
+}
+
+function isTransferRow(tx) {
+  const kind = String(tx.kind || "").toLowerCase();
+  const sourceType = String(tx.source_type || "").toLowerCase();
+  return kind.includes("transfer") || sourceType.includes("transfer");
+}
+
+function isBillRow(tx) {
+  const kind = String(tx.kind || "").toLowerCase();
+  const sourceType = String(tx.source_type || "").toLowerCase();
+  return kind.includes("bill") || sourceType.includes("bill");
+}
+
+function flowBucket(tx) {
+  if (isTransferRow(tx)) return "Transfers";
+  if (isBillRow(tx)) return "Bills";
+  if (safeNum(tx.delta, 0) > 0) return "Income";
+  if (String(tx.source_type || "").toLowerCase().includes("adjust")) return "Adjustments";
+  return "Spending";
+}
+
+function buildBalanceBars(transactions, currentBalance, days = 14) {
+  const txByDay = new Map();
+
+  transactions.forEach((tx) => {
+    const key = dayKey(tx.created_at);
+    if (!key) return;
+    txByDay.set(key, round2((txByDay.get(key) || 0) + safeNum(tx.delta, 0)));
+  });
+
+  let running = round2(currentBalance);
+  const today = new Date();
+  const values = [];
+
+  for (let i = 0; i < days; i += 1) {
+    const d = new Date(today);
+    d.setDate(today.getDate() - i);
+    const key = d.toISOString().slice(0, 10);
+
+    values.unshift({
+      key,
+      label: d.toLocaleDateString(undefined, { month: "short", day: "numeric" }),
+      value: running,
+    });
+
+    running = round2(running - safeNum(txByDay.get(key), 0));
+  }
+
+  const nums = values.map((v) => v.value);
+  const min = Math.min(...nums, 0);
+  const max = Math.max(...nums, 1);
+  const range = Math.max(max - min, 1);
+
+  return values.map((v) => ({
+    ...v,
+    height: 24 + ((v.value - min) / range) * 60,
+  }));
+}
+
+function AccountRailCard({ account, summary, selected, onSelect }) {
+  const tone = summary?.atRisk ? "amber" : accountTone(account.account_type);
+  const meta = toneMeta(tone);
+
   return (
     <button
       type="button"
-      className={`accountsMenuItem ${danger ? "danger" : ""}`}
-      onClick={onClick}
-    >
-      <Icon size={14} />
-      {children}
-    </button>
-  );
-}
-
-function Modal({
-  open,
-  title,
-  subtitle,
-  onClose,
-  children,
-  width = 760,
-  tone = "neutral",
-  chrome = "default",
-}) {
-  if (!open) return null;
-
-  const meta = toneMeta(tone);
-
-  return (
-    <div className="accountsModalRoot">
-      <div
-        className={`accountsModalBackdrop ${chrome === "command" ? "command" : ""}`}
-        onClick={onClose}
-      />
-      <div
-        className={`accountsModalCard ${chrome === "command" ? "accountsModalCardCommand" : ""}`}
-        style={{ width: `min(100%, ${width}px)` }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <GlassPane tone={tone} size="card" style={{ padding: 0, overflow: "hidden" }}>
-          <div className={`accountsModalInner ${chrome === "command" ? "command" : ""}`}>
-            <div className="accountsModalTopGlow" />
-            <div className="accountsModalHeader">
-              <div className="accountsModalHeaderText">
-                <div className="accountsModalTitle">{title}</div>
-                {subtitle ? <div className="accountsModalSubtitle">{subtitle}</div> : null}
-              </div>
-
-              <button
-                type="button"
-                onClick={onClose}
-                aria-label="Close"
-                className="accountsIconBtn accountsIconBtnSoft"
-                style={{ flexShrink: 0 }}
-              >
-                <X size={16} />
-              </button>
-            </div>
-
-            <div
-              className="accountsModalDivider"
-              style={{
-                background: `linear-gradient(90deg, transparent, ${meta.border}, transparent)`,
-              }}
-            />
-
-            <div className="accountsModalBody">{children}</div>
-          </div>
-        </GlassPane>
-      </div>
-    </div>
-  );
-}
-
-function CompactAccountRow({
-  account,
-  selected,
-  primary,
-  menuOpen,
-  onSelect,
-  onToggleMenu,
-  onViewSpending,
-  onEdit,
-  onSetPrimary,
-  onDelete,
-}) {
-  const tone = typeTone(account.type);
-  const meta = toneMeta(tone);
-
-  return (
-    <div
-      className="accountsCompactRow"
+      className="accountRailCard"
       onClick={onSelect}
       style={{
         borderColor: selected ? meta.border : "rgba(255,255,255,0.07)",
@@ -743,1855 +535,812 @@ function CompactAccountRow({
           : "inset 0 1px 0 rgba(255,255,255,0.025)",
       }}
     >
-      <div
-        className="accountsCompactAvatar"
-        style={{
-          borderColor: meta.border,
-          color: tone === "neutral" ? "#fff" : meta.text,
-          boxShadow: `0 0 12px ${meta.glow}`,
-        }}
-      >
-        {initialsFromLabel(account.name)}
-      </div>
-
-      <div style={{ minWidth: 0 }}>
-        <div
-          style={{
-            display: "flex",
-            gap: 8,
-            alignItems: "center",
-            flexWrap: "wrap",
-          }}
-        >
-          <div className="accountsCompactTitle">{account.name}</div>
-          {primary ? <MiniPill>Primary</MiniPill> : null}
-          <MiniPill tone={tone}>
-            {typeEmoji(account.type)} {typeLabel(account.type)}
-          </MiniPill>
+      <div className="accountRailCardTop">
+        <div style={{ minWidth: 0 }}>
+          <div className="accountRailCardTitle">{account.name || "Account"}</div>
+          <div className="accountRailCardSub">{normalizeAccountType(account.account_type)}</div>
         </div>
 
-        <div className="accountsCompactSub">Updated {fmtWhen(account.updatedAt)}</div>
+        <div className="accountRailCardRight">
+          {summary?.atRisk ? <MiniPill tone="amber">Watch</MiniPill> : null}
+          <ChevronRight size={14} style={{ opacity: 0.55 }} />
+        </div>
       </div>
 
-      <div className="accountsCompactValue">{fmtMoney(account.balance)}</div>
+      <div className="accountRailBalance">{fmtMoney(account.balance)}</div>
 
-      <div
-        className="accountsMenuWrap"
-        onClick={(e) => {
-          e.stopPropagation();
-        }}
-      >
-        <button
-          type="button"
-          className="accountsIconBtn"
-          onClick={onToggleMenu}
-          aria-label="More actions"
-          title="More actions"
-        >
-          <MoreHorizontal size={14} />
-        </button>
-
-        {menuOpen ? (
-          <div className="accountsMenuPanel">
-            <MenuItem icon={History} onClick={onViewSpending}>
-              Spending History
-            </MenuItem>
-            <MenuItem icon={PencilLine} onClick={onEdit}>
-              Edit Account
-            </MenuItem>
-            <MenuItem icon={Star} onClick={onSetPrimary}>
-              Set Primary
-            </MenuItem>
-            <MenuItem icon={Trash2} danger onClick={onDelete}>
-              Delete
-            </MenuItem>
+      <div className="accountRailGrid">
+        <div className="accountRailStat">
+          <div className="accountTinyLabel">30D Change</div>
+          <div
+            className="accountRailStatValue"
+            style={{
+              color: safeNum(summary?.last30Delta, 0) >= 0 ? "#97efc7" : "#ffb4c5",
+            }}
+          >
+            {safeNum(summary?.last30Delta, 0) >= 0 ? "+" : ""}
+            {fmtMoney(summary?.last30Delta)}
           </div>
-        ) : null}
+        </div>
+
+        <div className="accountRailStat">
+          <div className="accountTinyLabel">Next Bill</div>
+          <div className="accountRailStatValue">
+            {summary?.nextBill ? shortDate(summary.nextBill.due_date) : "Clear"}
+          </div>
+        </div>
       </div>
-    </div>
+
+      <div className="accountRailFooter">
+        <div>
+          <span className="accountTinyLabel">14D Projection</span>
+          <div className="accountRailFooterValue">{fmtMoney(summary?.projected14)}</div>
+        </div>
+
+        {summary?.nextIncome ? (
+          <MiniPill tone="green">{shortDate(summary.nextIncome.deposit_date)}</MiniPill>
+        ) : (
+          <MiniPill>no deposit</MiniPill>
+        )}
+      </div>
+    </button>
   );
 }
 
-function FocusCard({
-  selectedAccount,
-  primaryId,
-  linkedBills,
-  spendMonth,
-  spend30,
-  ledgerHealth,
-  focusMenuOpen,
-  setFocusMenuOpen,
-  onAdjust,
-  onTransfer,
-  onOpenSpend,
-  onSetExact,
-  onEdit,
-  onSetPrimary,
-  onDelete,
-}) {
-  if (!selectedAccount) {
+function BalanceBars({ bars = [] }) {
+  if (!bars.length) {
     return (
-      <GlassPane size="card">
-        <PaneHeader
-          title="Selected Account"
-          subcopy="Choose one from the roster to work it here."
-        />
-        <div className="accountsEmptyState" style={{ minHeight: 260 }}>
-          <div>
-            <div className="accountsEmptyTitle">No account selected</div>
-            <div className="accountsEmptyText">
-              Pick one from the roster on the left.
-            </div>
-          </div>
-        </div>
-      </GlassPane>
+      <div className="accountBarsEmpty">
+        <div>No recent balance movement yet.</div>
+      </div>
     );
   }
 
-  const tone = typeTone(selectedAccount.type);
-  const meta = toneMeta(tone);
-  const isCredit = isCreditType(selectedAccount.type);
-
-  const activeBills = linkedBills.filter((bill) => bill.active);
-  const autopayBills = activeBills.filter((bill) => bill.autopay);
-  const autopayTotal = autopayBills.reduce((sum, bill) => sum + safeNum(bill.amount, 0), 0);
-
-  const nextBill = [...activeBills]
-    .filter((bill) => bill.dueDate)
-    .sort(
-      (a, b) =>
-        new Date(`${String(a.dueDate).slice(0, 10)}T12:00:00`).getTime() -
-        new Date(`${String(b.dueDate).slice(0, 10)}T12:00:00`).getTime()
-    )[0];
-
   return (
-    <GlassPane tone={tone} size="card" style={{ height: "100%" }}>
-      <PaneHeader
-        title={selectedAccount.name}
-        subcopy="Focused controls and account-specific money intel."
-        right={
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-            {selectedAccount.id === primaryId ? <MiniPill>Primary</MiniPill> : null}
-            <MiniPill tone={tone}>
-              {typeEmoji(selectedAccount.type)} {typeLabel(selectedAccount.type)}
-            </MiniPill>
-
-            <div
-              className="accountsMenuWrap"
-              onClick={(e) => {
-                e.stopPropagation();
-              }}
-            >
-              <button
-                type="button"
-                className="accountsIconBtn"
-                onClick={() => setFocusMenuOpen((prev) => !prev)}
-                aria-label="More actions"
-                title="More actions"
-              >
-                <MoreHorizontal size={14} />
-              </button>
-
-              {focusMenuOpen ? (
-                <div className="accountsMenuPanel accountsMenuPanelRight">
-                  <MenuItem
-                    icon={Landmark}
-                    onClick={() => {
-                      setFocusMenuOpen(false);
-                      onSetExact();
-                    }}
-                  >
-                    Set Exact Balance
-                  </MenuItem>
-                  <MenuItem
-                    icon={PencilLine}
-                    onClick={() => {
-                      setFocusMenuOpen(false);
-                      onEdit();
-                    }}
-                  >
-                    Edit Account
-                  </MenuItem>
-                  <MenuItem
-                    icon={Star}
-                    onClick={() => {
-                      setFocusMenuOpen(false);
-                      onSetPrimary();
-                    }}
-                  >
-                    Set Primary
-                  </MenuItem>
-                  <MenuItem
-                    icon={Trash2}
-                    danger
-                    onClick={() => {
-                      setFocusMenuOpen(false);
-                      onDelete();
-                    }}
-                  >
-                    Delete
-                  </MenuItem>
-                </div>
-              ) : null}
-            </div>
-          </div>
-        }
-      />
-
-      <div className="accountsFocusBox">
-        <div className="accountsTinyLabel">
-          {isCredit ? "Amount Owed" : "Current Balance"}
+    <div className="accountBarsWrap">
+      {bars.map((bar) => (
+        <div key={bar.key} className="accountBarCol" title={`${bar.label} • ${fmtMoney(bar.value)}`}>
+          <div className="accountBarFill" style={{ height: bar.height }} />
         </div>
-
-        <div
-          style={{
-            marginTop: 8,
-            fontSize: "clamp(30px, 4vw, 46px)",
-            lineHeight: 1,
-            fontWeight: 850,
-            letterSpacing: "-0.05em",
-            color: tone === "neutral" ? "#fff" : meta.text,
-          }}
-        >
-          {fmtMoney(selectedAccount.balance)}
-        </div>
-
-        <div
-          style={{
-            marginTop: 10,
-            fontSize: 12,
-            color: "rgba(255,255,255,0.58)",
-          }}
-        >
-          Updated {fmtWhen(selectedAccount.updatedAt)}
-        </div>
-
-        <div className="accountsInfoGrid" style={{ marginTop: 14 }}>
-          <div className="accountsInfoCell">
-            <div className="accountsTinyLabel">Spent This Month</div>
-            <div className="accountsInfoValue">{fmtMoney(spendMonth)}</div>
-            <div className="accountsInfoSub">Account-specific spending only</div>
-          </div>
-
-          <div className="accountsInfoCell">
-            <div className="accountsTinyLabel">Spent Last 30 Days</div>
-            <div className="accountsInfoValue">{fmtMoney(spend30)}</div>
-            <div className="accountsInfoSub">Rolling outflow view</div>
-          </div>
-
-          <div className="accountsInfoCell">
-            <div className="accountsTinyLabel">Autopay Load</div>
-            <div className="accountsInfoValue">
-              {autopayBills.length} bill{autopayBills.length === 1 ? "" : "s"} •{" "}
-              {fmtMoney(autopayTotal)}
-            </div>
-            <div className="accountsInfoSub">
-              {nextBill ? `Next due ${shortDate(nextBill.dueDate)}` : "No due bill found"}
-            </div>
-          </div>
-
-          <div className="accountsInfoCell">
-            <div className="accountsTinyLabel">Ledger Math</div>
-            <div className="accountsInfoValue">
-              {ledgerHealth.hasLedger
-                ? ledgerHealth.aligned
-                  ? "Aligned"
-                  : `${fmtMoney(Math.abs(ledgerHealth.diff))} off`
-                : "No ledger yet"}
-            </div>
-            <div className="accountsInfoSub">
-              {ledgerHealth.hasLedger
-                ? `Ledger says ${fmtMoney(ledgerHealth.latestBalance)}`
-                : "Create, transfer, spend, and income writes should land in the ledger"}
-            </div>
-          </div>
-        </div>
-
-        <div className="accountsActionGridTriplet" style={{ marginTop: 14 }}>
-          <ActionBtn variant="primary" onClick={onAdjust} full>
-            <Wallet size={14} /> Add Transaction
-          </ActionBtn>
-          <ActionBtn onClick={onTransfer} full>
-            <ArrowRightLeft size={14} /> Transfer
-          </ActionBtn>
-          <ActionBtn onClick={onOpenSpend} full>
-            <History size={14} /> Spending History
-          </ActionBtn>
-        </div>
-      </div>
-    </GlassPane>
+      ))}
+    </div>
   );
 }
 
-function AddAccountLauncherCard({
-  onOpen,
-  totalAccounts,
-  primaryName,
-  liquidTotal,
-  creditExposure,
-}) {
+function TransactionRow({ tx }) {
+  const delta = safeNum(tx.delta, 0);
+  const positive = delta >= 0;
+  const bucket = flowBucket(tx);
+
   return (
-    <GlassPane size="card" style={{ alignSelf: "start" }}>
-      <div className="accountsLauncherCard">
-        <div className="accountsLauncherTop">
-          <div className="accountsLauncherIcon">
-            <Plus size={16} />
-          </div>
-          <MiniPill>Quick create</MiniPill>
-        </div>
-
-        <div className="accountsLauncherTitle">Add Account</div>
-        <div className="accountsLauncherSub">
-          Keep creation tucked away until you need it. Open a tighter modal instead of
-          letting a form permanently take over the page.
-        </div>
-
-        <div className="accountsLauncherStatGrid">
-          <div className="accountsLauncherStat">
-            <div className="accountsTinyLabel">Accounts</div>
-            <div className="accountsLauncherStatValue">{totalAccounts}</div>
-          </div>
-
-          <div className="accountsLauncherStat">
-            <div className="accountsTinyLabel">Primary</div>
-            <div className="accountsLauncherStatValue accountsLauncherStatValueSmall">
-              {primaryName || "Not set"}
-            </div>
-          </div>
-
-          <div className="accountsLauncherStat">
-            <div className="accountsTinyLabel">Liquid</div>
-            <div className="accountsLauncherStatValue accountsLauncherStatValueSmall">
-              {fmtMoney(liquidTotal)}
-            </div>
-          </div>
-
-          <div className="accountsLauncherStat">
-            <div className="accountsTinyLabel">Credit</div>
-            <div className="accountsLauncherStatValue accountsLauncherStatValueSmall">
-              {fmtMoney(creditExposure)}
-            </div>
-          </div>
-        </div>
-
-        <ActionBtn variant="primary" onClick={onOpen} full>
-          <Plus size={14} /> Add Account
-        </ActionBtn>
-
-        <div className="accountsFootnote">
-          New accounts write a starting ledger entry automatically so the math stays clean.
+    <div className="accountTxRow">
+      <div>
+        <div className="accountTxTitle">{tx.note || bucket}</div>
+        <div className="accountTxSub">
+          {shortDate(tx.created_at)} • {bucket}
+          {tx.related_account_name ? ` • ${tx.related_account_name}` : ""}
+          {tx.source_type ? ` • ${String(tx.source_type).replaceAll("_", " ")}` : ""}
         </div>
       </div>
-    </GlassPane>
+
+      <div style={{ textAlign: "right" }}>
+        <div
+          className="accountTxAmount"
+          style={{ color: positive ? "#97efc7" : "#ffb4c5" }}
+        >
+          {positive ? "+" : ""}
+          {fmtMoney(delta)}
+        </div>
+        <div className="accountTxSub">Bal {fmtMoney(tx.resulting_balance)}</div>
+      </div>
+    </div>
   );
 }
 
-function LedgerItem({ item }) {
-  const tone = transactionTone(item.kind);
-  const meta = toneMeta(tone);
+function ForecastEventRow({ event }) {
+  const tone = event.kind === "income" ? "green" : "amber";
+  const afterPositive = safeNum(event.afterBalance, 0) >= 0;
 
   return (
-    <div
-      className="accountsLedgerItem"
+    <div className="accountForecastRow">
+      <div>
+        <div className="accountTxTitle">{event.label}</div>
+        <div className="accountTxSub">
+          {shortDate(event.date)} • {event.kind === "income" ? "Incoming" : "Outgoing"}
+        </div>
+      </div>
+
+      <div style={{ textAlign: "right" }}>
+        <div className="accountTxAmount" style={{ color: toneMeta(tone).text }}>
+          {event.delta >= 0 ? "+" : ""}
+          {fmtMoney(event.delta)}
+        </div>
+        <div
+          className="accountTxSub"
+          style={{ color: afterPositive ? "rgba(255,255,255,0.58)" : "#ffb4c5" }}
+        >
+          After {fmtMoney(event.afterBalance)}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TabBtn({ label, active, onClick }) {
+  return (
+    <button
+      type="button"
+      className="accountTabBtn"
+      onClick={onClick}
       style={{
-        borderColor: meta.border,
-        boxShadow: `inset 0 1px 0 rgba(255,255,255,0.03), 0 0 12px ${meta.glow}`,
+        borderColor: active ? "rgba(143,177,255,0.24)" : "rgba(214,226,255,0.10)",
+        background: active
+          ? "linear-gradient(180deg, rgba(143,177,255,0.14), rgba(143,177,255,0.06))"
+          : "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.012))",
       }}
     >
-      <div className="accountsLedgerGrid">
-        <div style={{ minWidth: 0 }}>
-          <div
-            style={{
-              display: "flex",
-              gap: 8,
-              flexWrap: "wrap",
-              alignItems: "center",
-            }}
-          >
-            <MiniPill tone={tone}>{transactionLabel(item.kind)}</MiniPill>
-            {item.relatedAccountName ? <MiniPill>{item.relatedAccountName}</MiniPill> : null}
-          </div>
-
-          <div className="accountsLedgerTitle">{item.note || "No note"}</div>
-          <div className="accountsLedgerSub">{fmtWhen(item.ts)}</div>
-        </div>
-
-        <div className="accountsLedgerRight">
-          <div className="accountsLedgerLabel">Delta</div>
-          <div
-            style={{
-              marginTop: 6,
-              fontSize: 14,
-              fontWeight: 850,
-              color: tone === "neutral" ? "#fff" : meta.text,
-            }}
-          >
-            {fmtMoneySigned(item.delta)}
-          </div>
-        </div>
-
-        <div className="accountsLedgerRight">
-          <div className="accountsLedgerLabel">Balance</div>
-          <div
-            style={{
-              marginTop: 6,
-              fontSize: 14,
-              fontWeight: 850,
-              color: "#fff",
-            }}
-          >
-            {fmtMoney(item.resultingBalance)}
-          </div>
-        </div>
-      </div>
-    </div>
+      {label}
+    </button>
   );
 }
 
-function SpendingGroupCard({ group }) {
-  const largest = group.items.reduce(
-    (max, item) => Math.max(max, safeNum(item.amount, 0)),
-    0
-  );
+function QuickInfoRow({ label, value, tone = "neutral" }) {
+  const color =
+    tone === "green"
+      ? "#97efc7"
+      : tone === "amber"
+      ? "#f5cf88"
+      : tone === "red"
+      ? "#ffb4c5"
+      : "#fff";
 
   return (
-    <div className="accountsSpendGroup">
-      <div className="accountsSpendGroupHeader">
-        <div style={{ minWidth: 0 }}>
-          <div className="accountsSpendGroupTitle">{group.label}</div>
-          <div className="accountsSpendGroupSub">
-            {group.count} transaction{group.count === 1 ? "" : "s"} • largest{" "}
-            {fmtMoney(largest)}
-          </div>
-        </div>
-
-        <MiniPill tone="green">{fmtMoney(group.total)}</MiniPill>
-      </div>
-
-      <div className="accountsSpendLineList">
-        {group.items.map((item) => (
-          <div key={item.id} className="accountsSpendLine">
-            <div style={{ minWidth: 0 }}>
-              <div className="accountsSpendLineTitle">{item.merchant || "Spending"}</div>
-              <div className="accountsSpendLineSub">
-                {shortDate(item.txDate)} •{" "}
-                {item.note || item.paymentMethod || item.categoryLabel || "No detail"}
-              </div>
-            </div>
-
-            <div className="accountsSpendLineAmount">{fmtMoney(item.amount)}</div>
-          </div>
-        ))}
-      </div>
+    <div className="accountsQuickInfoRow">
+      <span>{label}</span>
+      <span style={{ color }}>{value}</span>
     </div>
-  );
-}
-
-function SpendingHistoryModal({
-  open,
-  onClose,
-  account,
-  spendingItems,
-  linkedBills,
-  ledgerHealth,
-  range,
-  setRange,
-  groupBy,
-  setGroupBy,
-  spendSearch,
-  setSpendSearch,
-  spendSort,
-  setSpendSort,
-}) {
-  const filteredItems = useMemo(() => {
-    const q = spendSearch.trim().toLowerCase();
-
-    let list = spendingItems.filter((item) => rangeMatches(item.ts, range));
-
-    if (q) {
-      list = list.filter((item) =>
-        [
-          item.merchant,
-          item.note,
-          item.categoryLabel,
-          item.paymentMethod,
-          fmtMoney(item.amount),
-          shortDate(item.txDate),
-        ]
-          .join(" ")
-          .toLowerCase()
-          .includes(q)
-      );
-    }
-
-    if (spendSort === "amount") {
-      list.sort((a, b) => safeNum(b.amount, 0) - safeNum(a.amount, 0));
-      return list;
-    }
-
-    list.sort((a, b) => safeNum(b.ts, 0) - safeNum(a.ts, 0));
-    return list;
-  }, [spendingItems, range, spendSearch, spendSort]);
-
-  const activeBills = useMemo(() => linkedBills.filter((bill) => bill.active), [linkedBills]);
-
-  const autopayBills = useMemo(
-    () => activeBills.filter((bill) => bill.autopay),
-    [activeBills]
-  );
-
-  const autopayTotal = useMemo(
-    () => autopayBills.reduce((sum, bill) => sum + safeNum(bill.amount, 0), 0),
-    [autopayBills]
-  );
-
-  const nextAutopay = useMemo(() => {
-    return [...autopayBills]
-      .filter((bill) => bill.dueDate)
-      .sort(
-        (a, b) =>
-          new Date(`${String(a.dueDate).slice(0, 10)}T12:00:00`).getTime() -
-          new Date(`${String(b.dueDate).slice(0, 10)}T12:00:00`).getTime()
-      )[0];
-  }, [autopayBills]);
-
-  const topBills = useMemo(() => {
-    return [...activeBills]
-      .sort(
-        (a, b) =>
-          new Date(`${String(a.dueDate || "9999-12-31").slice(0, 10)}T12:00:00`).getTime() -
-          new Date(`${String(b.dueDate || "9999-12-31").slice(0, 10)}T12:00:00`).getTime()
-      )
-      .slice(0, 6);
-  }, [activeBills]);
-
-  const totals = useMemo(() => {
-    const total = filteredItems.reduce((sum, item) => sum + safeNum(item.amount, 0), 0);
-    const count = filteredItems.length;
-    const avg = count ? round2(total / count) : 0;
-
-    const merchants = new Set(
-      filteredItems.map((item) => normalizeLooseText(item.merchant || "Spending"))
-    );
-
-    const grouped = new Map();
-    filteredItems.forEach((item) => {
-      const key = groupBy === "merchant" ? item.merchant || "Spending" : item.categoryLabel;
-      grouped.set(key, round2((grouped.get(key) || 0) + safeNum(item.amount, 0)));
-    });
-
-    const topGroup = [...grouped.entries()].sort((a, b) => b[1] - a[1])[0];
-
-    return {
-      total,
-      count,
-      avg,
-      merchants: merchants.size,
-      topLabel: topGroup?.[0] || "—",
-      topAmount: topGroup?.[1] || 0,
-    };
-  }, [filteredItems, groupBy]);
-
-  const groupedItems = useMemo(() => {
-    const map = new Map();
-
-    filteredItems.forEach((item) => {
-      const key = groupBy === "merchant" ? item.merchant || "Spending" : item.categoryLabel;
-      const existing = map.get(key);
-
-      if (existing) {
-        existing.total = round2(existing.total + safeNum(item.amount, 0));
-        existing.count += 1;
-        existing.items.push(item);
-      } else {
-        map.set(key, {
-          key,
-          label: key,
-          total: round2(safeNum(item.amount, 0)),
-          count: 1,
-          items: [item],
-        });
-      }
-    });
-
-    return [...map.values()]
-      .map((group) => ({
-        ...group,
-        items:
-          spendSort === "amount"
-            ? [...group.items].sort((a, b) => safeNum(b.amount, 0) - safeNum(a.amount, 0))
-            : [...group.items].sort((a, b) => safeNum(b.ts, 0) - safeNum(a.ts, 0)),
-      }))
-      .sort((a, b) => b.total - a.total);
-  }, [filteredItems, groupBy, spendSort]);
-
-  const accountTone = account ? typeTone(account.type) : "neutral";
-  const balanceLabel = account && isCreditType(account.type) ? "Balance Owed" : "Current Balance";
-
-  return (
-    <Modal
-      open={open}
-      onClose={onClose}
-      width={1320}
-      tone={accountTone}
-      chrome="command"
-      title={account ? `${account.name} Spending History` : "Spending History"}
-      subtitle="A tighter command overlay for account-linked spending, grouped to the account you clicked."
-    >
-      <div className="accountsSpendModalStack">
-        <div className="accountsSpendHeroShell">
-          <div className="accountsSpendHeroHeader">
-            <div style={{ minWidth: 0 }}>
-              <div className="accountsEyebrow">Account spending lens</div>
-              <div className="accountsSpendHeroTitle">
-                {account ? account.name : "Spending History"}
-              </div>
-              <div className="accountsSpendHeroSub">
-                Focused to one account so you can sanity-check real spending, linked bills,
-                and ledger drift without leaving the page.
-              </div>
-            </div>
-
-            <div className="accountsSpendHeroPills">
-              {account ? (
-                <MiniPill tone={accountTone}>
-                  {typeEmoji(account.type)} {typeLabel(account.type)}
-                </MiniPill>
-              ) : null}
-              {account ? (
-                <MiniPill>
-                  {balanceLabel} • {fmtMoney(account.balance)}
-                </MiniPill>
-              ) : null}
-              <MiniPill tone={ledgerHealth.aligned ? "green" : "red"}>
-                {ledgerHealth.hasLedger
-                  ? ledgerHealth.aligned
-                    ? "Ledger aligned"
-                    : `${fmtMoney(Math.abs(ledgerHealth.diff))} drift`
-                  : "No ledger yet"}
-              </MiniPill>
-            </div>
-          </div>
-
-          <div className="accountsSpendSummaryGrid accountsSpendSummaryGridCommand">
-            <div className="accountsSpendHeroStat">
-              <div className="accountsTinyLabel">Total Spent</div>
-              <div className="accountsSpendHeroStatValue">{fmtMoney(totals.total)}</div>
-              <div className="accountsInfoSub">
-                {totals.count} transaction{totals.count === 1 ? "" : "s"} in this filtered view
-              </div>
-            </div>
-
-            <div className="accountsSpendHeroStat">
-              <div className="accountsTinyLabel">Top Group</div>
-              <div className="accountsSpendHeroStatValue accountsSpendHeroStatValueText">
-                {totals.topLabel}
-              </div>
-              <div className="accountsInfoSub">{fmtMoney(totals.topAmount)}</div>
-            </div>
-
-            <div className="accountsSpendHeroStat">
-              <div className="accountsTinyLabel">Merchants</div>
-              <div className="accountsSpendHeroStatValue">{totals.merchants}</div>
-              <div className="accountsInfoSub">Unique merchants in the current filter</div>
-            </div>
-
-            <div className="accountsSpendHeroStat">
-              <div className="accountsTinyLabel">Autopay Load</div>
-              <div className="accountsSpendHeroStatValue">{fmtMoney(autopayTotal)}</div>
-              <div className="accountsInfoSub">
-                {autopayBills.length} autopay bill{autopayBills.length === 1 ? "" : "s"}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="accountsSpendControlShell">
-          <div className="accountsSpendControls">
-            <div className="accountsSearchWrap">
-              <Search size={15} />
-              <input
-                className="accountsField accountsSearchField"
-                placeholder="Search merchant, note, category"
-                value={spendSearch}
-                onChange={(e) => setSpendSearch(e.target.value)}
-              />
-            </div>
-
-            <select
-              className="accountsField"
-              value={range}
-              onChange={(e) => setRange(e.target.value)}
-            >
-              <option value="month">This month</option>
-              <option value="30">Last 30 days</option>
-              <option value="90">Last 90 days</option>
-              <option value="all">All history</option>
-            </select>
-
-            <select
-              className="accountsField"
-              value={groupBy}
-              onChange={(e) => setGroupBy(e.target.value)}
-            >
-              <option value="category">Group by category</option>
-              <option value="merchant">Group by merchant</option>
-            </select>
-
-            <select
-              className="accountsField"
-              value={spendSort}
-              onChange={(e) => setSpendSort(e.target.value)}
-            >
-              <option value="recent">Recent first</option>
-              <option value="amount">Largest first</option>
-            </select>
-          </div>
-        </div>
-
-        <div className="accountsSpendContentGrid accountsSpendContentGridCommand">
-          <div className="accountsSpendPrimaryPane">
-            <div className="accountsSpendSectionHead">
-              <div style={{ minWidth: 0 }}>
-                <div className="accountsSpendSectionTitle">Grouped activity</div>
-                <div className="accountsSpendSectionSub">
-                  {groupedItems.length
-                    ? `Grouped by ${groupBy === "category" ? "category" : "merchant"} so the biggest buckets rise first.`
-                    : "Nothing hit this account and filter combination yet."}
-                </div>
-              </div>
-
-              <MiniPill>
-                {groupedItems.length} group{groupedItems.length === 1 ? "" : "s"}
-              </MiniPill>
-            </div>
-
-            {groupedItems.length ? (
-              <div className="accountsSpendGroupList accountsSpendGroupListCommand">
-                {groupedItems.map((group) => (
-                  <SpendingGroupCard key={group.key} group={group} />
-                ))}
-              </div>
-            ) : (
-              <div className="accountsSpendEmptyCard">
-                <div className="accountsSpendEmptyIcon">
-                  <History size={18} />
-                </div>
-                <div className="accountsEmptyTitle">No spending linked to this account yet</div>
-                <div className="accountsEmptyText">
-                  Nothing matched the selected range and account link. That usually means the
-                  filter window is too tight, the spending rows are tied to another account,
-                  or this account simply has no posted spending yet.
-                </div>
-
-                <div className="accountsSpendEmptyList">
-                  <div>• Try Last 30 Days or All History.</div>
-                  <div>• Check that spending rows carry this account ID or account name.</div>
-                  <div>• Compare against the ledger on the main Accounts page if the math feels off.</div>
-                </div>
-
-                <div className="accountsSpendEmptyActions">
-                  <ActionBtn onClick={() => setRange("all")}>Show All History</ActionBtn>
-                  <ActionBtn
-                    onClick={() =>
-                      setGroupBy(groupBy === "category" ? "merchant" : "category")
-                    }
-                  >
-                    {groupBy === "category" ? "Group by Merchant" : "Group by Category"}
-                  </ActionBtn>
-                </div>
-              </div>
-            )}
-          </div>
-
-          <div className="accountsSpendRail">
-            <div className="accountsSpendRailCard accountsSpendRailCardStrong">
-              <div className="accountsTinyLabel">{balanceLabel}</div>
-              <div className="accountsSpendRailValue">
-                {account ? fmtMoney(account.balance) : "—"}
-              </div>
-              <div className="accountsInfoSub">
-                {account ? `${typeLabel(account.type)} account` : "No account selected"}
-              </div>
-
-              <div className="accountsSpendRailMetricGrid">
-                <div className="accountsSpendRailMetric">
-                  <div className="accountsTinyLabel">Average Ticket</div>
-                  <div className="accountsSpendRailMetricValue">{fmtMoney(totals.avg)}</div>
-                </div>
-
-                <div className="accountsSpendRailMetric">
-                  <div className="accountsTinyLabel">Ledger Math</div>
-                  <div className="accountsSpendRailMetricValue">
-                    {ledgerHealth.hasLedger
-                      ? ledgerHealth.aligned
-                        ? "Aligned"
-                        : `${fmtMoney(Math.abs(ledgerHealth.diff))} off`
-                      : "No ledger yet"}
-                  </div>
-                </div>
-
-                <div className="accountsSpendRailMetric">
-                  <div className="accountsTinyLabel">Linked Bills</div>
-                  <div className="accountsSpendRailMetricValue">
-                    {activeBills.length} active
-                  </div>
-                </div>
-
-                <div className="accountsSpendRailMetric">
-                  <div className="accountsTinyLabel">Next Autopay</div>
-                  <div className="accountsSpendRailMetricValue">
-                    {nextAutopay ? shortDate(nextAutopay.dueDate) : "None"}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="accountsSpendRailCard">
-              <div className="accountsSpendSectionHead accountsSpendSectionHeadTight">
-                <div style={{ minWidth: 0 }}>
-                  <div className="accountsSpendSectionTitle">Bills & Autopay</div>
-                  <div className="accountsSpendSectionSub">
-                    Bills tied to this account so you can check the money path fast.
-                  </div>
-                </div>
-
-                <MiniPill>
-                  {activeBills.length} linked
-                </MiniPill>
-              </div>
-
-              {topBills.length ? (
-                <div className="accountsMiniBillList accountsMiniBillListCommand">
-                  {topBills.map((bill) => {
-                    const days = daysUntilDate(bill.dueDate);
-
-                    return (
-                      <div key={bill.id} className="accountsMiniBillRow">
-                        <div style={{ minWidth: 0 }}>
-                          <div className="accountsMiniBillTitle">{bill.name}</div>
-                          <div className="accountsMiniBillSub">
-                            {shortDate(bill.dueDate)} • {bill.category || "No category"}
-                          </div>
-                        </div>
-
-                        <div style={{ display: "grid", gap: 6, justifyItems: "end" }}>
-                          <MiniPill tone={bill.autopay ? "green" : "amber"}>
-                            {bill.autopay ? "Autopay" : "Manual"}
-                          </MiniPill>
-                          <div className="accountsMiniBillAmount">{fmtMoney(bill.amount)}</div>
-                          {days !== null ? (
-                            <div className="accountsMiniBillDays">
-                              {days === 0
-                                ? "Due today"
-                                : days > 0
-                                ? `${days}d left`
-                                : `${Math.abs(days)}d late`}
-                            </div>
-                          ) : null}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div className="accountsSpendRailEmpty">
-                  <div className="accountsEmptyTitle" style={{ fontSize: 15 }}>
-                    No linked bills
-                  </div>
-                  <div className="accountsEmptyText" style={{ maxWidth: "none" }}>
-                    Bills need a matching account ID or account name to show here.
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-    </Modal>
   );
 }
 
 export default function AccountsPage() {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [pageError, setPageError] = useState("");
-  const [status, setStatus] = useState("");
-
   const [accounts, setAccounts] = useState([]);
-  const [primaryId, setPrimaryId] = useState("");
-  const [ledger, setLedger] = useState([]);
-  const [spendingRows, setSpendingRows] = useState([]);
+  const [transactions, setTransactions] = useState([]);
   const [bills, setBills] = useState([]);
-
-  const [query, setQuery] = useState("");
-  const [typeFilter, setTypeFilter] = useState("all");
-  const [sort, setSort] = useState("updated");
-  const [ledgerSearch, setLedgerSearch] = useState("");
-
-  const [adding, setAdding] = useState({
-    name: "",
-    type: "checking",
-    balance: "",
-  });
-  const [addingBusy, setAddingBusy] = useState(false);
-
+  const [incomeRows, setIncomeRows] = useState([]);
+  const [defaultAccountId, setDefaultAccountId] = useState("");
+  const [defaultAccountName, setDefaultAccountName] = useState("");
   const [selectedAccountId, setSelectedAccountId] = useState("");
-  const selectedAccountIdRef = useRef("");
+  const [accountSearch, setAccountSearch] = useState("");
+  const [accountFilter, setAccountFilter] = useState("all");
+  const [tab, setTab] = useState("activity");
+  const [loading, setLoading] = useState(true);
+  const [userId, setUserId] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [safeBufferMap, setSafeBufferMap] = useState({});
+  const [adjustForm, setAdjustForm] = useState({
+    mode: "add",
+    amount: "",
+    note: "",
+  });
+  const [transferForm, setTransferForm] = useState({
+    toAccountId: "",
+    amount: "",
+    note: "",
+  });
 
-  const [rowMenuId, setRowMenuId] = useState("");
-  const [focusMenuOpen, setFocusMenuOpen] = useState(false);
-
-  const [modalOpen, setModalOpen] = useState(false);
-  const [modalType, setModalType] = useState("adjust");
-  const [modalAccountId, setModalAccountId] = useState("");
-  const [amount, setAmount] = useState("");
-  const [note, setNote] = useState("");
-  const [adjustMode, setAdjustMode] = useState("increase");
-  const [transferToId, setTransferToId] = useState("");
-  const [editName, setEditName] = useState("");
-  const [editType, setEditType] = useState("checking");
-  const [modalBusy, setModalBusy] = useState(false);
-
-  const [spendModalOpen, setSpendModalOpen] = useState(false);
-  const [spendModalAccountId, setSpendModalAccountId] = useState("");
-  const [spendRange, setSpendRange] = useState("month");
-  const [spendGroupBy, setSpendGroupBy] = useState("category");
-  const [spendSearch, setSpendSearch] = useState("");
-  const [spendSort, setSpendSort] = useState("recent");
-
-  useEffect(() => {
-    selectedAccountIdRef.current = selectedAccountId;
-  }, [selectedAccountId]);
-
-  useEffect(() => {
-    if (!status) return undefined;
-    const id = window.setTimeout(() => setStatus(""), 3200);
-    return () => window.clearTimeout(id);
-  }, [status]);
-
-  const loadData = useCallback(async (userId, preferredSelectedId = "") => {
-    if (!userId || !supabase) return;
-
-    const [accRes, settingsRes, ledgerRes, spendingRes, billsRes] = await Promise.all([
-      supabase
-        .from("accounts")
-        .select("*")
-        .eq("user_id", userId)
-        .order("updated_at", { ascending: false }),
-
-      supabase
-        .from("account_settings")
-        .select("*")
-        .eq("user_id", userId)
-        .maybeSingle(),
-
-      supabase
-        .from("account_transactions")
-        .select("*")
-        .eq("user_id", userId)
-        .order("created_at", { ascending: false }),
-
-      supabase
-        .from("spending_transactions")
-        .select("*")
-        .eq("user_id", userId)
-        .order("tx_date", { ascending: false }),
-
-      supabase
-        .from("bills")
-        .select("*")
-        .eq("user_id", userId)
-        .order("updated_at", { ascending: false }),
-    ]);
-
-    if (accRes.error) throw accRes.error;
-    if (settingsRes.error) throw settingsRes.error;
-    if (ledgerRes.error) throw ledgerRes.error;
-    if (spendingRes.error) throw spendingRes.error;
-    if (billsRes.error) throw billsRes.error;
-
-    const loadedAccounts = (accRes.data || []).map(mapAccountRowToClient);
-    const loadedLedger = (ledgerRes.data || []).map(mapLedgerRowToClient);
-    const loadedSpending = (spendingRes.data || [])
-      .map(mapSpendingRowToClient)
-      .filter(isExpenseLikeSpending);
-    const loadedBills = (billsRes.data || []).map(mapBillRowToClient);
-
-    const storedPrimary = settingsRes.data?.primary_account_id || "";
-
-    const resolvedPrimary =
-      storedPrimary && loadedAccounts.some((a) => a.id === storedPrimary)
-        ? storedPrimary
-        : loadedAccounts[0]?.id || "";
-
-    if (resolvedPrimary && resolvedPrimary !== storedPrimary) {
-      const healPrimary = await supabase.from("account_settings").upsert(
-        {
-          user_id: userId,
-          primary_account_id: resolvedPrimary,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: "user_id" }
-      );
-
-      if (healPrimary.error) {
-        throw healPrimary.error;
-      }
+  async function loadAccountsPage() {
+    if (!supabase) {
+      setLoading(false);
+      return;
     }
 
-    const fallbackSelected =
-      preferredSelectedId ||
-      selectedAccountIdRef.current ||
-      resolvedPrimary ||
-      loadedAccounts[0]?.id ||
-      "";
+    setLoading(true);
 
-    const resolvedSelected = loadedAccounts.some((a) => a.id === fallbackSelected)
-      ? fallbackSelected
-      : resolvedPrimary || loadedAccounts[0]?.id || "";
+    const {
+      data: { session },
+      error: sessionError,
+    } = await supabase.auth.getSession();
+
+    if (sessionError || !session?.user) {
+      setUserId(null);
+      setAccounts([]);
+      setTransactions([]);
+      setBills([]);
+      setIncomeRows([]);
+      setDefaultAccountId("");
+      setDefaultAccountName("");
+      setSelectedAccountId("");
+      setLoading(false);
+      return;
+    }
+
+    setUserId(session.user.id);
+
+    const [accountsRes, txRes, settingsRes, billsRes, incomeRes] = await Promise.all([
+      supabase
+        .from("accounts")
+        .select("id, user_id, name, account_type, balance, updated_at")
+        .eq("user_id", session.user.id)
+        .order("name", { ascending: true }),
+      supabase
+        .from("account_transactions")
+        .select(
+          "id, user_id, account_id, kind, amount, delta, resulting_balance, note, related_account_id, related_account_name, source_type, source_id, created_at"
+        )
+        .eq("user_id", session.user.id)
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("account_settings")
+        .select("primary_account_id")
+        .eq("user_id", session.user.id)
+        .maybeSingle(),
+      supabase
+        .from("bills")
+        .select(
+          "id, user_id, account_id, amount, due_date, active, category, notes, frequency, min_pay, extra_pay, balance"
+        )
+        .eq("user_id", session.user.id)
+        .order("due_date", { ascending: true }),
+      supabase
+        .from("income_deposits")
+        .select("id, user_id, source, amount, note, deposit_date, created_at, updated_at")
+        .eq("user_id", session.user.id)
+        .order("deposit_date", { ascending: true }),
+    ]);
+
+    if (accountsRes.error) console.error("load accounts error:", accountsRes.error);
+    if (txRes.error) console.error("load transactions error:", txRes.error);
+    if (settingsRes.error) console.error("load account settings error:", settingsRes.error);
+    if (billsRes.error) console.error("load bills error:", billsRes.error);
+    if (incomeRes.error) console.error("load income routing error:", incomeRes.error);
+
+    const loadedAccounts = accountsRes.data || [];
+    const primaryAccountId = settingsRes.data?.primary_account_id || "";
+    const primaryAccount =
+      loadedAccounts.find((account) => account.id === primaryAccountId) || null;
 
     setAccounts(loadedAccounts);
-    setPrimaryId(resolvedPrimary);
-    setSelectedAccountId(resolvedSelected);
-    setLedger(loadedLedger);
-    setSpendingRows(loadedSpending);
-    setBills(loadedBills);
+    setTransactions(txRes.data || []);
+    setBills((billsRes.data || []).filter((row) => row.active !== false));
+    setIncomeRows(incomeRes.data || []);
+    setDefaultAccountId(primaryAccountId);
+    setDefaultAccountName(primaryAccount?.name || "");
+    setSelectedAccountId((prev) => prev || loadedAccounts[0]?.id || "");
+    setLoading(false);
+  }
+
+  useEffect(() => {
+    loadAccountsPage();
+
+    if (!supabase) return;
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(() => {
+      loadAccountsPage();
+    });
+
+    return () => {
+      subscription?.unsubscribe?.();
+    };
   }, []);
 
   useEffect(() => {
-    let mounted = true;
-
-    async function bootstrap() {
-      try {
-        setPageError("");
-        setLoading(true);
-
-        if (!supabase) throw new Error("Supabase is not configured.");
-
-        const {
-          data: { user: currentUser },
-          error: userErr,
-        } = await supabase.auth.getUser();
-
-        if (userErr) throw userErr;
-        if (!mounted) return;
-
-        setUser(currentUser || null);
-
-        if (!currentUser) {
-          setLoading(false);
-          return;
-        }
-
-        await loadData(currentUser.id);
-      } catch (err) {
-        if (!mounted) return;
-        setPageError(err?.message || "Failed to load accounts.");
-      } finally {
-        if (mounted) setLoading(false);
+    if (typeof window === "undefined") return;
+    try {
+      const raw = window.localStorage.getItem(SAFE_BUFFER_STORAGE_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === "object") {
+        setSafeBufferMap(parsed);
       }
+    } catch {
+      //
     }
+  }, []);
 
-    bootstrap();
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem(SAFE_BUFFER_STORAGE_KEY, JSON.stringify(safeBufferMap));
+    } catch {
+      //
+    }
+  }, [safeBufferMap]);
 
-    return () => {
-      mounted = false;
-    };
-  }, [loadData]);
+  const summaryById = useMemo(() => {
+    const now = new Date();
+    const todayIso = dateInputToday();
+    const next14Iso = addDays(new Date(), 14).toISOString().slice(0, 10);
+    const next30Iso = addDays(new Date(), 30).toISOString().slice(0, 10);
+    const monthStartIso = monthStart(now).toISOString();
+    const monthEndIso = monthEnd(now).toISOString().slice(0, 10);
 
-  const selectedAccount = useMemo(
-    () => accounts.find((a) => a.id === selectedAccountId) || null,
-    [accounts, selectedAccountId]
-  );
+    const txMap = new Map(accounts.map((account) => [account.id, []]));
+    transactions.forEach((tx) => {
+      if (!txMap.has(tx.account_id)) return;
+      txMap.get(tx.account_id).push({
+        ...tx,
+        delta: round2(tx.delta),
+        resulting_balance: round2(tx.resulting_balance),
+      });
+    });
 
-  const modalAccount = useMemo(
-    () => accounts.find((a) => a.id === modalAccountId) || null,
-    [accounts, modalAccountId]
-  );
+    const billMap = new Map(accounts.map((account) => [account.id, []]));
+    bills.forEach((bill) => {
+      if (!bill.account_id || !billMap.has(bill.account_id)) return;
+      billMap.get(bill.account_id).push(bill);
+    });
 
-  const spendModalAccount = useMemo(
-    () => accounts.find((a) => a.id === spendModalAccountId) || null,
-    [accounts, spendModalAccountId]
-  );
+    const upcomingIncomeMap = new Map(accounts.map((account) => [account.id, []]));
+    incomeRows.forEach((row) => {
+      const routed = getIncomeRouting(row, defaultAccountId);
+      if (routed.posted || routed.status !== "scheduled") return;
 
-  const totals = useMemo(() => {
-    const liquid = accounts
-      .filter((a) => isLiquidType(a.type))
-      .reduce((sum, a) => sum + safeNum(a.balance, 0), 0);
+      routed.shares.forEach((share) => {
+        if (!upcomingIncomeMap.has(share.accountId)) return;
+        upcomingIncomeMap.get(share.accountId).push({
+          id: `${routed.id}-${share.accountId}`,
+          income_id: routed.id,
+          source: routed.source,
+          deposit_date: routed.deposit_date,
+          amount: round2(share.amount),
+        });
+      });
+    });
 
-    const invest = accounts
-      .filter((a) => isInvestmentType(a.type))
-      .reduce((sum, a) => sum + safeNum(a.balance, 0), 0);
+    const result = {};
 
-    const creditExposure = accounts
-      .filter((a) => isCreditType(a.type))
-      .reduce((sum, a) => sum + Math.max(safeNum(a.balance, 0), 0), 0);
+    accounts.forEach((account) => {
+      const accountTxs = (txMap.get(account.id) || []).sort(
+        (a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
+      );
 
-    const assetBalances = accounts
-      .filter((a) => !isCreditType(a.type))
-      .reduce((sum, a) => sum + safeNum(a.balance, 0), 0);
+      const monthTxs = accountTxs.filter(
+        (tx) => new Date(tx.created_at || 0).getTime() >= new Date(monthStartIso).getTime()
+      );
 
-    const liabilityNet = accounts
-      .filter((a) => isCreditType(a.type))
-      .reduce((sum, a) => sum + safeNum(a.balance, 0), 0);
+      const last30Cutoff = addDays(new Date(), -30).getTime();
+      const last30Delta = round2(
+        accountTxs
+          .filter((tx) => new Date(tx.created_at || 0).getTime() >= last30Cutoff)
+          .reduce((sum, tx) => sum + safeNum(tx.delta, 0), 0)
+      );
 
-    const netWorth = round2(assetBalances - liabilityNet);
+      const monthIncome = round2(
+        monthTxs
+          .filter((tx) => safeNum(tx.delta, 0) > 0 && !isTransferRow(tx))
+          .reduce((sum, tx) => sum + safeNum(tx.delta, 0), 0)
+      );
 
-    const updatedMax = accounts.reduce((mx, a) => Math.max(mx, safeNum(a.updatedAt, 0)), 0);
+      const monthBills = round2(
+        monthTxs
+          .filter((tx) => safeNum(tx.delta, 0) < 0 && isBillRow(tx))
+          .reduce((sum, tx) => sum + Math.abs(safeNum(tx.delta, 0)), 0)
+      );
 
-    return {
-      liquid: round2(liquid),
-      invest: round2(invest),
-      creditExposure: round2(creditExposure),
-      assetBalances: round2(assetBalances),
-      liabilityNet: round2(liabilityNet),
-      netWorth,
-      updatedMax,
-    };
+      const monthSpending = round2(
+        monthTxs
+          .filter((tx) => safeNum(tx.delta, 0) < 0 && !isBillRow(tx) && !isTransferRow(tx))
+          .reduce((sum, tx) => sum + Math.abs(safeNum(tx.delta, 0)), 0)
+      );
+
+      const monthTransfersNet = round2(
+        monthTxs
+          .filter((tx) => isTransferRow(tx))
+          .reduce((sum, tx) => sum + safeNum(tx.delta, 0), 0)
+      );
+
+      const monthNet = round2(monthTxs.reduce((sum, tx) => sum + safeNum(tx.delta, 0), 0));
+      const startBalance = round2(safeNum(account.balance, 0) - monthNet);
+
+      const upcomingBills = (billMap.get(account.id) || [])
+        .filter((bill) => bill.due_date && String(bill.due_date).slice(0, 10) >= todayIso)
+        .sort(
+          (a, b) => new Date(a.due_date || 0).getTime() - new Date(b.due_date || 0).getTime()
+        );
+
+      const scheduledDeposits = (upcomingIncomeMap.get(account.id) || [])
+        .filter((item) => item.deposit_date && String(item.deposit_date).slice(0, 10) >= todayIso)
+        .sort(
+          (a, b) =>
+            new Date(a.deposit_date || 0).getTime() - new Date(b.deposit_date || 0).getTime()
+        );
+
+      const nextBill = upcomingBills[0] || null;
+      const nextIncome = scheduledDeposits[0] || null;
+
+      const bill14 = round2(
+        upcomingBills
+          .filter((bill) => String(bill.due_date).slice(0, 10) <= next14Iso)
+          .reduce((sum, bill) => sum + amountFromBill(bill), 0)
+      );
+
+      const income14 = round2(
+        scheduledDeposits
+          .filter((item) => String(item.deposit_date).slice(0, 10) <= next14Iso)
+          .reduce((sum, item) => sum + safeNum(item.amount, 0), 0)
+      );
+
+      const futureBillsMonth = round2(
+        upcomingBills
+          .filter((bill) => String(bill.due_date).slice(0, 10) <= monthEndIso)
+          .reduce((sum, bill) => sum + amountFromBill(bill), 0)
+      );
+
+      const futureIncomeMonth = round2(
+        scheduledDeposits
+          .filter((item) => String(item.deposit_date).slice(0, 10) <= monthEndIso)
+          .reduce((sum, item) => sum + safeNum(item.amount, 0), 0)
+      );
+
+      const safeBuffer = safeNum(safeBufferMap[account.id], 150);
+      const projected14 = round2(safeNum(account.balance, 0) + income14 - bill14);
+      const projectedMonthEnd = round2(
+        safeNum(account.balance, 0) + futureIncomeMonth - futureBillsMonth
+      );
+
+      const projectionEvents = [
+        ...scheduledDeposits
+          .filter((item) => String(item.deposit_date).slice(0, 10) <= next30Iso)
+          .map((item) => ({
+            id: `income-${item.id}`,
+            kind: "income",
+            date: item.deposit_date,
+            label: item.source || "Scheduled income",
+            delta: round2(item.amount),
+          })),
+        ...upcomingBills
+          .filter((bill) => String(bill.due_date).slice(0, 10) <= next30Iso)
+          .map((bill) => ({
+            id: `bill-${bill.id}`,
+            kind: "bill",
+            date: bill.due_date,
+            label: billTitle(bill),
+            delta: round2(-amountFromBill(bill)),
+          })),
+      ].sort((a, b) => new Date(a.date || 0).getTime() - new Date(b.date || 0).getTime());
+
+      let running = round2(account.balance);
+      let lowPoint = running;
+
+      const projectionEventsWithAfter = projectionEvents.map((event) => {
+        running = round2(running + safeNum(event.delta, 0));
+        if (running < lowPoint) lowPoint = running;
+
+        return {
+          ...event,
+          afterBalance: running,
+        };
+      });
+
+      const flowMixMap = new Map();
+      monthTxs.forEach((tx) => {
+        const key = flowBucket(tx);
+        const existing = flowMixMap.get(key) || { label: key, total: 0 };
+        existing.total = round2(existing.total + safeNum(tx.delta, 0));
+        flowMixMap.set(key, existing);
+      });
+
+      result[account.id] = {
+        account,
+        transactions: accountTxs,
+        recentTransactions: accountTxs.slice(0, 40),
+        last30Delta,
+        startBalance,
+        monthIncome,
+        monthBills,
+        monthSpending,
+        monthTransfersNet,
+        nextBill,
+        nextIncome,
+        upcomingBills,
+        scheduledDeposits,
+        safeBuffer,
+        projected14,
+        projectedMonthEnd,
+        projectedLowPoint: round2(lowPoint),
+        projectionEvents: projectionEventsWithAfter,
+        atRisk: projected14 < safeBuffer || lowPoint < 0,
+        flowMix: [...flowMixMap.values()].sort((a, b) => Math.abs(b.total) - Math.abs(a.total)),
+      };
+    });
+
+    return result;
+  }, [accounts, transactions, bills, incomeRows, defaultAccountId, safeBufferMap]);
+
+  const totalCash = useMemo(() => {
+    return round2(accounts.reduce((sum, account) => sum + safeNum(account.balance, 0), 0));
   }, [accounts]);
 
-  const filteredAccounts = useMemo(() => {
-    let list = [...accounts];
-    const q = query.trim().toLowerCase();
-
-    if (q) {
-      list = list.filter((a) => {
-        const hay = `${a.name} ${typeLabel(a.type)}`.toLowerCase();
-        return hay.includes(q);
-      });
-    }
-
-    if (typeFilter !== "all") {
-      list = list.filter((a) => normalizeType(a.type) === typeFilter);
-    }
-
-    if (sort === "name") {
-      list.sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")));
-    } else if (sort === "balance") {
-      list.sort(
-        (a, b) => Math.abs(safeNum(b.balance, 0)) - Math.abs(safeNum(a.balance, 0))
-      );
-    } else {
-      list.sort((a, b) => safeNum(b.updatedAt, 0) - safeNum(a.updatedAt, 0));
-    }
-
-    if (primaryId) {
-      list.sort((a, b) => (a.id === primaryId ? -1 : b.id === primaryId ? 1 : 0));
-    }
-
-    return list;
-  }, [accounts, query, typeFilter, sort, primaryId]);
-
-  const selectedLedger = useMemo(() => {
-    if (!selectedAccountId) return [];
-    const q = ledgerSearch.trim().toLowerCase();
-
-    return ledger
-      .filter((x) => x.accountId === selectedAccountId)
-      .filter((x) => {
-        if (!q) return true;
-        const hay = [
-          transactionLabel(x.kind),
-          x.note,
-          x.relatedAccountName,
-          fmtMoney(x.amount),
-          fmtMoney(x.resultingBalance),
-        ]
-          .join(" ")
-          .toLowerCase();
-        return hay.includes(q);
-      })
-      .sort((a, b) => safeNum(b.ts, 0) - safeNum(a.ts, 0));
-  }, [ledger, selectedAccountId, ledgerSearch]);
-
-  const selectedAccountBills = useMemo(() => {
-    if (!selectedAccount) return [];
-    return bills.filter((bill) => billMatchesAccount(bill, selectedAccount));
-  }, [bills, selectedAccount]);
-
-  const selectedAccountSpendRows = useMemo(() => {
-    if (!selectedAccount) return [];
-    return spendingRows.filter((row) => spendingMatchesAccount(row, selectedAccount));
-  }, [spendingRows, selectedAccount]);
-
-  const selectedSpendMonth = useMemo(() => {
+  const checkingTotal = useMemo(() => {
     return round2(
-      selectedAccountSpendRows
-        .filter((item) => rangeMatches(item.ts, "month"))
-        .reduce((sum, item) => sum + safeNum(item.amount, 0), 0)
+      accounts
+        .filter((account) => String(account.account_type || "").toLowerCase().includes("checking"))
+        .reduce((sum, account) => sum + safeNum(account.balance, 0), 0)
     );
-  }, [selectedAccountSpendRows]);
+  }, [accounts]);
 
-  const selectedSpend30 = useMemo(() => {
+  const savingsTotal = useMemo(() => {
     return round2(
-      selectedAccountSpendRows
-        .filter((item) => rangeMatches(item.ts, "30"))
-        .reduce((sum, item) => sum + safeNum(item.amount, 0), 0)
+      accounts
+        .filter((account) => String(account.account_type || "").toLowerCase().includes("savings"))
+        .reduce((sum, account) => sum + safeNum(account.balance, 0), 0)
     );
-  }, [selectedAccountSpendRows]);
+  }, [accounts]);
 
-  const selectedLedgerHealth = useMemo(() => {
-    if (!selectedAccount) {
+  const atRiskCount = useMemo(() => {
+    return accounts.filter((account) => summaryById[account.id]?.atRisk).length;
+  }, [accounts, summaryById]);
+
+  const visibleAccounts = useMemo(() => {
+    const q = accountSearch.trim().toLowerCase();
+
+    return accounts.filter((account) => {
+      const summary = summaryById[account.id];
+      if (accountFilter === "at_risk" && !summary?.atRisk) return false;
+      if (accountFilter !== "all" && accountFilter !== "at_risk") {
+        if (!typeMatches(account.account_type, accountFilter)) return false;
+      }
+
+      if (!q) return true;
+
+      return [account.name, normalizeAccountType(account.account_type)]
+        .join(" ")
+        .toLowerCase()
+        .includes(q);
+    });
+  }, [accounts, accountSearch, accountFilter, summaryById]);
+
+  useEffect(() => {
+    if (!visibleAccounts.length) {
+      setSelectedAccountId("");
+      return;
+    }
+
+    const exists = visibleAccounts.some((account) => account.id === selectedAccountId);
+    if (!exists) {
+      setSelectedAccountId(visibleAccounts[0].id);
+    }
+  }, [visibleAccounts, selectedAccountId]);
+
+  const selectedAccount =
+    accounts.find((account) => account.id === selectedAccountId) || visibleAccounts[0] || null;
+
+  const selectedSummary = selectedAccount ? summaryById[selectedAccount.id] : null;
+
+  const selectedBars = useMemo(() => {
+    if (!selectedSummary || !selectedAccount) return [];
+    return buildBalanceBars(selectedSummary.transactions, selectedAccount.balance, 14);
+  }, [selectedSummary, selectedAccount?.id, selectedAccount?.balance]);
+
+  useEffect(() => {
+    if (!selectedAccount) return;
+    setTransferForm((prev) => {
+      if (prev.toAccountId && prev.toAccountId !== selectedAccount.id) return prev;
+      const fallback = accounts.find((account) => account.id !== selectedAccount.id)?.id || "";
       return {
-        hasLedger: false,
-        aligned: true,
-        diff: 0,
-        latestBalance: 0,
+        ...prev,
+        toAccountId: fallback,
       };
-    }
+    });
+  }, [selectedAccount?.id, accounts]);
 
-    const related = ledger
-      .filter((item) => item.accountId === selectedAccount.id)
-      .sort((a, b) => safeNum(b.ts, 0) - safeNum(a.ts, 0));
+  async function setPrimaryAccount() {
+    if (!supabase || !userId || !selectedAccount || busy) return;
 
-    if (!related.length) {
-      return {
-        hasLedger: false,
-        aligned: true,
-        diff: 0,
-        latestBalance: 0,
-      };
-    }
-
-    const latestBalance = round2(safeNum(related[0].resultingBalance, 0));
-    const diff = round2(safeNum(selectedAccount.balance, 0) - latestBalance);
-
-    return {
-      hasLedger: true,
-      aligned: Math.abs(diff) <= 0.009,
-      diff,
-      latestBalance,
-    };
-  }, [ledger, selectedAccount]);
-
-  const spendModalSpendRows = useMemo(() => {
-    if (!spendModalAccount) return [];
-    return spendingRows.filter((row) => spendingMatchesAccount(row, spendModalAccount));
-  }, [spendingRows, spendModalAccount]);
-
-  const spendModalBills = useMemo(() => {
-    if (!spendModalAccount) return [];
-    return bills.filter((bill) => billMatchesAccount(bill, spendModalAccount));
-  }, [bills, spendModalAccount]);
-
-  const spendModalLedgerHealth = useMemo(() => {
-    if (!spendModalAccount) {
-      return {
-        hasLedger: false,
-        aligned: true,
-        diff: 0,
-        latestBalance: 0,
-      };
-    }
-
-    const related = ledger
-      .filter((item) => item.accountId === spendModalAccount.id)
-      .sort((a, b) => safeNum(b.ts, 0) - safeNum(a.ts, 0));
-
-    if (!related.length) {
-      return {
-        hasLedger: false,
-        aligned: true,
-        diff: 0,
-        latestBalance: 0,
-      };
-    }
-
-    const latestBalance = round2(safeNum(related[0].resultingBalance, 0));
-    const diff = round2(safeNum(spendModalAccount.balance, 0) - latestBalance);
-
-    return {
-      hasLedger: true,
-      aligned: Math.abs(diff) <= 0.009,
-      diff,
-      latestBalance,
-    };
-  }, [ledger, spendModalAccount]);
-
-  async function insertLedgerEntries(entries) {
-    if (!user || !supabase || !entries.length) {
-      return { ok: false, error: "Missing ledger data." };
-    }
-
-    const rows = entries.map((entry) => mapLedgerClientToRow(entry, user.id));
-    const { error } = await supabase.from("account_transactions").insert(rows);
-
-    if (error) {
-      return { ok: false, error: error.message || "Failed to save ledger." };
-    }
-
-    return { ok: true };
-  }
-
-  async function updateAccountColumns(accountId, patch) {
-    if (!user || !supabase) {
-      return { ok: false, error: "Missing user." };
-    }
-
-    const payload = {
-      ...patch,
-      updated_at: new Date().toISOString(),
-    };
-
-    if (payload.balance !== undefined) {
-      payload.balance = round2(safeNum(payload.balance, 0));
-    }
-
-    const { error } = await supabase
-      .from("accounts")
-      .update(payload)
-      .eq("id", accountId)
-      .eq("user_id", user.id);
-
-    if (error) {
-      return { ok: false, error: error.message || "Failed to save account." };
-    }
-
-    return { ok: true };
-  }
-
-  async function savePrimary(nextId) {
-    if (!user || !supabase || !nextId) return;
-
-    setPageError("");
+    setBusy(true);
 
     const { error } = await supabase.from("account_settings").upsert(
       {
-        user_id: user.id,
-        primary_account_id: nextId,
+        user_id: userId,
+        primary_account_id: selectedAccount.id,
         updated_at: new Date().toISOString(),
       },
       { onConflict: "user_id" }
     );
 
     if (error) {
-      setPageError(error.message || "Failed to save primary account.");
+      console.error("set primary account error:", error);
+      setBusy(false);
       return;
     }
 
-    setPrimaryId(nextId);
-    setStatus("Primary account updated.");
+    setDefaultAccountId(selectedAccount.id);
+    setDefaultAccountName(selectedAccount.name || "");
+    setBusy(false);
   }
 
-  function openSpendingModal(accountId) {
-    setSpendModalAccountId(accountId);
-    setSpendRange("month");
-    setSpendGroupBy("category");
-    setSpendSearch("");
-    setSpendSort("recent");
-    setSpendModalOpen(true);
-  }
+  async function addManualAdjustment() {
+    if (!supabase || !userId || !selectedAccount || busy) return;
 
+    const rawAmount = round2(parseMoneyInput(adjustForm.amount));
+    const note = String(adjustForm.note || "").trim();
+    const signedDelta = adjustForm.mode === "subtract" ? -Math.abs(rawAmount) : Math.abs(rawAmount);
 
-  function openModal(type, accountId = "") {
-    const acc = accounts.find((a) => a.id === accountId) || null;
+    if (!Number.isFinite(rawAmount) || rawAmount <= 0) return;
 
-    if (type === "create") {
-      setAdding({ name: "", type: "checking", balance: "" });
-    }
+    const nextBalance = round2(safeNum(selectedAccount.balance, 0) + signedDelta);
+    const nowIso = new Date().toISOString();
 
-    setModalType(type);
-    setModalAccountId(accountId || "");
-    setModalOpen(true);
-    setAmount("");
-    setNote("");
-    setAdjustMode("increase");
-    setTransferToId("");
-    setEditName(acc?.name || "");
-    setEditType(acc?.type || "checking");
-  }
+    setBusy(true);
 
-  function meaningfulLedgerEntriesForAccount(accountId) {
-    return ledger.filter(
-      (item) =>
-        item.accountId === accountId &&
-        !["create"].includes(String(item.kind || "").toLowerCase())
-    );
-  }
-
-  function linkedSpendingForAccount(account) {
-    return spendingRows.filter((row) => spendingMatchesAccount(row, account));
-  }
-
-  function linkedBillsForAccount(account) {
-    return bills.filter((bill) => billMatchesAccount(bill, account));
-  }
-
-  function canDeleteAccount(accountId) {
-    const account = accounts.find((row) => row.id === accountId);
-    if (!account) {
-      return { ok: false, reason: "Account not found." };
-    }
-
-    if (accounts.length <= 1) {
-      return { ok: false, reason: "You need at least one account." };
-    }
-
-    if (Math.abs(safeNum(account.balance, 0)) > 0.009) {
-      return { ok: false, reason: "Only zero-balance accounts can be deleted." };
-    }
-
-    const meaningfulLedger = meaningfulLedgerEntriesForAccount(accountId);
-    if (meaningfulLedger.length) {
-      return {
-        ok: false,
-        reason:
-          "This account already has real ledger history. Keep it for math integrity or rename it instead.",
-      };
-    }
-
-    const spendLinks = linkedSpendingForAccount(account);
-    if (spendLinks.length) {
-      return {
-        ok: false,
-        reason:
-          "This account is linked to spending history. Deleting it would break that trail.",
-      };
-    }
-
-    const billLinks = linkedBillsForAccount(account);
-    if (billLinks.length) {
-      return {
-        ok: false,
-        reason:
-          "This account is linked to one or more bills. Move those bills first.",
-      };
-    }
-
-    return { ok: true, reason: "" };
-  }
-
-
-  async function addAccount() {
-    setPageError("");
-
-    if (!user || !supabase || addingBusy) return false;
-
-    const name = adding.name.trim();
-    if (!name) {
-      setPageError("Account name is required.");
-      return false;
-    }
-
-    const bal = adding.balance.trim() ? parseMoneyInput(adding.balance) : 0;
-    if (adding.balance.trim() && !Number.isFinite(bal)) {
-      setPageError("Enter a valid starting balance.");
-      return false;
-    }
-
-    setAddingBusy(true);
-
-    try {
-      const nextAcc = {
-        id: uid(),
-        name,
-        type: adding.type,
-        balance: round2(Number.isFinite(bal) ? bal : 0),
-        updatedAt: nowTs(),
-      };
-
-      const { data, error } = await supabase
-        .from("accounts")
-        .insert([mapAccountClientToRow(nextAcc, user.id)])
-        .select()
-        .single();
-
-      if (error) {
-        setPageError(error.message || "Failed to add account.");
-        return false;
-      }
-
-      const saved = mapAccountRowToClient(data);
-
-      const ledgerRes = await insertLedgerEntries([
-        {
-          id: uid(),
-          ts: nowTs(),
-          kind: "create",
-          accountId: saved.id,
-          amount: round2(Math.abs(safeNum(saved.balance, 0))),
-          delta: round2(safeNum(saved.balance, 0)),
-          resultingBalance: round2(safeNum(saved.balance, 0)),
-          note: "Account created",
-          relatedAccountId: "",
-          relatedAccountName: "",
-        },
-      ]);
-
-      if (!ledgerRes.ok) {
-        setPageError(ledgerRes.error || "Account added but ledger creation failed.");
-        return false;
-      }
-
-      if (!primaryId) {
-        await savePrimary(saved.id);
-      }
-
-      await loadData(user.id, saved.id);
-      setAdding({ name: "", type: "checking", balance: "" });
-      setStatus("Account added.");
-      return true;
-    } finally {
-      setAddingBusy(false);
-    }
-  }
-
-  async function deleteAccount(id) {
-    if (!user || !supabase) return;
-
-    const account = accounts.find((a) => a.id === id);
-    if (!account) return;
-
-    const guard = canDeleteAccount(id);
-    if (!guard.ok) {
-      setPageError(guard.reason);
-      return;
-    }
-
-    const ok = window.confirm(
-      `Delete "${account.name}"? This is only allowed because it is empty and unlinked.`
-    );
-    if (!ok) return;
-
-    setPageError("");
-
-    const createOnlyLedger = ledger.filter((item) => item.accountId === id);
-
-    if (createOnlyLedger.length) {
-      const deleteLedgerRes = await supabase
-        .from("account_transactions")
-        .delete()
-        .eq("user_id", user.id)
-        .eq("account_id", id);
-
-      if (deleteLedgerRes.error) {
-        setPageError(deleteLedgerRes.error.message || "Failed to remove ledger.");
-        return;
-      }
-    }
-
-    const deleteAccountRes = await supabase
+    const updateRes = await supabase
       .from("accounts")
-      .delete()
-      .eq("id", id)
-      .eq("user_id", user.id);
-
-    if (deleteAccountRes.error) {
-      setPageError(deleteAccountRes.error.message || "Failed to delete account.");
-      return;
-    }
-
-    const nextPrimary =
-      primaryId === id ? accounts.find((a) => a.id !== id)?.id || "" : primaryId;
-
-    if (nextPrimary) {
-      await savePrimary(nextPrimary);
-    }
-
-    await loadData(user.id, nextPrimary);
-    setStatus("Account deleted.");
-  }
-
-
-  async function applyModal() {
-    setPageError("");
-    if (!user || !supabase || modalBusy) return;
-
-    if (modalType === "create") {
-      const created = await addAccount();
-      if (created) {
-        setModalOpen(false);
-      }
-      return;
-    }
-
-    if (!modalAccount) return;
-
-    setModalBusy(true);
-
-    if (modalType === "edit") {
-      const name = editName.trim();
-      if (!name) {
-        setPageError("Account name is required.");
-        setModalBusy(false);
-        return;
-      }
-
-      const typeChanged = normalizeType(editType) !== normalizeType(modalAccount.type);
-      if (typeChanged) {
-        const hasMeaningfulHistory =
-          meaningfulLedgerEntriesForAccount(modalAccount.id).length > 0 ||
-          linkedSpendingForAccount(modalAccount).length > 0 ||
-          linkedBillsForAccount(modalAccount).length > 0;
-
-        if (hasMeaningfulHistory) {
-          setPageError(
-            "Do not change account type after real history exists. Rename it or create a new account instead."
-          );
-          setModalBusy(false);
-          return;
-        }
-      }
-
-      const res = await updateAccountColumns(modalAccount.id, {
-        name,
-        account_type: editType,
-      });
-
-      if (!res.ok) {
-        setPageError(res.error || "Failed to update account.");
-        setModalBusy(false);
-        return;
-      }
-
-      await loadData(user.id, modalAccount.id);
-      setModalOpen(false);
-      setStatus("Account updated.");
-      setModalBusy(false);
-      return;
-    }
-
-    if (modalType === "set") {
-      const exactRaw = parseMoneyInput(amount);
-      const exact = round2(exactRaw);
-
-      if (!Number.isFinite(exact)) {
-        setPageError("Enter a valid balance.");
-        setModalBusy(false);
-        return;
-      }
-
-      const oldBalance = round2(safeNum(modalAccount.balance, 0));
-
-      const updateRes = await updateAccountColumns(modalAccount.id, {
-        balance: exact,
-      });
-
-      if (!updateRes.ok) {
-        setPageError(updateRes.error || "Failed to set balance.");
-        setModalBusy(false);
-        return;
-      }
-
-      const ledgerRes = await insertLedgerEntries([
-        {
-          id: uid(),
-          ts: nowTs(),
-          kind: "set",
-          accountId: modalAccount.id,
-          amount: round2(Math.abs(exact)),
-          delta: round2(exact - oldBalance),
-          resultingBalance: round2(exact),
-          note: note.trim() || "Manual balance set",
-          relatedAccountId: "",
-          relatedAccountName: "",
-        },
-      ]);
-
-      if (!ledgerRes.ok) {
-        await updateAccountColumns(modalAccount.id, { balance: oldBalance });
-        await loadData(user.id, modalAccount.id);
-        setPageError(ledgerRes.error || "Failed to save ledger. Balance rolled back.");
-        setModalBusy(false);
-        return;
-      }
-
-      await loadData(user.id, modalAccount.id);
-      setModalOpen(false);
-      setStatus("Balance updated.");
-      setModalBusy(false);
-      return;
-    }
-
-    if (modalType === "adjust") {
-      const absAmountRaw = parseMoneyInput(amount);
-      const absAmount = round2(absAmountRaw);
-
-      if (!Number.isFinite(absAmount) || absAmount <= 0) {
-        setPageError("Enter a valid amount.");
-        setModalBusy(false);
-        return;
-      }
-
-      const current = round2(safeNum(modalAccount.balance, 0));
-      const delta = round2(getAdjustDelta(modalAccount.type, adjustMode, absAmount));
-      const nextBalance = round2(current + delta);
-      const kind = getAdjustKind(modalAccount.type, adjustMode);
-
-      const updateRes = await updateAccountColumns(modalAccount.id, {
+      .update({
         balance: nextBalance,
-      });
+        updated_at: nowIso,
+      })
+      .eq("id", selectedAccount.id)
+      .eq("user_id", userId);
 
-      if (!updateRes.ok) {
-        setPageError(updateRes.error || "Failed to update balance.");
-        setModalBusy(false);
-        return;
-      }
-
-      const ledgerRes = await insertLedgerEntries([
-        {
-          id: uid(),
-          ts: nowTs(),
-          kind,
-          accountId: modalAccount.id,
-          amount: round2(Math.abs(absAmount)),
-          delta: round2(delta),
-          resultingBalance: round2(nextBalance),
-          note: note.trim() || "",
-          relatedAccountId: "",
-          relatedAccountName: "",
-        },
-      ]);
-
-      if (!ledgerRes.ok) {
-        await updateAccountColumns(modalAccount.id, { balance: current });
-        await loadData(user.id, modalAccount.id);
-        setPageError(ledgerRes.error || "Failed to save ledger. Balance rolled back.");
-        setModalBusy(false);
-        return;
-      }
-
-      await loadData(user.id, modalAccount.id);
-      setModalOpen(false);
-      setStatus("Transaction applied.");
-      setModalBusy(false);
+    if (updateRes.error) {
+      console.error("adjustment account update error:", updateRes.error);
+      setBusy(false);
       return;
     }
 
-    if (modalType === "transfer") {
-      const absAmountRaw = parseMoneyInput(amount);
-      const absAmount = round2(absAmountRaw);
-      const target = accounts.find((a) => a.id === transferToId);
+    const insertRes = await supabase
+      .from("account_transactions")
+      .insert({
+        user_id: userId,
+        account_id: selectedAccount.id,
+        kind: adjustForm.mode === "subtract" ? "manual_debit" : "manual_credit",
+        amount: Math.abs(rawAmount),
+        delta: signedDelta,
+        resulting_balance: nextBalance,
+        note: note || "Manual adjustment",
+        related_account_id: null,
+        related_account_name: null,
+        source_type: "manual_adjustment",
+        source_id: uid(),
+        created_at: nowIso,
+      })
+      .select(
+        "id, user_id, account_id, kind, amount, delta, resulting_balance, note, related_account_id, related_account_name, source_type, source_id, created_at"
+      )
+      .single();
 
-      if (!Number.isFinite(absAmount) || absAmount <= 0) {
-        setPageError("Enter a valid amount.");
-        setModalBusy(false);
-        return;
-      }
-
-      if (!target) {
-        setPageError("Choose the destination account.");
-        setModalBusy(false);
-        return;
-      }
-
-      if (target.id === modalAccount.id) {
-        setPageError("Cannot transfer to the same account.");
-        setModalBusy(false);
-        return;
-      }
-
-      const plan = getTransferPlan(modalAccount, target, absAmount);
-      const fromCurrent = round2(safeNum(modalAccount.balance, 0));
-      const toCurrent = round2(safeNum(target.balance, 0));
-      const fromNext = round2(fromCurrent + plan.fromDelta);
-      const toNext = round2(toCurrent + plan.toDelta);
-      const sharedNote = note.trim() || "Transfer between accounts";
-
-      const fromRes = await updateAccountColumns(modalAccount.id, {
-        balance: fromNext,
-      });
-
-      if (!fromRes.ok) {
-        setPageError(fromRes.error || "Failed to update source account.");
-        setModalBusy(false);
-        return;
-      }
-
-      const toRes = await updateAccountColumns(target.id, {
-        balance: toNext,
-      });
-
-      if (!toRes.ok) {
-        await updateAccountColumns(modalAccount.id, { balance: fromCurrent });
-        await loadData(user.id, modalAccount.id);
-        setPageError(toRes.error || "Failed to update destination account.");
-        setModalBusy(false);
-        return;
-      }
-
-      const ledgerRes = await insertLedgerEntries([
-        {
-          id: uid(),
-          ts: nowTs(),
-          kind: plan.fromKind,
-          accountId: modalAccount.id,
-          amount: round2(Math.abs(absAmount)),
-          delta: round2(plan.fromDelta),
-          resultingBalance: round2(fromNext),
-          note: sharedNote,
-          relatedAccountId: target.id,
-          relatedAccountName: target.name,
-        },
-        {
-          id: uid(),
-          ts: nowTs(),
-          kind: plan.toKind,
-          accountId: target.id,
-          amount: round2(Math.abs(absAmount)),
-          delta: round2(plan.toDelta),
-          resultingBalance: round2(toNext),
-          note: sharedNote,
-          relatedAccountId: modalAccount.id,
-          relatedAccountName: modalAccount.name,
-        },
-      ]);
-
-      if (!ledgerRes.ok) {
-        await updateAccountColumns(modalAccount.id, { balance: fromCurrent });
-        await updateAccountColumns(target.id, { balance: toCurrent });
-        await loadData(user.id, modalAccount.id);
-        setPageError(ledgerRes.error || "Failed to save ledger. Transfer rolled back.");
-        setModalBusy(false);
-        return;
-      }
-
-      await loadData(user.id, modalAccount.id);
-      setModalOpen(false);
-      setStatus("Transfer completed.");
-      setModalBusy(false);
+    if (insertRes.error) {
+      console.error("adjustment transaction insert error:", insertRes.error);
+      await loadAccountsPage();
+      setBusy(false);
       return;
     }
 
-    setModalBusy(false);
+    setAccounts((prev) =>
+      prev.map((account) =>
+        account.id === selectedAccount.id
+          ? { ...account, balance: nextBalance, updated_at: nowIso }
+          : account
+      )
+    );
+    setTransactions((prev) => [insertRes.data, ...prev]);
+    setAdjustForm({
+      mode: "add",
+      amount: "",
+      note: "",
+    });
+    setBusy(false);
   }
 
-  const currentMonth = new Date().toLocaleString(undefined, {
-    month: "long",
-    year: "numeric",
-  });
+  async function submitTransfer() {
+    if (!supabase || !userId || !selectedAccount || busy) return;
 
-  const modalIsCredit = isCreditType(modalAccount?.type);
-  const adjustIncreaseLabel = modalIsCredit ? "Charge" : "Deposit";
-  const adjustDecreaseLabel = modalIsCredit ? "Payment" : "Withdraw";
-  const modalTone =
-    modalType === "create" ? "neutral" : modalAccount ? typeTone(modalAccount.type) : "neutral";
-  const modalActionBusy = modalType === "create" ? addingBusy : modalBusy;
-  const modalActionLabel = modalType === "create" ? "Add Account" : "Apply";
+    const amount = round2(parseMoneyInput(transferForm.amount));
+    const note = String(transferForm.note || "").trim();
+    const target = accounts.find((account) => account.id === transferForm.toAccountId);
+
+    if (!target || target.id === selectedAccount.id) return;
+    if (!Number.isFinite(amount) || amount <= 0) return;
+
+    const sourceNextBalance = round2(safeNum(selectedAccount.balance, 0) - amount);
+    const targetNextBalance = round2(safeNum(target.balance, 0) + amount);
+    const nowIso = new Date().toISOString();
+
+    setBusy(true);
+
+    const sourceUpdate = await supabase
+      .from("accounts")
+      .update({
+        balance: sourceNextBalance,
+        updated_at: nowIso,
+      })
+      .eq("id", selectedAccount.id)
+      .eq("user_id", userId);
+
+    if (sourceUpdate.error) {
+      console.error("transfer source update error:", sourceUpdate.error);
+      setBusy(false);
+      return;
+    }
+
+    const targetUpdate = await supabase
+      .from("accounts")
+      .update({
+        balance: targetNextBalance,
+        updated_at: nowIso,
+      })
+      .eq("id", target.id)
+      .eq("user_id", userId);
+
+    if (targetUpdate.error) {
+      console.error("transfer target update error:", targetUpdate.error);
+      await loadAccountsPage();
+      setBusy(false);
+      return;
+    }
+
+    const txRes = await supabase
+      .from("account_transactions")
+      .insert([
+        {
+          user_id: userId,
+          account_id: selectedAccount.id,
+          kind: "transfer_out",
+          amount,
+          delta: -amount,
+          resulting_balance: sourceNextBalance,
+          note: note || `Transfer to ${target.name}`,
+          related_account_id: target.id,
+          related_account_name: target.name || "",
+          source_type: "manual_transfer",
+          source_id: uid(),
+          created_at: nowIso,
+        },
+        {
+          user_id: userId,
+          account_id: target.id,
+          kind: "transfer_in",
+          amount,
+          delta: amount,
+          resulting_balance: targetNextBalance,
+          note: note || `Transfer from ${selectedAccount.name}`,
+          related_account_id: selectedAccount.id,
+          related_account_name: selectedAccount.name || "",
+          source_type: "manual_transfer",
+          source_id: uid(),
+          created_at: nowIso,
+        },
+      ])
+      .select(
+        "id, user_id, account_id, kind, amount, delta, resulting_balance, note, related_account_id, related_account_name, source_type, source_id, created_at"
+      );
+
+    if (txRes.error) {
+      console.error("transfer transaction insert error:", txRes.error);
+      await loadAccountsPage();
+      setBusy(false);
+      return;
+    }
+
+    setAccounts((prev) =>
+      prev.map((account) => {
+        if (account.id === selectedAccount.id) {
+          return { ...account, balance: sourceNextBalance, updated_at: nowIso };
+        }
+        if (account.id === target.id) {
+          return { ...account, balance: targetNextBalance, updated_at: nowIso };
+        }
+        return account;
+      })
+    );
+    setTransactions((prev) => [...(txRes.data || []), ...prev]);
+    setTransferForm({
+      toAccountId: target.id,
+      amount: "",
+      note: "",
+    });
+    setBusy(false);
+  }
 
   if (loading) {
     return (
       <main className="accountsPage">
-        <div className="accountsPageShell">
+        <div className="accountsShell">
           <GlassPane size="card">
             <div style={{ fontWeight: 800, fontSize: 18, color: "#fff" }}>
-              Loading accounts.
-            </div>
-          </GlassPane>
-        </div>
-        <style jsx global>{globalStyles}</style>
-      </main>
-    );
-  }
-
-  if (!user) {
-    return (
-      <main className="accountsPage">
-        <div className="accountsPageShell">
-          <GlassPane size="card">
-            <div style={{ fontWeight: 800, fontSize: 18, color: "#fff" }}>
-              Please log in
+              Loading account command.
             </div>
           </GlassPane>
         </div>
@@ -2602,536 +1351,929 @@ export default function AccountsPage() {
 
   return (
     <>
-      <main
-        className="accountsPage"
-        onClick={() => {
-          if (rowMenuId) setRowMenuId("");
-          if (focusMenuOpen) setFocusMenuOpen(false);
-        }}
-      >
-        <div className="accountsPageShell">
-          {pageError ? <div className="accountsBanner accountsBannerError">{pageError}</div> : null}
-          {status ? <div className="accountsBanner accountsBannerOk">{status}</div> : null}
-
+      <main className="accountsPage">
+        <div className="accountsShell">
           <GlassPane size="card">
             <div className="accountsHeroGrid">
               <div style={{ minWidth: 0 }}>
                 <div className="accountsEyebrow">Life Command Center</div>
-                <div className="accountsHeroTitle">Accounts Command</div>
+                <div className="accountsHeroTitle">Account Command</div>
                 <div className="accountsHeroSub">
-                  Cleaner controls, safer math, tighter tools, and account-specific spending
-                  history with linked bill visibility.
+                  Open an account like a bank detail view without leaving the page. The account
+                  list stays on the left. The selected account opens into one continuous workspace
+                  instead of a bunch of broken-up floating panels.
                 </div>
 
                 <div className="accountsPillRow">
                   <MiniPill>{accounts.length} accounts</MiniPill>
-                  <MiniPill>{currentMonth}</MiniPill>
-                  {primaryId ? (
-                    <MiniPill>
-                      Primary • {accounts.find((a) => a.id === primaryId)?.name || "—"}
-                    </MiniPill>
-                  ) : null}
+                  <MiniPill>{defaultAccountName || "No primary set"}</MiniPill>
+                  <MiniPill tone="amber">{atRiskCount} at risk</MiniPill>
+                  {selectedAccount ? <MiniPill tone="blue">{selectedAccount.name}</MiniPill> : null}
                 </div>
               </div>
 
-              <div
-                style={{
-                  display: "flex",
-                  gap: 8,
-                  flexWrap: "wrap",
-                  justifyContent: "flex-end",
-                }}
-              >
-                <MiniPill>{fmtWhen(totals.updatedMax || nowTs())}</MiniPill>
-                <MiniPill tone="green">{fmtMoney(totals.liquid)} liquid</MiniPill>
-                <MiniPill tone={totals.creditExposure > 0 ? "red" : "green"}>
-                  {fmtMoney(totals.creditExposure)} credit
-                </MiniPill>
+              <div className="accountsHeroSide">
+                <MiniPill>{fmtWhen(new Date().toISOString())}</MiniPill>
+                <MiniPill tone="green">{fmtMoney(totalCash)} total cash</MiniPill>
               </div>
             </div>
           </GlassPane>
 
           <section className="accountsMetricGrid">
-            <StatCard
-              icon={Landmark}
-              label="Net Worth"
-              value={fmtMoney(totals.netWorth)}
-              detail={`Assets ${fmtMoney(totals.assetBalances)} minus credit net ${fmtMoney(
-                totals.liabilityNet
-              )}.`}
-              tone={totals.netWorth >= 0 ? "green" : "red"}
-            />
-            <StatCard
+            <MetricCard
               icon={Wallet}
-              label="Liquid Balances"
-              value={fmtMoney(totals.liquid)}
-              detail="Checking, savings, and cash only."
-              tone="neutral"
+              label="Total Cash"
+              value={fmtMoney(totalCash)}
+              detail="Combined balance across loaded accounts."
+              tone="green"
             />
-            <StatCard
+            <MetricCard
+              icon={Landmark}
+              label="Checking"
+              value={fmtMoney(checkingTotal)}
+              detail="Cash sitting in checking-type accounts."
+              tone="blue"
+            />
+            <MetricCard
               icon={PiggyBank}
-              label="Investment Accounts"
-              value={fmtMoney(totals.invest)}
-              detail="Tracked investment account balances."
-              tone="neutral"
+              label="Savings"
+              value={fmtMoney(savingsTotal)}
+              detail="Savings parked and ready for buffer or goals."
+              tone="green"
             />
-            <StatCard
-              icon={CreditCard}
-              label="Credit Exposure"
-              value={fmtMoney(totals.creditExposure)}
-              detail="Only positive credit balances count as debt exposure."
-              tone={totals.creditExposure > 0 ? "red" : "green"}
+            <MetricCard
+              icon={ShieldAlert}
+              label="At Risk"
+              value={String(atRiskCount)}
+              detail="Accounts projected below the safe buffer in the next 14 days."
+              tone={atRiskCount > 0 ? "amber" : "neutral"}
             />
           </section>
 
-          <section className="accountsMainGrid">
+          <section className="accountsWorkspaceGrid">
             <GlassPane size="card" style={{ height: "100%" }}>
               <PaneHeader
-                title="Account Roster"
-                subcopy="Click any account to open its spending history popup and keep the math focused."
-                right={<MiniPill>{filteredAccounts.length} showing</MiniPill>}
+                title="Accounts"
+                subcopy="Click one to open it inside the command workspace."
+                right={<MiniPill>{visibleAccounts.length} showing</MiniPill>}
               />
 
-              <div className="accountsRosterControls">
+              <div className="accountsRailControls">
                 <div className="accountsSearchWrap">
                   <Search size={15} />
                   <input
                     className="accountsField accountsSearchField"
                     placeholder="Search accounts"
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
+                    value={accountSearch}
+                    onChange={(e) => setAccountSearch(e.target.value)}
                   />
                 </div>
 
                 <select
                   className="accountsField"
-                  value={typeFilter}
-                  onChange={(e) => setTypeFilter(e.target.value)}
+                  value={accountFilter}
+                  onChange={(e) => setAccountFilter(e.target.value)}
                 >
-                  <option value="all">All types</option>
+                  <option value="all">All accounts</option>
                   <option value="checking">Checking</option>
                   <option value="savings">Savings</option>
+                  <option value="credit">Credit</option>
                   <option value="cash">Cash</option>
-                  <option value="credit">Credit Card</option>
-                  <option value="investment">Investment</option>
-                  <option value="other">Other</option>
-                </select>
-
-                <select
-                  className="accountsField"
-                  value={sort}
-                  onChange={(e) => setSort(e.target.value)}
-                >
-                  <option value="updated">Recently updated</option>
-                  <option value="name">Name</option>
-                  <option value="balance">Largest impact</option>
+                  <option value="at_risk">At risk</option>
                 </select>
               </div>
 
-              {filteredAccounts.length ? (
-                <div className="accountsRosterListCompact">
-                  {filteredAccounts.map((a) => (
-                    <CompactAccountRow
-                      key={a.id}
-                      account={a}
-                      selected={a.id === selectedAccountId}
-                      primary={a.id === primaryId}
-                      menuOpen={rowMenuId === a.id}
-                      onSelect={() => {
-                        setSelectedAccountId(a.id);
-                        openSpendingModal(a.id);
-                      }}
-                      onToggleMenu={() => {
-                        setRowMenuId((prev) => (prev === a.id ? "" : a.id));
-                      }}
-                      onViewSpending={() => {
-                        setSelectedAccountId(a.id);
-                        setRowMenuId("");
-                        openSpendingModal(a.id);
-                      }}
-                      onEdit={() => {
-                        setRowMenuId("");
-                        openModal("edit", a.id);
-                      }}
-                      onSetPrimary={() => {
-                        setRowMenuId("");
-                        savePrimary(a.id);
-                      }}
-                      onDelete={() => {
-                        setRowMenuId("");
-                        deleteAccount(a.id);
-                      }}
+              {visibleAccounts.length ? (
+                <div className="accountsRailList">
+                  {visibleAccounts.map((account) => (
+                    <AccountRailCard
+                      key={account.id}
+                      account={account}
+                      summary={summaryById[account.id]}
+                      selected={account.id === selectedAccount?.id}
+                      onSelect={() => setSelectedAccountId(account.id)}
                     />
                   ))}
-                </div>
-              ) : accounts.length === 0 ? (
-                <div className="accountsEmptyState">
-                  <div>
-                    <div className="accountsEmptyTitle">No accounts yet</div>
-                    <div className="accountsEmptyText">
-                      Start by adding a real account. This page no longer hides fake filler.
-                    </div>
-                  </div>
                 </div>
               ) : (
                 <div className="accountsEmptyState">
                   <div>
                     <div className="accountsEmptyTitle">No accounts found</div>
                     <div className="accountsEmptyText">
-                      Clear filters or add another account.
+                      Clear the filter or add an account first.
                     </div>
                   </div>
                 </div>
               )}
             </GlassPane>
 
-            <div className="accountsRightStack">
-              <div className="accountsTopRightGrid">
-                <FocusCard
-                  selectedAccount={selectedAccount}
-                  primaryId={primaryId}
-                  linkedBills={selectedAccountBills}
-                  spendMonth={selectedSpendMonth}
-                  spend30={selectedSpend30}
-                  ledgerHealth={selectedLedgerHealth}
-                  focusMenuOpen={focusMenuOpen}
-                  setFocusMenuOpen={setFocusMenuOpen}
-                  onAdjust={() => selectedAccount && openModal("adjust", selectedAccount.id)}
-                  onTransfer={() => selectedAccount && openModal("transfer", selectedAccount.id)}
-                  onOpenSpend={() => selectedAccount && openSpendingModal(selectedAccount.id)}
-                  onSetExact={() => selectedAccount && openModal("set", selectedAccount.id)}
-                  onEdit={() => selectedAccount && openModal("edit", selectedAccount.id)}
-                  onSetPrimary={() => selectedAccount && savePrimary(selectedAccount.id)}
-                  onDelete={() => selectedAccount && deleteAccount(selectedAccount.id)}
-                />
+            <GlassPane size="card" style={{ height: "100%" }}>
+              <div className="accountsWorkspaceShell">
+                {selectedAccount && selectedSummary ? (
+                  <>
+                    <section className="accountsSurfaceSection accountsSurfaceHero">
+                      <PaneHeader
+                        title={selectedAccount.name || "Account Focus"}
+                        subcopy={`${normalizeAccountType(
+                          selectedAccount.account_type
+                        )} • Updated ${formatAgo(selectedAccount.updated_at)}`}
+                        right={
+                          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                            {defaultAccountId === selectedAccount.id ? (
+                              <MiniPill tone="green">Primary</MiniPill>
+                            ) : null}
+                            {selectedSummary.atRisk ? (
+                              <MiniPill tone="amber">Low buffer risk</MiniPill>
+                            ) : (
+                              <MiniPill tone="blue">Stable</MiniPill>
+                            )}
+                          </div>
+                        }
+                      />
 
-                <AddAccountLauncherCard
-                  onOpen={() => openModal("create")}
-                  totalAccounts={accounts.length}
-                  primaryName={accounts.find((a) => a.id === primaryId)?.name || ""}
-                  liquidTotal={totals.liquid}
-                  creditExposure={totals.creditExposure}
-                />
-              </div>
+                      <div className="accountsFocusHero">
+                        <div className="accountsFocusLeft">
+                          <div className="accountTinyLabel">Live Balance</div>
+                          <div className="accountsFocusBalance">
+                            {fmtMoney(selectedAccount.balance)}
+                          </div>
 
-              <GlassPane size="card">
-                <PaneHeader
-                  title={
-                    selectedAccount ? `${selectedAccount.name} Ledger` : "Transaction Ledger"
-                  }
-                  subcopy="Full movement history for the selected account."
-                  right={
-                    <MiniPill>
-                      {selectedLedger.length} item{selectedLedger.length === 1 ? "" : "s"}
-                    </MiniPill>
-                  }
-                />
+                          <div className="accountsFocusGrid">
+                            <div className="accountsInfoCell">
+                              <div className="accountTinyLabel">30D Change</div>
+                              <div
+                                className="accountsInfoValue"
+                                style={{
+                                  color:
+                                    safeNum(selectedSummary.last30Delta, 0) >= 0
+                                      ? "#97efc7"
+                                      : "#ffb4c5",
+                                }}
+                              >
+                                {safeNum(selectedSummary.last30Delta, 0) >= 0 ? "+" : ""}
+                                {fmtMoney(selectedSummary.last30Delta)}
+                              </div>
+                              <div className="accountsInfoSub">Trailing 30 day ledger movement</div>
+                            </div>
 
-                <div className="accountsSearchWrap" style={{ marginBottom: 10 }}>
-                  <Search size={15} />
-                  <input
-                    className="accountsField accountsSearchField"
-                    placeholder="Search ledger"
-                    value={ledgerSearch}
-                    onChange={(e) => setLedgerSearch(e.target.value)}
-                  />
-                </div>
+                            <div className="accountsInfoCell">
+                              <div className="accountTinyLabel">Projected 14D</div>
+                              <div className="accountsInfoValue">
+                                {fmtMoney(selectedSummary.projected14)}
+                              </div>
+                              <div className="accountsInfoSub">
+                                Income minus bills over the next two weeks
+                              </div>
+                            </div>
 
-                {selectedAccount ? (
-                  selectedLedger.length ? (
-                    <div className="accountsLedgerList accountsLedgerListTight">
-                      {selectedLedger.map((item) => (
-                        <LedgerItem key={item.id} item={item} />
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="accountsEmptyState" style={{ minHeight: 140 }}>
-                      <div>
-                        <div className="accountsEmptyTitle">No ledger entries yet</div>
-                        <div className="accountsEmptyText">
-                          Transactions, transfers, exact balance sets, income posting, and
-                          spending-linked writes should land here.
+                            <div className="accountsInfoCell">
+                              <div className="accountTinyLabel">Next Bill</div>
+                              <div className="accountsInfoValue">
+                                {selectedSummary.nextBill
+                                  ? shortDate(selectedSummary.nextBill.due_date)
+                                  : "Clear"}
+                              </div>
+                              <div className="accountsInfoSub">
+                                {selectedSummary.nextBill
+                                  ? `${billTitle(selectedSummary.nextBill)} • ${fmtMoney(
+                                      amountFromBill(selectedSummary.nextBill)
+                                    )}`
+                                  : "No linked outgoing bill"}
+                              </div>
+                            </div>
+
+                            <div className="accountsInfoCell">
+                              <div className="accountTinyLabel">Next Deposit</div>
+                              <div className="accountsInfoValue">
+                                {selectedSummary.nextIncome
+                                  ? shortDate(selectedSummary.nextIncome.deposit_date)
+                                  : "None"}
+                              </div>
+                              <div className="accountsInfoSub">
+                                {selectedSummary.nextIncome
+                                  ? `${selectedSummary.nextIncome.source} • ${fmtMoney(
+                                      selectedSummary.nextIncome.amount
+                                    )}`
+                                  : "No scheduled incoming deposit"}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="accountsFocusRight">
+                          <div className="accountsChartCard">
+                            <div className="accountsChartHead">
+                              <div>
+                                <div className="accountTinyLabel">Balance Trend</div>
+                                <div className="accountsChartTitle">Last 14 Days</div>
+                              </div>
+                              <MiniPill tone="blue">live</MiniPill>
+                            </div>
+
+                            <BalanceBars bars={selectedBars} />
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  )
+                    </section>
+
+                    <section className="accountsSurfaceSection accountsSurfaceBody">
+                      <div className="accountsBodyGrid">
+                        <div className="accountsMainColumn">
+                          <div className="accountsTabRow">
+                            <TabBtn
+                              label="Activity"
+                              active={tab === "activity"}
+                              onClick={() => setTab("activity")}
+                            />
+                            <TabBtn
+                              label="Balance Story"
+                              active={tab === "story"}
+                              onClick={() => setTab("story")}
+                            />
+                            <TabBtn
+                              label="Recurring Flow"
+                              active={tab === "recurring"}
+                              onClick={() => setTab("recurring")}
+                            />
+                            <TabBtn
+                              label="Forecast"
+                              active={tab === "forecast"}
+                              onClick={() => setTab("forecast")}
+                            />
+                          </div>
+
+                          {tab === "activity" ? (
+                            <>
+                              <div className="accountsContentSection">
+                                <PaneHeader
+                                  title="Activity Feed"
+                                  subcopy="What actually hit this account."
+                                  right={<MiniPill>{selectedSummary.recentTransactions.length} rows</MiniPill>}
+                                />
+
+                                {selectedSummary.recentTransactions.length ? (
+                                  <div className="accountsTxList">
+                                    {selectedSummary.recentTransactions.map((tx) => (
+                                      <TransactionRow key={tx.id} tx={tx} />
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <div className="accountsEmptyState accountsInlineEmpty">
+                                    <div>
+                                      <div className="accountsEmptyTitle">No account activity yet</div>
+                                      <div className="accountsEmptyText">
+                                        The ledger will fill as income, bills, transfers, and manual
+                                        adjustments hit this account.
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+
+                              <div className="accountsDetailSubGrid">
+                                <div className="accountsContentSection compact">
+                                  <PaneHeader
+                                    title="Balance Story Snapshot"
+                                    subcopy="Fast explanation of why the balance is here."
+                                  />
+
+                                  <div className="accountsQuickInfoList">
+                                    <QuickInfoRow
+                                      label="Start of month"
+                                      value={fmtMoney(selectedSummary.startBalance)}
+                                    />
+                                    <QuickInfoRow
+                                      label="Income added"
+                                      value={`+${fmtMoney(selectedSummary.monthIncome)}`}
+                                      tone="green"
+                                    />
+                                    <QuickInfoRow
+                                      label="Bills paid"
+                                      value={`-${fmtMoney(selectedSummary.monthBills)}`}
+                                      tone="amber"
+                                    />
+                                    <QuickInfoRow
+                                      label="Spending"
+                                      value={`-${fmtMoney(selectedSummary.monthSpending)}`}
+                                      tone="red"
+                                    />
+                                    <QuickInfoRow
+                                      label="Transfers"
+                                      value={`${safeNum(selectedSummary.monthTransfersNet, 0) >= 0 ? "+" : ""}${fmtMoney(selectedSummary.monthTransfersNet)}`}
+                                      tone={
+                                        safeNum(selectedSummary.monthTransfersNet, 0) >= 0
+                                          ? "green"
+                                          : "red"
+                                      }
+                                    />
+                                    <QuickInfoRow
+                                      label="Current balance"
+                                      value={fmtMoney(selectedAccount.balance)}
+                                    />
+                                  </div>
+                                </div>
+
+                                <div className="accountsContentSection compact">
+                                  <PaneHeader
+                                    title="Upcoming Hits"
+                                    subcopy="What is next to move this account."
+                                  />
+
+                                  <div className="accountsMiniList">
+                                    {selectedSummary.nextIncome ? (
+                                      <div className="accountMiniRow">
+                                        <div>
+                                          <div className="accountTxTitle">
+                                            {selectedSummary.nextIncome.source}
+                                          </div>
+                                          <div className="accountTxSub">
+                                            {shortDate(selectedSummary.nextIncome.deposit_date)}
+                                          </div>
+                                        </div>
+
+                                        <div className="accountTxAmount" style={{ color: "#97efc7" }}>
+                                          +{fmtMoney(selectedSummary.nextIncome.amount)}
+                                        </div>
+                                      </div>
+                                    ) : null}
+
+                                    {selectedSummary.nextBill ? (
+                                      <div className="accountMiniRow">
+                                        <div>
+                                          <div className="accountTxTitle">
+                                            {billTitle(selectedSummary.nextBill)}
+                                          </div>
+                                          <div className="accountTxSub">
+                                            {shortDate(selectedSummary.nextBill.due_date)}
+                                          </div>
+                                        </div>
+
+                                        <div className="accountTxAmount" style={{ color: "#f5cf88" }}>
+                                          -{fmtMoney(amountFromBill(selectedSummary.nextBill))}
+                                        </div>
+                                      </div>
+                                    ) : null}
+
+                                    {!selectedSummary.nextIncome && !selectedSummary.nextBill ? (
+                                      <div className="accountsInfoSub" style={{ marginTop: 0 }}>
+                                        Nothing linked next.
+                                      </div>
+                                    ) : null}
+                                  </div>
+                                </div>
+                              </div>
+                            </>
+                          ) : null}
+
+                          {tab === "story" ? (
+                            <div className="accountsContentSection">
+                              <PaneHeader
+                                title="Balance Story"
+                                subcopy="Why this balance is what it is right now."
+                                right={<MiniPill tone="green">month to date</MiniPill>}
+                              />
+
+                              <div className="accountsStoryGrid">
+                                <div className="accountsStoryCell">
+                                  <div className="accountTinyLabel">Start of Month</div>
+                                  <div className="accountsStoryValue">
+                                    {fmtMoney(selectedSummary.startBalance)}
+                                  </div>
+                                </div>
+
+                                <div className="accountsStoryCell">
+                                  <div className="accountTinyLabel">Income Added</div>
+                                  <div className="accountsStoryValue" style={{ color: "#97efc7" }}>
+                                    +{fmtMoney(selectedSummary.monthIncome)}
+                                  </div>
+                                </div>
+
+                                <div className="accountsStoryCell">
+                                  <div className="accountTinyLabel">Bills Paid</div>
+                                  <div className="accountsStoryValue" style={{ color: "#f5cf88" }}>
+                                    -{fmtMoney(selectedSummary.monthBills)}
+                                  </div>
+                                </div>
+
+                                <div className="accountsStoryCell">
+                                  <div className="accountTinyLabel">Spending</div>
+                                  <div className="accountsStoryValue" style={{ color: "#ffb4c5" }}>
+                                    -{fmtMoney(selectedSummary.monthSpending)}
+                                  </div>
+                                </div>
+
+                                <div className="accountsStoryCell">
+                                  <div className="accountTinyLabel">Transfers</div>
+                                  <div
+                                    className="accountsStoryValue"
+                                    style={{
+                                      color:
+                                        safeNum(selectedSummary.monthTransfersNet, 0) >= 0
+                                          ? "#97efc7"
+                                          : "#ffb4c5",
+                                    }}
+                                  >
+                                    {safeNum(selectedSummary.monthTransfersNet, 0) >= 0 ? "+" : ""}
+                                    {fmtMoney(selectedSummary.monthTransfersNet)}
+                                  </div>
+                                </div>
+
+                                <div className="accountsStoryCell strong">
+                                  <div className="accountTinyLabel">Current Balance</div>
+                                  <div className="accountsStoryValue">
+                                    {fmtMoney(selectedAccount.balance)}
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="accountsStoryBottom">
+                                <div className="accountsInfoCell">
+                                  <div className="accountTinyLabel">Projected Month-End</div>
+                                  <div className="accountsInfoValue">
+                                    {fmtMoney(selectedSummary.projectedMonthEnd)}
+                                  </div>
+                                  <div className="accountsInfoSub">
+                                    Current balance + future income - future bills this month
+                                  </div>
+                                </div>
+
+                                <div className="accountsInfoCell">
+                                  <div className="accountTinyLabel">Flow Mix</div>
+                                  <div className="accountsFlowList">
+                                    {selectedSummary.flowMix.length ? (
+                                      selectedSummary.flowMix.map((item) => (
+                                        <div key={item.label} className="accountsFlowRow">
+                                          <span>{item.label}</span>
+                                          <span>
+                                            {item.total >= 0 ? "+" : ""}
+                                            {fmtMoney(item.total)}
+                                          </span>
+                                        </div>
+                                      ))
+                                    ) : (
+                                      <div className="accountsInfoSub" style={{ marginTop: 0 }}>
+                                        No month-to-date flow yet.
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          ) : null}
+
+                          {tab === "recurring" ? (
+                            <div className="accountsContentSection">
+                              <PaneHeader
+                                title="Recurring Flow"
+                                subcopy="What this account is responsible for next."
+                                right={
+                                  <MiniPill tone="blue">
+                                    {selectedSummary.upcomingBills.length +
+                                      selectedSummary.scheduledDeposits.length}{" "}
+                                    hits
+                                  </MiniPill>
+                                }
+                              />
+
+                              <div className="accountsDetailSubGrid">
+                                <div className="accountsContentSection compact">
+                                  <PaneHeader
+                                    title="Scheduled Deposits"
+                                    subcopy="Income routed into this account."
+                                    right={<MiniPill tone="green">{selectedSummary.scheduledDeposits.length}</MiniPill>}
+                                  />
+
+                                  <div className="accountsMiniList">
+                                    {selectedSummary.scheduledDeposits.length ? (
+                                      selectedSummary.scheduledDeposits.map((item) => (
+                                        <div key={item.id} className="accountMiniRow">
+                                          <div>
+                                            <div className="accountTxTitle">{item.source}</div>
+                                            <div className="accountTxSub">
+                                              {shortDate(item.deposit_date)} •{" "}
+                                              {daysUntil(item.deposit_date) === 0
+                                                ? "today"
+                                                : `${daysUntil(item.deposit_date)}d`}
+                                            </div>
+                                          </div>
+
+                                          <div className="accountTxAmount" style={{ color: "#97efc7" }}>
+                                            +{fmtMoney(item.amount)}
+                                          </div>
+                                        </div>
+                                      ))
+                                    ) : (
+                                      <div className="accountsInfoSub" style={{ marginTop: 0 }}>
+                                        No scheduled income routed here.
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+
+                                <div className="accountsContentSection compact">
+                                  <PaneHeader
+                                    title="Linked Bills"
+                                    subcopy="Outgoing bills tied to this account."
+                                    right={<MiniPill tone="amber">{selectedSummary.upcomingBills.length}</MiniPill>}
+                                  />
+
+                                  <div className="accountsMiniList">
+                                    {selectedSummary.upcomingBills.length ? (
+                                      selectedSummary.upcomingBills.map((bill) => (
+                                        <div key={bill.id} className="accountMiniRow">
+                                          <div>
+                                            <div className="accountTxTitle">{billTitle(bill)}</div>
+                                            <div className="accountTxSub">
+                                              {shortDate(bill.due_date)} •{" "}
+                                              {daysUntil(bill.due_date) === 0
+                                                ? "today"
+                                                : `${daysUntil(bill.due_date)}d`}
+                                            </div>
+                                          </div>
+
+                                          <div className="accountTxAmount" style={{ color: "#f5cf88" }}>
+                                            -{fmtMoney(amountFromBill(bill))}
+                                          </div>
+                                        </div>
+                                      ))
+                                    ) : (
+                                      <div className="accountsInfoSub" style={{ marginTop: 0 }}>
+                                        No active bills linked to this account.
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          ) : null}
+
+                          {tab === "forecast" ? (
+                            <div className="accountsContentSection">
+                              <PaneHeader
+                                title="Forecast"
+                                subcopy="What is about to happen to this account over the next 30 days."
+                                right={<MiniPill>{selectedSummary.projectionEvents.length} events</MiniPill>}
+                              />
+
+                              <div className="accountsForecastCards">
+                                <div className="accountsInfoCell">
+                                  <div className="accountTinyLabel">Safe Buffer</div>
+                                  <div className="accountsInfoValue">
+                                    {fmtMoney(selectedSummary.safeBuffer)}
+                                  </div>
+                                  <div className="accountsInfoSub">
+                                    Local warning threshold for this account
+                                  </div>
+                                </div>
+
+                                <div className="accountsInfoCell">
+                                  <div className="accountTinyLabel">Low Point</div>
+                                  <div
+                                    className="accountsInfoValue"
+                                    style={{
+                                      color:
+                                        selectedSummary.projectedLowPoint < 0
+                                          ? "#ffb4c5"
+                                          : selectedSummary.projectedLowPoint <
+                                            selectedSummary.safeBuffer
+                                          ? "#f5cf88"
+                                          : "#fff",
+                                    }}
+                                  >
+                                    {fmtMoney(selectedSummary.projectedLowPoint)}
+                                  </div>
+                                  <div className="accountsInfoSub">
+                                    Worst projected balance in the next 30 days
+                                  </div>
+                                </div>
+
+                                <div className="accountsInfoCell">
+                                  <div className="accountTinyLabel">30D End</div>
+                                  <div className="accountsInfoValue">
+                                    {selectedSummary.projectionEvents.length
+                                      ? fmtMoney(
+                                          selectedSummary.projectionEvents[
+                                            selectedSummary.projectionEvents.length - 1
+                                          ].afterBalance
+                                        )
+                                      : fmtMoney(selectedAccount.balance)}
+                                  </div>
+                                  <div className="accountsInfoSub">
+                                    Balance if every scheduled hit lands
+                                  </div>
+                                </div>
+                              </div>
+
+                              {selectedSummary.projectionEvents.length ? (
+                                <div className="accountsTxList">
+                                  {selectedSummary.projectionEvents.map((event) => (
+                                    <ForecastEventRow key={event.id} event={event} />
+                                  ))}
+                                </div>
+                              ) : (
+                                <div className="accountsEmptyState accountsInlineEmpty">
+                                  <div>
+                                    <div className="accountsEmptyTitle">Forecast is clean</div>
+                                    <div className="accountsEmptyText">
+                                      No upcoming linked income or bills are scheduled for this account.
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          ) : null}
+                        </div>
+
+                        <aside className="accountsToolColumn">
+                          <div className="accountsToolSection">
+                            <PaneHeader
+                              title="Quick Adjustment"
+                              subcopy="Manual correction straight into the account ledger."
+                              right={busy ? <MiniPill tone="amber">Working...</MiniPill> : null}
+                            />
+
+                            <div className="accountsFormStack">
+                              <div>
+                                <div className="accountTinyLabel">Mode</div>
+                                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                                  <ActionBtn
+                                    variant={adjustForm.mode === "add" ? "primary" : "ghost"}
+                                    onClick={() =>
+                                      setAdjustForm((prev) => ({
+                                        ...prev,
+                                        mode: "add",
+                                      }))
+                                    }
+                                  >
+                                    + Add
+                                  </ActionBtn>
+                                  <ActionBtn
+                                    variant={adjustForm.mode === "subtract" ? "primary" : "ghost"}
+                                    onClick={() =>
+                                      setAdjustForm((prev) => ({
+                                        ...prev,
+                                        mode: "subtract",
+                                      }))
+                                    }
+                                  >
+                                    - Subtract
+                                  </ActionBtn>
+                                </div>
+                              </div>
+
+                              <div>
+                                <div className="accountTinyLabel">Amount</div>
+                                <input
+                                  className="accountsField"
+                                  inputMode="decimal"
+                                  placeholder="0.00"
+                                  value={adjustForm.amount}
+                                  onChange={(e) =>
+                                    setAdjustForm((prev) => ({
+                                      ...prev,
+                                      amount: e.target.value,
+                                    }))
+                                  }
+                                />
+                              </div>
+
+                              <div>
+                                <div className="accountTinyLabel">Note</div>
+                                <textarea
+                                  className="accountsField"
+                                  rows={4}
+                                  placeholder="Why this correction is being made..."
+                                  value={adjustForm.note}
+                                  onChange={(e) =>
+                                    setAdjustForm((prev) => ({
+                                      ...prev,
+                                      note: e.target.value,
+                                    }))
+                                  }
+                                />
+                              </div>
+
+                              <ActionBtn
+                                variant="primary"
+                                full
+                                onClick={addManualAdjustment}
+                                disabled={busy || !selectedAccount}
+                              >
+                                <Plus size={14} /> Apply Adjustment
+                              </ActionBtn>
+                            </div>
+                          </div>
+
+                          <div className="accountsToolSection">
+                            <PaneHeader
+                              title="Transfer"
+                              subcopy="Move money between accounts without leaving this workspace."
+                            />
+
+                            <div className="accountsFormStack">
+                              <div>
+                                <div className="accountTinyLabel">To Account</div>
+                                <select
+                                  className="accountsField"
+                                  value={transferForm.toAccountId}
+                                  onChange={(e) =>
+                                    setTransferForm((prev) => ({
+                                      ...prev,
+                                      toAccountId: e.target.value,
+                                    }))
+                                  }
+                                >
+                                  <option value="">Select account</option>
+                                  {accounts
+                                    .filter((account) => account.id !== selectedAccount?.id)
+                                    .map((account) => (
+                                      <option key={account.id} value={account.id}>
+                                        {account.name}
+                                      </option>
+                                    ))}
+                                </select>
+                              </div>
+
+                              <div>
+                                <div className="accountTinyLabel">Amount</div>
+                                <input
+                                  className="accountsField"
+                                  inputMode="decimal"
+                                  placeholder="0.00"
+                                  value={transferForm.amount}
+                                  onChange={(e) =>
+                                    setTransferForm((prev) => ({
+                                      ...prev,
+                                      amount: e.target.value,
+                                    }))
+                                  }
+                                />
+                              </div>
+
+                              <div>
+                                <div className="accountTinyLabel">Note</div>
+                                <textarea
+                                  className="accountsField"
+                                  rows={4}
+                                  placeholder="Optional transfer note..."
+                                  value={transferForm.note}
+                                  onChange={(e) =>
+                                    setTransferForm((prev) => ({
+                                      ...prev,
+                                      note: e.target.value,
+                                    }))
+                                  }
+                                />
+                              </div>
+
+                              <ActionBtn
+                                variant="primary"
+                                full
+                                onClick={submitTransfer}
+                                disabled={busy || !selectedAccount}
+                              >
+                                <ArrowRightLeft size={14} /> Move Money
+                              </ActionBtn>
+                            </div>
+                          </div>
+
+                          <div className="accountsToolSection">
+                            <PaneHeader
+                              title="Account Settings"
+                              subcopy="Warnings and control tools tied to the selected account."
+                            />
+
+                            <div className="accountsFormStack">
+                              <div className="accountsInfoCell">
+                                <div className="accountTinyLabel">Safe Buffer</div>
+                                <div className="accountsInfoValue">
+                                  {fmtMoney(safeNum(safeBufferMap[selectedAccount.id], 150))}
+                                </div>
+                                <div className="accountsInfoSub">
+                                  Local warning line for this account
+                                </div>
+                              </div>
+
+                              <div>
+                                <div className="accountTinyLabel">Set Safe Buffer</div>
+                                <input
+                                  className="accountsField"
+                                  inputMode="decimal"
+                                  placeholder="150.00"
+                                  value={String(safeBufferMap[selectedAccount.id] ?? 150)}
+                                  onChange={(e) =>
+                                    setSafeBufferMap((prev) => ({
+                                      ...prev,
+                                      [selectedAccount.id]:
+                                        round2(parseMoneyInput(e.target.value)) || 0,
+                                    }))
+                                  }
+                                />
+                              </div>
+
+                              <ActionBtn
+                                variant={defaultAccountId === selectedAccount.id ? "ghost" : "primary"}
+                                full
+                                onClick={setPrimaryAccount}
+                                disabled={busy}
+                              >
+                                <Save size={14} />{" "}
+                                {defaultAccountId === selectedAccount.id
+                                  ? "Already Primary"
+                                  : "Set as Primary Account"}
+                              </ActionBtn>
+
+                              <ActionBtn
+                                variant="ghost"
+                                full
+                                onClick={loadAccountsPage}
+                                disabled={busy}
+                              >
+                                <RefreshCw size={14} /> Refresh Data
+                              </ActionBtn>
+
+                              <div className="accountsInfoCell">
+                                <div className="accountTinyLabel">Warning Engine</div>
+                                <div className="accountsWarningRow">
+                                  {selectedSummary.atRisk ? (
+                                    <>
+                                      <AlertTriangle size={14} />
+                                      <span>
+                                        This account is projected below its safe buffer soon.
+                                      </span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Sparkles size={14} />
+                                      <span>This account looks stable right now.</span>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+
+                              <div className="accountsInfoCell">
+                                <div className="accountTinyLabel">Next Hits</div>
+                                <div className="accountsMiniList">
+                                  {selectedSummary.nextIncome ? (
+                                    <div className="accountMiniRow">
+                                      <div>
+                                        <div className="accountTxTitle">
+                                          {selectedSummary.nextIncome.source}
+                                        </div>
+                                        <div className="accountTxSub">
+                                          {shortDate(selectedSummary.nextIncome.deposit_date)}
+                                        </div>
+                                      </div>
+                                      <div className="accountTxAmount" style={{ color: "#97efc7" }}>
+                                        +{fmtMoney(selectedSummary.nextIncome.amount)}
+                                      </div>
+                                    </div>
+                                  ) : null}
+
+                                  {selectedSummary.nextBill ? (
+                                    <div className="accountMiniRow">
+                                      <div>
+                                        <div className="accountTxTitle">
+                                          {billTitle(selectedSummary.nextBill)}
+                                        </div>
+                                        <div className="accountTxSub">
+                                          {shortDate(selectedSummary.nextBill.due_date)}
+                                        </div>
+                                      </div>
+                                      <div className="accountTxAmount" style={{ color: "#f5cf88" }}>
+                                        -{fmtMoney(amountFromBill(selectedSummary.nextBill))}
+                                      </div>
+                                    </div>
+                                  ) : null}
+
+                                  {!selectedSummary.nextIncome && !selectedSummary.nextBill ? (
+                                    <div className="accountsInfoSub" style={{ marginTop: 0 }}>
+                                      Nothing linked next.
+                                    </div>
+                                  ) : null}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </aside>
+                      </div>
+                    </section>
+                  </>
                 ) : (
-                  <div className="accountsEmptyState" style={{ minHeight: 140 }}>
+                  <div className="accountsEmptyState">
                     <div>
                       <div className="accountsEmptyTitle">No account selected</div>
                       <div className="accountsEmptyText">
-                        Choose one from the roster to view its ledger.
+                        Pick one from the left rail to open the workspace.
                       </div>
                     </div>
                   </div>
                 )}
-              </GlassPane>
-            </div>
+              </div>
+            </GlassPane>
           </section>
         </div>
       </main>
-
-      <Modal
-        open={modalOpen}
-        onClose={() => {
-          if (modalActionBusy) return;
-          setModalOpen(false);
-        }}
-        tone={modalTone}
-        title={
-          modalType === "create"
-            ? "Add Account"
-            : modalType === "edit"
-            ? `Edit ${modalAccount?.name || "account"}`
-            : modalType === "transfer"
-            ? `Transfer from ${modalAccount?.name || "account"}`
-            : modalType === "set"
-            ? `Set exact balance for ${modalAccount?.name || "account"}`
-            : `Adjust ${modalAccount?.name || "account"}`
-        }
-        subtitle={
-          modalType === "create"
-            ? "Fast create without letting the form permanently take over the page."
-            : "Writes hit the account and the matching ledger history."
-        }
-      >
-        {modalType === "create" ? (
-          <div className="accountsFormStack">
-            <div>
-              <div className="accountsTinyLabel">Account Name</div>
-              <input
-                className="accountsField"
-                placeholder="Account name"
-                value={adding.name}
-                onChange={(e) => setAdding((p) => ({ ...p, name: e.target.value }))}
-              />
-            </div>
-
-            <div>
-              <div className="accountsTinyLabel">Type</div>
-              <select
-                className="accountsField"
-                value={adding.type}
-                onChange={(e) => setAdding((p) => ({ ...p, type: e.target.value }))}
-              >
-                <option value="checking">🏦 Checking</option>
-                <option value="savings">💰 Savings</option>
-                <option value="cash">💵 Cash</option>
-                <option value="credit">💳 Credit Card</option>
-                <option value="investment">📈 Investment</option>
-                <option value="other">📁 Other</option>
-              </select>
-            </div>
-
-            <div>
-              <div className="accountsTinyLabel">Starting Balance</div>
-              <input
-                className="accountsField"
-                inputMode="decimal"
-                placeholder="0.00"
-                value={adding.balance}
-                onChange={(e) => setAdding((p) => ({ ...p, balance: e.target.value }))}
-              />
-            </div>
-
-            <div className="accountsFootnote">
-              Credit accounts store what you owe. Liquid accounts go up and down the normal
-              way. A create entry is written to the ledger automatically.
-            </div>
-          </div>
-        ) : null}
-
-        {modalType === "edit" ? (
-          <div className="accountsFormStack">
-            <div>
-              <div className="accountsTinyLabel">Account Name</div>
-              <input
-                className="accountsField"
-                value={editName}
-                onChange={(e) => setEditName(e.target.value)}
-              />
-            </div>
-
-            <div>
-              <div className="accountsTinyLabel">Account Type</div>
-              <select
-                className="accountsField"
-                value={editType}
-                onChange={(e) => setEditType(e.target.value)}
-              >
-                <option value="checking">🏦 Checking</option>
-                <option value="savings">💰 Savings</option>
-                <option value="cash">💵 Cash</option>
-                <option value="credit">💳 Credit Card</option>
-                <option value="investment">📈 Investment</option>
-                <option value="other">📁 Other</option>
-              </select>
-            </div>
-
-            <div className="accountsFootnote">
-              Type changes are blocked once real history exists. That protects the math.
-            </div>
-          </div>
-        ) : null}
-
-        {modalType === "adjust" ? (
-          <div className="accountsFormStack">
-            <div>
-              <div className="accountsTinyLabel">Direction</div>
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                <ActionBtn
-                  variant={adjustMode === "increase" ? "primary" : "ghost"}
-                  onClick={() => setAdjustMode("increase")}
-                >
-                  {adjustIncreaseLabel}
-                </ActionBtn>
-                <ActionBtn
-                  variant={adjustMode === "decrease" ? "primary" : "ghost"}
-                  onClick={() => setAdjustMode("decrease")}
-                >
-                  {adjustDecreaseLabel}
-                </ActionBtn>
-              </div>
-            </div>
-
-            <div>
-              <div className="accountsTinyLabel">Amount</div>
-              <input
-                className="accountsField"
-                inputMode="decimal"
-                placeholder="0.00"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-              />
-            </div>
-
-            <div>
-              <div className="accountsTinyLabel">Note</div>
-              <textarea
-                className="accountsField"
-                placeholder="Optional note"
-                value={note}
-                onChange={(e) => setNote(e.target.value)}
-                rows={4}
-              />
-            </div>
-          </div>
-        ) : null}
-
-        {modalType === "transfer" ? (
-          <div className="accountsFormStack">
-            <div>
-              <div className="accountsTinyLabel">Amount</div>
-              <input
-                className="accountsField"
-                inputMode="decimal"
-                placeholder="0.00"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-              />
-            </div>
-
-            <div>
-              <div className="accountsTinyLabel">Transfer To</div>
-              <select
-                className="accountsField"
-                value={transferToId}
-                onChange={(e) => setTransferToId(e.target.value)}
-              >
-                <option value="">Choose account</option>
-                {accounts
-                  .filter((a) => a.id !== modalAccountId)
-                  .map((a) => (
-                    <option key={a.id} value={a.id}>
-                      {a.name} • {typeLabel(a.type)}
-                    </option>
-                  ))}
-              </select>
-            </div>
-
-            <div>
-              <div className="accountsTinyLabel">Note</div>
-              <textarea
-                className="accountsField"
-                placeholder="Optional note"
-                value={note}
-                onChange={(e) => setNote(e.target.value)}
-                rows={4}
-              />
-            </div>
-
-            <div className="accountsFootnote">
-              Cash → credit reduces debt. Credit → cash increases debt. Credit → credit works
-              like a balance transfer.
-            </div>
-          </div>
-        ) : null}
-
-        {modalType === "set" ? (
-          <div className="accountsFormStack">
-            <div>
-              <div className="accountsTinyLabel">Exact Balance</div>
-              <input
-                className="accountsField"
-                inputMode="decimal"
-                placeholder="0.00"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-              />
-            </div>
-
-            <div>
-              <div className="accountsTinyLabel">Note</div>
-              <textarea
-                className="accountsField"
-                placeholder="Optional note"
-                value={note}
-                onChange={(e) => setNote(e.target.value)}
-                rows={4}
-              />
-            </div>
-          </div>
-        ) : null}
-
-        <div
-          style={{
-            marginTop: 14,
-            display: "flex",
-            gap: 10,
-            flexWrap: "wrap",
-            justifyContent: "flex-end",
-          }}
-        >
-          <ActionBtn onClick={() => setModalOpen(false)} disabled={modalActionBusy}>
-            Cancel
-          </ActionBtn>
-          <ActionBtn variant="primary" onClick={applyModal} disabled={modalActionBusy}>
-            {modalActionBusy
-              ? modalType === "create"
-                ? "Adding..."
-                : "Applying..."
-              : modalActionLabel}{" "}
-            <ChevronRight size={14} />
-          </ActionBtn>
-        </div>
-      </Modal>
-
-      <SpendingHistoryModal
-        open={spendModalOpen}
-        onClose={() => setSpendModalOpen(false)}
-        account={spendModalAccount}
-        spendingItems={spendModalSpendRows}
-        linkedBills={spendModalBills}
-        ledgerHealth={spendModalLedgerHealth}
-        range={spendRange}
-        setRange={setSpendRange}
-        groupBy={spendGroupBy}
-        setGroupBy={setSpendGroupBy}
-        spendSearch={spendSearch}
-        setSpendSearch={setSpendSearch}
-        spendSort={spendSort}
-        setSpendSort={setSpendSort}
-      />
 
       <style jsx global>{globalStyles}</style>
     </>
@@ -3141,43 +2283,18 @@ export default function AccountsPage() {
 const globalStyles = `
   .accountsPage {
     width: 100%;
+    min-width: 0;
     color: var(--lcc-text);
     font-family: var(--lcc-font-sans);
-    box-sizing: border-box;
   }
 
-  .accountsPageShell {
+  .accountsShell {
     width: 100%;
     max-width: none;
     margin: 0;
-    padding: 0 0 20px;
+    padding: 12px 0 20px;
     display: grid;
-    gap: 12px;
-    box-sizing: border-box;
-  }
-
-  .accountsBanner {
-    min-height: 44px;
-    border-radius: 16px;
-    border: 1px solid rgba(214,226,255,0.12);
-    display: flex;
-    align-items: center;
-    padding: 0 14px;
-    font-size: 13px;
-    font-weight: 800;
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
-  }
-
-  .accountsBannerOk {
-    background: linear-gradient(180deg, rgba(74,222,128,0.12), rgba(74,222,128,0.05));
-    color: #a7f3d0;
-    border-color: rgba(74,222,128,0.18);
-  }
-
-  .accountsBannerError {
-    background: linear-gradient(180deg, rgba(255,132,163,0.12), rgba(255,132,163,0.05));
-    color: #ffd3df;
-    border-color: rgba(255,132,163,0.18);
+    gap: 14px;
   }
 
   .accountsEyebrow {
@@ -3202,14 +2319,22 @@ const globalStyles = `
     font-size: 13px;
     line-height: 1.55;
     color: rgba(255,255,255,0.62);
-    max-width: 840px;
+    max-width: 940px;
   }
 
   .accountsHeroGrid {
     display: grid;
-    grid-template-columns: minmax(0, 1.1fr) auto;
-    gap: 12px;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 14px;
     align-items: start;
+  }
+
+  .accountsHeroSide {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    align-content: flex-start;
   }
 
   .accountsPillRow {
@@ -3222,31 +2347,19 @@ const globalStyles = `
   .accountsMetricGrid {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 12px;
+    gap: 14px;
   }
 
-  .accountsMainGrid {
+  .accountsWorkspaceGrid {
     display: grid;
-    grid-template-columns: minmax(460px, 0.98fr) minmax(0, 1.02fr);
-    gap: 12px;
+    grid-template-columns: minmax(280px, 312px) minmax(0, 1fr);
+    gap: 14px;
     align-items: start;
   }
 
-  .accountsRightStack {
+  .accountsRailControls {
     display: grid;
-    gap: 12px;
-  }
-
-  .accountsTopRightGrid {
-    display: grid;
-    grid-template-columns: minmax(0, 1.1fr) minmax(280px, 0.64fr);
-    gap: 12px;
-    align-items: start;
-  }
-
-  .accountsRosterControls {
-    display: grid;
-    grid-template-columns: 1.2fr 0.8fr 0.9fr;
+    grid-template-columns: 1fr;
     gap: 10px;
     margin-bottom: 10px;
   }
@@ -3274,87 +2387,152 @@ const globalStyles = `
     padding: 0 !important;
   }
 
-  .accountsRosterListCompact {
+  .accountsRailList {
     display: grid;
-    gap: 8px;
-    max-height: 660px;
-    overflow: auto;
-    padding-right: 2px;
+    gap: 10px;
+    max-height: none;
+    overflow: visible;
+    padding-right: 0;
   }
 
-  .accountsCompactRow {
+  .accountRailCard {
+    width: 100%;
+    text-align: left;
     display: grid;
-    grid-template-columns: 42px minmax(0, 1fr) auto auto;
     gap: 10px;
-    align-items: center;
-    min-height: 82px;
-    padding: 10px 12px;
     border-radius: 18px;
     border: 1px solid rgba(255,255,255,0.07);
     background:
       linear-gradient(180deg, rgba(8,13,24,0.78), rgba(4,8,16,0.72));
+    padding: 13px;
     cursor: pointer;
     transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
   }
 
-  .accountsCompactRow:hover {
+  .accountRailCard:hover {
     transform: translateY(-1px);
   }
 
-  .accountsCompactAvatar {
-    width: 42px;
-    height: 42px;
-    border-radius: 14px;
-    display: grid;
-    place-items: center;
-    border: 1px solid rgba(255,255,255,0.08);
-    background:
-      linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.012)),
-      rgba(9, 14, 23, 0.68);
-    font-size: 12px;
-    font-weight: 800;
-    letter-spacing: .05em;
+  .accountRailCardTop {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    align-items: flex-start;
   }
 
-  .accountsCompactTitle {
-    font-size: 13.5px;
-    font-weight: 800;
-    color: #fff;
+  .accountRailCardRight {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .accountRailCardTitle {
+    font-size: 14px;
+    font-weight: 850;
     line-height: 1.2;
+    color: #fff;
     overflow-wrap: anywhere;
   }
 
-  .accountsCompactSub {
-    margin-top: 4px;
+  .accountRailCardSub {
+    margin-top: 3px;
     font-size: 11.5px;
     color: rgba(255,255,255,0.54);
-    line-height: 1.3;
   }
 
-  .accountsCompactValue {
-    font-size: 15px;
-    font-weight: 850;
+  .accountRailBalance {
+    font-size: 21px;
+    line-height: 1;
+    font-weight: 900;
+    letter-spacing: -0.045em;
     color: #fff;
-    white-space: nowrap;
   }
 
-  .accountsFocusBox {
-    border-radius: 22px;
-    border: 1px solid rgba(214,226,255,0.12);
-    background:
-      linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01));
-    padding: 16px;
-    min-height: 100%;
-  }
-
-  .accountsInfoGrid {
+  .accountRailGrid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 10px;
   }
 
-  .accountsInfoGridSingle {
-    grid-template-columns: 1fr;
+  .accountRailStat {
+    border-radius: 14px;
+    border: 1px solid rgba(255,255,255,0.05);
+    background: rgba(255,255,255,0.025);
+    padding: 10px;
+  }
+
+  .accountRailStatValue {
+    font-size: 13px;
+    font-weight: 850;
+    color: #fff;
+  }
+
+  .accountRailFooter {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    align-items: flex-end;
+    flex-wrap: wrap;
+  }
+
+  .accountRailFooterValue {
+    font-size: 13px;
+    font-weight: 850;
+    color: #fff;
+    line-height: 1.2;
+  }
+
+  .accountTinyLabel {
+    display: block;
+    margin-bottom: 8px;
+    font-size: 10px;
+    color: rgba(255,255,255,0.46);
+    text-transform: uppercase;
+    letter-spacing: .16em;
+    font-weight: 800;
+  }
+
+  .accountsWorkspaceShell {
+    min-width: 0;
+    display: grid;
+    gap: 0;
+  }
+
+  .accountsSurfaceSection {
+    position: relative;
+  }
+
+  .accountsSurfaceSection + .accountsSurfaceSection {
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid rgba(255,255,255,0.07);
+  }
+
+  .accountsFocusHero {
+    display: grid;
+    grid-template-columns: minmax(0, 1.18fr) minmax(300px, 0.82fr);
+    gap: 14px;
+    align-items: stretch;
+  }
+
+  .accountsFocusLeft,
+  .accountsFocusRight {
+    min-width: 0;
+  }
+
+  .accountsFocusBalance {
+    font-size: clamp(32px, 4vw, 48px);
+    line-height: 1;
+    font-weight: 900;
+    letter-spacing: -0.06em;
+    color: #fff;
+  }
+
+  .accountsFocusGrid {
+    margin-top: 14px;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
   }
 
   .accountsInfoCell {
@@ -3365,7 +2543,7 @@ const globalStyles = `
   }
 
   .accountsInfoValue {
-    font-size: 0.96rem;
+    font-size: 1rem;
     font-weight: 900;
     line-height: 1.15;
     color: #fff;
@@ -3378,25 +2556,260 @@ const globalStyles = `
     line-height: 1.4;
   }
 
-  .accountsActionGridTriplet {
+  .accountsChartCard {
+    border-radius: 20px;
+    border: 1px solid rgba(214,226,255,0.10);
+    background:
+      linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01));
+    padding: 12px;
+    min-height: 100%;
+    height: 100%;
+  }
+
+  .accountsChartHead {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    align-items: flex-start;
+    margin-bottom: 12px;
+  }
+
+  .accountsChartTitle {
+    font-size: 14px;
+    font-weight: 850;
+    color: #fff;
+    line-height: 1.2;
+  }
+
+  .accountBarsWrap {
+    height: 136px;
+    display: grid;
+    grid-template-columns: repeat(14, minmax(0, 1fr));
+    gap: 6px;
+    align-items: end;
+  }
+
+  .accountBarCol {
+    height: 100%;
+    display: flex;
+    align-items: end;
+  }
+
+  .accountBarFill {
+    width: 100%;
+    border-radius: 999px;
+    background: linear-gradient(180deg, rgba(143,177,255,0.95), rgba(86,140,255,0.72));
+    box-shadow: 0 0 16px rgba(86,140,255,0.16);
+  }
+
+  .accountBarsEmpty {
+    min-height: 136px;
+    display: grid;
+    place-items: center;
+    color: rgba(255,255,255,0.54);
+    font-size: 12px;
+    text-align: center;
+  }
+
+  .accountsBodyGrid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.2fr) minmax(300px, 340px);
+    gap: 18px;
+    align-items: start;
+  }
+
+  .accountsMainColumn {
+    min-width: 0;
+    display: grid;
+    gap: 14px;
+  }
+
+  .accountsToolColumn {
+    min-width: 0;
+    display: grid;
+    gap: 0;
+    align-self: start;
+    position: sticky;
+    top: 12px;
+    border-left: 1px solid rgba(255,255,255,0.07);
+    padding-left: 16px;
+  }
+
+  .accountsToolSection + .accountsToolSection {
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid rgba(255,255,255,0.07);
+  }
+
+  .accountsContentSection {
+    border-radius: 20px;
+    border: 1px solid rgba(255,255,255,0.06);
+    background: rgba(255,255,255,0.02);
+    padding: 14px;
+    display: grid;
+    gap: 12px;
+  }
+
+  .accountsContentSection.compact {
+    gap: 8px;
+  }
+
+  .accountsTabRow {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .accountTabBtn {
+    min-height: 38px;
+    padding: 0 14px;
+    border-radius: 999px;
+    border: 1px solid rgba(214,226,255,0.10);
+    color: #fff;
+    cursor: pointer;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 800;
+  }
+
+  .accountsTxList {
+    display: grid;
+    gap: 10px;
+    max-height: 360px;
+    overflow: auto;
+    padding-right: 2px;
+  }
+
+  .accountTxRow,
+  .accountForecastRow,
+  .accountMiniRow {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: center;
+    border-radius: 16px;
+    border: 1px solid rgba(255,255,255,0.06);
+    background:
+      linear-gradient(180deg, rgba(8,13,24,0.78), rgba(4,8,16,0.72));
+    padding: 12px;
+  }
+
+  .accountTxTitle {
+    font-size: 13px;
+    font-weight: 850;
+    line-height: 1.2;
+    color: #fff;
+    overflow-wrap: anywhere;
+  }
+
+  .accountTxSub {
+    margin-top: 4px;
+    font-size: 11.5px;
+    color: rgba(255,255,255,0.54);
+    line-height: 1.35;
+  }
+
+  .accountTxAmount {
+    font-size: 13.5px;
+    font-weight: 850;
+    color: #fff;
+    white-space: nowrap;
+  }
+
+  .accountsDetailSubGrid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+  }
+
+  .accountsQuickInfoList {
+    display: grid;
+    gap: 8px;
+  }
+
+  .accountsQuickInfoRow {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    font-size: 12px;
+    color: rgba(255,255,255,0.76);
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+    padding-bottom: 8px;
+  }
+
+  .accountsQuickInfoRow:last-child {
+    border-bottom: 0;
+    padding-bottom: 0;
+  }
+
+  .accountsStoryGrid {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .accountsStoryCell {
+    border-radius: 18px;
+    border: 1px solid rgba(255,255,255,0.06);
+    background: rgba(255,255,255,0.025);
+    padding: 12px;
+  }
+
+  .accountsStoryCell.strong {
+    background: linear-gradient(180deg, rgba(143,177,255,0.10), rgba(143,177,255,0.04));
+    border-color: rgba(143,177,255,0.18);
+  }
+
+  .accountsStoryValue {
+    font-size: 18px;
+    font-weight: 900;
+    color: #fff;
+    line-height: 1.1;
+  }
+
+  .accountsStoryBottom {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 10px;
+  }
+
+  .accountsFlowList {
+    display: grid;
     gap: 8px;
+  }
+
+  .accountsFlowRow {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    font-size: 12px;
+    color: rgba(255,255,255,0.78);
+  }
+
+  .accountsForecastCards {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  .accountsMiniList {
+    display: grid;
+    gap: 10px;
+    margin-top: 2px;
+  }
+
+  .accountsWarningRow {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: rgba(255,255,255,0.84);
+    font-size: 12px;
+    line-height: 1.4;
   }
 
   .accountsFormStack {
     display: grid;
     gap: 12px;
-  }
-
-  .accountsTinyLabel {
-    display: block;
-    margin-bottom: 8px;
-    font-size: 10px;
-    color: rgba(255,255,255,0.46);
-    text-transform: uppercase;
-    letter-spacing: .16em;
-    font-weight: 800;
   }
 
   .accountsField {
@@ -3437,7 +2850,7 @@ const globalStyles = `
     padding: 12px 13px;
   }
 
-  .accountsActionBtn {
+  .accountActionBtn {
     min-height: 40px;
     padding: 10px 13px;
     border-radius: 14px;
@@ -3451,138 +2864,20 @@ const globalStyles = `
     transition: transform 160ms ease, border-color 160ms ease, background 160ms ease, box-shadow 160ms ease;
   }
 
-  .accountsActionBtn:hover {
+  .accountActionBtn:hover {
     transform: translateY(-1px);
   }
 
-  .accountsMenuWrap {
-    position: relative;
-  }
-
-  .accountsMenuPanel {
-    position: absolute;
-    top: calc(100% + 8px);
-    right: 0;
-    z-index: 50;
-    min-width: 196px;
-    border-radius: 16px;
-    border: 1px solid rgba(214,226,255,0.12);
-    background:
-      linear-gradient(180deg, rgba(12,18,30,0.96), rgba(7,11,20,0.94));
-    box-shadow:
-      0 18px 45px rgba(0,0,0,0.42),
-      inset 0 1px 0 rgba(255,255,255,0.03);
-    padding: 8px;
-    display: grid;
-    gap: 6px;
-  }
-
-  .accountsMenuPanelRight {
-    right: 0;
-  }
-
-  .accountsMenuItem {
-    width: 100%;
-    min-height: 38px;
-    border-radius: 12px;
-    border: 1px solid rgba(214,226,255,0.08);
-    background:
-      linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.012));
-    color: rgba(247,251,255,0.9);
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    padding: 0 12px;
-    cursor: pointer;
-    font: inherit;
-    font-size: 12px;
-    font-weight: 800;
-  }
-
-  .accountsMenuItem.danger {
-    border-color: rgba(255,132,163,0.18);
-    color: #ffd3df;
-  }
-
-  .accountsIconBtn {
-    width: 34px;
-    height: 34px;
-    border-radius: 12px;
-    border: 1px solid rgba(214,226,255,0.10);
-    background:
-      linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.012));
-    color: rgba(247,251,255,0.88);
-    display: grid;
-    place-items: center;
-    cursor: pointer;
-  }
-
-  .accountsLedgerList {
-    display: grid;
-    gap: 10px;
-  }
-
-  .accountsLedgerListTight {
-    max-height: 500px;
-    overflow: auto;
-    padding-right: 2px;
-  }
-
-  .accountsLedgerItem {
-    border-radius: 18px;
-    border: 1px solid rgba(255,255,255,0.07);
-    background:
-      linear-gradient(180deg, rgba(8,13,24,0.78), rgba(4,8,16,0.72));
-    padding: 12px;
-  }
-
-  .accountsLedgerGrid {
-    display: grid;
-    grid-template-columns: minmax(0, 1.7fr) auto auto;
-    gap: 14px;
-    align-items: center;
-  }
-
-  .accountsLedgerTitle {
-    margin-top: 10px;
-    font-size: 13px;
-    font-weight: 800;
-    color: #fff;
-    line-height: 1.25;
-    overflow-wrap: anywhere;
-  }
-
-  .accountsLedgerSub {
-    margin-top: 4px;
-    font-size: 11.5px;
-    color: rgba(255,255,255,0.54);
-    line-height: 1.35;
-  }
-
-  .accountsLedgerLabel {
-    font-size: 11px;
-    color: rgba(255,255,255,0.50);
-    text-transform: uppercase;
-    letter-spacing: .14em;
-    font-weight: 700;
-  }
-
-  .accountsLedgerRight {
-    text-align: right;
-  }
-
-  .accountsFootnote {
-    font-size: 12px;
-    color: rgba(255,255,255,0.48);
-    line-height: 1.45;
-  }
-
   .accountsEmptyState {
-    min-height: 150px;
+    min-height: 180px;
     display: grid;
     place-items: center;
     text-align: center;
     padding: 14px;
+  }
+
+  .accountsInlineEmpty {
+    min-height: 220px;
   }
 
   .accountsEmptyTitle {
@@ -3596,702 +2891,76 @@ const globalStyles = `
     font-size: 13px;
     line-height: 1.5;
     color: rgba(255,255,255,0.60);
-    max-width: 460px;
+    max-width: 360px;
   }
 
-  .accountsModalRoot {
-    position: fixed;
-    inset: 0;
-    z-index: 90;
-    display: grid;
-    place-items: center;
-    padding: 18px;
-  }
-
-  .accountsModalBackdrop {
-    position: absolute;
-    inset: 0;
-    background: rgba(2,5,10,0.68);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-  }
-
-  .accountsModalCard {
-    position: relative;
-    z-index: 1;
-    max-height: min(90vh, 980px);
-    overflow: auto;
-  }
-
-  .accountsSpendSummaryGrid {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 10px;
-    margin-bottom: 12px;
-  }
-
-  .accountsSpendControls {
-    display: grid;
-    grid-template-columns: 1.25fr 0.72fr 0.72fr 0.72fr;
-    gap: 10px;
-    margin-bottom: 12px;
-  }
-
-  .accountsSpendContentGrid {
-    display: grid;
-    grid-template-columns: minmax(0, 1.1fr) minmax(310px, 0.9fr);
-    gap: 12px;
-    align-items: start;
-  }
-
-  .accountsSpendSideStack {
-    display: grid;
-    gap: 12px;
-  }
-
-  .accountsSpendGroupList {
-    display: grid;
-    gap: 10px;
-    max-height: 540px;
-    overflow: auto;
-    padding-right: 2px;
-  }
-
-  .accountsSpendGroup {
-    border-radius: 20px;
-    border: 1px solid rgba(255,255,255,0.07);
-    background:
-      radial-gradient(circle at top, rgba(124,148,255,0.05), transparent 34%),
-      linear-gradient(180deg, rgba(8,13,24,0.84), rgba(4,8,16,0.76));
-    padding: 14px;
-    display: grid;
-    gap: 12px;
-    box-shadow:
-      inset 0 1px 0 rgba(255,255,255,0.03),
-      0 14px 30px rgba(0,0,0,0.14);
-  }
-
-  .accountsSpendGroupHeader {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    gap: 12px;
-    flex-wrap: wrap;
-  }
-
-  .accountsSpendGroupTitle {
-    font-size: 14px;
-    font-weight: 850;
-    color: #fff;
-    line-height: 1.2;
-  }
-
-  .accountsSpendGroupSub {
-    margin-top: 4px;
-    font-size: 11.5px;
-    color: rgba(255,255,255,0.54);
-  }
-
-  .accountsSpendLineList {
-    display: grid;
-    gap: 8px;
-  }
-
-  .accountsSpendLine {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 12px;
-    align-items: center;
-    border-radius: 16px;
-    border: 1px solid rgba(255,255,255,0.06);
-    background:
-      linear-gradient(180deg, rgba(255,255,255,0.028), rgba(255,255,255,0.014));
-    padding: 11px 12px;
-  }
-
-  .accountsSpendLineTitle {
-    font-size: 12.5px;
-    font-weight: 800;
-    color: #fff;
-    line-height: 1.2;
-  }
-
-  .accountsSpendLineSub {
-    margin-top: 4px;
-    font-size: 11px;
-    color: rgba(255,255,255,0.56);
-    line-height: 1.35;
-  }
-
-  .accountsSpendLineAmount {
-    font-size: 13px;
-    font-weight: 850;
-    color: #fff;
-    white-space: nowrap;
-  }
-
-  .accountsSpendEmptyCard {
-    min-height: 300px;
-    border-radius: 22px;
-    border: 1px solid rgba(255,255,255,0.06);
-    background:
-      linear-gradient(180deg, rgba(8,13,24,0.78), rgba(4,8,16,0.72));
-    display: grid;
-    place-items: center;
-    text-align: center;
-    padding: 24px;
-  }
-
-  .accountsSpendEmptyIcon {
-    width: 44px;
-    height: 44px;
-    border-radius: 14px;
-    margin: 0 auto 12px;
-    display: grid;
-    place-items: center;
-    border: 1px solid rgba(214,226,255,0.10);
-    background:
-      linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.012));
-    color: rgba(247,251,255,0.86);
-  }
-
-  .accountsEmptyHints {
-    margin-top: 14px;
-    display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
-    justify-content: center;
-  }
-
-  .accountsMiniBillList {
-    display: grid;
-    gap: 8px;
-    max-height: 340px;
-    overflow: auto;
-    padding-right: 2px;
-  }
-
-  .accountsMiniBillRow {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 12px;
-    align-items: start;
-    border-radius: 14px;
-    border: 1px solid rgba(255,255,255,0.06);
-    background: rgba(255,255,255,0.02);
-    padding: 10px 12px;
-  }
-
-  .accountsMiniBillTitle {
-    font-size: 12.5px;
-    font-weight: 800;
-    color: #fff;
-    line-height: 1.2;
-  }
-
-  .accountsMiniBillSub {
-    margin-top: 4px;
-    font-size: 11px;
-    color: rgba(255,255,255,0.56);
-    line-height: 1.35;
-  }
-
-  .accountsMiniBillAmount {
-    font-size: 12px;
-    font-weight: 850;
-    color: #fff;
-    text-align: right;
-  }
-
-  .accountsMiniBillDays {
-    font-size: 10.5px;
-    color: rgba(255,255,255,0.52);
-    text-align: right;
-  }
-
-.accountsLauncherCard {
-    display: grid;
-    gap: 12px;
-  }
-
-  .accountsLauncherTop {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
-  }
-
-  .accountsLauncherIcon {
-    width: 38px;
-    height: 38px;
-    border-radius: 14px;
-    display: grid;
-    place-items: center;
-    border: 1px solid rgba(143,177,255,0.14);
-    color: #f7fbff;
-    background:
-      linear-gradient(180deg, rgba(143,177,255,0.10), rgba(143,177,255,0.04)),
-      rgba(8, 12, 20, 0.76);
-    box-shadow:
-      inset 0 1px 0 rgba(255,255,255,0.035),
-      0 0 18px rgba(79,114,255,0.12);
-  }
-
-  .accountsLauncherTitle {
-    font-size: 20px;
-    line-height: 1.02;
-    font-weight: 850;
-    letter-spacing: -0.04em;
-    color: #fff;
-  }
-
-  .accountsLauncherSub {
-    font-size: 13px;
-    line-height: 1.55;
-    color: rgba(255,255,255,0.62);
-  }
-
-  .accountsLauncherStatGrid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px;
-  }
-
-  .accountsLauncherStat {
-    border-radius: 16px;
-    border: 1px solid rgba(255,255,255,0.06);
-    background: rgba(255,255,255,0.024);
-    padding: 11px 12px;
-    min-width: 0;
-  }
-
-  .accountsLauncherStatValue {
-    font-size: 19px;
-    line-height: 1.05;
-    font-weight: 850;
-    color: #fff;
-    overflow-wrap: anywhere;
-  }
-
-  .accountsLauncherStatValueSmall {
-    font-size: 13px;
-    line-height: 1.35;
-    letter-spacing: -0.02em;
-  }
-
-  .accountsModalBackdrop {
-    position: absolute;
-    inset: 0;
-    background:
-      radial-gradient(circle at 50% 18%, rgba(91,120,255,0.16), transparent 34%),
-      radial-gradient(circle at 78% 60%, rgba(50,206,153,0.10), transparent 30%),
-      rgba(2,5,10,0.80);
-    backdrop-filter: blur(14px);
-    -webkit-backdrop-filter: blur(14px);
-  }
-
-  .accountsModalBackdrop.command {
-    background:
-      radial-gradient(circle at 50% 10%, rgba(91,120,255,0.22), transparent 32%),
-      radial-gradient(circle at 80% 22%, rgba(50,206,153,0.10), transparent 24%),
-      radial-gradient(circle at 18% 70%, rgba(255,132,163,0.08), transparent 24%),
-      rgba(2,5,10,0.86);
-  }
-
-  .accountsModalCard {
-    position: relative;
-    z-index: 1;
-    max-height: min(90vh, 980px);
-    overflow: auto;
-    border-radius: 28px;
-  }
-
-  .accountsModalCardCommand {
-    max-height: min(92vh, 1040px);
-  }
-
-  .accountsModalInner {
-    position: relative;
-    padding: 18px;
-  }
-
-  .accountsModalInner.command {
-    padding: 22px;
-  }
-
-  .accountsModalTopGlow {
-    position: absolute;
-    inset: 0 0 auto 0;
-    height: 180px;
-    pointer-events: none;
-    background:
-      radial-gradient(circle at 50% 0%, rgba(109,136,255,0.14), transparent 62%);
-    opacity: 0.95;
-  }
-
-  .accountsModalHeader {
-    position: relative;
-    z-index: 1;
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    gap: 14px;
-    margin-bottom: 14px;
-  }
-
-  .accountsModalHeaderText {
-    min-width: 0;
-  }
-
-  .accountsModalTitle {
-    font-size: 21px;
-    line-height: 1.04;
-    font-weight: 850;
-    letter-spacing: -0.04em;
-    color: #fff;
-  }
-
-  .accountsModalSubtitle {
-    margin-top: 6px;
-    font-size: 12.5px;
-    color: rgba(255,255,255,0.62);
-    line-height: 1.5;
-    max-width: 900px;
-  }
-
-  .accountsModalDivider {
-    height: 1px;
-    margin-bottom: 16px;
-  }
-
-  .accountsModalBody {
-    position: relative;
-    z-index: 1;
-  }
-
-  .accountsIconBtnSoft {
-    background:
-      linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.018));
-    box-shadow:
-      inset 0 1px 0 rgba(255,255,255,0.03),
-      0 10px 28px rgba(0,0,0,0.18);
-  }
-
-  .accountsSpendModalStack {
-    display: grid;
-    gap: 14px;
-  }
-
-  .accountsSpendHeroShell {
-    border-radius: 24px;
-    border: 1px solid rgba(214,226,255,0.10);
-    background:
-      linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.018)),
-      rgba(8, 12, 20, 0.58);
-    padding: 14px;
-    box-shadow:
-      inset 0 1px 0 rgba(255,255,255,0.035),
-      0 0 0 1px rgba(255,255,255,0.01),
-      0 24px 70px rgba(0,0,0,0.18);
-  }
-
-  .accountsSpendHeroHeader {
-    display: flex;
-    justify-content: space-between;
-    gap: 16px;
-    align-items: flex-start;
-    margin-bottom: 14px;
-    flex-wrap: wrap;
-  }
-
-  .accountsSpendHeroTitle {
-    margin-top: 8px;
-    font-size: clamp(26px, 3.2vw, 38px);
-    line-height: 1;
-    font-weight: 900;
-    letter-spacing: -0.055em;
-    color: #fff;
-  }
-
-  .accountsSpendHeroSub {
-    margin-top: 8px;
-    max-width: 860px;
-    font-size: 13px;
-    line-height: 1.55;
-    color: rgba(255,255,255,0.62);
-  }
-
-  .accountsSpendHeroPills {
-    display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
-    justify-content: flex-end;
-  }
-
-  .accountsSpendSummaryGridCommand {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    margin-bottom: 0;
-  }
-
-  .accountsSpendHeroStat {
-    border-radius: 20px;
-    border: 1px solid rgba(255,255,255,0.06);
-    background:
-      linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.015));
-    padding: 14px;
-    min-width: 0;
-  }
-
-  .accountsSpendHeroStatValue {
-    font-size: clamp(23px, 2vw, 30px);
-    line-height: 1.02;
-    font-weight: 900;
-    letter-spacing: -0.05em;
-    color: #fff;
-    overflow-wrap: anywhere;
-  }
-
-  .accountsSpendHeroStatValueText {
-    font-size: clamp(19px, 1.6vw, 25px);
-    line-height: 1.12;
-  }
-
-  .accountsSpendControlShell {
-    border-radius: 22px;
-    border: 1px solid rgba(214,226,255,0.08);
-    background:
-      linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.012));
-    padding: 12px;
-  }
-
-  .accountsSpendContentGridCommand {
-    grid-template-columns: minmax(0, 1.12fr) minmax(310px, 0.88fr);
-    gap: 14px;
-  }
-
-  .accountsSpendPrimaryPane {
-    border-radius: 24px;
-    border: 1px solid rgba(214,226,255,0.08);
-    background:
-      linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.012));
-    padding: 14px;
-    min-height: 420px;
-  }
-
-  .accountsSpendSectionHead {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    gap: 12px;
-    margin-bottom: 12px;
-    flex-wrap: wrap;
-  }
-
-  .accountsSpendSectionHeadTight {
-    margin-bottom: 10px;
-  }
-
-  .accountsSpendSectionTitle {
-    font-size: 18px;
-    line-height: 1.06;
-    font-weight: 850;
-    letter-spacing: -0.035em;
-    color: #fff;
-  }
-
-  .accountsSpendSectionSub {
-    margin-top: 4px;
-    font-size: 12px;
-    line-height: 1.5;
-    color: rgba(255,255,255,0.58);
-  }
-
-  .accountsSpendRail {
-    display: grid;
-    gap: 12px;
-    align-content: start;
-  }
-
-  .accountsSpendRailCard {
-    border-radius: 22px;
-    border: 1px solid rgba(214,226,255,0.08);
-    background:
-      linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.012));
-    padding: 14px;
-  }
-
-  .accountsSpendRailCardStrong {
-    background:
-      linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.016)),
-      rgba(6, 12, 20, 0.44);
-    box-shadow:
-      inset 0 1px 0 rgba(255,255,255,0.03),
-      0 18px 44px rgba(0,0,0,0.15);
-  }
-
-  .accountsSpendRailValue {
-    font-size: clamp(26px, 2.4vw, 38px);
-    line-height: 1.02;
-    font-weight: 900;
-    letter-spacing: -0.055em;
-    color: #fff;
-  }
-
-  .accountsSpendRailMetricGrid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px;
-    margin-top: 14px;
-  }
-
-  .accountsSpendRailMetric {
-    border-radius: 16px;
-    border: 1px solid rgba(255,255,255,0.06);
-    background: rgba(255,255,255,0.022);
-    padding: 10px 11px;
-    min-width: 0;
-  }
-
-  .accountsSpendRailMetricValue {
-    font-size: 13px;
-    line-height: 1.32;
-    font-weight: 850;
-    color: #fff;
-    overflow-wrap: anywhere;
-  }
-
-  .accountsSpendRailEmpty {
-    min-height: 180px;
-    display: grid;
-    place-items: center;
-    text-align: center;
-    padding: 12px;
-  }
-
-  .accountsSpendGroupListCommand {
-    max-height: 540px;
-  }
-
-  .accountsSpendEmptyCard {
-    min-height: 340px;
-    border-radius: 22px;
-    border: 1px solid rgba(255,255,255,0.06);
-    background:
-      radial-gradient(circle at top, rgba(120,142,255,0.07), transparent 38%),
-      linear-gradient(180deg, rgba(8,13,24,0.78), rgba(4,8,16,0.72));
-    display: grid;
-    place-items: center;
-    text-align: center;
-    padding: 28px 24px;
-  }
-
-  .accountsSpendEmptyList {
-    margin-top: 14px;
-    display: grid;
-    gap: 6px;
-    font-size: 12px;
-    line-height: 1.5;
-    color: rgba(255,255,255,0.58);
-    text-align: left;
-    max-width: 560px;
-  }
-
-  .accountsSpendEmptyActions {
-    margin-top: 16px;
-    display: flex;
-    gap: 10px;
-    flex-wrap: wrap;
-    justify-content: center;
-  }
-
-  .accountsMiniBillListCommand {
-    max-height: none;
-  }
-
-  @media (max-width: 1520px) {
-    .accountsTopRightGrid {
-      grid-template-columns: 1fr;
+  @media (max-width: 1500px) {
+    .accountsBodyGrid {
+      grid-template-columns: minmax(0, 1fr) minmax(290px, 320px);
     }
   }
 
-  @media (max-width: 1320px) {
+  @media (max-width: 1380px) {
     .accountsMetricGrid {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
-    .accountsMainGrid {
-      grid-template-columns: 1fr;
-    }
-
-    .accountsSpendSummaryGrid,
-    .accountsSpendSummaryGridCommand {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-
-    .accountsSpendControls {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-
-    .accountsSpendContentGrid,
-    .accountsSpendContentGridCommand {
+    .accountsFocusHero {
       grid-template-columns: 1fr;
     }
   }
 
-  @media (max-width: 1100px) {
-    .accountsHeroGrid {
-      grid-template-columns: 1fr;
-    }
-  }
-
-  @media (max-width: 1024px) {
-    .accountsRosterControls,
-    .accountsActionGridTriplet,
-    .accountsLedgerGrid,
-    .accountsInfoGrid,
-    .accountsSpendControls,
-    .accountsLauncherStatGrid,
-    .accountsSpendRailMetricGrid {
+  @media (max-width: 1240px) {
+    .accountsHeroGrid,
+    .accountsWorkspaceGrid,
+    .accountsBodyGrid,
+    .accountsStoryBottom,
+    .accountsForecastCards,
+    .accountsDetailSubGrid {
       grid-template-columns: 1fr;
     }
 
-    .accountsLedgerRight {
-      text-align: left;
+    .accountsHeroSide {
+      justify-content: flex-start;
     }
 
-    .accountsCompactRow {
-      grid-template-columns: 42px minmax(0, 1fr);
+    .accountsFocusGrid,
+    .accountsStoryGrid,
+    .accountRailGrid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
-    .accountsCompactValue {
-      white-space: normal;
+    .accountsToolColumn {
+      position: static;
+      border-left: 0;
+      padding-left: 0;
+      border-top: 1px solid rgba(255,255,255,0.07);
+      padding-top: 16px;
+      margin-top: 4px;
     }
 
-    .accountsRosterListCompact,
-    .accountsLedgerListTight,
-    .accountsSpendGroupList,
-    .accountsMiniBillList {
+    .accountsTxList {
       max-height: none;
     }
-
-    .accountsSpendLine,
-    .accountsMiniBillRow {
-      grid-template-columns: 1fr;
-    }
   }
 
-  @media (max-width: 760px) {
-    .accountsPageShell {
-      padding: 0 0 14px;
+  @media (max-width: 780px) {
+    .accountsShell {
+      padding: 8px 0 14px;
     }
 
     .accountsMetricGrid,
-    .accountsSpendSummaryGrid {
+    .accountsFocusGrid,
+    .accountsStoryGrid,
+    .accountRailGrid {
       grid-template-columns: 1fr;
     }
 
-    .accountsModalRoot {
-      padding: 10px;
+    .accountTxRow,
+    .accountForecastRow,
+    .accountMiniRow {
+      align-items: flex-start;
+      flex-direction: column;
     }
   }
 `;
