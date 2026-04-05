@@ -21,17 +21,117 @@ import {
 import styles from "./SideNav.module.css";
 
 const NAV_ITEMS = [
-  { label: "Dashboard", href: "/", icon: LayoutDashboard, accent: { icon: "#ffffff", border: "rgba(255,255,255,0.14)", glow: "rgba(255,255,255,0.10)" } },
-  { label: "Calendar", href: "/calendar", icon: CalendarDays, accent: { icon: "#b9f2ff", border: "rgba(185,242,255,0.16)", glow: "rgba(185,242,255,0.10)" } },
-  { label: "Accounts", href: "/accounts", icon: Wallet, accent: { icon: "#edf3ff", border: "rgba(237,243,255,0.15)", glow: "rgba(237,243,255,0.08)" } },
-  { label: "Bills", href: "/bills", icon: Receipt, accent: { icon: "#ffd089", border: "rgba(255,208,137,0.16)", glow: "rgba(255,208,137,0.10)" } },
-  { label: "Debt", href: "/debt", icon: CreditCard, accent: { icon: "#ffb3c7", border: "rgba(255,179,199,0.16)", glow: "rgba(255,179,199,0.10)" } },
-  { label: "Income", href: "/income", icon: Gem, accent: { icon: "#9ef0c0", border: "rgba(158,240,192,0.16)", glow: "rgba(158,240,192,0.10)" } },
-  { label: "Spending", href: "/spending", icon: PiggyBank, accent: { icon: "#9cf0ea", border: "rgba(156,240,234,0.16)", glow: "rgba(156,240,234,0.10)" } },
-  { label: "Investments", href: "/investments", icon: TrendingUp, badge: "LIVE", accent: { icon: "#f6fbff", border: "rgba(246,251,255,0.15)", glow: "rgba(246,251,255,0.08)" } },
-  { label: "Savings", href: "/savings", icon: Target, accent: { icon: "#a7ffc6", border: "rgba(167,255,198,0.16)", glow: "rgba(167,255,198,0.10)" } },
-  { label: "Admin", href: "/admin", icon: Shield, accent: { icon: "#ffd898", border: "rgba(255,216,152,0.16)", glow: "rgba(255,216,152,0.10)" } },
-  { label: "Settings", href: "/settings", icon: UserCircle2, accent: { icon: "#eaf1ff", border: "rgba(234,241,255,0.15)", glow: "rgba(234,241,255,0.08)" } },
+  {
+    label: "Dashboard",
+    href: "/",
+    icon: LayoutDashboard,
+    accent: {
+      icon: "#f3f6fb",
+      border: "rgba(243,246,251,0.16)",
+      glow: "rgba(243,246,251,0.10)",
+    },
+  },
+  {
+    label: "Calendar",
+    href: "/calendar",
+    icon: CalendarDays,
+    accent: {
+      icon: "#bde8ff",
+      border: "rgba(189,232,255,0.18)",
+      glow: "rgba(189,232,255,0.12)",
+    },
+  },
+  {
+    label: "Accounts",
+    href: "/accounts",
+    icon: Wallet,
+    accent: {
+      icon: "#eaf1ff",
+      border: "rgba(234,241,255,0.16)",
+      glow: "rgba(234,241,255,0.10)",
+    },
+  },
+  {
+    label: "Bills",
+    href: "/bills",
+    icon: Receipt,
+    accent: {
+      icon: "#ffd694",
+      border: "rgba(255,214,148,0.20)",
+      glow: "rgba(255,214,148,0.14)",
+    },
+  },
+  {
+    label: "Debt",
+    href: "/debt",
+    icon: CreditCard,
+    accent: {
+      icon: "#ffb8c9",
+      border: "rgba(255,184,201,0.18)",
+      glow: "rgba(255,184,201,0.12)",
+    },
+  },
+  {
+    label: "Income",
+    href: "/income",
+    icon: Gem,
+    accent: {
+      icon: "#a9f2c8",
+      border: "rgba(169,242,200,0.18)",
+      glow: "rgba(169,242,200,0.12)",
+    },
+  },
+  {
+    label: "Spending",
+    href: "/spending",
+    icon: PiggyBank,
+    accent: {
+      icon: "#9deee4",
+      border: "rgba(157,238,228,0.18)",
+      glow: "rgba(157,238,228,0.12)",
+    },
+  },
+  {
+    label: "Investments",
+    href: "/investments",
+    icon: TrendingUp,
+    badge: "LIVE",
+    accent: {
+      icon: "#f4f7ff",
+      border: "rgba(244,247,255,0.16)",
+      glow: "rgba(244,247,255,0.10)",
+    },
+  },
+  {
+    label: "Savings",
+    href: "/savings",
+    icon: Target,
+    accent: {
+      icon: "#b5ffce",
+      border: "rgba(181,255,206,0.18)",
+      glow: "rgba(181,255,206,0.12)",
+    },
+  },
+  {
+    label: "Admin",
+    href: "/admin",
+    icon: Shield,
+    accent: {
+      icon: "#ffdba0",
+      border: "rgba(255,219,160,0.18)",
+      glow: "rgba(255,219,160,0.12)",
+    },
+  },
+  {
+    label: "Settings",
+    href: "/settings",
+    icon: UserCircle2,
+    accent: {
+      icon: "#eef3ff",
+      border: "rgba(238,243,255,0.16)",
+      glow: "rgba(238,243,255,0.10)",
+    },
+  },
 ];
 
 function cx(...names) {
@@ -59,28 +159,31 @@ function NavItem({ item, active, collapsed, onNavigate }) {
       href={item.href}
       onClick={onNavigate}
       aria-current={active ? "page" : undefined}
-      className={cx(styles.navItem, active && styles.navItemActive, collapsed && styles.navItemCollapsed)}
+      className={cx(
+        styles.navItem,
+        active && styles.navItemActive,
+        collapsed && styles.navItemCollapsed
+      )}
       style={accentVars(item.accent)}
       title={collapsed ? item.label : undefined}
     >
-      <div className={styles.navItemMain}>
-        <div className={styles.iconBox}>
-          <Icon size={18} strokeWidth={2.15} />
-        </div>
+      <span className={styles.activeRail} />
 
-        {!collapsed ? (
-          <div className={styles.labelWrap}>
-            <div className={styles.label}>{item.label}</div>
-          </div>
-        ) : null}
-
-        {!collapsed ? (
-          <div className={styles.itemRight}>
-            {item.badge ? <div className={styles.badge}>{item.badge}</div> : null}
-            <div className={styles.dot} />
-          </div>
-        ) : null}
+      <div className={styles.iconBox}>
+        <Icon size={18} strokeWidth={2.1} />
       </div>
+
+      {!collapsed ? (
+        <div className={styles.copy}>
+          <div className={styles.label}>{item.label}</div>
+        </div>
+      ) : null}
+
+      {!collapsed ? (
+        <div className={styles.rightSlot}>
+          {item.badge ? <span className={styles.badge}>{item.badge}</span> : null}
+        </div>
+      ) : null}
     </Link>
   );
 }
@@ -94,7 +197,13 @@ export default function SideNav({
   const pathname = usePathname() || "";
 
   return (
-    <div className={cx(styles.shell, collapsed && !mobile && styles.shellCollapsed, mobile && styles.shellMobile)}>
+    <div
+      className={cx(
+        styles.shell,
+        collapsed && !mobile && styles.shellCollapsed,
+        mobile && styles.shellMobile
+      )}
+    >
       <div className={styles.shellGlow} />
       <div className={styles.shellEdge} />
 
@@ -111,8 +220,8 @@ export default function SideNav({
               <Image
                 src="/brand/lcc-logo.png"
                 alt="Life Command Center logo"
-                width={46}
-                height={46}
+                width={44}
+                height={44}
                 priority
                 className={styles.logo}
               />
@@ -125,7 +234,6 @@ export default function SideNav({
               <div className={styles.brandTitle}>Life Command Center</div>
             </div>
           ) : null}
-
 
           {mobile ? (
             <button

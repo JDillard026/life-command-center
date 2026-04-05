@@ -2,11 +2,13 @@
 
 export const dynamic = "force-dynamic";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
   ArrowRightLeft,
+  CheckCircle2,
   ChevronRight,
+  CreditCard,
   Landmark,
   PiggyBank,
   Plus,
@@ -16,12 +18,15 @@ import {
   ShieldAlert,
   Sparkles,
   Wallet,
+  X,
 } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
-import GlassPane from "../components/GlassPane";
 
 const META_PREFIX = "__LCC_META__";
-const SAFE_BUFFER_STORAGE_KEY = "lcc-account-safe-buffers";
+
+/* ──────────────────────────────────────────────────────────────────────────
+   helpers
+   ────────────────────────────────────────────────────────────────────────── */
 
 function uid() {
   return (
@@ -64,19 +69,6 @@ function shortDate(dateValue) {
     month: "short",
     day: "numeric",
     year: "numeric",
-  });
-}
-
-function fmtWhen(ts) {
-  if (!ts) return "—";
-  const d = new Date(ts);
-  if (!Number.isFinite(d.getTime())) return "—";
-  return d.toLocaleString(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
   });
 }
 
@@ -183,186 +175,6 @@ function toneMeta(tone = "neutral") {
   };
 }
 
-function MiniPill({ children, tone = "neutral" }) {
-  const meta = toneMeta(tone);
-
-  return (
-    <div
-      style={{
-        minHeight: 30,
-        display: "inline-flex",
-        alignItems: "center",
-        gap: 8,
-        padding: "0 10px",
-        borderRadius: 999,
-        border: `1px solid ${meta.border}`,
-        background:
-          "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.012))",
-        boxShadow: `inset 0 1px 0 rgba(255,255,255,0.03), 0 0 10px ${meta.glow}`,
-        color: tone === "neutral" ? "rgba(255,255,255,0.88)" : meta.text,
-        fontSize: 11,
-        fontWeight: 800,
-        whiteSpace: "nowrap",
-      }}
-    >
-      {children}
-    </div>
-  );
-}
-
-function PaneHeader({ title, subcopy, right }) {
-  return (
-    <div
-      style={{
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "flex-start",
-        gap: 10,
-        flexWrap: "wrap",
-        marginBottom: 10,
-      }}
-    >
-      <div style={{ minWidth: 0 }}>
-        <div
-          style={{
-            fontSize: 17,
-            lineHeight: 1.08,
-            fontWeight: 850,
-            letterSpacing: "-0.035em",
-            color: "#fff",
-          }}
-        >
-          {title}
-        </div>
-
-        {subcopy ? (
-          <div
-            style={{
-              marginTop: 3,
-              fontSize: 12,
-              lineHeight: 1.45,
-              color: "rgba(255,255,255,0.60)",
-            }}
-          >
-            {subcopy}
-          </div>
-        ) : null}
-      </div>
-
-      {right || null}
-    </div>
-  );
-}
-
-function ActionBtn({
-  children,
-  onClick,
-  variant = "ghost",
-  full = false,
-  type = "button",
-  disabled = false,
-}) {
-  const isPrimary = variant === "primary";
-  const isDanger = variant === "danger";
-
-  return (
-    <button
-      type={type}
-      onClick={onClick}
-      disabled={disabled}
-      className="accountActionBtn"
-      style={{
-        width: full ? "100%" : undefined,
-        border: isDanger
-          ? "1px solid rgba(255,132,163,0.18)"
-          : isPrimary
-          ? "1px solid rgba(143,177,255,0.18)"
-          : "1px solid rgba(214,226,255,0.10)",
-        background: isDanger
-          ? "linear-gradient(180deg, rgba(255,132,163,0.10), rgba(255,132,163,0.05))"
-          : isPrimary
-          ? "linear-gradient(180deg, rgba(143,177,255,0.14), rgba(143,177,255,0.06))"
-          : "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.012))",
-        color: isDanger ? "#ffd3df" : "#f7fbff",
-        opacity: disabled ? 0.55 : 1,
-        cursor: disabled ? "not-allowed" : "pointer",
-      }}
-    >
-      {children}
-    </button>
-  );
-}
-
-function MetricCard({ icon: Icon, label, value, detail, tone = "neutral" }) {
-  const meta = toneMeta(tone);
-
-  return (
-    <GlassPane tone={tone === "blue" ? "neutral" : tone} size="card" style={{ height: "100%" }}>
-      <div
-        style={{
-          minHeight: 110,
-          display: "grid",
-          gridTemplateRows: "auto auto 1fr",
-          gap: 7,
-        }}
-      >
-        <div
-          style={{
-            width: 34,
-            height: 34,
-            borderRadius: 12,
-            display: "grid",
-            placeItems: "center",
-            border: `1px solid ${meta.border}`,
-            background: meta.bg,
-            color: tone === "neutral" ? "#fff" : meta.text,
-            boxShadow: `0 0 10px ${meta.glow}`,
-          }}
-        >
-          <Icon size={15} />
-        </div>
-
-        <div>
-          <div
-            style={{
-              fontSize: 10,
-              textTransform: "uppercase",
-              letterSpacing: ".2em",
-              fontWeight: 800,
-              color: "rgba(255,255,255,0.40)",
-            }}
-          >
-            {label}
-          </div>
-
-          <div
-            style={{
-              marginTop: 8,
-              fontSize: "clamp(18px, 2.2vw, 28px)",
-              lineHeight: 1,
-              fontWeight: 850,
-              letterSpacing: "-0.05em",
-              color: tone === "neutral" ? "#fff" : meta.text,
-            }}
-          >
-            {value}
-          </div>
-        </div>
-
-        <div
-          style={{
-            fontSize: 11.5,
-            lineHeight: 1.4,
-            color: "rgba(255,255,255,0.60)",
-          }}
-        >
-          {detail}
-        </div>
-      </div>
-    </GlassPane>
-  );
-}
-
 function extractStoredNote(rawNote) {
   const text = String(rawNote ?? "");
   const idx = text.indexOf(META_PREFIX);
@@ -417,11 +229,33 @@ function typeMatches(type, filter) {
   return true;
 }
 
+function isCashLikeAccount(type = "") {
+  const value = String(type || "").toLowerCase();
+  if (!value) return true;
+  if (value.includes("credit")) return false;
+  if (value.includes("debt")) return false;
+  if (value.includes("loan")) return false;
+  if (value.includes("broker")) return false;
+  if (value.includes("invest")) return false;
+  return true;
+}
+
+function getAccountIcon(type = "") {
+  const value = String(type || "").toLowerCase();
+  if (value.includes("savings")) return <PiggyBank size={16} />;
+  if (value.includes("credit")) return <CreditCard size={16} />;
+  if (value.includes("cash")) return <Wallet size={16} />;
+  return <Landmark size={16} />;
+}
+
 function getIncomeRouting(row, defaultAccountId) {
-  const { meta } = extractStoredNote(row.note);
+  const extracted = extractStoredNote(row.note);
+  const meta = extracted.meta;
   const posted = !!meta?.posted;
   const status =
-    meta?.status === "scheduled" || isFutureDate(row.deposit_date) ? "scheduled" : "received";
+    meta?.status === "scheduled" || isFutureDate(row.deposit_date)
+      ? "scheduled"
+      : "received";
 
   let shares = [];
   if (Array.isArray(meta?.splits) && meta.splits.length) {
@@ -481,6 +315,45 @@ function flowBucket(tx) {
   return "Spending";
 }
 
+function riskMeta(summary) {
+  if (!summary) {
+    return {
+      tone: "blue",
+      label: "Stable",
+      detail: "This account looks stable right now.",
+      chipTone: "blue",
+    };
+  }
+
+  if (summary.projectedLowPoint < 0) {
+    return {
+      tone: "red",
+      label: "Critical cash risk",
+      detail: "This account is projected to dip below zero soon.",
+      chipTone: "red",
+    };
+  }
+
+  if (
+    summary.projected14 < summary.safeBuffer ||
+    summary.projectedLowPoint < summary.safeBuffer
+  ) {
+    return {
+      tone: "amber",
+      label: "Low buffer risk",
+      detail: "This account is projected below its safe buffer soon.",
+      chipTone: "amber",
+    };
+  }
+
+  return {
+    tone: "green",
+    label: "Stable",
+    detail: "This account looks stable right now.",
+    chipTone: "green",
+  };
+}
+
 function buildBalanceBars(transactions, currentBalance, days = 14) {
   const txByDay = new Map();
 
@@ -515,94 +388,376 @@ function buildBalanceBars(transactions, currentBalance, days = 14) {
 
   return values.map((v) => ({
     ...v,
-    height: 24 + ((v.value - min) / range) * 60,
+    height: 18 + ((v.value - min) / range) * 52,
   }));
 }
 
-function AccountRailCard({ account, summary, selected, onSelect }) {
-  const tone = summary?.atRisk ? "amber" : accountTone(account.account_type);
+/* ──────────────────────────────────────────────────────────────────────────
+   ui
+   ────────────────────────────────────────────────────────────────────────── */
+
+function MiniPill({ children, tone = "neutral" }) {
+  const meta = toneMeta(tone);
+
+  return (
+    <div
+      style={{
+        minHeight: 28,
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 8,
+        padding: "0 10px",
+        borderRadius: 999,
+        border: `1px solid ${meta.border}`,
+        background:
+          "linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.012))",
+        boxShadow: `inset 0 1px 0 rgba(255,255,255,0.03), 0 0 14px ${meta.glow}`,
+        color: tone === "neutral" ? "rgba(255,255,255,0.88)" : meta.text,
+        fontSize: 11,
+        fontWeight: 800,
+        whiteSpace: "nowrap",
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+function Button({
+  children,
+  onClick,
+  variant = "ghost",
+  size = "sm",
+  full = false,
+  type = "button",
+  disabled = false,
+}) {
+  return (
+    <button
+      type={type}
+      onClick={onClick}
+      disabled={disabled}
+      className={`accCmdBtn accCmdBtn_${variant} accCmdBtn_${size} ${
+        full ? "accCmdBtn_full" : ""
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+function TabBtn({ label, active, onClick }) {
+  return (
+    <button
+      type="button"
+      className={`accCmdTab ${active ? "accCmdTab_active" : ""}`}
+      onClick={onClick}
+    >
+      {label}
+    </button>
+  );
+}
+
+function Toast({ error, status, onClearError }) {
+  if (!error && !status) return null;
+
+  return (
+    <div className="accCmdToastStack">
+      {status ? (
+        <div className="accCmdToast accCmdToast_success">
+          <CheckCircle2 size={14} />
+          {status}
+        </div>
+      ) : null}
+
+      {error ? (
+        <div className="accCmdToast accCmdToast_error">
+          <AlertTriangle size={14} />
+          {error}
+          <button
+            type="button"
+            onClick={onClearError}
+            className="accCmdToastClose"
+            aria-label="Dismiss"
+          >
+            <X size={12} />
+          </button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function ModalShell({ open, title, subcopy, onClose, children, footer }) {
+  useEffect(() => {
+    if (!open) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    const onKey = (e) => {
+      if (e.key === "Escape") onClose?.();
+    };
+
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = prev;
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [open, onClose]);
+
+  if (!open) return null;
+
+  return (
+    <div className="accCmdOverlay">
+      <button type="button" className="accCmdBackdrop" onClick={onClose} />
+      <div className="accCmdModal">
+        <div className="accCmdModalHead">
+          <div>
+            <div className="accCmdModalTitle">{title}</div>
+            {subcopy ? <div className="accCmdModalSub">{subcopy}</div> : null}
+          </div>
+
+          <button type="button" onClick={onClose} className="accCmdCloseBtn" aria-label="Close">
+            <X size={14} />
+          </button>
+        </div>
+
+        <div className="accCmdModalBody">{children}</div>
+
+        {footer ? <div className="accCmdModalFoot">{footer}</div> : null}
+      </div>
+    </div>
+  );
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+   top strip
+   ────────────────────────────────────────────────────────────────────────── */
+
+function SummaryStrip({
+  accounts,
+  totalCash,
+  checkingTotal,
+  savingsTotal,
+  atRiskCount,
+  selectedAccount,
+  selectedRisk,
+}) {
+  return (
+    <div className="accCmdSummaryStrip">
+      <div className="accCmdSummaryLeft">
+        <div className="accCmdTitleWrap">
+          <div className="accCmdEyebrow">Accounts</div>
+          <div className="accCmdPageTitle">Account Command</div>
+        </div>
+
+        <div className="accCmdSummaryMiniList">
+          <div className="accCmdMiniStat">
+            <span className="accCmdMiniLabel">Accounts</span>
+            <span className="accCmdMiniValue">{accounts.length}</span>
+          </div>
+          <div className="accCmdMiniStat">
+            <span className="accCmdMiniLabel">Checking</span>
+            <span className="accCmdMiniValue">{fmtMoney(checkingTotal)}</span>
+          </div>
+          <div className="accCmdMiniStat">
+            <span className="accCmdMiniLabel">Savings</span>
+            <span className="accCmdMiniValue">{fmtMoney(savingsTotal)}</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="accCmdSummaryRight">
+        {selectedAccount ? (
+          <MiniPill tone={selectedRisk?.chipTone || "blue"}>
+            {selectedAccount.name}
+          </MiniPill>
+        ) : null}
+        <MiniPill tone={atRiskCount > 0 ? "amber" : "green"}>
+          {atRiskCount} at risk
+        </MiniPill>
+        <MiniPill tone="green">{fmtMoney(totalCash)} total cash</MiniPill>
+      </div>
+    </div>
+  );
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+   left queue
+   ────────────────────────────────────────────────────────────────────────── */
+
+function AccountQueueRow({
+  account,
+  summary,
+  selected,
+  onSelect,
+  isPrimary,
+}) {
+  const tone = riskMeta(summary).chipTone || accountTone(account.account_type);
   const meta = toneMeta(tone);
 
   return (
     <button
       type="button"
-      className="accountRailCard"
+      className={`accCmdQueueRow ${selected ? "accCmdQueueRow_active" : ""}`}
       onClick={onSelect}
-      style={{
-        borderColor: selected ? meta.border : "rgba(255,255,255,0.07)",
-        boxShadow: selected
-          ? `inset 0 1px 0 rgba(255,255,255,0.03), 0 0 0 1px rgba(255,255,255,0.01), 0 0 24px ${meta.glow}`
-          : "inset 0 1px 0 rgba(255,255,255,0.025)",
-      }}
     >
-      <div className="accountRailCardTop">
-        <div style={{ minWidth: 0 }}>
-          <div className="accountRailCardTitle">{account.name || "Account"}</div>
-          <div className="accountRailCardSub">{normalizeAccountType(account.account_type)}</div>
-        </div>
+      <div
+        className="accCmdQueueAccent"
+        style={{ background: selected ? meta.text : "transparent" }}
+      />
 
-        <div className="accountRailCardRight">
-          {summary?.atRisk ? <MiniPill tone="amber">Watch</MiniPill> : null}
-          <ChevronRight size={14} style={{ opacity: 0.55 }} />
-        </div>
+      <div
+        className="accCmdQueueIcon"
+        style={{
+          color: meta.text,
+          borderColor: meta.border,
+          boxShadow: `0 0 16px ${meta.glow}`,
+        }}
+      >
+        {getAccountIcon(account.account_type)}
       </div>
 
-      <div className="accountRailBalance">{fmtMoney(account.balance)}</div>
+      <div className="accCmdQueueMain">
+        <div className="accCmdQueueTop">
+          <div className="accCmdQueueTitleWrap">
+            <div className="accCmdQueueName">{account.name || "Account"}</div>
+            {isPrimary ? <MiniPill tone="green">Primary</MiniPill> : null}
+            {summary?.riskLevel === "warning" ? <MiniPill tone="amber">Watch</MiniPill> : null}
+            {summary?.riskLevel === "critical" ? <MiniPill tone="red">Critical</MiniPill> : null}
+          </div>
+          <div className="accCmdQueueAmount">{fmtMoney(account.balance)}</div>
+        </div>
 
-      <div className="accountRailGrid">
-        <div className="accountRailStat">
-          <div className="accountTinyLabel">30D Change</div>
-          <div
-            className="accountRailStatValue"
+        <div className="accCmdQueueMeta">
+          <span>{normalizeAccountType(account.account_type)}</span>
+          <span>•</span>
+          <span
             style={{
               color: safeNum(summary?.last30Delta, 0) >= 0 ? "#97efc7" : "#ffb4c5",
             }}
           >
             {safeNum(summary?.last30Delta, 0) >= 0 ? "+" : ""}
-            {fmtMoney(summary?.last30Delta)}
-          </div>
-        </div>
-
-        <div className="accountRailStat">
-          <div className="accountTinyLabel">Next Bill</div>
-          <div className="accountRailStatValue">
-            {summary?.nextBill ? shortDate(summary.nextBill.due_date) : "Clear"}
-          </div>
+            {fmtMoney(summary?.last30Delta)} 30D
+          </span>
+          <span>•</span>
+          <span>{fmtMoney(summary?.projected14)} 14D</span>
         </div>
       </div>
 
-      <div className="accountRailFooter">
-        <div>
-          <span className="accountTinyLabel">14D Projection</span>
-          <div className="accountRailFooterValue">{fmtMoney(summary?.projected14)}</div>
-        </div>
-
-        {summary?.nextIncome ? (
-          <MiniPill tone="green">{shortDate(summary.nextIncome.deposit_date)}</MiniPill>
-        ) : (
-          <MiniPill>no deposit</MiniPill>
-        )}
-      </div>
+      <ChevronRight size={14} style={{ opacity: 0.45, flexShrink: 0 }} />
     </button>
   );
 }
 
+function QueuePane({
+  visibleAccounts,
+  summaryById,
+  selectedAccount,
+  onSelect,
+  accountSearch,
+  setAccountSearch,
+  accountFilter,
+  setAccountFilter,
+  defaultAccountId,
+}) {
+  return (
+    <div className="accCmdLeftPane">
+      <div className="accCmdLeftHead">
+        <div>
+          <div className="accCmdPaneTitle">Accounts</div>
+          <div className="accCmdPaneSub">Open one into the workspace.</div>
+        </div>
+
+        <div className="accCmdSearch">
+          <Search size={14} />
+          <input
+            value={accountSearch}
+            onChange={(e) => setAccountSearch(e.target.value)}
+            placeholder="Search accounts…"
+          />
+          {accountSearch ? (
+            <button
+              type="button"
+              className="accCmdSearchClear"
+              onClick={() => setAccountSearch("")}
+            >
+              <X size={12} />
+            </button>
+          ) : null}
+        </div>
+
+        <select
+          className="accCmdField"
+          value={accountFilter}
+          onChange={(e) => setAccountFilter(e.target.value)}
+        >
+          <option value="all">All accounts</option>
+          <option value="checking">Checking</option>
+          <option value="savings">Savings</option>
+          <option value="credit">Credit</option>
+          <option value="cash">Cash</option>
+          <option value="at_risk">At risk</option>
+        </select>
+      </div>
+
+      <div className="accCmdQueueList">
+        {visibleAccounts.length ? (
+          visibleAccounts.map((account) => (
+            <AccountQueueRow
+              key={account.id}
+              account={account}
+              summary={summaryById[account.id]}
+              selected={account.id === selectedAccount?.id}
+              isPrimary={defaultAccountId === account.id}
+              onSelect={() => onSelect(account.id)}
+            />
+          ))
+        ) : (
+          <div className="accCmdEmptyBlock">No accounts found.</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+   center focus
+   ────────────────────────────────────────────────────────────────────────── */
+
 function BalanceBars({ bars = [] }) {
   if (!bars.length) {
-    return (
-      <div className="accountBarsEmpty">
-        <div>No recent balance movement yet.</div>
-      </div>
-    );
+    return <div className="accCmdBarsEmpty">No recent balance movement yet.</div>;
   }
 
   return (
-    <div className="accountBarsWrap">
+    <div className="accCmdBarsWrap">
       {bars.map((bar) => (
-        <div key={bar.key} className="accountBarCol" title={`${bar.label} • ${fmtMoney(bar.value)}`}>
-          <div className="accountBarFill" style={{ height: bar.height }} />
+        <div
+          key={bar.key}
+          className="accCmdBarCol"
+          title={`${bar.label} • ${fmtMoney(bar.value)}`}
+        >
+          <div className="accCmdBarFill" style={{ height: bar.height }} />
         </div>
       ))}
+    </div>
+  );
+}
+
+function CommandStat({ label, value, sub, tone = "neutral" }) {
+  const meta = toneMeta(tone);
+
+  return (
+    <div className="accCmdCommandStat">
+      <span className="accCmdCommandLabel">{label}</span>
+      <strong
+        className="accCmdCommandValue"
+        style={{ color: tone === "neutral" ? "#fff" : meta.text }}
+      >
+        {value}
+      </strong>
+      <small className="accCmdCommandSub">{sub}</small>
     </div>
   );
 }
@@ -613,10 +768,10 @@ function TransactionRow({ tx }) {
   const bucket = flowBucket(tx);
 
   return (
-    <div className="accountTxRow">
+    <div className="accCmdDataRow">
       <div>
-        <div className="accountTxTitle">{tx.note || bucket}</div>
-        <div className="accountTxSub">
+        <div className="accCmdDataTitle">{tx.note || bucket}</div>
+        <div className="accCmdDataSub">
           {shortDate(tx.created_at)} • {bucket}
           {tx.related_account_name ? ` • ${tx.related_account_name}` : ""}
           {tx.source_type ? ` • ${String(tx.source_type).replaceAll("_", " ")}` : ""}
@@ -624,14 +779,11 @@ function TransactionRow({ tx }) {
       </div>
 
       <div style={{ textAlign: "right" }}>
-        <div
-          className="accountTxAmount"
-          style={{ color: positive ? "#97efc7" : "#ffb4c5" }}
-        >
+        <div className="accCmdDataAmount" style={{ color: positive ? "#97efc7" : "#ffb4c5" }}>
           {positive ? "+" : ""}
           {fmtMoney(delta)}
         </div>
-        <div className="accountTxSub">Bal {fmtMoney(tx.resulting_balance)}</div>
+        <div className="accCmdDataSub">Bal {fmtMoney(tx.resulting_balance)}</div>
       </div>
     </div>
   );
@@ -642,45 +794,27 @@ function ForecastEventRow({ event }) {
   const afterPositive = safeNum(event.afterBalance, 0) >= 0;
 
   return (
-    <div className="accountForecastRow">
+    <div className="accCmdDataRow">
       <div>
-        <div className="accountTxTitle">{event.label}</div>
-        <div className="accountTxSub">
+        <div className="accCmdDataTitle">{event.label}</div>
+        <div className="accCmdDataSub">
           {shortDate(event.date)} • {event.kind === "income" ? "Incoming" : "Outgoing"}
         </div>
       </div>
 
       <div style={{ textAlign: "right" }}>
-        <div className="accountTxAmount" style={{ color: toneMeta(tone).text }}>
+        <div className="accCmdDataAmount" style={{ color: toneMeta(tone).text }}>
           {event.delta >= 0 ? "+" : ""}
           {fmtMoney(event.delta)}
         </div>
         <div
-          className="accountTxSub"
+          className="accCmdDataSub"
           style={{ color: afterPositive ? "rgba(255,255,255,0.58)" : "#ffb4c5" }}
         >
           After {fmtMoney(event.afterBalance)}
         </div>
       </div>
     </div>
-  );
-}
-
-function TabBtn({ label, active, onClick }) {
-  return (
-    <button
-      type="button"
-      className="accountTabBtn"
-      onClick={onClick}
-      style={{
-        borderColor: active ? "rgba(143,177,255,0.24)" : "rgba(214,226,255,0.10)",
-        background: active
-          ? "linear-gradient(180deg, rgba(143,177,255,0.14), rgba(143,177,255,0.06))"
-          : "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.012))",
-      }}
-    >
-      {label}
-    </button>
   );
 }
 
@@ -695,12 +829,812 @@ function QuickInfoRow({ label, value, tone = "neutral" }) {
       : "#fff";
 
   return (
-    <div className="accountsQuickInfoRow">
+    <div className="accCmdQuickInfoRow">
       <span>{label}</span>
       <span style={{ color }}>{value}</span>
     </div>
   );
 }
+
+function FocusPane({
+  selectedAccount,
+  selectedSummary,
+  selectedBars,
+  tab,
+  setTab,
+  defaultAccountId,
+}) {
+  if (!selectedAccount || !selectedSummary) {
+    return (
+      <div className="accCmdCenterPane accCmdCenterPane_empty">
+        <div className="accCmdEmptyBlock">Select an account.</div>
+      </div>
+    );
+  }
+
+  const risk = riskMeta(selectedSummary);
+
+  return (
+    <div className="accCmdCenterPane">
+      <div className="accCmdCenterHead">
+        <div>
+          <div className="accCmdFocusTitle">{selectedAccount.name || "Account Focus"}</div>
+          <div className="accCmdFocusMeta">
+            {normalizeAccountType(selectedAccount.account_type)} • Updated{" "}
+            {formatAgo(selectedAccount.updated_at)}
+          </div>
+        </div>
+
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {defaultAccountId === selectedAccount.id ? <MiniPill tone="green">Primary</MiniPill> : null}
+          <MiniPill tone={risk.chipTone}>{risk.label}</MiniPill>
+        </div>
+      </div>
+
+      <div className="accCmdCenterScroll">
+        <div className="accCmdCommandCard">
+          <div className="accCmdCommandTop">
+            <div className="accCmdBalanceBlock">
+              <div className="accCmdBalanceLabel">Live Balance</div>
+              <div className="accCmdBalanceValue">{fmtMoney(selectedAccount.balance)}</div>
+              <div className="accCmdBalancePills">
+                <MiniPill tone={safeNum(selectedSummary.last30Delta, 0) >= 0 ? "green" : "red"}>
+                  {safeNum(selectedSummary.last30Delta, 0) >= 0 ? "+" : ""}
+                  {fmtMoney(selectedSummary.last30Delta)} 30D
+                </MiniPill>
+                <MiniPill tone={risk.chipTone}>{risk.label}</MiniPill>
+              </div>
+            </div>
+
+            <div className="accCmdTrendMini">
+              <div className="accCmdTrendMiniHead">
+                <div>
+                  <div className="accCmdBalanceLabel">Trend</div>
+                  <div className="accCmdTrendMiniTitle">14 Day Balance</div>
+                </div>
+                <MiniPill tone="blue">live</MiniPill>
+              </div>
+              <BalanceBars bars={selectedBars} />
+            </div>
+          </div>
+
+          <div className="accCmdCommandGrid">
+            <CommandStat
+              label="Projected 14D"
+              value={fmtMoney(selectedSummary.projected14)}
+              sub="Income minus bills over the next two weeks"
+              tone={
+                selectedSummary.projected14 < selectedSummary.safeBuffer ? "amber" : "neutral"
+              }
+            />
+            <CommandStat
+              label="Safe Buffer"
+              value={fmtMoney(selectedSummary.safeBuffer)}
+              sub="Local warning line for this account"
+            />
+            <CommandStat
+              label="Next Bill"
+              value={selectedSummary.nextBill ? shortDate(selectedSummary.nextBill.due_date) : "Clear"}
+              sub={
+                selectedSummary.nextBill
+                  ? `${billTitle(selectedSummary.nextBill)} • ${fmtMoney(
+                      amountFromBill(selectedSummary.nextBill)
+                    )}`
+                  : "No linked outgoing bill"
+              }
+              tone={selectedSummary.nextBill ? "amber" : "neutral"}
+            />
+            <CommandStat
+              label="Next Deposit"
+              value={
+                selectedSummary.nextIncome
+                  ? shortDate(selectedSummary.nextIncome.deposit_date)
+                  : "None"
+              }
+              sub={
+                selectedSummary.nextIncome
+                  ? `${selectedSummary.nextIncome.source} • ${fmtMoney(
+                      selectedSummary.nextIncome.amount
+                    )}`
+                  : "No scheduled incoming deposit"
+              }
+              tone={selectedSummary.nextIncome ? "green" : "neutral"}
+            />
+          </div>
+        </div>
+
+        <div className="accCmdTabRow">
+          <TabBtn label="Activity" active={tab === "activity"} onClick={() => setTab("activity")} />
+          <TabBtn label="Balance Story" active={tab === "story"} onClick={() => setTab("story")} />
+          <TabBtn
+            label="Recurring Flow"
+            active={tab === "recurring"}
+            onClick={() => setTab("recurring")}
+          />
+          <TabBtn label="Forecast" active={tab === "forecast"} onClick={() => setTab("forecast")} />
+        </div>
+
+        {tab === "activity" ? (
+          <div className="accCmdActivityLayout">
+            <div className="accCmdPanel">
+              <div className="accCmdPanelHead">
+                <div>
+                  <div className="accCmdPanelTitle">Activity Feed</div>
+                  <div className="accCmdPanelSub">What actually hit this account.</div>
+                </div>
+                <MiniPill>{selectedSummary.recentTransactions.length} rows</MiniPill>
+              </div>
+
+              {selectedSummary.recentTransactions.length ? (
+                <div className="accCmdDataList">
+                  {selectedSummary.recentTransactions.map((tx) => (
+                    <TransactionRow key={tx.id} tx={tx} />
+                  ))}
+                </div>
+              ) : (
+                <div className="accCmdEmptyInline">No account activity yet.</div>
+              )}
+            </div>
+
+            <div className="accCmdAsideStack">
+              <div className="accCmdPanel compact">
+                <div className="accCmdPanelHead">
+                  <div>
+                    <div className="accCmdPanelTitle">Balance Story Snapshot</div>
+                    <div className="accCmdPanelSub">Fast explanation of where the money moved.</div>
+                  </div>
+                </div>
+
+                <div className="accCmdQuickInfoList">
+                  <QuickInfoRow label="Start of month" value={fmtMoney(selectedSummary.startBalance)} />
+                  <QuickInfoRow
+                    label="Income added"
+                    value={`+${fmtMoney(selectedSummary.monthIncome)}`}
+                    tone="green"
+                  />
+                  <QuickInfoRow
+                    label="Bills paid"
+                    value={`-${fmtMoney(selectedSummary.monthBills)}`}
+                    tone="amber"
+                  />
+                  <QuickInfoRow
+                    label="Spending"
+                    value={`-${fmtMoney(selectedSummary.monthSpending)}`}
+                    tone="red"
+                  />
+                  <QuickInfoRow
+                    label="Transfers"
+                    value={`${
+                      safeNum(selectedSummary.monthTransfersNet, 0) >= 0 ? "+" : ""
+                    }${fmtMoney(selectedSummary.monthTransfersNet)}`}
+                    tone={safeNum(selectedSummary.monthTransfersNet, 0) >= 0 ? "green" : "red"}
+                  />
+                  <QuickInfoRow label="Current balance" value={fmtMoney(selectedAccount.balance)} />
+                </div>
+              </div>
+
+              <div className="accCmdPanel compact">
+                <div className="accCmdPanelHead">
+                  <div>
+                    <div className="accCmdPanelTitle">Upcoming Hits</div>
+                    <div className="accCmdPanelSub">What is next to move this account.</div>
+                  </div>
+                </div>
+
+                <div className="accCmdMiniList">
+                  {selectedSummary.nextIncome ? (
+                    <div className="accCmdDataRow">
+                      <div>
+                        <div className="accCmdDataTitle">{selectedSummary.nextIncome.source}</div>
+                        <div className="accCmdDataSub">
+                          {shortDate(selectedSummary.nextIncome.deposit_date)}
+                        </div>
+                      </div>
+                      <div className="accCmdDataAmount" style={{ color: "#97efc7" }}>
+                        +{fmtMoney(selectedSummary.nextIncome.amount)}
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {selectedSummary.nextBill ? (
+                    <div className="accCmdDataRow">
+                      <div>
+                        <div className="accCmdDataTitle">{billTitle(selectedSummary.nextBill)}</div>
+                        <div className="accCmdDataSub">
+                          {shortDate(selectedSummary.nextBill.due_date)}
+                        </div>
+                      </div>
+                      <div className="accCmdDataAmount" style={{ color: "#f5cf88" }}>
+                        -{fmtMoney(amountFromBill(selectedSummary.nextBill))}
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {!selectedSummary.nextIncome && !selectedSummary.nextBill ? (
+                    <div className="accCmdEmptyInline">Nothing linked next.</div>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        {tab === "story" ? (
+          <div className="accCmdStoryLayout">
+            <div className="accCmdPanel">
+              <div className="accCmdPanelHead">
+                <div>
+                  <div className="accCmdPanelTitle">Balance Story</div>
+                  <div className="accCmdPanelSub">Why the balance is here right now.</div>
+                </div>
+                <MiniPill tone="green">month to date</MiniPill>
+              </div>
+
+              <div className="accCmdStoryGrid">
+                <div className="accCmdStoryCell">
+                  <div className="accCmdBalanceLabel">Start of Month</div>
+                  <div className="accCmdStoryValue">{fmtMoney(selectedSummary.startBalance)}</div>
+                </div>
+                <div className="accCmdStoryCell">
+                  <div className="accCmdBalanceLabel">Income Added</div>
+                  <div className="accCmdStoryValue" style={{ color: "#97efc7" }}>
+                    +{fmtMoney(selectedSummary.monthIncome)}
+                  </div>
+                </div>
+                <div className="accCmdStoryCell">
+                  <div className="accCmdBalanceLabel">Bills Paid</div>
+                  <div className="accCmdStoryValue" style={{ color: "#f5cf88" }}>
+                    -{fmtMoney(selectedSummary.monthBills)}
+                  </div>
+                </div>
+                <div className="accCmdStoryCell">
+                  <div className="accCmdBalanceLabel">Spending</div>
+                  <div className="accCmdStoryValue" style={{ color: "#ffb4c5" }}>
+                    -{fmtMoney(selectedSummary.monthSpending)}
+                  </div>
+                </div>
+                <div className="accCmdStoryCell">
+                  <div className="accCmdBalanceLabel">Transfers</div>
+                  <div
+                    className="accCmdStoryValue"
+                    style={{
+                      color:
+                        safeNum(selectedSummary.monthTransfersNet, 0) >= 0 ? "#97efc7" : "#ffb4c5",
+                    }}
+                  >
+                    {safeNum(selectedSummary.monthTransfersNet, 0) >= 0 ? "+" : ""}
+                    {fmtMoney(selectedSummary.monthTransfersNet)}
+                  </div>
+                </div>
+                <div className="accCmdStoryCell accCmdStoryCell_strong">
+                  <div className="accCmdBalanceLabel">Current Balance</div>
+                  <div className="accCmdStoryValue">{fmtMoney(selectedAccount.balance)}</div>
+                </div>
+              </div>
+            </div>
+
+            <div className="accCmdPanel compact">
+              <div className="accCmdPanelHead">
+                <div>
+                  <div className="accCmdPanelTitle">Projected Month-End</div>
+                  <div className="accCmdPanelSub">Current balance plus remaining flow this month.</div>
+                </div>
+              </div>
+
+              <div className="accCmdBigNumber">{fmtMoney(selectedSummary.projectedMonthEnd)}</div>
+
+              <div className="accCmdFlowList">
+                {selectedSummary.flowMix.length ? (
+                  selectedSummary.flowMix.map((item) => (
+                    <div key={item.label} className="accCmdFlowRow">
+                      <span>{item.label}</span>
+                      <span>
+                        {item.total >= 0 ? "+" : ""}
+                        {fmtMoney(item.total)}
+                      </span>
+                    </div>
+                  ))
+                ) : (
+                  <div className="accCmdEmptyInline">No month-to-date flow yet.</div>
+                )}
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        {tab === "recurring" ? (
+          <div className="accCmdTwoCol">
+            <div className="accCmdPanel">
+              <div className="accCmdPanelHead">
+                <div>
+                  <div className="accCmdPanelTitle">Scheduled Deposits</div>
+                  <div className="accCmdPanelSub">Income routed into this account.</div>
+                </div>
+                <MiniPill tone="green">{selectedSummary.scheduledDeposits.length}</MiniPill>
+              </div>
+
+              <div className="accCmdMiniList">
+                {selectedSummary.scheduledDeposits.length ? (
+                  selectedSummary.scheduledDeposits.map((item) => (
+                    <div key={item.id} className="accCmdDataRow">
+                      <div>
+                        <div className="accCmdDataTitle">{item.source}</div>
+                        <div className="accCmdDataSub">
+                          {shortDate(item.deposit_date)} •{" "}
+                          {daysUntil(item.deposit_date) === 0
+                            ? "today"
+                            : `${daysUntil(item.deposit_date)}d`}
+                        </div>
+                      </div>
+
+                      <div className="accCmdDataAmount" style={{ color: "#97efc7" }}>
+                        +{fmtMoney(item.amount)}
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="accCmdEmptyInline">No scheduled income routed here.</div>
+                )}
+              </div>
+            </div>
+
+            <div className="accCmdPanel">
+              <div className="accCmdPanelHead">
+                <div>
+                  <div className="accCmdPanelTitle">Linked Bills</div>
+                  <div className="accCmdPanelSub">Outgoing bills tied to this account.</div>
+                </div>
+                <MiniPill tone="amber">{selectedSummary.upcomingBills.length}</MiniPill>
+              </div>
+
+              <div className="accCmdMiniList">
+                {selectedSummary.upcomingBills.length ? (
+                  selectedSummary.upcomingBills.map((bill) => (
+                    <div key={bill.id} className="accCmdDataRow">
+                      <div>
+                        <div className="accCmdDataTitle">{billTitle(bill)}</div>
+                        <div className="accCmdDataSub">
+                          {shortDate(bill.due_date)} •{" "}
+                          {daysUntil(bill.due_date) === 0 ? "today" : `${daysUntil(bill.due_date)}d`}
+                        </div>
+                      </div>
+
+                      <div className="accCmdDataAmount" style={{ color: "#f5cf88" }}>
+                        -{fmtMoney(amountFromBill(bill))}
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="accCmdEmptyInline">No active bills linked to this account.</div>
+                )}
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        {tab === "forecast" ? (
+          <div className="accCmdPanel">
+            <div className="accCmdPanelHead">
+              <div>
+                <div className="accCmdPanelTitle">Forecast</div>
+                <div className="accCmdPanelSub">
+                  What is about to happen over the next 30 days.
+                </div>
+              </div>
+              <MiniPill>{selectedSummary.projectionEvents.length} events</MiniPill>
+            </div>
+
+            <div className="accCmdForecastTiles">
+              <CommandStat
+                label="Safe Buffer"
+                value={fmtMoney(selectedSummary.safeBuffer)}
+                sub="Local warning threshold for this account"
+              />
+              <CommandStat
+                label="Low Point"
+                value={fmtMoney(selectedSummary.projectedLowPoint)}
+                sub="Worst projected balance in the next 30 days"
+                tone={
+                  selectedSummary.projectedLowPoint < 0
+                    ? "red"
+                    : selectedSummary.projectedLowPoint < selectedSummary.safeBuffer
+                    ? "amber"
+                    : "neutral"
+                }
+              />
+              <CommandStat
+                label="30D End"
+                value={
+                  selectedSummary.projectionEvents.length
+                    ? fmtMoney(
+                        selectedSummary.projectionEvents[
+                          selectedSummary.projectionEvents.length - 1
+                        ].afterBalance
+                      )
+                    : fmtMoney(selectedAccount.balance)
+                }
+                sub="Balance if every scheduled hit lands"
+              />
+            </div>
+
+            {selectedSummary.projectionEvents.length ? (
+              <div className="accCmdDataList">
+                {selectedSummary.projectionEvents.map((event) => (
+                  <ForecastEventRow key={event.id} event={event} />
+                ))}
+              </div>
+            ) : (
+              <div className="accCmdEmptyInline">
+                Forecast is clean. No upcoming linked income or bills are scheduled.
+              </div>
+            )}
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+   right rail
+   ────────────────────────────────────────────────────────────────────────── */
+
+function ToolRail({
+  selectedAccount,
+  selectedSummary,
+  defaultAccountId,
+  busy,
+  onSetPrimary,
+  onOpenAdjust,
+  onOpenTransfer,
+  onRefresh,
+}) {
+  if (!selectedAccount || !selectedSummary) {
+    return (
+      <div className="accCmdRightPane">
+        <div className="accCmdEmptyBlock">Select an account.</div>
+      </div>
+    );
+  }
+
+  const risk = riskMeta(selectedSummary);
+
+  return (
+    <div className="accCmdRightPane">
+      <div className="accCmdRailSection">
+        <div className="accCmdRailLabel">Quick Actions</div>
+        <div className="accCmdRailActionStack">
+          <Button
+            variant={defaultAccountId === selectedAccount.id ? "ghost" : "primary"}
+            full
+            onClick={onSetPrimary}
+            disabled={busy}
+          >
+            <Save size={14} />
+            {defaultAccountId === selectedAccount.id ? "Already Primary" : "Set as Primary"}
+          </Button>
+
+          <Button variant="ghost" full onClick={onOpenAdjust}>
+            <Plus size={14} />
+            Adjust Balance
+          </Button>
+
+          <Button variant="ghost" full onClick={onOpenTransfer}>
+            <ArrowRightLeft size={14} />
+            Transfer Money
+          </Button>
+
+          <Button variant="ghost" full onClick={onRefresh} disabled={busy}>
+            <RefreshCw size={14} />
+            Refresh Data
+          </Button>
+        </div>
+      </div>
+
+      <div className="accCmdRailSection">
+        <div className="accCmdRailLabel">Signals</div>
+
+        <div className="accCmdSignalStack">
+          <div className="accCmdSignalCard">
+            <span>Safe Buffer</span>
+            <strong>{fmtMoney(selectedSummary.safeBuffer)}</strong>
+            <small>Local warning line</small>
+          </div>
+
+          <div className="accCmdSignalCard">
+            <span>Projected 14D</span>
+            <strong
+              style={{
+                color:
+                  selectedSummary.projected14 < selectedSummary.safeBuffer
+                    ? "#f5cf88"
+                    : "#fff",
+              }}
+            >
+              {fmtMoney(selectedSummary.projected14)}
+            </strong>
+            <small>Two week balance view</small>
+          </div>
+
+          <div className="accCmdSignalCard">
+            <span>Low Point</span>
+            <strong
+              style={{
+                color:
+                  selectedSummary.projectedLowPoint < 0
+                    ? "#ffb4c5"
+                    : selectedSummary.projectedLowPoint < selectedSummary.safeBuffer
+                    ? "#f5cf88"
+                    : "#fff",
+              }}
+            >
+              {fmtMoney(selectedSummary.projectedLowPoint)}
+            </strong>
+            <small>Worst projected 30D balance</small>
+          </div>
+        </div>
+      </div>
+
+      <div className="accCmdRailSection accCmdRailSection_fill">
+        <div className="accCmdRailLabel">Next Hits</div>
+
+        <div className="accCmdMiniList">
+          {selectedSummary.nextIncome ? (
+            <div className="accCmdDataRow">
+              <div>
+                <div className="accCmdDataTitle">{selectedSummary.nextIncome.source}</div>
+                <div className="accCmdDataSub">
+                  {shortDate(selectedSummary.nextIncome.deposit_date)}
+                </div>
+              </div>
+              <div className="accCmdDataAmount" style={{ color: "#97efc7" }}>
+                +{fmtMoney(selectedSummary.nextIncome.amount)}
+              </div>
+            </div>
+          ) : null}
+
+          {selectedSummary.nextBill ? (
+            <div className="accCmdDataRow">
+              <div>
+                <div className="accCmdDataTitle">{billTitle(selectedSummary.nextBill)}</div>
+                <div className="accCmdDataSub">{shortDate(selectedSummary.nextBill.due_date)}</div>
+              </div>
+              <div className="accCmdDataAmount" style={{ color: "#f5cf88" }}>
+                -{fmtMoney(amountFromBill(selectedSummary.nextBill))}
+              </div>
+            </div>
+          ) : null}
+
+          {!selectedSummary.nextIncome && !selectedSummary.nextBill ? (
+            <div className="accCmdEmptyInline">Nothing linked next.</div>
+          ) : null}
+        </div>
+
+        <div className="accCmdRailSpacer" />
+
+        <div className="accCmdInfoCard">
+          <div className="accCmdTinyLabel">Warning Engine</div>
+          <div className="accCmdWarningRow">
+            {risk.tone === "red" || risk.tone === "amber" ? (
+              <>
+                <ShieldAlert size={14} />
+                <span>{risk.detail}</span>
+              </>
+            ) : (
+              <>
+                <Sparkles size={14} />
+                <span>{risk.detail}</span>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+   modals
+   ────────────────────────────────────────────────────────────────────────── */
+
+function AdjustModal({
+  open,
+  onClose,
+  selectedAccount,
+  adjustForm,
+  setAdjustForm,
+  onSubmit,
+  busy,
+  safeBufferValue,
+  setSafeBufferValue,
+}) {
+  return (
+    <ModalShell
+      open={open}
+      onClose={onClose}
+      title="Adjust Balance"
+      subcopy={
+        selectedAccount
+          ? `Manual correction for ${selectedAccount.name}`
+          : "Manual balance correction"
+      }
+      footer={
+        <>
+          <Button onClick={onClose}>Cancel</Button>
+          <Button variant="primary" onClick={onSubmit} disabled={busy}>
+            <Save size={14} />
+            {busy ? "Saving…" : "Apply Changes"}
+          </Button>
+        </>
+      }
+    >
+      <div className="accCmdModalGrid">
+        <div className="accCmdInfoCard">
+          <div className="accCmdTinyLabel">Mode</div>
+          <div className="accCmdModeRow">
+            <Button
+              variant={adjustForm.mode === "add" ? "primary" : "ghost"}
+              onClick={() => setAdjustForm((prev) => ({ ...prev, mode: "add" }))}
+            >
+              + Add
+            </Button>
+            <Button
+              variant={adjustForm.mode === "subtract" ? "primary" : "ghost"}
+              onClick={() => setAdjustForm((prev) => ({ ...prev, mode: "subtract" }))}
+            >
+              - Subtract
+            </Button>
+          </div>
+        </div>
+
+        <div>
+          <div className="accCmdTinyLabel">Amount</div>
+          <input
+            className="accCmdField"
+            inputMode="decimal"
+            placeholder="0.00"
+            value={adjustForm.amount}
+            onChange={(e) =>
+              setAdjustForm((prev) => ({
+                ...prev,
+                amount: e.target.value,
+              }))
+            }
+          />
+        </div>
+
+        <div>
+          <div className="accCmdTinyLabel">Note</div>
+          <textarea
+            className="accCmdField"
+            rows={5}
+            placeholder="Why this correction is being made…"
+            value={adjustForm.note}
+            onChange={(e) =>
+              setAdjustForm((prev) => ({
+                ...prev,
+                note: e.target.value,
+              }))
+            }
+          />
+        </div>
+
+        <div>
+          <div className="accCmdTinyLabel">Safe Buffer</div>
+          <input
+            className="accCmdField"
+            inputMode="decimal"
+            placeholder="150.00"
+            value={safeBufferValue}
+            onChange={(e) => setSafeBufferValue(e.target.value)}
+          />
+        </div>
+      </div>
+    </ModalShell>
+  );
+}
+
+function TransferModal({
+  open,
+  onClose,
+  selectedAccount,
+  accounts,
+  transferForm,
+  setTransferForm,
+  onSubmit,
+  busy,
+}) {
+  return (
+    <ModalShell
+      open={open}
+      onClose={onClose}
+      title="Transfer Money"
+      subcopy={
+        selectedAccount
+          ? `Move money out of ${selectedAccount.name}`
+          : "Move money between accounts"
+      }
+      footer={
+        <>
+          <Button onClick={onClose}>Cancel</Button>
+          <Button variant="primary" onClick={onSubmit} disabled={busy}>
+            <ArrowRightLeft size={14} />
+            {busy ? "Moving…" : "Move Money"}
+          </Button>
+        </>
+      }
+    >
+      <div className="accCmdModalGrid">
+        <div>
+          <div className="accCmdTinyLabel">From Account</div>
+          <div className="accCmdInfoCard">
+            <div className="accCmdInfoValue">{selectedAccount?.name || "Account"}</div>
+            <div className="accCmdInfoSub">Current transfer source</div>
+          </div>
+        </div>
+
+        <div>
+          <div className="accCmdTinyLabel">To Account</div>
+          <select
+            className="accCmdField"
+            value={transferForm.toAccountId}
+            onChange={(e) =>
+              setTransferForm((prev) => ({
+                ...prev,
+                toAccountId: e.target.value,
+              }))
+            }
+          >
+            <option value="">Select account</option>
+            {accounts
+              .filter((account) => account.id !== selectedAccount?.id)
+              .map((account) => (
+                <option key={account.id} value={account.id}>
+                  {account.name}
+                </option>
+              ))}
+          </select>
+        </div>
+
+        <div>
+          <div className="accCmdTinyLabel">Amount</div>
+          <input
+            className="accCmdField"
+            inputMode="decimal"
+            placeholder="0.00"
+            value={transferForm.amount}
+            onChange={(e) =>
+              setTransferForm((prev) => ({
+                ...prev,
+                amount: e.target.value,
+              }))
+            }
+          />
+        </div>
+
+        <div>
+          <div className="accCmdTinyLabel">Note</div>
+          <textarea
+            className="accCmdField"
+            rows={5}
+            placeholder="Optional transfer note…"
+            value={transferForm.note}
+            onChange={(e) =>
+              setTransferForm((prev) => ({
+                ...prev,
+                note: e.target.value,
+              }))
+            }
+          />
+        </div>
+      </div>
+    </ModalShell>
+  );
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+   page
+   ────────────────────────────────────────────────────────────────────────── */
 
 export default function AccountsPage() {
   const [accounts, setAccounts] = useState([]);
@@ -708,15 +1642,19 @@ export default function AccountsPage() {
   const [bills, setBills] = useState([]);
   const [incomeRows, setIncomeRows] = useState([]);
   const [defaultAccountId, setDefaultAccountId] = useState("");
-  const [defaultAccountName, setDefaultAccountName] = useState("");
   const [selectedAccountId, setSelectedAccountId] = useState("");
+
   const [accountSearch, setAccountSearch] = useState("");
   const [accountFilter, setAccountFilter] = useState("all");
   const [tab, setTab] = useState("activity");
+  const [mobileSection, setMobileSection] = useState("focus");
+
   const [loading, setLoading] = useState(true);
   const [userId, setUserId] = useState(null);
   const [busy, setBusy] = useState(false);
-  const [safeBufferMap, setSafeBufferMap] = useState({});
+  const [pageError, setPageError] = useState("");
+  const [status, setStatus] = useState("");
+
   const [adjustForm, setAdjustForm] = useState({
     mode: "add",
     amount: "",
@@ -727,87 +1665,105 @@ export default function AccountsPage() {
     amount: "",
     note: "",
   });
+  const [openModal, setOpenModal] = useState(null);
+  const [bufferDraft, setBufferDraft] = useState("150");
 
-  async function loadAccountsPage() {
+  useEffect(() => {
+    if (!status) return;
+    const id = setTimeout(() => setStatus(""), 3200);
+    return () => clearTimeout(id);
+  }, [status]);
+
+  const loadAccountsPage = useCallback(async () => {
     if (!supabase) {
       setLoading(false);
+      setPageError("Supabase client is not available.");
       return;
     }
 
     setLoading(true);
+    setPageError("");
 
-    const {
-      data: { session },
-      error: sessionError,
-    } = await supabase.auth.getSession();
+    try {
+      const {
+        data: { session },
+        error: sessionError,
+      } = await supabase.auth.getSession();
 
-    if (sessionError || !session?.user) {
-      setUserId(null);
-      setAccounts([]);
-      setTransactions([]);
-      setBills([]);
-      setIncomeRows([]);
-      setDefaultAccountId("");
-      setDefaultAccountName("");
-      setSelectedAccountId("");
+      if (sessionError || !session?.user) {
+        setUserId(null);
+        setAccounts([]);
+        setTransactions([]);
+        setBills([]);
+        setIncomeRows([]);
+        setDefaultAccountId("");
+        setSelectedAccountId("");
+        setLoading(false);
+        return;
+      }
+
+      setUserId(session.user.id);
+
+      const [accountsRes, txRes, settingsRes, billsRes, incomeRes] = await Promise.all([
+        supabase
+          .from("accounts")
+          .select("id, user_id, name, account_type, balance, safe_buffer, updated_at")
+          .eq("user_id", session.user.id)
+          .order("name", { ascending: true }),
+        supabase
+          .from("account_transactions")
+          .select(
+            "id, user_id, account_id, kind, amount, delta, resulting_balance, note, related_account_id, related_account_name, source_type, source_id, created_at"
+          )
+          .eq("user_id", session.user.id)
+          .order("created_at", { ascending: false }),
+        supabase
+          .from("account_settings")
+          .select("primary_account_id")
+          .eq("user_id", session.user.id)
+          .maybeSingle(),
+        supabase
+          .from("bills")
+          .select(
+            "id, user_id, account_id, amount, due_date, active, category, notes, frequency, min_pay, extra_pay, balance"
+          )
+          .eq("user_id", session.user.id)
+          .order("due_date", { ascending: true }),
+        supabase
+          .from("income_deposits")
+          .select("id, user_id, source, amount, note, deposit_date, created_at, updated_at")
+          .eq("user_id", session.user.id)
+          .order("deposit_date", { ascending: true }),
+      ]);
+
+      if (accountsRes.error) throw accountsRes.error;
+      if (txRes.error) throw txRes.error;
+      if (settingsRes.error) throw settingsRes.error;
+      if (billsRes.error) throw billsRes.error;
+      if (incomeRes.error) throw incomeRes.error;
+
+      const loadedAccounts = accountsRes.data || [];
+      const primaryAccountId = settingsRes.data?.primary_account_id || "";
+
+      setAccounts(loadedAccounts);
+      setTransactions(txRes.data || []);
+      setBills((billsRes.data || []).filter((row) => row.active !== false));
+      setIncomeRows(incomeRes.data || []);
+      setDefaultAccountId(primaryAccountId);
+
+      setSelectedAccountId((prev) => {
+        if (prev && loadedAccounts.some((account) => account.id === prev)) return prev;
+        if (primaryAccountId && loadedAccounts.some((account) => account.id === primaryAccountId)) {
+          return primaryAccountId;
+        }
+        return loadedAccounts[0]?.id || "";
+      });
+    } catch (err) {
+      setPageError(err?.message || "Failed to load accounts.");
+    } finally {
       setLoading(false);
-      return;
     }
-
-    setUserId(session.user.id);
-
-    const [accountsRes, txRes, settingsRes, billsRes, incomeRes] = await Promise.all([
-      supabase
-        .from("accounts")
-        .select("id, user_id, name, account_type, balance, updated_at")
-        .eq("user_id", session.user.id)
-        .order("name", { ascending: true }),
-      supabase
-        .from("account_transactions")
-        .select(
-          "id, user_id, account_id, kind, amount, delta, resulting_balance, note, related_account_id, related_account_name, source_type, source_id, created_at"
-        )
-        .eq("user_id", session.user.id)
-        .order("created_at", { ascending: false }),
-      supabase
-        .from("account_settings")
-        .select("primary_account_id")
-        .eq("user_id", session.user.id)
-        .maybeSingle(),
-      supabase
-        .from("bills")
-        .select(
-          "id, user_id, account_id, amount, due_date, active, category, notes, frequency, min_pay, extra_pay, balance"
-        )
-        .eq("user_id", session.user.id)
-        .order("due_date", { ascending: true }),
-      supabase
-        .from("income_deposits")
-        .select("id, user_id, source, amount, note, deposit_date, created_at, updated_at")
-        .eq("user_id", session.user.id)
-        .order("deposit_date", { ascending: true }),
-    ]);
-
-    if (accountsRes.error) console.error("load accounts error:", accountsRes.error);
-    if (txRes.error) console.error("load transactions error:", txRes.error);
-    if (settingsRes.error) console.error("load account settings error:", settingsRes.error);
-    if (billsRes.error) console.error("load bills error:", billsRes.error);
-    if (incomeRes.error) console.error("load income routing error:", incomeRes.error);
-
-    const loadedAccounts = accountsRes.data || [];
-    const primaryAccountId = settingsRes.data?.primary_account_id || "";
-    const primaryAccount =
-      loadedAccounts.find((account) => account.id === primaryAccountId) || null;
-
-    setAccounts(loadedAccounts);
-    setTransactions(txRes.data || []);
-    setBills((billsRes.data || []).filter((row) => row.active !== false));
-    setIncomeRows(incomeRes.data || []);
-    setDefaultAccountId(primaryAccountId);
-    setDefaultAccountName(primaryAccount?.name || "");
-    setSelectedAccountId((prev) => prev || loadedAccounts[0]?.id || "");
-    setLoading(false);
-  }
+  }, []);
 
   useEffect(() => {
     loadAccountsPage();
@@ -823,30 +1779,7 @@ export default function AccountsPage() {
     return () => {
       subscription?.unsubscribe?.();
     };
-  }, []);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    try {
-      const raw = window.localStorage.getItem(SAFE_BUFFER_STORAGE_KEY);
-      if (!raw) return;
-      const parsed = JSON.parse(raw);
-      if (parsed && typeof parsed === "object") {
-        setSafeBufferMap(parsed);
-      }
-    } catch {
-      //
-    }
-  }, []);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    try {
-      window.localStorage.setItem(SAFE_BUFFER_STORAGE_KEY, JSON.stringify(safeBufferMap));
-    } catch {
-      //
-    }
-  }, [safeBufferMap]);
+  }, [loadAccountsPage]);
 
   const summaryById = useMemo(() => {
     const now = new Date();
@@ -974,7 +1907,7 @@ export default function AccountsPage() {
           .reduce((sum, item) => sum + safeNum(item.amount, 0), 0)
       );
 
-      const safeBuffer = safeNum(safeBufferMap[account.id], 150);
+      const safeBuffer = safeNum(account.safe_buffer, 150);
       const projected14 = round2(safeNum(account.balance, 0) + income14 - bill14);
       const projectedMonthEnd = round2(
         safeNum(account.balance, 0) + futureIncomeMonth - futureBillsMonth
@@ -1022,10 +1955,17 @@ export default function AccountsPage() {
         flowMixMap.set(key, existing);
       });
 
+      const risk =
+        lowPoint < 0
+          ? "critical"
+          : projected14 < safeBuffer || lowPoint < safeBuffer
+          ? "warning"
+          : "stable";
+
       result[account.id] = {
         account,
         transactions: accountTxs,
-        recentTransactions: accountTxs.slice(0, 40),
+        recentTransactions: accountTxs.slice(0, 50),
         last30Delta,
         startBalance,
         monthIncome,
@@ -1041,16 +1981,21 @@ export default function AccountsPage() {
         projectedMonthEnd,
         projectedLowPoint: round2(lowPoint),
         projectionEvents: projectionEventsWithAfter,
-        atRisk: projected14 < safeBuffer || lowPoint < 0,
+        atRisk: risk !== "stable",
+        riskLevel: risk,
         flowMix: [...flowMixMap.values()].sort((a, b) => Math.abs(b.total) - Math.abs(a.total)),
       };
     });
 
     return result;
-  }, [accounts, transactions, bills, incomeRows, defaultAccountId, safeBufferMap]);
+  }, [accounts, transactions, bills, incomeRows, defaultAccountId]);
 
   const totalCash = useMemo(() => {
-    return round2(accounts.reduce((sum, account) => sum + safeNum(account.balance, 0), 0));
+    return round2(
+      accounts
+        .filter((account) => isCashLikeAccount(account.account_type))
+        .reduce((sum, account) => sum + safeNum(account.balance, 0), 0)
+    );
   }, [accounts]);
 
   const checkingTotal = useMemo(() => {
@@ -1076,7 +2021,7 @@ export default function AccountsPage() {
   const visibleAccounts = useMemo(() => {
     const q = accountSearch.trim().toLowerCase();
 
-    return accounts.filter((account) => {
+    const filtered = accounts.filter((account) => {
       const summary = summaryById[account.id];
       if (accountFilter === "at_risk" && !summary?.atRisk) return false;
       if (accountFilter !== "all" && accountFilter !== "at_risk") {
@@ -1090,7 +2035,21 @@ export default function AccountsPage() {
         .toLowerCase()
         .includes(q);
     });
-  }, [accounts, accountSearch, accountFilter, summaryById]);
+
+    const riskRank = { critical: 3, warning: 2, stable: 1 };
+
+    return filtered.sort((a, b) => {
+      const aPrimary = a.id === defaultAccountId ? 1 : 0;
+      const bPrimary = b.id === defaultAccountId ? 1 : 0;
+      if (aPrimary !== bPrimary) return bPrimary - aPrimary;
+
+      const aRisk = riskRank[summaryById[a.id]?.riskLevel || "stable"] || 0;
+      const bRisk = riskRank[summaryById[b.id]?.riskLevel || "stable"] || 0;
+      if (aRisk !== bRisk) return bRisk - aRisk;
+
+      return Math.abs(safeNum(b.balance, 0)) - Math.abs(safeNum(a.balance, 0));
+    });
+  }, [accounts, accountSearch, accountFilter, summaryById, defaultAccountId]);
 
   useEffect(() => {
     if (!visibleAccounts.length) {
@@ -1100,14 +2059,17 @@ export default function AccountsPage() {
 
     const exists = visibleAccounts.some((account) => account.id === selectedAccountId);
     if (!exists) {
-      setSelectedAccountId(visibleAccounts[0].id);
+      const preferred =
+        visibleAccounts.find((account) => account.id === defaultAccountId) || visibleAccounts[0];
+      setSelectedAccountId(preferred.id);
     }
-  }, [visibleAccounts, selectedAccountId]);
+  }, [visibleAccounts, selectedAccountId, defaultAccountId]);
 
   const selectedAccount =
     accounts.find((account) => account.id === selectedAccountId) || visibleAccounts[0] || null;
 
   const selectedSummary = selectedAccount ? summaryById[selectedAccount.id] : null;
+  const selectedRisk = riskMeta(selectedSummary);
 
   const selectedBars = useMemo(() => {
     if (!selectedSummary || !selectedAccount) return [];
@@ -1116,6 +2078,7 @@ export default function AccountsPage() {
 
   useEffect(() => {
     if (!selectedAccount) return;
+
     setTransferForm((prev) => {
       if (prev.toAccountId && prev.toAccountId !== selectedAccount.id) return prev;
       const fallback = accounts.find((account) => account.id !== selectedAccount.id)?.id || "";
@@ -1126,29 +2089,40 @@ export default function AccountsPage() {
     });
   }, [selectedAccount?.id, accounts]);
 
+  useEffect(() => {
+    if (!selectedAccount) return;
+    setBufferDraft(String(safeNum(selectedAccount.safe_buffer, 150)));
+  }, [selectedAccount?.id, selectedAccount?.safe_buffer]);
+
+  useEffect(() => {
+    if (selectedAccountId) setMobileSection("focus");
+  }, [selectedAccountId]);
+
   async function setPrimaryAccount() {
     if (!supabase || !userId || !selectedAccount || busy) return;
 
     setBusy(true);
+    setPageError("");
 
-    const { error } = await supabase.from("account_settings").upsert(
-      {
-        user_id: userId,
-        primary_account_id: selectedAccount.id,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: "user_id" }
-    );
+    try {
+      const { error } = await supabase.from("account_settings").upsert(
+        {
+          user_id: userId,
+          primary_account_id: selectedAccount.id,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "user_id" }
+      );
 
-    if (error) {
-      console.error("set primary account error:", error);
+      if (error) throw error;
+
+      setStatus("Primary account updated.");
+      await loadAccountsPage();
+    } catch (err) {
+      setPageError(err?.message || "Could not set primary account.");
+    } finally {
       setBusy(false);
-      return;
     }
-
-    setDefaultAccountId(selectedAccount.id);
-    setDefaultAccountName(selectedAccount.name || "");
-    setBusy(false);
   }
 
   async function addManualAdjustment() {
@@ -1156,72 +2130,97 @@ export default function AccountsPage() {
 
     const rawAmount = round2(parseMoneyInput(adjustForm.amount));
     const note = String(adjustForm.note || "").trim();
-    const signedDelta = adjustForm.mode === "subtract" ? -Math.abs(rawAmount) : Math.abs(rawAmount);
+    const parsedBuffer = round2(parseMoneyInput(bufferDraft));
+    const hasBufferInput = Number.isFinite(parsedBuffer) && parsedBuffer >= 0;
 
-    if (!Number.isFinite(rawAmount) || rawAmount <= 0) return;
+    const balanceChangeValid = Number.isFinite(rawAmount) && rawAmount > 0;
+    const signedDelta = balanceChangeValid
+      ? adjustForm.mode === "subtract"
+        ? -Math.abs(rawAmount)
+        : Math.abs(rawAmount)
+      : 0;
 
-    const nextBalance = round2(safeNum(selectedAccount.balance, 0) + signedDelta);
+    const originalBalance = round2(safeNum(selectedAccount.balance, 0));
+    const originalSafeBuffer = round2(safeNum(selectedAccount.safe_buffer, 150));
+    const nextBalance = round2(originalBalance + signedDelta);
+    const nextSafeBuffer = hasBufferInput ? parsedBuffer : originalSafeBuffer;
+
+    const hasBufferChange = nextSafeBuffer !== originalSafeBuffer;
+    const hasBalanceChange = signedDelta !== 0;
+
+    if (!hasBalanceChange && !hasBufferChange) {
+      setPageError("Enter an adjustment amount or change the safe buffer.");
+      return;
+    }
+
+    if (!hasBufferInput && bufferDraft.trim() !== "") {
+      setPageError("Enter a valid safe buffer.");
+      return;
+    }
+
     const nowIso = new Date().toISOString();
 
     setBusy(true);
+    setPageError("");
 
-    const updateRes = await supabase
-      .from("accounts")
-      .update({
-        balance: nextBalance,
-        updated_at: nowIso,
-      })
-      .eq("id", selectedAccount.id)
-      .eq("user_id", userId);
+    try {
+      const updateRes = await supabase
+        .from("accounts")
+        .update({
+          balance: nextBalance,
+          safe_buffer: nextSafeBuffer,
+          updated_at: nowIso,
+        })
+        .eq("id", selectedAccount.id)
+        .eq("user_id", userId);
 
-    if (updateRes.error) {
-      console.error("adjustment account update error:", updateRes.error);
-      setBusy(false);
-      return;
-    }
+      if (updateRes.error) throw updateRes.error;
 
-    const insertRes = await supabase
-      .from("account_transactions")
-      .insert({
-        user_id: userId,
-        account_id: selectedAccount.id,
-        kind: adjustForm.mode === "subtract" ? "manual_debit" : "manual_credit",
-        amount: Math.abs(rawAmount),
-        delta: signedDelta,
-        resulting_balance: nextBalance,
-        note: note || "Manual adjustment",
-        related_account_id: null,
-        related_account_name: null,
-        source_type: "manual_adjustment",
-        source_id: uid(),
-        created_at: nowIso,
-      })
-      .select(
-        "id, user_id, account_id, kind, amount, delta, resulting_balance, note, related_account_id, related_account_name, source_type, source_id, created_at"
-      )
-      .single();
+      if (hasBalanceChange) {
+        const insertRes = await supabase.from("account_transactions").insert({
+          user_id: userId,
+          account_id: selectedAccount.id,
+          kind: adjustForm.mode === "subtract" ? "manual_debit" : "manual_credit",
+          amount: Math.abs(rawAmount),
+          delta: signedDelta,
+          resulting_balance: nextBalance,
+          note: note || "Manual adjustment",
+          related_account_id: null,
+          related_account_name: null,
+          source_type: "manual_adjustment",
+          source_id: uid(),
+          created_at: nowIso,
+        });
 
-    if (insertRes.error) {
-      console.error("adjustment transaction insert error:", insertRes.error);
+        if (insertRes.error) {
+          await supabase
+            .from("accounts")
+            .update({
+              balance: originalBalance,
+              safe_buffer: originalSafeBuffer,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", selectedAccount.id)
+            .eq("user_id", userId);
+
+          throw insertRes.error;
+        }
+      }
+
+      setAdjustForm({
+        mode: "add",
+        amount: "",
+        note: "",
+      });
+      setOpenModal(null);
+      setStatus(hasBalanceChange ? "Adjustment applied." : "Safe buffer updated.");
       await loadAccountsPage();
+    } catch (err) {
+      setPageError(err?.message || "Could not apply changes.");
+      await loadAccountsPage();
+    } finally {
       setBusy(false);
-      return;
     }
-
-    setAccounts((prev) =>
-      prev.map((account) =>
-        account.id === selectedAccount.id
-          ? { ...account, balance: nextBalance, updated_at: nowIso }
-          : account
-      )
-    );
-    setTransactions((prev) => [insertRes.data, ...prev]);
-    setAdjustForm({
-      mode: "add",
-      amount: "",
-      note: "",
-    });
-    setBusy(false);
   }
 
   async function submitTransfer() {
@@ -1231,49 +2230,60 @@ export default function AccountsPage() {
     const note = String(transferForm.note || "").trim();
     const target = accounts.find((account) => account.id === transferForm.toAccountId);
 
-    if (!target || target.id === selectedAccount.id) return;
-    if (!Number.isFinite(amount) || amount <= 0) return;
+    if (!target || target.id === selectedAccount.id) {
+      setPageError("Choose a different account for the transfer.");
+      return;
+    }
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setPageError("Enter a valid transfer amount.");
+      return;
+    }
 
-    const sourceNextBalance = round2(safeNum(selectedAccount.balance, 0) - amount);
-    const targetNextBalance = round2(safeNum(target.balance, 0) + amount);
+    const sourceOriginalBalance = round2(safeNum(selectedAccount.balance, 0));
+    const targetOriginalBalance = round2(safeNum(target.balance, 0));
+    const sourceNextBalance = round2(sourceOriginalBalance - amount);
+    const targetNextBalance = round2(targetOriginalBalance + amount);
     const nowIso = new Date().toISOString();
+    const transferId = uid();
 
     setBusy(true);
+    setPageError("");
 
-    const sourceUpdate = await supabase
-      .from("accounts")
-      .update({
-        balance: sourceNextBalance,
-        updated_at: nowIso,
-      })
-      .eq("id", selectedAccount.id)
-      .eq("user_id", userId);
+    try {
+      const sourceUpdate = await supabase
+        .from("accounts")
+        .update({
+          balance: sourceNextBalance,
+          updated_at: nowIso,
+        })
+        .eq("id", selectedAccount.id)
+        .eq("user_id", userId);
 
-    if (sourceUpdate.error) {
-      console.error("transfer source update error:", sourceUpdate.error);
-      setBusy(false);
-      return;
-    }
+      if (sourceUpdate.error) throw sourceUpdate.error;
 
-    const targetUpdate = await supabase
-      .from("accounts")
-      .update({
-        balance: targetNextBalance,
-        updated_at: nowIso,
-      })
-      .eq("id", target.id)
-      .eq("user_id", userId);
+      const targetUpdate = await supabase
+        .from("accounts")
+        .update({
+          balance: targetNextBalance,
+          updated_at: nowIso,
+        })
+        .eq("id", target.id)
+        .eq("user_id", userId);
 
-    if (targetUpdate.error) {
-      console.error("transfer target update error:", targetUpdate.error);
-      await loadAccountsPage();
-      setBusy(false);
-      return;
-    }
+      if (targetUpdate.error) {
+        await supabase
+          .from("accounts")
+          .update({
+            balance: sourceOriginalBalance,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", selectedAccount.id)
+          .eq("user_id", userId);
 
-    const txRes = await supabase
-      .from("account_transactions")
-      .insert([
+        throw targetUpdate.error;
+      }
+
+      const txRes = await supabase.from("account_transactions").insert([
         {
           user_id: userId,
           account_id: selectedAccount.id,
@@ -1285,7 +2295,7 @@ export default function AccountsPage() {
           related_account_id: target.id,
           related_account_name: target.name || "",
           source_type: "manual_transfer",
-          source_id: uid(),
+          source_id: transferId,
           created_at: nowIso,
         },
         {
@@ -1299,1311 +2309,666 @@ export default function AccountsPage() {
           related_account_id: selectedAccount.id,
           related_account_name: selectedAccount.name || "",
           source_type: "manual_transfer",
-          source_id: uid(),
+          source_id: transferId,
           created_at: nowIso,
         },
-      ])
-      .select(
-        "id, user_id, account_id, kind, amount, delta, resulting_balance, note, related_account_id, related_account_name, source_type, source_id, created_at"
-      );
+      ]);
 
-    if (txRes.error) {
-      console.error("transfer transaction insert error:", txRes.error);
+      if (txRes.error) {
+        await supabase
+          .from("accounts")
+          .update({
+            balance: sourceOriginalBalance,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", selectedAccount.id)
+          .eq("user_id", userId);
+
+        await supabase
+          .from("accounts")
+          .update({
+            balance: targetOriginalBalance,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", target.id)
+          .eq("user_id", userId);
+
+        throw txRes.error;
+      }
+
+      setTransferForm({
+        toAccountId: target.id,
+        amount: "",
+        note: "",
+      });
+      setOpenModal(null);
+      setStatus("Transfer completed.");
       await loadAccountsPage();
+    } catch (err) {
+      setPageError(err?.message || "Could not complete transfer.");
+      await loadAccountsPage();
+    } finally {
       setBusy(false);
-      return;
     }
-
-    setAccounts((prev) =>
-      prev.map((account) => {
-        if (account.id === selectedAccount.id) {
-          return { ...account, balance: sourceNextBalance, updated_at: nowIso };
-        }
-        if (account.id === target.id) {
-          return { ...account, balance: targetNextBalance, updated_at: nowIso };
-        }
-        return account;
-      })
-    );
-    setTransactions((prev) => [...(txRes.data || []), ...prev]);
-    setTransferForm({
-      toAccountId: target.id,
-      amount: "",
-      note: "",
-    });
-    setBusy(false);
   }
 
   if (loading) {
     return (
-      <main className="accountsPage">
-        <div className="accountsShell">
-          <GlassPane size="card">
-            <div style={{ fontWeight: 800, fontSize: 18, color: "#fff" }}>
-              Loading account command.
-            </div>
-          </GlassPane>
+      <>
+        <div className="accCmdRoot">
+          <div className="accCmdGate">Loading account command…</div>
         </div>
-        <style jsx global>{globalStyles}</style>
-      </main>
+        <style jsx global>{styles}</style>
+      </>
     );
   }
 
   return (
     <>
-      <main className="accountsPage">
-        <div className="accountsShell">
-          <GlassPane size="card">
-            <div className="accountsHeroGrid">
-              <div style={{ minWidth: 0 }}>
-                <div className="accountsEyebrow">Life Command Center</div>
-                <div className="accountsHeroTitle">Account Command</div>
-                <div className="accountsHeroSub">
-                  Open an account like a bank detail view without leaving the page. The account
-                  list stays on the left. The selected account opens into one continuous workspace
-                  instead of a bunch of broken-up floating panels.
-                </div>
+      <div className="accCmdRoot">
+        <SummaryStrip
+          accounts={accounts}
+          totalCash={totalCash}
+          checkingTotal={checkingTotal}
+          savingsTotal={savingsTotal}
+          atRiskCount={atRiskCount}
+          selectedAccount={selectedAccount}
+          selectedRisk={selectedRisk}
+        />
 
-                <div className="accountsPillRow">
-                  <MiniPill>{accounts.length} accounts</MiniPill>
-                  <MiniPill>{defaultAccountName || "No primary set"}</MiniPill>
-                  <MiniPill tone="amber">{atRiskCount} at risk</MiniPill>
-                  {selectedAccount ? <MiniPill tone="blue">{selectedAccount.name}</MiniPill> : null}
-                </div>
-              </div>
+        <div className="accCmdMobileTabs">
+          {[
+            { v: "list", l: "Accounts" },
+            { v: "focus", l: "Detail" },
+            { v: "tools", l: "Tools" },
+          ].map((s) => (
+            <button
+              key={s.v}
+              type="button"
+              onClick={() => setMobileSection(s.v)}
+              className={`accCmdMobileTab ${
+                mobileSection === s.v ? "accCmdMobileTab_active" : ""
+              }`}
+            >
+              {s.l}
+            </button>
+          ))}
+        </div>
 
-              <div className="accountsHeroSide">
-                <MiniPill>{fmtWhen(new Date().toISOString())}</MiniPill>
-                <MiniPill tone="green">{fmtMoney(totalCash)} total cash</MiniPill>
-              </div>
-            </div>
-          </GlassPane>
-
-          <section className="accountsMetricGrid">
-            <MetricCard
-              icon={Wallet}
-              label="Total Cash"
-              value={fmtMoney(totalCash)}
-              detail="Combined balance across loaded accounts."
-              tone="green"
-            />
-            <MetricCard
-              icon={Landmark}
-              label="Checking"
-              value={fmtMoney(checkingTotal)}
-              detail="Cash sitting in checking-type accounts."
-              tone="blue"
-            />
-            <MetricCard
-              icon={PiggyBank}
-              label="Savings"
-              value={fmtMoney(savingsTotal)}
-              detail="Savings parked and ready for buffer or goals."
-              tone="green"
-            />
-            <MetricCard
-              icon={ShieldAlert}
-              label="At Risk"
-              value={String(atRiskCount)}
-              detail="Accounts projected below the safe buffer in the next 14 days."
-              tone={atRiskCount > 0 ? "amber" : "neutral"}
+        <div className="accCmdWorkspace">
+          <section className={`accCmdCol ${mobileSection === "list" ? "accCmdCol_show" : ""}`}>
+            <QueuePane
+              visibleAccounts={visibleAccounts}
+              summaryById={summaryById}
+              selectedAccount={selectedAccount}
+              onSelect={(accountId) => {
+                setSelectedAccountId(accountId);
+                setMobileSection("focus");
+              }}
+              accountSearch={accountSearch}
+              setAccountSearch={setAccountSearch}
+              accountFilter={accountFilter}
+              setAccountFilter={setAccountFilter}
+              defaultAccountId={defaultAccountId}
             />
           </section>
 
-          <section className="accountsWorkspaceGrid">
-            <GlassPane size="card" style={{ height: "100%" }}>
-              <PaneHeader
-                title="Accounts"
-                subcopy="Click one to open it inside the command workspace."
-                right={<MiniPill>{visibleAccounts.length} showing</MiniPill>}
-              />
+          <section className={`accCmdCol ${mobileSection === "focus" ? "accCmdCol_show" : ""}`}>
+            <FocusPane
+              selectedAccount={selectedAccount}
+              selectedSummary={selectedSummary}
+              selectedBars={selectedBars}
+              tab={tab}
+              setTab={setTab}
+              defaultAccountId={defaultAccountId}
+            />
+          </section>
 
-              <div className="accountsRailControls">
-                <div className="accountsSearchWrap">
-                  <Search size={15} />
-                  <input
-                    className="accountsField accountsSearchField"
-                    placeholder="Search accounts"
-                    value={accountSearch}
-                    onChange={(e) => setAccountSearch(e.target.value)}
-                  />
-                </div>
-
-                <select
-                  className="accountsField"
-                  value={accountFilter}
-                  onChange={(e) => setAccountFilter(e.target.value)}
-                >
-                  <option value="all">All accounts</option>
-                  <option value="checking">Checking</option>
-                  <option value="savings">Savings</option>
-                  <option value="credit">Credit</option>
-                  <option value="cash">Cash</option>
-                  <option value="at_risk">At risk</option>
-                </select>
-              </div>
-
-              {visibleAccounts.length ? (
-                <div className="accountsRailList">
-                  {visibleAccounts.map((account) => (
-                    <AccountRailCard
-                      key={account.id}
-                      account={account}
-                      summary={summaryById[account.id]}
-                      selected={account.id === selectedAccount?.id}
-                      onSelect={() => setSelectedAccountId(account.id)}
-                    />
-                  ))}
-                </div>
-              ) : (
-                <div className="accountsEmptyState">
-                  <div>
-                    <div className="accountsEmptyTitle">No accounts found</div>
-                    <div className="accountsEmptyText">
-                      Clear the filter or add an account first.
-                    </div>
-                  </div>
-                </div>
-              )}
-            </GlassPane>
-
-            <GlassPane size="card" style={{ height: "100%" }}>
-              <div className="accountsWorkspaceShell">
-                {selectedAccount && selectedSummary ? (
-                  <>
-                    <section className="accountsSurfaceSection accountsSurfaceHero">
-                      <PaneHeader
-                        title={selectedAccount.name || "Account Focus"}
-                        subcopy={`${normalizeAccountType(
-                          selectedAccount.account_type
-                        )} • Updated ${formatAgo(selectedAccount.updated_at)}`}
-                        right={
-                          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                            {defaultAccountId === selectedAccount.id ? (
-                              <MiniPill tone="green">Primary</MiniPill>
-                            ) : null}
-                            {selectedSummary.atRisk ? (
-                              <MiniPill tone="amber">Low buffer risk</MiniPill>
-                            ) : (
-                              <MiniPill tone="blue">Stable</MiniPill>
-                            )}
-                          </div>
-                        }
-                      />
-
-                      <div className="accountsFocusHero">
-                        <div className="accountsFocusLeft">
-                          <div className="accountTinyLabel">Live Balance</div>
-                          <div className="accountsFocusBalance">
-                            {fmtMoney(selectedAccount.balance)}
-                          </div>
-
-                          <div className="accountsFocusGrid">
-                            <div className="accountsInfoCell">
-                              <div className="accountTinyLabel">30D Change</div>
-                              <div
-                                className="accountsInfoValue"
-                                style={{
-                                  color:
-                                    safeNum(selectedSummary.last30Delta, 0) >= 0
-                                      ? "#97efc7"
-                                      : "#ffb4c5",
-                                }}
-                              >
-                                {safeNum(selectedSummary.last30Delta, 0) >= 0 ? "+" : ""}
-                                {fmtMoney(selectedSummary.last30Delta)}
-                              </div>
-                              <div className="accountsInfoSub">Trailing 30 day ledger movement</div>
-                            </div>
-
-                            <div className="accountsInfoCell">
-                              <div className="accountTinyLabel">Projected 14D</div>
-                              <div className="accountsInfoValue">
-                                {fmtMoney(selectedSummary.projected14)}
-                              </div>
-                              <div className="accountsInfoSub">
-                                Income minus bills over the next two weeks
-                              </div>
-                            </div>
-
-                            <div className="accountsInfoCell">
-                              <div className="accountTinyLabel">Next Bill</div>
-                              <div className="accountsInfoValue">
-                                {selectedSummary.nextBill
-                                  ? shortDate(selectedSummary.nextBill.due_date)
-                                  : "Clear"}
-                              </div>
-                              <div className="accountsInfoSub">
-                                {selectedSummary.nextBill
-                                  ? `${billTitle(selectedSummary.nextBill)} • ${fmtMoney(
-                                      amountFromBill(selectedSummary.nextBill)
-                                    )}`
-                                  : "No linked outgoing bill"}
-                              </div>
-                            </div>
-
-                            <div className="accountsInfoCell">
-                              <div className="accountTinyLabel">Next Deposit</div>
-                              <div className="accountsInfoValue">
-                                {selectedSummary.nextIncome
-                                  ? shortDate(selectedSummary.nextIncome.deposit_date)
-                                  : "None"}
-                              </div>
-                              <div className="accountsInfoSub">
-                                {selectedSummary.nextIncome
-                                  ? `${selectedSummary.nextIncome.source} • ${fmtMoney(
-                                      selectedSummary.nextIncome.amount
-                                    )}`
-                                  : "No scheduled incoming deposit"}
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="accountsFocusRight">
-                          <div className="accountsChartCard">
-                            <div className="accountsChartHead">
-                              <div>
-                                <div className="accountTinyLabel">Balance Trend</div>
-                                <div className="accountsChartTitle">Last 14 Days</div>
-                              </div>
-                              <MiniPill tone="blue">live</MiniPill>
-                            </div>
-
-                            <BalanceBars bars={selectedBars} />
-                          </div>
-                        </div>
-                      </div>
-                    </section>
-
-                    <section className="accountsSurfaceSection accountsSurfaceBody">
-                      <div className="accountsBodyGrid">
-                        <div className="accountsMainColumn">
-                          <div className="accountsTabRow">
-                            <TabBtn
-                              label="Activity"
-                              active={tab === "activity"}
-                              onClick={() => setTab("activity")}
-                            />
-                            <TabBtn
-                              label="Balance Story"
-                              active={tab === "story"}
-                              onClick={() => setTab("story")}
-                            />
-                            <TabBtn
-                              label="Recurring Flow"
-                              active={tab === "recurring"}
-                              onClick={() => setTab("recurring")}
-                            />
-                            <TabBtn
-                              label="Forecast"
-                              active={tab === "forecast"}
-                              onClick={() => setTab("forecast")}
-                            />
-                          </div>
-
-                          {tab === "activity" ? (
-                            <>
-                              <div className="accountsContentSection">
-                                <PaneHeader
-                                  title="Activity Feed"
-                                  subcopy="What actually hit this account."
-                                  right={<MiniPill>{selectedSummary.recentTransactions.length} rows</MiniPill>}
-                                />
-
-                                {selectedSummary.recentTransactions.length ? (
-                                  <div className="accountsTxList">
-                                    {selectedSummary.recentTransactions.map((tx) => (
-                                      <TransactionRow key={tx.id} tx={tx} />
-                                    ))}
-                                  </div>
-                                ) : (
-                                  <div className="accountsEmptyState accountsInlineEmpty">
-                                    <div>
-                                      <div className="accountsEmptyTitle">No account activity yet</div>
-                                      <div className="accountsEmptyText">
-                                        The ledger will fill as income, bills, transfers, and manual
-                                        adjustments hit this account.
-                                      </div>
-                                    </div>
-                                  </div>
-                                )}
-                              </div>
-
-                              <div className="accountsDetailSubGrid">
-                                <div className="accountsContentSection compact">
-                                  <PaneHeader
-                                    title="Balance Story Snapshot"
-                                    subcopy="Fast explanation of why the balance is here."
-                                  />
-
-                                  <div className="accountsQuickInfoList">
-                                    <QuickInfoRow
-                                      label="Start of month"
-                                      value={fmtMoney(selectedSummary.startBalance)}
-                                    />
-                                    <QuickInfoRow
-                                      label="Income added"
-                                      value={`+${fmtMoney(selectedSummary.monthIncome)}`}
-                                      tone="green"
-                                    />
-                                    <QuickInfoRow
-                                      label="Bills paid"
-                                      value={`-${fmtMoney(selectedSummary.monthBills)}`}
-                                      tone="amber"
-                                    />
-                                    <QuickInfoRow
-                                      label="Spending"
-                                      value={`-${fmtMoney(selectedSummary.monthSpending)}`}
-                                      tone="red"
-                                    />
-                                    <QuickInfoRow
-                                      label="Transfers"
-                                      value={`${safeNum(selectedSummary.monthTransfersNet, 0) >= 0 ? "+" : ""}${fmtMoney(selectedSummary.monthTransfersNet)}`}
-                                      tone={
-                                        safeNum(selectedSummary.monthTransfersNet, 0) >= 0
-                                          ? "green"
-                                          : "red"
-                                      }
-                                    />
-                                    <QuickInfoRow
-                                      label="Current balance"
-                                      value={fmtMoney(selectedAccount.balance)}
-                                    />
-                                  </div>
-                                </div>
-
-                                <div className="accountsContentSection compact">
-                                  <PaneHeader
-                                    title="Upcoming Hits"
-                                    subcopy="What is next to move this account."
-                                  />
-
-                                  <div className="accountsMiniList">
-                                    {selectedSummary.nextIncome ? (
-                                      <div className="accountMiniRow">
-                                        <div>
-                                          <div className="accountTxTitle">
-                                            {selectedSummary.nextIncome.source}
-                                          </div>
-                                          <div className="accountTxSub">
-                                            {shortDate(selectedSummary.nextIncome.deposit_date)}
-                                          </div>
-                                        </div>
-
-                                        <div className="accountTxAmount" style={{ color: "#97efc7" }}>
-                                          +{fmtMoney(selectedSummary.nextIncome.amount)}
-                                        </div>
-                                      </div>
-                                    ) : null}
-
-                                    {selectedSummary.nextBill ? (
-                                      <div className="accountMiniRow">
-                                        <div>
-                                          <div className="accountTxTitle">
-                                            {billTitle(selectedSummary.nextBill)}
-                                          </div>
-                                          <div className="accountTxSub">
-                                            {shortDate(selectedSummary.nextBill.due_date)}
-                                          </div>
-                                        </div>
-
-                                        <div className="accountTxAmount" style={{ color: "#f5cf88" }}>
-                                          -{fmtMoney(amountFromBill(selectedSummary.nextBill))}
-                                        </div>
-                                      </div>
-                                    ) : null}
-
-                                    {!selectedSummary.nextIncome && !selectedSummary.nextBill ? (
-                                      <div className="accountsInfoSub" style={{ marginTop: 0 }}>
-                                        Nothing linked next.
-                                      </div>
-                                    ) : null}
-                                  </div>
-                                </div>
-                              </div>
-                            </>
-                          ) : null}
-
-                          {tab === "story" ? (
-                            <div className="accountsContentSection">
-                              <PaneHeader
-                                title="Balance Story"
-                                subcopy="Why this balance is what it is right now."
-                                right={<MiniPill tone="green">month to date</MiniPill>}
-                              />
-
-                              <div className="accountsStoryGrid">
-                                <div className="accountsStoryCell">
-                                  <div className="accountTinyLabel">Start of Month</div>
-                                  <div className="accountsStoryValue">
-                                    {fmtMoney(selectedSummary.startBalance)}
-                                  </div>
-                                </div>
-
-                                <div className="accountsStoryCell">
-                                  <div className="accountTinyLabel">Income Added</div>
-                                  <div className="accountsStoryValue" style={{ color: "#97efc7" }}>
-                                    +{fmtMoney(selectedSummary.monthIncome)}
-                                  </div>
-                                </div>
-
-                                <div className="accountsStoryCell">
-                                  <div className="accountTinyLabel">Bills Paid</div>
-                                  <div className="accountsStoryValue" style={{ color: "#f5cf88" }}>
-                                    -{fmtMoney(selectedSummary.monthBills)}
-                                  </div>
-                                </div>
-
-                                <div className="accountsStoryCell">
-                                  <div className="accountTinyLabel">Spending</div>
-                                  <div className="accountsStoryValue" style={{ color: "#ffb4c5" }}>
-                                    -{fmtMoney(selectedSummary.monthSpending)}
-                                  </div>
-                                </div>
-
-                                <div className="accountsStoryCell">
-                                  <div className="accountTinyLabel">Transfers</div>
-                                  <div
-                                    className="accountsStoryValue"
-                                    style={{
-                                      color:
-                                        safeNum(selectedSummary.monthTransfersNet, 0) >= 0
-                                          ? "#97efc7"
-                                          : "#ffb4c5",
-                                    }}
-                                  >
-                                    {safeNum(selectedSummary.monthTransfersNet, 0) >= 0 ? "+" : ""}
-                                    {fmtMoney(selectedSummary.monthTransfersNet)}
-                                  </div>
-                                </div>
-
-                                <div className="accountsStoryCell strong">
-                                  <div className="accountTinyLabel">Current Balance</div>
-                                  <div className="accountsStoryValue">
-                                    {fmtMoney(selectedAccount.balance)}
-                                  </div>
-                                </div>
-                              </div>
-
-                              <div className="accountsStoryBottom">
-                                <div className="accountsInfoCell">
-                                  <div className="accountTinyLabel">Projected Month-End</div>
-                                  <div className="accountsInfoValue">
-                                    {fmtMoney(selectedSummary.projectedMonthEnd)}
-                                  </div>
-                                  <div className="accountsInfoSub">
-                                    Current balance + future income - future bills this month
-                                  </div>
-                                </div>
-
-                                <div className="accountsInfoCell">
-                                  <div className="accountTinyLabel">Flow Mix</div>
-                                  <div className="accountsFlowList">
-                                    {selectedSummary.flowMix.length ? (
-                                      selectedSummary.flowMix.map((item) => (
-                                        <div key={item.label} className="accountsFlowRow">
-                                          <span>{item.label}</span>
-                                          <span>
-                                            {item.total >= 0 ? "+" : ""}
-                                            {fmtMoney(item.total)}
-                                          </span>
-                                        </div>
-                                      ))
-                                    ) : (
-                                      <div className="accountsInfoSub" style={{ marginTop: 0 }}>
-                                        No month-to-date flow yet.
-                                      </div>
-                                    )}
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          ) : null}
-
-                          {tab === "recurring" ? (
-                            <div className="accountsContentSection">
-                              <PaneHeader
-                                title="Recurring Flow"
-                                subcopy="What this account is responsible for next."
-                                right={
-                                  <MiniPill tone="blue">
-                                    {selectedSummary.upcomingBills.length +
-                                      selectedSummary.scheduledDeposits.length}{" "}
-                                    hits
-                                  </MiniPill>
-                                }
-                              />
-
-                              <div className="accountsDetailSubGrid">
-                                <div className="accountsContentSection compact">
-                                  <PaneHeader
-                                    title="Scheduled Deposits"
-                                    subcopy="Income routed into this account."
-                                    right={<MiniPill tone="green">{selectedSummary.scheduledDeposits.length}</MiniPill>}
-                                  />
-
-                                  <div className="accountsMiniList">
-                                    {selectedSummary.scheduledDeposits.length ? (
-                                      selectedSummary.scheduledDeposits.map((item) => (
-                                        <div key={item.id} className="accountMiniRow">
-                                          <div>
-                                            <div className="accountTxTitle">{item.source}</div>
-                                            <div className="accountTxSub">
-                                              {shortDate(item.deposit_date)} •{" "}
-                                              {daysUntil(item.deposit_date) === 0
-                                                ? "today"
-                                                : `${daysUntil(item.deposit_date)}d`}
-                                            </div>
-                                          </div>
-
-                                          <div className="accountTxAmount" style={{ color: "#97efc7" }}>
-                                            +{fmtMoney(item.amount)}
-                                          </div>
-                                        </div>
-                                      ))
-                                    ) : (
-                                      <div className="accountsInfoSub" style={{ marginTop: 0 }}>
-                                        No scheduled income routed here.
-                                      </div>
-                                    )}
-                                  </div>
-                                </div>
-
-                                <div className="accountsContentSection compact">
-                                  <PaneHeader
-                                    title="Linked Bills"
-                                    subcopy="Outgoing bills tied to this account."
-                                    right={<MiniPill tone="amber">{selectedSummary.upcomingBills.length}</MiniPill>}
-                                  />
-
-                                  <div className="accountsMiniList">
-                                    {selectedSummary.upcomingBills.length ? (
-                                      selectedSummary.upcomingBills.map((bill) => (
-                                        <div key={bill.id} className="accountMiniRow">
-                                          <div>
-                                            <div className="accountTxTitle">{billTitle(bill)}</div>
-                                            <div className="accountTxSub">
-                                              {shortDate(bill.due_date)} •{" "}
-                                              {daysUntil(bill.due_date) === 0
-                                                ? "today"
-                                                : `${daysUntil(bill.due_date)}d`}
-                                            </div>
-                                          </div>
-
-                                          <div className="accountTxAmount" style={{ color: "#f5cf88" }}>
-                                            -{fmtMoney(amountFromBill(bill))}
-                                          </div>
-                                        </div>
-                                      ))
-                                    ) : (
-                                      <div className="accountsInfoSub" style={{ marginTop: 0 }}>
-                                        No active bills linked to this account.
-                                      </div>
-                                    )}
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          ) : null}
-
-                          {tab === "forecast" ? (
-                            <div className="accountsContentSection">
-                              <PaneHeader
-                                title="Forecast"
-                                subcopy="What is about to happen to this account over the next 30 days."
-                                right={<MiniPill>{selectedSummary.projectionEvents.length} events</MiniPill>}
-                              />
-
-                              <div className="accountsForecastCards">
-                                <div className="accountsInfoCell">
-                                  <div className="accountTinyLabel">Safe Buffer</div>
-                                  <div className="accountsInfoValue">
-                                    {fmtMoney(selectedSummary.safeBuffer)}
-                                  </div>
-                                  <div className="accountsInfoSub">
-                                    Local warning threshold for this account
-                                  </div>
-                                </div>
-
-                                <div className="accountsInfoCell">
-                                  <div className="accountTinyLabel">Low Point</div>
-                                  <div
-                                    className="accountsInfoValue"
-                                    style={{
-                                      color:
-                                        selectedSummary.projectedLowPoint < 0
-                                          ? "#ffb4c5"
-                                          : selectedSummary.projectedLowPoint <
-                                            selectedSummary.safeBuffer
-                                          ? "#f5cf88"
-                                          : "#fff",
-                                    }}
-                                  >
-                                    {fmtMoney(selectedSummary.projectedLowPoint)}
-                                  </div>
-                                  <div className="accountsInfoSub">
-                                    Worst projected balance in the next 30 days
-                                  </div>
-                                </div>
-
-                                <div className="accountsInfoCell">
-                                  <div className="accountTinyLabel">30D End</div>
-                                  <div className="accountsInfoValue">
-                                    {selectedSummary.projectionEvents.length
-                                      ? fmtMoney(
-                                          selectedSummary.projectionEvents[
-                                            selectedSummary.projectionEvents.length - 1
-                                          ].afterBalance
-                                        )
-                                      : fmtMoney(selectedAccount.balance)}
-                                  </div>
-                                  <div className="accountsInfoSub">
-                                    Balance if every scheduled hit lands
-                                  </div>
-                                </div>
-                              </div>
-
-                              {selectedSummary.projectionEvents.length ? (
-                                <div className="accountsTxList">
-                                  {selectedSummary.projectionEvents.map((event) => (
-                                    <ForecastEventRow key={event.id} event={event} />
-                                  ))}
-                                </div>
-                              ) : (
-                                <div className="accountsEmptyState accountsInlineEmpty">
-                                  <div>
-                                    <div className="accountsEmptyTitle">Forecast is clean</div>
-                                    <div className="accountsEmptyText">
-                                      No upcoming linked income or bills are scheduled for this account.
-                                    </div>
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          ) : null}
-                        </div>
-
-                        <aside className="accountsToolColumn">
-                          <div className="accountsToolSection">
-                            <PaneHeader
-                              title="Quick Adjustment"
-                              subcopy="Manual correction straight into the account ledger."
-                              right={busy ? <MiniPill tone="amber">Working...</MiniPill> : null}
-                            />
-
-                            <div className="accountsFormStack">
-                              <div>
-                                <div className="accountTinyLabel">Mode</div>
-                                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                                  <ActionBtn
-                                    variant={adjustForm.mode === "add" ? "primary" : "ghost"}
-                                    onClick={() =>
-                                      setAdjustForm((prev) => ({
-                                        ...prev,
-                                        mode: "add",
-                                      }))
-                                    }
-                                  >
-                                    + Add
-                                  </ActionBtn>
-                                  <ActionBtn
-                                    variant={adjustForm.mode === "subtract" ? "primary" : "ghost"}
-                                    onClick={() =>
-                                      setAdjustForm((prev) => ({
-                                        ...prev,
-                                        mode: "subtract",
-                                      }))
-                                    }
-                                  >
-                                    - Subtract
-                                  </ActionBtn>
-                                </div>
-                              </div>
-
-                              <div>
-                                <div className="accountTinyLabel">Amount</div>
-                                <input
-                                  className="accountsField"
-                                  inputMode="decimal"
-                                  placeholder="0.00"
-                                  value={adjustForm.amount}
-                                  onChange={(e) =>
-                                    setAdjustForm((prev) => ({
-                                      ...prev,
-                                      amount: e.target.value,
-                                    }))
-                                  }
-                                />
-                              </div>
-
-                              <div>
-                                <div className="accountTinyLabel">Note</div>
-                                <textarea
-                                  className="accountsField"
-                                  rows={4}
-                                  placeholder="Why this correction is being made..."
-                                  value={adjustForm.note}
-                                  onChange={(e) =>
-                                    setAdjustForm((prev) => ({
-                                      ...prev,
-                                      note: e.target.value,
-                                    }))
-                                  }
-                                />
-                              </div>
-
-                              <ActionBtn
-                                variant="primary"
-                                full
-                                onClick={addManualAdjustment}
-                                disabled={busy || !selectedAccount}
-                              >
-                                <Plus size={14} /> Apply Adjustment
-                              </ActionBtn>
-                            </div>
-                          </div>
-
-                          <div className="accountsToolSection">
-                            <PaneHeader
-                              title="Transfer"
-                              subcopy="Move money between accounts without leaving this workspace."
-                            />
-
-                            <div className="accountsFormStack">
-                              <div>
-                                <div className="accountTinyLabel">To Account</div>
-                                <select
-                                  className="accountsField"
-                                  value={transferForm.toAccountId}
-                                  onChange={(e) =>
-                                    setTransferForm((prev) => ({
-                                      ...prev,
-                                      toAccountId: e.target.value,
-                                    }))
-                                  }
-                                >
-                                  <option value="">Select account</option>
-                                  {accounts
-                                    .filter((account) => account.id !== selectedAccount?.id)
-                                    .map((account) => (
-                                      <option key={account.id} value={account.id}>
-                                        {account.name}
-                                      </option>
-                                    ))}
-                                </select>
-                              </div>
-
-                              <div>
-                                <div className="accountTinyLabel">Amount</div>
-                                <input
-                                  className="accountsField"
-                                  inputMode="decimal"
-                                  placeholder="0.00"
-                                  value={transferForm.amount}
-                                  onChange={(e) =>
-                                    setTransferForm((prev) => ({
-                                      ...prev,
-                                      amount: e.target.value,
-                                    }))
-                                  }
-                                />
-                              </div>
-
-                              <div>
-                                <div className="accountTinyLabel">Note</div>
-                                <textarea
-                                  className="accountsField"
-                                  rows={4}
-                                  placeholder="Optional transfer note..."
-                                  value={transferForm.note}
-                                  onChange={(e) =>
-                                    setTransferForm((prev) => ({
-                                      ...prev,
-                                      note: e.target.value,
-                                    }))
-                                  }
-                                />
-                              </div>
-
-                              <ActionBtn
-                                variant="primary"
-                                full
-                                onClick={submitTransfer}
-                                disabled={busy || !selectedAccount}
-                              >
-                                <ArrowRightLeft size={14} /> Move Money
-                              </ActionBtn>
-                            </div>
-                          </div>
-
-                          <div className="accountsToolSection">
-                            <PaneHeader
-                              title="Account Settings"
-                              subcopy="Warnings and control tools tied to the selected account."
-                            />
-
-                            <div className="accountsFormStack">
-                              <div className="accountsInfoCell">
-                                <div className="accountTinyLabel">Safe Buffer</div>
-                                <div className="accountsInfoValue">
-                                  {fmtMoney(safeNum(safeBufferMap[selectedAccount.id], 150))}
-                                </div>
-                                <div className="accountsInfoSub">
-                                  Local warning line for this account
-                                </div>
-                              </div>
-
-                              <div>
-                                <div className="accountTinyLabel">Set Safe Buffer</div>
-                                <input
-                                  className="accountsField"
-                                  inputMode="decimal"
-                                  placeholder="150.00"
-                                  value={String(safeBufferMap[selectedAccount.id] ?? 150)}
-                                  onChange={(e) =>
-                                    setSafeBufferMap((prev) => ({
-                                      ...prev,
-                                      [selectedAccount.id]:
-                                        round2(parseMoneyInput(e.target.value)) || 0,
-                                    }))
-                                  }
-                                />
-                              </div>
-
-                              <ActionBtn
-                                variant={defaultAccountId === selectedAccount.id ? "ghost" : "primary"}
-                                full
-                                onClick={setPrimaryAccount}
-                                disabled={busy}
-                              >
-                                <Save size={14} />{" "}
-                                {defaultAccountId === selectedAccount.id
-                                  ? "Already Primary"
-                                  : "Set as Primary Account"}
-                              </ActionBtn>
-
-                              <ActionBtn
-                                variant="ghost"
-                                full
-                                onClick={loadAccountsPage}
-                                disabled={busy}
-                              >
-                                <RefreshCw size={14} /> Refresh Data
-                              </ActionBtn>
-
-                              <div className="accountsInfoCell">
-                                <div className="accountTinyLabel">Warning Engine</div>
-                                <div className="accountsWarningRow">
-                                  {selectedSummary.atRisk ? (
-                                    <>
-                                      <AlertTriangle size={14} />
-                                      <span>
-                                        This account is projected below its safe buffer soon.
-                                      </span>
-                                    </>
-                                  ) : (
-                                    <>
-                                      <Sparkles size={14} />
-                                      <span>This account looks stable right now.</span>
-                                    </>
-                                  )}
-                                </div>
-                              </div>
-
-                              <div className="accountsInfoCell">
-                                <div className="accountTinyLabel">Next Hits</div>
-                                <div className="accountsMiniList">
-                                  {selectedSummary.nextIncome ? (
-                                    <div className="accountMiniRow">
-                                      <div>
-                                        <div className="accountTxTitle">
-                                          {selectedSummary.nextIncome.source}
-                                        </div>
-                                        <div className="accountTxSub">
-                                          {shortDate(selectedSummary.nextIncome.deposit_date)}
-                                        </div>
-                                      </div>
-                                      <div className="accountTxAmount" style={{ color: "#97efc7" }}>
-                                        +{fmtMoney(selectedSummary.nextIncome.amount)}
-                                      </div>
-                                    </div>
-                                  ) : null}
-
-                                  {selectedSummary.nextBill ? (
-                                    <div className="accountMiniRow">
-                                      <div>
-                                        <div className="accountTxTitle">
-                                          {billTitle(selectedSummary.nextBill)}
-                                        </div>
-                                        <div className="accountTxSub">
-                                          {shortDate(selectedSummary.nextBill.due_date)}
-                                        </div>
-                                      </div>
-                                      <div className="accountTxAmount" style={{ color: "#f5cf88" }}>
-                                        -{fmtMoney(amountFromBill(selectedSummary.nextBill))}
-                                      </div>
-                                    </div>
-                                  ) : null}
-
-                                  {!selectedSummary.nextIncome && !selectedSummary.nextBill ? (
-                                    <div className="accountsInfoSub" style={{ marginTop: 0 }}>
-                                      Nothing linked next.
-                                    </div>
-                                  ) : null}
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        </aside>
-                      </div>
-                    </section>
-                  </>
-                ) : (
-                  <div className="accountsEmptyState">
-                    <div>
-                      <div className="accountsEmptyTitle">No account selected</div>
-                      <div className="accountsEmptyText">
-                        Pick one from the left rail to open the workspace.
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </GlassPane>
+          <section className={`accCmdCol ${mobileSection === "tools" ? "accCmdCol_show" : ""}`}>
+            <ToolRail
+              selectedAccount={selectedAccount}
+              selectedSummary={selectedSummary}
+              defaultAccountId={defaultAccountId}
+              busy={busy}
+              onSetPrimary={setPrimaryAccount}
+              onOpenAdjust={() => setOpenModal("adjust")}
+              onOpenTransfer={() => setOpenModal("transfer")}
+              onRefresh={loadAccountsPage}
+            />
           </section>
         </div>
-      </main>
+      </div>
 
-      <style jsx global>{globalStyles}</style>
+      <AdjustModal
+        open={openModal === "adjust"}
+        onClose={() => setOpenModal(null)}
+        selectedAccount={selectedAccount}
+        adjustForm={adjustForm}
+        setAdjustForm={setAdjustForm}
+        onSubmit={addManualAdjustment}
+        busy={busy}
+        safeBufferValue={bufferDraft}
+        setSafeBufferValue={setBufferDraft}
+      />
+
+      <TransferModal
+        open={openModal === "transfer"}
+        onClose={() => setOpenModal(null)}
+        selectedAccount={selectedAccount}
+        accounts={accounts}
+        transferForm={transferForm}
+        setTransferForm={setTransferForm}
+        onSubmit={submitTransfer}
+        busy={busy}
+      />
+
+      <Toast error={pageError} status={status} onClearError={() => setPageError("")} />
+      <style jsx global>{styles}</style>
     </>
   );
 }
 
-const globalStyles = `
-  .accountsPage {
-    width: 100%;
-    min-width: 0;
-    color: var(--lcc-text);
-    font-family: var(--lcc-font-sans);
-  }
-
-  .accountsShell {
-    width: 100%;
-    max-width: none;
-    margin: 0;
-    padding: 12px 0 20px;
+const styles = `
+  .accCmdRoot {
+    min-height: calc(100svh - 24px);
     display: grid;
-    gap: 14px;
+    grid-template-rows: auto auto 1fr;
+    gap: 12px;
+    color: var(--lcc-text);
   }
 
-  .accountsEyebrow {
-    font-size: 10px;
+  .accCmdGate {
+    min-height: 60svh;
+    display: grid;
+    place-items: center;
+    color: var(--lcc-text-muted);
+  }
+
+  .accCmdSummaryStrip {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    min-height: 86px;
+    padding: 16px 18px;
+    border-radius: var(--lcc-radius-lg);
+    border: 1px solid rgba(143, 177, 255, 0.12);
+    background:
+      radial-gradient(circle at top right, rgba(79, 142, 255, 0.10), transparent 28%),
+      linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0)),
+      rgba(18, 22, 32, 0.86);
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.035),
+      var(--lcc-shadow-sm);
+  }
+
+  .accCmdSummaryLeft {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    min-width: 0;
+  }
+
+  .accCmdTitleWrap {
+    min-width: 0;
+  }
+
+  .accCmdEyebrow {
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
     text-transform: uppercase;
-    letter-spacing: .22em;
-    font-weight: 800;
-    color: rgba(255,255,255,0.42);
+    color: var(--lcc-text-soft);
   }
 
-  .accountsHeroTitle {
-    margin-top: 8px;
-    font-size: clamp(24px, 3.2vw, 34px);
-    line-height: 1.02;
-    font-weight: 850;
+  .accCmdPageTitle {
+    margin-top: 4px;
+    font-size: clamp(24px, 2.4vw, 32px);
+    line-height: 1;
+    font-weight: 800;
     letter-spacing: -0.05em;
+  }
+
+  .accCmdSummaryMiniList {
+    display: flex;
+    align-items: stretch;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .accCmdMiniStat {
+    min-width: 110px;
+    padding: 10px 12px;
+    border-radius: 14px;
+    border: 1px solid rgba(214,226,255,0.08);
+    background: rgba(255,255,255,0.028);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.025);
+  }
+
+  .accCmdMiniLabel {
+    display: block;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--lcc-text-soft);
+  }
+
+  .accCmdMiniValue {
+    display: block;
+    margin-top: 5px;
+    font-size: 15px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+  }
+
+  .accCmdSummaryRight {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  .accCmdMobileTabs {
+    display: none;
+    border-radius: var(--lcc-radius-md);
+    border: 1px solid var(--lcc-border);
+    background: rgba(18, 22, 32, 0.78);
+    overflow: hidden;
+  }
+
+  .accCmdMobileTab {
+    flex: 1;
+    min-height: 42px;
+    border: 0;
+    background: transparent;
+    color: var(--lcc-text-soft);
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .accCmdMobileTab_active {
+    background: rgba(79, 142, 255, 0.10);
+    color: var(--lcc-blue);
+    box-shadow: inset 0 -2px 0 var(--lcc-blue);
+  }
+
+  .accCmdWorkspace {
+    min-height: 0;
+    display: grid;
+    grid-template-columns: 300px minmax(0, 1fr) 280px;
+    gap: 12px;
+    flex: 1;
+  }
+
+  .accCmdCol {
+    min-height: 0;
+    min-width: 0;
+  }
+
+  .accCmdLeftPane,
+  .accCmdCenterPane,
+  .accCmdRightPane {
+    height: 100%;
+    min-height: 0;
+    border-radius: var(--lcc-radius-lg);
+    border: 1px solid rgba(143, 177, 255, 0.10);
+    background:
+      radial-gradient(circle at top, rgba(79,142,255,0.07), transparent 24%),
+      linear-gradient(180deg, rgba(255,255,255,0.028), rgba(255,255,255,0) 48px),
+      rgba(18, 22, 32, 0.88);
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.03),
+      var(--lcc-shadow-sm);
+  }
+
+  .accCmdLeftPane {
+    display: grid;
+    grid-template-rows: auto 1fr;
+    overflow: hidden;
+  }
+
+  .accCmdLeftHead {
+    padding: 12px;
+    border-bottom: 1px solid rgba(214,226,255,0.08);
+    display: grid;
+    gap: 10px;
+  }
+
+  .accCmdPaneTitle {
+    font-size: 17px;
+    line-height: 1.08;
+    font-weight: 800;
+    letter-spacing: -0.03em;
     color: #fff;
   }
 
-  .accountsHeroSub {
-    margin-top: 8px;
-    font-size: 13px;
-    line-height: 1.55;
-    color: rgba(255,255,255,0.62);
-    max-width: 940px;
+  .accCmdPaneSub {
+    margin-top: 3px;
+    font-size: 12px;
+    line-height: 1.45;
+    color: rgba(255,255,255,0.60);
   }
 
-  .accountsHeroGrid {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 14px;
-    align-items: start;
-  }
-
-  .accountsHeroSide {
-    display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
-    justify-content: flex-end;
-    align-content: flex-start;
-  }
-
-  .accountsPillRow {
-    margin-top: 12px;
-    display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
-  }
-
-  .accountsMetricGrid {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 14px;
-  }
-
-  .accountsWorkspaceGrid {
-    display: grid;
-    grid-template-columns: minmax(280px, 312px) minmax(0, 1fr);
-    gap: 14px;
-    align-items: start;
-  }
-
-  .accountsRailControls {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 10px;
-    margin-bottom: 10px;
-  }
-
-  .accountsSearchWrap {
-    position: relative;
+  .accCmdSearch {
     display: flex;
     align-items: center;
     gap: 8px;
-    min-height: 44px;
+    min-height: 42px;
+    padding: 0 12px;
+    border-radius: 14px;
+    border: 1px solid rgba(214,226,255,0.08);
+    background: rgba(255,255,255,0.03);
+    color: var(--lcc-text-soft);
+  }
+
+  .accCmdSearch input,
+  .accCmdSearch input:focus {
+    border: 0 !important;
+    box-shadow: none !important;
+    background: transparent !important;
+    padding: 0 !important;
+    min-height: auto !important;
+    color: var(--lcc-text);
+    width: 100%;
+  }
+
+  .accCmdSearchClear {
+    display: grid;
+    place-items: center;
+    padding: 0;
+    color: var(--lcc-text-soft);
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+
+  .accCmdField {
+    width: 100%;
+    min-height: 42px;
     border-radius: 14px;
     border: 1px solid rgba(214,226,255,0.10);
     background:
       linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.012)),
       rgba(8, 12, 20, 0.76);
-    color: rgba(255,255,255,0.58);
+    color: var(--lcc-text);
     padding: 0 12px;
+    outline: none;
+    font: inherit;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
   }
 
-  .accountsSearchField {
-    min-height: 42px !important;
-    border: 0 !important;
-    background: transparent !important;
-    box-shadow: none !important;
-    padding: 0 !important;
+  .accCmdField:focus {
+    border-color: rgba(143,177,255,0.30);
+    box-shadow:
+      0 0 0 4px rgba(79,114,255,0.08),
+      inset 0 1px 0 rgba(255,255,255,0.035);
   }
 
-  .accountsRailList {
+  .accCmdField option {
+    background: #08111f;
+    color: #f4f7ff;
+  }
+
+  textarea.accCmdField {
+    min-height: 110px;
+    resize: vertical;
+    padding: 12px;
+  }
+
+  .accCmdQueueList {
+    min-height: 0;
+    overflow: auto;
+    padding: 6px;
     display: grid;
-    gap: 10px;
-    max-height: none;
-    overflow: visible;
-    padding-right: 0;
-  }
-
-  .accountRailCard {
-    width: 100%;
-    text-align: left;
-    display: grid;
-    gap: 10px;
-    border-radius: 18px;
-    border: 1px solid rgba(255,255,255,0.07);
-    background:
-      linear-gradient(180deg, rgba(8,13,24,0.78), rgba(4,8,16,0.72));
-    padding: 13px;
-    cursor: pointer;
-    transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
-  }
-
-  .accountRailCard:hover {
-    transform: translateY(-1px);
-  }
-
-  .accountRailCardTop {
-    display: flex;
-    justify-content: space-between;
     gap: 8px;
-    align-items: flex-start;
   }
 
-  .accountRailCardRight {
+  .accCmdQueueRow {
+    width: 100%;
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 14px 14px 14px 14px;
+    border: 1px solid rgba(214,226,255,0.06);
+    border-radius: 18px;
+    background:
+      linear-gradient(180deg, rgba(255,255,255,0.025), rgba(255,255,255,0.008)),
+      rgba(10, 14, 22, 0.55);
+    text-align: left;
+    cursor: pointer;
+    transition:
+      background 140ms ease,
+      border-color 140ms ease,
+      transform 140ms ease,
+      box-shadow 140ms ease;
+  }
+
+  .accCmdQueueRow:hover {
+    transform: translateY(-1px);
+    background: rgba(255,255,255,0.038);
+    border-color: rgba(143,177,255,0.12);
+  }
+
+  .accCmdQueueRow_active {
+    background:
+      linear-gradient(180deg, rgba(79, 142, 255, 0.10), rgba(79,142,255,0.03)),
+      rgba(10, 14, 22, 0.58);
+    border-color: rgba(143,177,255,0.18);
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.025),
+      0 10px 24px rgba(9, 20, 48, 0.22);
+  }
+
+  .accCmdQueueAccent {
+    width: 2px;
+    align-self: stretch;
+    border-radius: 999px;
+    flex-shrink: 0;
+  }
+
+  .accCmdQueueIcon {
+    width: 36px;
+    height: 36px;
+    flex-shrink: 0;
+    display: grid;
+    place-items: center;
+    border-radius: 12px;
+    border: 1px solid rgba(214,226,255,0.10);
+    background: rgba(255,255,255,0.03);
+  }
+
+  .accCmdQueueMain {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .accCmdQueueTop {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  .accCmdQueueTitleWrap {
     display: flex;
     align-items: center;
-    gap: 6px;
-  }
-
-  .accountRailCardTitle {
-    font-size: 14px;
-    font-weight: 850;
-    line-height: 1.2;
-    color: #fff;
-    overflow-wrap: anywhere;
-  }
-
-  .accountRailCardSub {
-    margin-top: 3px;
-    font-size: 11.5px;
-    color: rgba(255,255,255,0.54);
-  }
-
-  .accountRailBalance {
-    font-size: 21px;
-    line-height: 1;
-    font-weight: 900;
-    letter-spacing: -0.045em;
-    color: #fff;
-  }
-
-  .accountRailGrid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px;
-  }
-
-  .accountRailStat {
-    border-radius: 14px;
-    border: 1px solid rgba(255,255,255,0.05);
-    background: rgba(255,255,255,0.025);
-    padding: 10px;
-  }
-
-  .accountRailStatValue {
-    font-size: 13px;
-    font-weight: 850;
-    color: #fff;
-  }
-
-  .accountRailFooter {
-    display: flex;
-    justify-content: space-between;
     gap: 8px;
-    align-items: flex-end;
+    min-width: 0;
     flex-wrap: wrap;
   }
 
-  .accountRailFooterValue {
-    font-size: 13px;
-    font-weight: 850;
-    color: #fff;
-    line-height: 1.2;
-  }
-
-  .accountTinyLabel {
-    display: block;
-    margin-bottom: 8px;
-    font-size: 10px;
-    color: rgba(255,255,255,0.46);
-    text-transform: uppercase;
-    letter-spacing: .16em;
+  .accCmdQueueName {
+    font-size: 14px;
     font-weight: 800;
-  }
-
-  .accountsWorkspaceShell {
+    color: #fff;
     min-width: 0;
+    overflow-wrap: anywhere;
+    letter-spacing: -0.02em;
+  }
+
+  .accCmdQueueAmount {
+    font-size: 14px;
+    font-weight: 900;
+    color: #fff;
+    white-space: nowrap;
+    flex-shrink: 0;
+    letter-spacing: -0.02em;
+  }
+
+  .accCmdQueueMeta {
+    margin-top: 6px;
+    display: flex;
+    gap: 5px;
+    flex-wrap: wrap;
+    font-size: 11.5px;
+    color: rgba(255,255,255,0.56);
+  }
+
+  .accCmdCenterPane {
     display: grid;
-    gap: 0;
+    grid-template-rows: auto 1fr;
+    min-height: 0;
+    overflow: hidden;
   }
 
-  .accountsSurfaceSection {
-    position: relative;
-  }
-
-  .accountsSurfaceSection + .accountsSurfaceSection {
-    margin-top: 16px;
-    padding-top: 16px;
-    border-top: 1px solid rgba(255,255,255,0.07);
-  }
-
-  .accountsFocusHero {
+  .accCmdCenterPane_empty {
     display: grid;
-    grid-template-columns: minmax(0, 1.18fr) minmax(300px, 0.82fr);
-    gap: 14px;
+    place-items: center;
+  }
+
+  .accCmdCenterHead {
+    padding: 16px 18px 14px;
+    border-bottom: 1px solid rgba(214,226,255,0.08);
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: flex-start;
+  }
+
+  .accCmdFocusTitle {
+    font-size: 22px;
+    font-weight: 800;
+    letter-spacing: -0.04em;
+    color: #fff;
+  }
+
+  .accCmdFocusMeta {
+    margin-top: 5px;
+    font-size: 12.5px;
+    color: var(--lcc-text-soft);
+  }
+
+  .accCmdCenterScroll {
+    min-height: 0;
+    overflow: auto;
+    padding: 14px;
+    display: grid;
+    gap: 12px;
+    align-content: start;
+  }
+
+  .accCmdCommandCard,
+  .accCmdPanel {
+    padding: 15px 16px;
+    border-radius: 18px;
+    border: 1px solid rgba(214,226,255,0.08);
+    background:
+      linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.012)),
+      rgba(255,255,255,0.01);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.02);
+  }
+
+  .accCmdPanel.compact {
+    padding: 14px;
+  }
+
+  .accCmdCommandTop {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 290px;
+    gap: 12px;
     align-items: stretch;
   }
 
-  .accountsFocusLeft,
-  .accountsFocusRight {
+  .accCmdBalanceBlock {
     min-width: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
   }
 
-  .accountsFocusBalance {
-    font-size: clamp(32px, 4vw, 48px);
-    line-height: 1;
+  .accCmdBalanceLabel,
+  .accCmdTinyLabel,
+  .accCmdCommandLabel {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: .16em;
+    font-weight: 800;
+    color: rgba(255,255,255,0.42);
+  }
+
+  .accCmdBalanceValue {
+    margin-top: 10px;
+    font-size: clamp(36px, 4vw, 50px);
+    line-height: 0.95;
     font-weight: 900;
-    letter-spacing: -0.06em;
+    letter-spacing: -0.07em;
     color: #fff;
   }
 
-  .accountsFocusGrid {
+  .accCmdBalancePills {
     margin-top: 14px;
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px;
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
   }
 
-  .accountsInfoCell {
-    border-radius: 18px;
-    border: 1px solid rgba(255,255,255,0.05);
-    background: rgba(255,255,255,0.025);
-    padding: 11px;
-  }
-
-  .accountsInfoValue {
-    font-size: 1rem;
-    font-weight: 900;
-    line-height: 1.15;
-    color: #fff;
-  }
-
-  .accountsInfoSub {
-    margin-top: 5px;
-    color: rgba(255,255,255,0.62);
-    font-size: 0.79rem;
-    line-height: 1.4;
-  }
-
-  .accountsChartCard {
-    border-radius: 20px;
-    border: 1px solid rgba(214,226,255,0.10);
+  .accCmdTrendMini {
+    border-radius: 16px;
+    border: 1px solid rgba(214,226,255,0.08);
     background:
       linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01));
     padding: 12px;
-    min-height: 100%;
-    height: 100%;
   }
 
-  .accountsChartHead {
+  .accCmdTrendMiniHead {
     display: flex;
     justify-content: space-between;
     gap: 8px;
     align-items: flex-start;
-    margin-bottom: 12px;
+    margin-bottom: 10px;
   }
 
-  .accountsChartTitle {
+  .accCmdTrendMiniTitle {
     font-size: 14px;
-    font-weight: 850;
+    font-weight: 800;
     color: #fff;
-    line-height: 1.2;
   }
 
-  .accountBarsWrap {
-    height: 136px;
+  .accCmdBarsWrap {
+    height: 96px;
     display: grid;
     grid-template-columns: repeat(14, minmax(0, 1fr));
     gap: 6px;
     align-items: end;
   }
 
-  .accountBarCol {
+  .accCmdBarCol {
     height: 100%;
     display: flex;
     align-items: end;
   }
 
-  .accountBarFill {
+  .accCmdBarFill {
     width: 100%;
     border-radius: 999px;
-    background: linear-gradient(180deg, rgba(143,177,255,0.95), rgba(86,140,255,0.72));
-    box-shadow: 0 0 16px rgba(86,140,255,0.16);
+    background: linear-gradient(180deg, rgba(143,177,255,0.98), rgba(86,140,255,0.74));
+    box-shadow: 0 0 18px rgba(86,140,255,0.18);
   }
 
-  .accountBarsEmpty {
-    min-height: 136px;
+  .accCmdBarsEmpty {
+    min-height: 96px;
     display: grid;
     place-items: center;
     color: rgba(255,255,255,0.54);
@@ -2611,78 +2976,125 @@ const globalStyles = `
     text-align: center;
   }
 
-  .accountsBodyGrid {
+  .accCmdCommandGrid {
+    margin-top: 12px;
     display: grid;
-    grid-template-columns: minmax(0, 1.2fr) minmax(300px, 340px);
-    gap: 18px;
-    align-items: start;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px;
   }
 
-  .accountsMainColumn {
-    min-width: 0;
-    display: grid;
-    gap: 14px;
+  .accCmdCommandStat,
+  .accCmdInfoCard,
+  .accCmdSignalCard {
+    padding: 12px;
+    border-radius: 14px;
+    border: 1px solid rgba(255,255,255,0.05);
+    background: rgba(255,255,255,0.03);
   }
 
-  .accountsToolColumn {
-    min-width: 0;
-    display: grid;
-    gap: 0;
-    align-self: start;
-    position: sticky;
-    top: 12px;
-    border-left: 1px solid rgba(255,255,255,0.07);
-    padding-left: 16px;
+  .accCmdCommandValue,
+  .accCmdInfoValue,
+  .accCmdStoryValue,
+  .accCmdBigNumber,
+  .accCmdSignalCard strong {
+    display: block;
+    margin-top: 6px;
+    font-size: 16px;
+    font-weight: 800;
+    color: #fff;
   }
 
-  .accountsToolSection + .accountsToolSection {
-    margin-top: 16px;
-    padding-top: 16px;
-    border-top: 1px solid rgba(255,255,255,0.07);
+  .accCmdCommandSub,
+  .accCmdInfoSub,
+  .accCmdSignalCard small {
+    display: block;
+    margin-top: 5px;
+    font-size: 11.5px;
+    line-height: 1.45;
+    color: rgba(255,255,255,0.58);
   }
 
-  .accountsContentSection {
-    border-radius: 20px;
-    border: 1px solid rgba(255,255,255,0.06);
-    background: rgba(255,255,255,0.02);
-    padding: 14px;
-    display: grid;
-    gap: 12px;
+  .accCmdSignalCard span {
+    display: block;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .07em;
+    color: rgba(255,255,255,0.42);
   }
 
-  .accountsContentSection.compact {
-    gap: 8px;
-  }
-
-  .accountsTabRow {
+  .accCmdTabRow {
     display: flex;
     gap: 8px;
     flex-wrap: wrap;
   }
 
-  .accountTabBtn {
-    min-height: 38px;
-    padding: 0 14px;
+  .accCmdTab {
+    min-height: 36px;
+    padding: 0 13px;
     border-radius: 999px;
     border: 1px solid rgba(214,226,255,0.10);
+    background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.012));
     color: #fff;
     cursor: pointer;
-    font: inherit;
     font-size: 12px;
     font-weight: 800;
   }
 
-  .accountsTxList {
+  .accCmdTab_active {
+    border-color: rgba(143,177,255,0.24);
+    background: linear-gradient(180deg, rgba(143,177,255,0.14), rgba(143,177,255,0.06));
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
+  }
+
+  .accCmdPanelHead {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    align-items: flex-start;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+  }
+
+  .accCmdPanelTitle {
+    font-size: 17px;
+    line-height: 1.08;
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    color: #fff;
+  }
+
+  .accCmdPanelSub {
+    margin-top: 3px;
+    font-size: 12px;
+    line-height: 1.45;
+    color: rgba(255,255,255,0.60);
+  }
+
+  .accCmdActivityLayout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 300px;
+    gap: 12px;
+  }
+
+  .accCmdAsideStack,
+  .accCmdMiniList,
+  .accCmdDataList {
     display: grid;
     gap: 10px;
-    max-height: 360px;
+  }
+
+  .accCmdAsideStack {
+    align-content: start;
+  }
+
+  .accCmdDataList {
+    max-height: 540px;
     overflow: auto;
     padding-right: 2px;
   }
 
-  .accountTxRow,
-  .accountForecastRow,
-  .accountMiniRow {
+  .accCmdDataRow {
     display: flex;
     justify-content: space-between;
     gap: 12px;
@@ -2694,40 +3106,67 @@ const globalStyles = `
     padding: 12px;
   }
 
-  .accountTxTitle {
+  .accCmdDataTitle {
     font-size: 13px;
-    font-weight: 850;
+    font-weight: 800;
     line-height: 1.2;
     color: #fff;
     overflow-wrap: anywhere;
   }
 
-  .accountTxSub {
+  .accCmdDataSub {
     margin-top: 4px;
     font-size: 11.5px;
     color: rgba(255,255,255,0.54);
     line-height: 1.35;
   }
 
-  .accountTxAmount {
+  .accCmdDataAmount {
     font-size: 13.5px;
-    font-weight: 850;
+    font-weight: 800;
     color: #fff;
     white-space: nowrap;
   }
 
-  .accountsDetailSubGrid {
+  .accCmdStoryLayout,
+  .accCmdTwoCol {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 14px;
+    gap: 12px;
   }
 
-  .accountsQuickInfoList {
+  .accCmdStoryGrid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .accCmdStoryCell {
+    border-radius: 18px;
+    border: 1px solid rgba(255,255,255,0.06);
+    background: rgba(255,255,255,0.025);
+    padding: 12px;
+  }
+
+  .accCmdStoryCell_strong {
+    background: linear-gradient(180deg, rgba(143,177,255,0.10), rgba(143,177,255,0.04));
+    border-color: rgba(143,177,255,0.18);
+  }
+
+  .accCmdBigNumber {
+    font-size: 28px;
+    letter-spacing: -0.04em;
+    margin-bottom: 14px;
+  }
+
+  .accCmdQuickInfoList,
+  .accCmdFlowList,
+  .accCmdSignalStack {
     display: grid;
     gap: 8px;
   }
 
-  .accountsQuickInfoRow {
+  .accCmdQuickInfoRow {
     display: flex;
     justify-content: space-between;
     gap: 12px;
@@ -2737,48 +3176,12 @@ const globalStyles = `
     padding-bottom: 8px;
   }
 
-  .accountsQuickInfoRow:last-child {
+  .accCmdQuickInfoRow:last-child {
     border-bottom: 0;
     padding-bottom: 0;
   }
 
-  .accountsStoryGrid {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 10px;
-  }
-
-  .accountsStoryCell {
-    border-radius: 18px;
-    border: 1px solid rgba(255,255,255,0.06);
-    background: rgba(255,255,255,0.025);
-    padding: 12px;
-  }
-
-  .accountsStoryCell.strong {
-    background: linear-gradient(180deg, rgba(143,177,255,0.10), rgba(143,177,255,0.04));
-    border-color: rgba(143,177,255,0.18);
-  }
-
-  .accountsStoryValue {
-    font-size: 18px;
-    font-weight: 900;
-    color: #fff;
-    line-height: 1.1;
-  }
-
-  .accountsStoryBottom {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    gap: 10px;
-  }
-
-  .accountsFlowList {
-    display: grid;
-    gap: 8px;
-  }
-
-  .accountsFlowRow {
+  .accCmdFlowRow {
     display: flex;
     justify-content: space-between;
     gap: 10px;
@@ -2786,19 +3189,52 @@ const globalStyles = `
     color: rgba(255,255,255,0.78);
   }
 
-  .accountsForecastCards {
+  .accCmdForecastTiles {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 12px;
-  }
-
-  .accountsMiniList {
-    display: grid;
     gap: 10px;
-    margin-top: 2px;
+    margin-bottom: 12px;
   }
 
-  .accountsWarningRow {
+  .accCmdRightPane {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .accCmdRailSection {
+    padding: 13px 12px;
+    border-bottom: 1px solid rgba(214,226,255,0.08);
+  }
+
+  .accCmdRailSection_fill {
+    border-bottom: 0;
+    flex: 1;
+    overflow: auto;
+  }
+
+  .accCmdRailLabel {
+    margin-bottom: 10px;
+    font-size: 10.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--lcc-text-soft);
+  }
+
+  .accCmdRailActionStack,
+  .accCmdFormStack {
+    display: grid;
+    gap: 8px;
+  }
+
+  .accCmdModeRow {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .accCmdWarningRow {
     display: inline-flex;
     align-items: center;
     gap: 8px;
@@ -2807,160 +3243,323 @@ const globalStyles = `
     line-height: 1.4;
   }
 
-  .accountsFormStack {
-    display: grid;
-    gap: 12px;
+  .accCmdRailSpacer {
+    height: 10px;
   }
 
-  .accountsField {
-    width: 100%;
-    min-height: 44px;
-    border-radius: 14px;
-    border: 1px solid rgba(214,226,255,0.10);
-    background:
-      linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.012)),
-      rgba(8, 12, 20, 0.76);
-    color: var(--lcc-text);
-    padding: 0 13px;
-    outline: none;
-    font: inherit;
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
-    transition: border-color 160ms ease, box-shadow 160ms ease, background 160ms ease;
-  }
-
-  .accountsField:focus {
-    border-color: rgba(143,177,255,0.30);
-    box-shadow:
-      0 0 0 4px rgba(79,114,255,0.08),
-      inset 0 1px 0 rgba(255,255,255,0.035);
-  }
-
-  .accountsField::placeholder {
-    color: rgba(225,233,245,0.38);
-  }
-
-  .accountsField option {
-    background: #08111f;
-    color: #f4f7ff;
-  }
-
-  textarea.accountsField {
-    min-height: 96px;
-    resize: vertical;
-    padding: 12px 13px;
-  }
-
-  .accountActionBtn {
-    min-height: 40px;
-    padding: 10px 13px;
-    border-radius: 14px;
+  .accCmdBtn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
     gap: 8px;
-    font-size: 13px;
+    border-radius: 14px;
     font-weight: 800;
-    line-height: 1;
-    transition: transform 160ms ease, border-color 160ms ease, background 160ms ease, box-shadow 160ms ease;
+    cursor: pointer;
+    white-space: nowrap;
+    transition:
+      transform 120ms ease,
+      background 120ms ease,
+      border-color 120ms ease,
+      opacity 120ms ease,
+      box-shadow 120ms ease;
   }
 
-  .accountActionBtn:hover {
+  .accCmdBtn:hover:not(:disabled) {
     transform: translateY(-1px);
   }
 
-  .accountsEmptyState {
-    min-height: 180px;
+  .accCmdBtn:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+  }
+
+  .accCmdBtn_sm {
+    min-height: 38px;
+    padding: 0 12px;
+    font-size: 13px;
+  }
+
+  .accCmdBtn_full {
+    width: 100%;
+  }
+
+  .accCmdBtn_ghost {
+    border: 1px solid rgba(214,226,255,0.08);
+    background: rgba(255,255,255,0.04);
+    color: var(--lcc-text-muted);
+  }
+
+  .accCmdBtn_ghost:hover:not(:disabled) {
+    color: var(--lcc-text);
+    background: rgba(255,255,255,0.07);
+    border-color: rgba(143,177,255,0.18);
+  }
+
+  .accCmdBtn_primary {
+    border: 1px solid rgba(79, 142, 255, 0.28);
+    background: linear-gradient(180deg, #4f90ff, #3a7af0);
+    color: #fff;
+    box-shadow: 0 6px 18px rgba(58, 122, 240, 0.26);
+  }
+
+  .accCmdBtn_primary:hover:not(:disabled) {
+    background: linear-gradient(180deg, #5a99ff, #4588f7);
+  }
+
+  .accCmdEmptyBlock,
+  .accCmdEmptyInline {
+    min-height: 160px;
     display: grid;
     place-items: center;
-    text-align: center;
-    padding: 14px;
-  }
-
-  .accountsInlineEmpty {
-    min-height: 220px;
-  }
-
-  .accountsEmptyTitle {
-    font-size: 16px;
-    font-weight: 850;
-    color: #fff;
-  }
-
-  .accountsEmptyText {
-    margin-top: 6px;
+    color: rgba(255,255,255,0.58);
     font-size: 13px;
-    line-height: 1.5;
+    text-align: center;
+    padding: 16px;
+  }
+
+  .accCmdToastStack {
+    position: fixed;
+    right: 22px;
+    bottom: 22px;
+    z-index: 1500;
+    display: grid;
+    gap: 8px;
+  }
+
+  .accCmdToast {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 42px;
+    padding: 0 12px;
+    border-radius: 12px;
+    font-size: 12.5px;
+    font-weight: 700;
+    box-shadow: var(--lcc-shadow-md);
+  }
+
+  .accCmdToast_success {
+    color: var(--lcc-green);
+    border: 1px solid rgba(34, 199, 125, 0.22);
+    background: rgba(10, 24, 17, 0.96);
+  }
+
+  .accCmdToast_error {
+    color: #ff8ea1;
+    border: 1px solid rgba(224, 84, 106, 0.24);
+    background: rgba(30, 11, 15, 0.96);
+  }
+
+  .accCmdToastClose {
+    display: grid;
+    place-items: center;
+    padding: 0;
+    margin-left: 4px;
+    color: inherit;
+    cursor: pointer;
+  }
+
+  .accCmdOverlay {
+    position: fixed;
+    inset: 0;
+    z-index: 1400;
+    display: grid;
+    place-items: center;
+    padding: 18px;
+  }
+
+  .accCmdBackdrop {
+    position: absolute;
+    inset: 0;
+    border: 0;
+    background: rgba(8, 11, 16, 0.76);
+    backdrop-filter: blur(7px);
+    -webkit-backdrop-filter: blur(7px);
+    cursor: pointer;
+  }
+
+  .accCmdModal {
+    position: relative;
+    width: min(720px, 100%);
+    max-height: min(84svh, 860px);
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+    border-radius: 20px;
+    overflow: hidden;
+    border: 1px solid rgba(143,177,255,0.16);
+    background: rgba(15, 18, 27, 0.98);
+    box-shadow: var(--lcc-shadow-lg);
+  }
+
+  .accCmdModalHead,
+  .accCmdModalFoot {
+    padding: 16px 18px;
+    border-bottom: 1px solid rgba(214,226,255,0.08);
+  }
+
+  .accCmdModalFoot {
+    border-bottom: 0;
+    border-top: 1px solid rgba(214,226,255,0.08);
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+
+  .accCmdModalHead {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: flex-start;
+  }
+
+  .accCmdModalTitle {
+    font-size: 19px;
+    font-weight: 800;
+    color: #fff;
+    letter-spacing: -0.03em;
+  }
+
+  .accCmdModalSub {
+    margin-top: 4px;
+    font-size: 12.5px;
     color: rgba(255,255,255,0.60);
-    max-width: 360px;
   }
 
-  @media (max-width: 1500px) {
-    .accountsBodyGrid {
-      grid-template-columns: minmax(0, 1fr) minmax(290px, 320px);
+  .accCmdModalBody {
+    min-height: 0;
+    overflow: auto;
+    padding: 18px;
+  }
+
+  .accCmdCloseBtn {
+    width: 34px;
+    height: 34px;
+    display: grid;
+    place-items: center;
+    border-radius: 10px;
+    border: 1px solid rgba(214,226,255,0.08);
+    background: rgba(255,255,255,0.04);
+    color: var(--lcc-text-muted);
+    cursor: pointer;
+  }
+
+  .accCmdModalGrid {
+    display: grid;
+    gap: 14px;
+  }
+
+  @media (max-width: 1320px) {
+    .accCmdWorkspace {
+      grid-template-columns: 280px minmax(0, 1fr) 266px;
     }
-  }
 
-  @media (max-width: 1380px) {
-    .accountsMetricGrid {
+    .accCmdCommandTop {
+      grid-template-columns: 1fr;
+    }
+
+    .accCmdCommandGrid {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
-    .accountsFocusHero {
+    .accCmdActivityLayout {
       grid-template-columns: 1fr;
+    }
+
+    .accCmdStoryGrid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
     }
   }
 
-  @media (max-width: 1240px) {
-    .accountsHeroGrid,
-    .accountsWorkspaceGrid,
-    .accountsBodyGrid,
-    .accountsStoryBottom,
-    .accountsForecastCards,
-    .accountsDetailSubGrid {
+  @media (max-width: 1180px) {
+    .accCmdMobileTabs {
+      display: flex;
+    }
+
+    .accCmdWorkspace {
       grid-template-columns: 1fr;
     }
 
-    .accountsHeroSide {
+    .accCmdCol {
+      display: none;
+    }
+
+    .accCmdCol_show {
+      display: block;
+    }
+
+    .accCmdLeftPane,
+    .accCmdCenterPane,
+    .accCmdRightPane {
+      min-height: calc(100svh - 220px);
+    }
+  }
+
+  @media (max-width: 860px) {
+    .accCmdSummaryStrip {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+
+    .accCmdSummaryLeft,
+    .accCmdSummaryRight {
+      width: 100%;
+    }
+
+    .accCmdSummaryRight {
       justify-content: flex-start;
     }
 
-    .accountsFocusGrid,
-    .accountsStoryGrid,
-    .accountRailGrid {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-
-    .accountsToolColumn {
-      position: static;
-      border-left: 0;
-      padding-left: 0;
-      border-top: 1px solid rgba(255,255,255,0.07);
-      padding-top: 16px;
-      margin-top: 4px;
-    }
-
-    .accountsTxList {
-      max-height: none;
-    }
-  }
-
-  @media (max-width: 780px) {
-    .accountsShell {
-      padding: 8px 0 14px;
-    }
-
-    .accountsMetricGrid,
-    .accountsFocusGrid,
-    .accountsStoryGrid,
-    .accountRailGrid {
+    .accCmdStoryLayout,
+    .accCmdTwoCol,
+    .accCmdForecastTiles,
+    .accCmdStoryGrid,
+    .accCmdCommandGrid {
       grid-template-columns: 1fr;
     }
 
-    .accountTxRow,
-    .accountForecastRow,
-    .accountMiniRow {
+    .accCmdCenterHead {
+      flex-direction: column;
+      align-items: stretch;
+    }
+
+    .accCmdDataRow {
       align-items: flex-start;
       flex-direction: column;
+    }
+
+    .accCmdModal {
+      width: 100%;
+    }
+  }
+
+  @media (max-width: 640px) {
+    .accCmdRoot {
+      min-height: calc(100svh - 16px);
+      gap: 10px;
+    }
+
+    .accCmdSummaryStrip {
+      padding: 14px;
+    }
+
+    .accCmdSummaryMiniList {
+      width: 100%;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+    }
+
+    .accCmdCenterScroll {
+      padding: 10px;
+    }
+
+    .accCmdToastStack {
+      left: 12px;
+      right: 12px;
+      bottom: 12px;
+    }
+
+    .accCmdOverlay {
+      padding: 10px;
     }
   }
 `;
