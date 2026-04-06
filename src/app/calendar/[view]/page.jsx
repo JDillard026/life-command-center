@@ -204,6 +204,71 @@ function mapEventRow(row) {
   };
 }
 
+function isSourceOwnedEvent(ev) {
+  const source = String(ev?.source || "manual").toLowerCase();
+  const sourceTable = String(ev?.source_table || "").toLowerCase();
+  const txType = String(ev?.transaction_type || "").toLowerCase();
+
+  return Boolean(
+    ev?.auto_created ||
+      (source && source !== "manual") ||
+      sourceTable ||
+      ev?.source_id ||
+      txType
+  );
+}
+
+function isManualEvent(ev) {
+  return !isSourceOwnedEvent(ev);
+}
+
+function isBillEvent(ev) {
+  const source = String(ev?.source || "").toLowerCase();
+  const sourceTable = String(ev?.source_table || "").toLowerCase();
+  const category = String(ev?.category || "").toLowerCase();
+  return source === "bill" || sourceTable === "bills" || category === "bill";
+}
+
+function isIncomeEvent(ev) {
+  const source = String(ev?.source || "").toLowerCase();
+  const sourceTable = String(ev?.source_table || "").toLowerCase();
+  const flow = String(ev?.flow || "").toLowerCase();
+  const category = String(ev?.category || "").toLowerCase();
+  const title = String(ev?.title || "").toLowerCase();
+  const txType = String(ev?.transaction_type || "").toLowerCase();
+
+  return (
+    flow === "income" ||
+    txType === "income" ||
+    source === "income" ||
+    sourceTable === "income_deposits" ||
+    category === "payday" ||
+    title.includes("payday") ||
+    title.includes("income")
+  );
+}
+
+function isPlannedExpenseEvent(ev) {
+  return String(ev?.source || "").toLowerCase() === "planned_expense";
+}
+
+function isExpenseEvent(ev) {
+  const source = String(ev?.source || "").toLowerCase();
+  const sourceTable = String(ev?.source_table || "").toLowerCase();
+  const flow = String(ev?.flow || "").toLowerCase();
+  const txType = String(ev?.transaction_type || "").toLowerCase();
+
+  if (isIncomeEvent(ev) || isPlannedExpenseEvent(ev)) return false;
+
+  return (
+    flow === "expense" ||
+    txType === "expense" ||
+    source === "spending" ||
+    sourceTable === "spending_transactions" ||
+    isBillEvent(ev)
+  );
+}
+
 function emptyEvent(dateISO, profileId = "") {
   return {
     id: "",
@@ -301,36 +366,34 @@ function toneMeta(tone = "neutral") {
 }
 
 function toneForEvent(ev) {
-  const source = String(ev?.source || "");
-  const flow = String(ev?.flow || "none").toLowerCase();
-  const category = String(ev?.category || "").toLowerCase();
-  const title = String(ev?.title || "").toLowerCase();
-
-  if (
-    flow === "income" ||
-    category === "payday" ||
-    source === "income" ||
-    title.includes("payday") ||
-    title.includes("income")
-  ) {
+  if (isIncomeEvent(ev)) {
     return { tone: "green", label: "Income", line: TONE.green };
   }
 
-  if (source === "planned_expense") {
+  if (isBillEvent(ev)) {
+    return { tone: "amber", label: "Bill", line: TONE.amber };
+  }
+
+  if (isPlannedExpenseEvent(ev)) {
     return { tone: "amber", label: "Planned", line: TONE.amber };
   }
 
-  if (flow === "expense" || source === "spending") {
+  if (isExpenseEvent(ev)) {
     return { tone: "red", label: "Expense", line: TONE.red };
   }
 
-  return { tone: "blue", label: "General", line: TONE.blue };
+  return { tone: "blue", label: isManualEvent(ev) ? "Manual" : "General", line: TONE.blue };
 }
 
 function sourceLabel(ev) {
-  if (ev.source === "spending") return "Synced from Spending";
-  if (ev.source === "planned_expense") return "Synced planned item";
-  if (ev.source === "income") return "Synced income";
+  const source = String(ev?.source || "").toLowerCase();
+  const sourceTable = String(ev?.source_table || "").toLowerCase();
+
+  if (source === "income" || sourceTable === "income_deposits") return "Synced from Income";
+  if (source === "spending" || sourceTable === "spending_transactions") return "Synced from Spending";
+  if (source === "bill" || sourceTable === "bills") return "Synced from Bills";
+  if (source === "planned_expense") return "Synced planned item";
+  if (isSourceOwnedEvent(ev)) return "Source-owned sync";
   return "Manual event";
 }
 
@@ -795,6 +858,7 @@ function NavigatorRail({
 
 function TimelineItem({ ev, onEdit, onDelete, onDuplicate }) {
   const t = toneForEvent(ev);
+  const sourceOwned = isSourceOwnedEvent(ev);
 
   return (
     <div className="calAgendaItem">
@@ -812,8 +876,8 @@ function TimelineItem({ ev, onEdit, onDelete, onDuplicate }) {
             <div className="calAgendaItemTitleRow">
               <div className="calAgendaItemTitle">{ev.title}</div>
               <Tag tone={t.tone}>{t.label}</Tag>
-              <Tag tone={ev.auto_created ? "neutral" : "blue"}>
-                {ev.auto_created ? "Synced" : "Manual"}
+              <Tag tone={sourceOwned ? "neutral" : "blue"}>
+                {sourceOwned ? "Synced" : "Manual"}
               </Tag>
               {ev.category ? <Tag>{ev.category}</Tag> : null}
             </div>
@@ -827,7 +891,7 @@ function TimelineItem({ ev, onEdit, onDelete, onDuplicate }) {
           </div>
 
           <ActionMenu>
-            {ev.auto_created ? (
+            {sourceOwned ? (
               <>
                 <MenuButton onClick={() => onDuplicate(ev)} tone="success" icon={<Copy size={15} />}>
                   Copy as manual event
@@ -1571,21 +1635,10 @@ export default function CalendarCommandSubpage() {
       const source = String(ev.source || "").toLowerCase();
       const title = String(ev.title || "").toLowerCase();
 
-      if (
-        filter === "Paydays" &&
-        !(
-          flow === "income" ||
-          category === "payday" ||
-          source === "income" ||
-          title.includes("payday") ||
-          title.includes("income")
-        )
-      ) {
-        return false;
-      }
-      if (filter === "Expenses" && !(flow === "expense" || source === "spending")) return false;
-      if (filter === "Planned" && source !== "planned_expense") return false;
-      if (filter === "Manual" && source !== "manual") return false;
+      if (filter === "Paydays" && !isIncomeEvent(ev)) return false;
+      if (filter === "Expenses" && !isExpenseEvent(ev)) return false;
+      if (filter === "Planned" && !isPlannedExpenseEvent(ev)) return false;
+      if (filter === "Manual" && !isManualEvent(ev)) return false;
 
       if (!q) return true;
 
@@ -1657,7 +1710,7 @@ export default function CalendarCommandSubpage() {
   const monthIncome = React.useMemo(
     () =>
       visibleMonthEvents
-        .filter((ev) => String(ev.flow) === "income")
+        .filter((ev) => isIncomeEvent(ev))
         .reduce((sum, ev) => sum + safeNum(ev.amount, 0), 0),
     [visibleMonthEvents]
   );
@@ -1665,7 +1718,7 @@ export default function CalendarCommandSubpage() {
   const monthExpense = React.useMemo(
     () =>
       visibleMonthEvents
-        .filter((ev) => String(ev.flow) === "expense" && ev.source !== "planned_expense")
+        .filter((ev) => isExpenseEvent(ev))
         .reduce((sum, ev) => sum + safeNum(ev.amount, 0), 0),
     [visibleMonthEvents]
   );
@@ -1673,20 +1726,20 @@ export default function CalendarCommandSubpage() {
   const monthPlanned = React.useMemo(
     () =>
       visibleMonthEvents
-        .filter((ev) => ev.source === "planned_expense")
+        .filter((ev) => isPlannedExpenseEvent(ev))
         .reduce((sum, ev) => sum + safeNum(ev.amount, 0), 0),
     [visibleMonthEvents]
   );
 
   const monthManualCount = React.useMemo(
-    () => visibleMonthEvents.filter((ev) => ev.source === "manual").length,
+    () => visibleMonthEvents.filter((ev) => isManualEvent(ev)).length,
     [visibleMonthEvents]
   );
 
   const selectedDayIn = React.useMemo(
     () =>
       selectedDayEvents
-        .filter((ev) => String(ev.flow) === "income")
+        .filter((ev) => isIncomeEvent(ev))
         .reduce((sum, ev) => sum + safeNum(ev.amount, 0), 0),
     [selectedDayEvents]
   );
@@ -1694,7 +1747,7 @@ export default function CalendarCommandSubpage() {
   const selectedDayOut = React.useMemo(
     () =>
       selectedDayEvents
-        .filter((ev) => String(ev.flow) === "expense" && ev.source !== "planned_expense")
+        .filter((ev) => isExpenseEvent(ev))
         .reduce((sum, ev) => sum + safeNum(ev.amount, 0), 0),
     [selectedDayEvents]
   );
@@ -1702,13 +1755,13 @@ export default function CalendarCommandSubpage() {
   const selectedDayPlanned = React.useMemo(
     () =>
       selectedDayEvents
-        .filter((ev) => ev.source === "planned_expense")
+        .filter((ev) => isPlannedExpenseEvent(ev))
         .reduce((sum, ev) => sum + safeNum(ev.amount, 0), 0),
     [selectedDayEvents]
   );
 
   const selectedDayManualCount = React.useMemo(
-    () => selectedDayEvents.filter((ev) => ev.source === "manual").length,
+    () => selectedDayEvents.filter((ev) => isManualEvent(ev)).length,
     [selectedDayEvents]
   );
 
@@ -1814,6 +1867,10 @@ export default function CalendarCommandSubpage() {
   );
 
   const openEditorForEdit = React.useCallback((ev) => {
+    if (isSourceOwnedEvent(ev)) {
+      setPageError("Source-owned events should be changed from Bills, Income, or Spending. Copy it as manual if you want a calendar-only version.");
+      return;
+    }
     setDraft({ ...ev, amount: ev.amount ? String(ev.amount) : "" });
     setEditorOpen(true);
   }, []);
@@ -1843,6 +1900,9 @@ export default function CalendarCommandSubpage() {
     if (!draft.event_date) return setPageError("Event date is required.");
     if (draft.end_time && draft.event_time && draft.end_time < draft.event_time) {
       return setPageError("End time cannot be earlier than start time.");
+    }
+    if (draft.id && isSourceOwnedEvent(draft)) {
+      return setPageError("Source-owned events must be changed from Bills, Income, or Spending. Copy it as manual first if needed.");
     }
 
     try {
@@ -1900,8 +1960,8 @@ export default function CalendarCommandSubpage() {
 
   async function handleDeleteEvent(ev) {
     if (!user || !ev?.id) return;
-    if (ev.auto_created) {
-      return setPageError("Synced events should be changed from their source module.");
+    if (isSourceOwnedEvent(ev)) {
+      return setPageError("Source-owned events should be changed from Bills, Income, or Spending.");
     }
     if (!window.confirm(`Delete "${ev.title}"?`)) return;
 
@@ -2339,10 +2399,10 @@ export default function CalendarCommandSubpage() {
         width="min(980px, 100%)"
       >
         <form onSubmit={handleSaveEvent}>
-          {draft.auto_created ? (
+          {isSourceOwnedEvent(draft) ? (
             <Panel accent="warning" style={{ marginBottom: 16 }}>
               <div style={{ color: "#ffd089", fontWeight: 800 }}>
-                This was originally a synced event. Saving here converts it into a manual event.
+                This event came from a synced source. Saving here converts it into a manual calendar event.
               </div>
             </Panel>
           ) : null}

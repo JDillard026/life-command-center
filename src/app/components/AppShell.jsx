@@ -15,6 +15,7 @@ const HIDE_SHELL_ROUTES = [
 ];
 
 const COLLAPSE_STORAGE_KEY = "lcc-sidebar-collapsed";
+const MOBILE_BREAKPOINT = "(max-width: 1100px)";
 
 function shouldHideShell(pathname = "") {
   if (!pathname) return false;
@@ -25,7 +26,9 @@ function shouldHideShell(pathname = "") {
 
 function pageTitleFromPath(pathname = "") {
   if (!pathname || pathname === "/") return "Dashboard";
+
   const segment = pathname.split("/").filter(Boolean)[0] || "Dashboard";
+
   return segment
     .replace(/-/g, " ")
     .replace(/\b\w/g, (char) => char.toUpperCase());
@@ -49,18 +52,26 @@ export default function AppShell({ children }) {
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    const media = window.matchMedia("(max-width: 1100px)");
+    const media = window.matchMedia(MOBILE_BREAKPOINT);
+
     const apply = () => {
       const nextIsMobile = media.matches;
       setIsMobileViewport(nextIsMobile);
+
       if (!nextIsMobile) {
         setMobileNavOpen(false);
       }
     };
 
     apply();
-    media.addEventListener("change", apply);
-    return () => media.removeEventListener("change", apply);
+
+    if (typeof media.addEventListener === "function") {
+      media.addEventListener("change", apply);
+      return () => media.removeEventListener("change", apply);
+    }
+
+    media.addListener(apply);
+    return () => media.removeListener(apply);
   }, []);
 
   useEffect(() => {
@@ -71,15 +82,40 @@ export default function AppShell({ children }) {
     if (typeof document === "undefined") return;
 
     document.body.classList.toggle("lcc-nav-open", mobileNavOpen);
-    return () => document.body.classList.remove("lcc-nav-open");
+
+    return () => {
+      document.body.classList.remove("lcc-nav-open");
+    };
+  }, [mobileNavOpen]);
+
+  useEffect(() => {
+    if (!mobileNavOpen) return;
+
+    function handleKeyDown(event) {
+      if (event.key === "Escape") {
+        setMobileNavOpen(false);
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
   }, [mobileNavOpen]);
 
   function handleToggleCollapse() {
     const next = !collapsed;
     setCollapsed(next);
+
     if (typeof window !== "undefined") {
       window.localStorage.setItem(COLLAPSE_STORAGE_KEY, next ? "1" : "0");
     }
+  }
+
+  function openMobileNav() {
+    setMobileNavOpen(true);
+  }
+
+  function closeMobileNav() {
+    setMobileNavOpen(false);
   }
 
   if (hideShell) {
@@ -91,7 +127,7 @@ export default function AppShell({ children }) {
       <div className={styles.shell}>
         <aside
           className={`${styles.sidebarColumn} ${collapsed ? styles.sidebarColumnCollapsed : ""}`}
-          aria-hidden={isMobileViewport}
+          aria-hidden={isMobileViewport ? "true" : undefined}
         >
           <div className={styles.sidebarInner}>
             <SideNav collapsed={collapsed} onToggle={handleToggleCollapse} />
@@ -102,8 +138,10 @@ export default function AppShell({ children }) {
           <button
             type="button"
             className={styles.mobileMenuBtn}
-            onClick={() => setMobileNavOpen(true)}
+            onClick={openMobileNav}
             aria-label="Open navigation"
+            aria-controls="lcc-mobile-drawer"
+            aria-expanded={mobileNavOpen}
           >
             <Menu size={18} />
           </button>
@@ -124,27 +162,33 @@ export default function AppShell({ children }) {
         </div>
 
         <div className={styles.mainColumn}>
-          <main className={styles.mainContent}>
+          <main id="lcc-main-content" className={styles.mainContent}>
             <div className={styles.pageFrame}>{children}</div>
           </main>
         </div>
 
-        <div
+        <button
+          type="button"
           className={`${styles.mobileOverlay} ${mobileNavOpen ? styles.mobileOverlayOpen : ""}`}
-          onClick={() => setMobileNavOpen(false)}
+          onClick={closeMobileNav}
+          aria-label="Close navigation"
           aria-hidden={!mobileNavOpen}
+          tabIndex={mobileNavOpen ? 0 : -1}
         />
 
         <aside
+          id="lcc-mobile-drawer"
           className={`${styles.mobileDrawer} ${mobileNavOpen ? styles.mobileDrawerOpen : ""}`}
           aria-hidden={!mobileNavOpen}
+          role="dialog"
+          aria-label="Navigation"
         >
           <div className={styles.mobileDrawerInner}>
             <SideNav
               collapsed={false}
               mobile
               onToggle={handleToggleCollapse}
-              onCloseMobile={() => setMobileNavOpen(false)}
+              onCloseMobile={closeMobileNav}
             />
           </div>
         </aside>

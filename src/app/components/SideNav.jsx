@@ -157,7 +157,7 @@ function NavItem({ item, active, collapsed, onNavigate }) {
   return (
     <Link
       href={item.href}
-      onClick={onNavigate}
+      onClick={() => onNavigate?.()}
       aria-current={active ? "page" : undefined}
       className={cx(
         styles.navItem,
@@ -255,7 +255,7 @@ export default function SideNav({
           </div>
         ) : null}
 
-        <nav className={styles.navList}>
+        <nav className={styles.navList} aria-label="Primary navigation">
           {NAV_ITEMS.map((item) => (
             <NavItem
               key={item.label}

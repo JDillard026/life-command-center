@@ -3,9 +3,7 @@ export const dynamic = "force-dynamic";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  AlertCircle,
   ArrowUpRight,
-  BadgeDollarSign,
   CalendarDays,
   CheckCircle2,
   Copy,
@@ -23,53 +21,71 @@ import {
   Zap,
 } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
+import { writeAccountDelta } from "@/lib/accountLedger";
 
 /* ──────────────────────────────────────────────────────────────────────────
    Helpers
    ────────────────────────────────────────────────────────────────────────── */
 function uid() {
-  return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  return (
+    globalThis.crypto?.randomUUID?.() ??
+    `${Date.now()}-${Math.random().toString(16).slice(2)}`
+  );
 }
+
 function safeNum(n, fallback = 0) {
   const x = Number(n);
   return Number.isFinite(x) ? x : fallback;
 }
+
 function round2(n) {
   return Math.round((safeNum(n) + Number.EPSILON) * 100) / 100;
 }
+
 function parseMoneyInput(v) {
   const c = String(v ?? "").replace(/[^0-9.-]/g, "");
   const n = Number(c);
   return Number.isFinite(n) ? n : NaN;
 }
+
 function isoDate(d = new Date()) {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
+    d.getDate()
+  ).padStart(2, "0")}`;
 }
+
 function parseIsoParts(iso) {
   const m = String(iso || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (!m) return null;
   return { yyyy: +m[1], mm: +m[2], dd: +m[3] };
 }
+
 function isoToLocalDate(iso, h = 12) {
   const p = parseIsoParts(iso);
   if (!p) return null;
   return new Date(p.yyyy, p.mm - 1, p.dd, h, 0, 0, 0);
 }
+
 function isoSerial(iso) {
   const p = parseIsoParts(iso);
   if (!p) return null;
   return Math.floor(Date.UTC(p.yyyy, p.mm - 1, p.dd) / 86400000);
 }
+
 function todaySerial() {
   const n = new Date();
-  return Math.floor(Date.UTC(n.getFullYear(), n.getMonth(), n.getDate()) / 86400000);
+  return Math.floor(
+    Date.UTC(n.getFullYear(), n.getMonth(), n.getDate()) / 86400000
+  );
 }
+
 function compareIsoDates(a, b) {
   const aa = isoSerial(a);
   const bb = isoSerial(b);
   if (!Number.isFinite(aa) || !Number.isFinite(bb)) return 0;
   return aa - bb;
 }
+
 function money(n) {
   const x = Number(n);
   if (!Number.isFinite(x)) return "$0";
@@ -79,6 +95,7 @@ function money(n) {
     maximumFractionDigits: 0,
   });
 }
+
 function moneyTight(n) {
   const x = Number(n);
   if (!Number.isFinite(x)) return "$0.00";
@@ -87,6 +104,7 @@ function moneyTight(n) {
     currency: "USD",
   });
 }
+
 function shortDate(v) {
   if (!v) return "—";
   const d = isoToLocalDate(v, 12);
@@ -97,6 +115,7 @@ function shortDate(v) {
     year: "numeric",
   });
 }
+
 function fmtAgo(ts) {
   if (!ts) return "—";
   const ms = Date.now() - new Date(ts).getTime();
@@ -108,26 +127,35 @@ function fmtAgo(ts) {
   if (hrs < 24) return `${hrs}h ago`;
   return `${Math.round(hrs / 24)}d ago`;
 }
+
 function monthKeyOf(v) {
   const p = parseIsoParts(v);
   if (!p) return "";
   return `${p.yyyy}-${String(p.mm).padStart(2, "0")}`;
 }
+
 function addDays(iso, n) {
   const dt = isoToLocalDate(iso, 12);
   if (!dt) return "";
   dt.setDate(dt.getDate() + Number(n || 0));
   return isoDate(dt);
 }
+
 function addMonthsClamped(iso, n) {
   const dt = isoToLocalDate(iso, 12);
   if (!dt) return "";
   const day = dt.getDate();
-  const nx = new Date(dt.getFullYear(), dt.getMonth() + Number(n || 0), 1, 12);
+  const nx = new Date(
+    dt.getFullYear(),
+    dt.getMonth() + Number(n || 0),
+    1,
+    12
+  );
   const last = new Date(nx.getFullYear(), nx.getMonth() + 1, 0).getDate();
   nx.setDate(Math.min(day, last));
   return isoDate(nx);
 }
+
 function nextDueFromFreq(iso, freq) {
   const b = iso || isoDate();
   switch (String(freq || "").toLowerCase()) {
@@ -145,6 +173,7 @@ function nextDueFromFreq(iso, freq) {
       return addMonthsClamped(b, 1);
   }
 }
+
 function prevDueFromFreq(iso, freq) {
   const b = iso || isoDate();
   switch (String(freq || "").toLowerCase()) {
@@ -162,15 +191,18 @@ function prevDueFromFreq(iso, freq) {
       return addMonthsClamped(b, -1);
   }
 }
+
 function daysUntil(iso) {
   const s = isoSerial(iso);
   if (!Number.isFinite(s)) return null;
   return s - todaySerial();
 }
+
 function ledgerTs(iso) {
   const dt = isoToLocalDate(iso, 12) || new Date();
   return dt.toISOString();
 }
+
 function freqMult(freq) {
   switch (String(freq || "").toLowerCase()) {
     case "weekly":
@@ -187,18 +219,19 @@ function freqMult(freq) {
       return 1;
   }
 }
+
 function moWeight(amt, freq) {
   return safeNum(amt) * freqMult(freq);
 }
+
 function normType(t) {
   return String(t || "other").toLowerCase().trim();
 }
-function isCredit(t) {
-  return normType(t) === "credit";
-}
+
 function isInvestment(t) {
   return normType(t) === "investment";
 }
+
 function dueMeta(days) {
   if (!Number.isFinite(days)) return { label: "No date", tone: "neutral", pct: 0 };
   if (days < 0) return { label: `${Math.abs(days)}d late`, tone: "red", pct: 100 };
@@ -208,42 +241,50 @@ function dueMeta(days) {
   if (days <= 14) return { label: `${days}d left`, tone: "amber", pct: 44 };
   return { label: `${days}d left`, tone: "green", pct: 16 };
 }
+
 function cycleStart(bill) {
   if (!bill?.dueDate || !bill?.frequency) return "";
   if (String(bill.frequency).toLowerCase() === "one_time") return bill.dueDate;
   return prevDueFromFreq(bill.dueDate, bill.frequency);
 }
+
 function cycleEnd(bill) {
   if (!bill?.dueDate || !bill?.frequency) return "";
   if (String(bill.frequency).toLowerCase() === "one_time") return bill.dueDate;
   return nextDueFromFreq(bill.dueDate, bill.frequency);
 }
+
 function isPaidThisCycle(bill) {
   if (!bill?.lastPaidDate || bill.active === false) return false;
   const ps = isoSerial(bill.lastPaidDate);
   const ds = isoSerial(bill.dueDate);
   if (!Number.isFinite(ps) || !Number.isFinite(ds)) return false;
   if (String(bill.frequency || "").toLowerCase() === "one_time") return ps >= ds;
+
   const ss = isoSerial(cycleStart(bill));
   const es = isoSerial(cycleEnd(bill));
-  if (!Number.isFinite(ss) || !Number.isFinite(es)) return ps >= ds;
+  if (!Number.isFinite(ss) || !Number.isFinite(es)) return false;
   return ps >= ss && ps < es;
 }
+
 function billStatus(bill) {
   if (!bill) return { label: "—", tone: "neutral", pct: 0, isPaid: false };
   if (bill.active === false) return { label: "Inactive", tone: "neutral", pct: 0, isPaid: false };
   if (isPaidThisCycle(bill)) return { label: "Paid", tone: "green", pct: 100, isPaid: true };
   return { ...dueMeta(daysUntil(bill.dueDate)), isPaid: false };
 }
+
 function dueText(days) {
   if (!Number.isFinite(days)) return "—";
   if (days < 0) return `${Math.abs(days)} days overdue`;
   if (days === 0) return "Due today";
   return `${days} days remaining`;
 }
+
 function moInterest(bal, apr) {
   return round2((safeNum(bal) * safeNum(apr)) / 1200);
 }
+
 function payoffMo(bal, apr, pay) {
   const b = safeNum(bal);
   const r = safeNum(apr) / 100 / 12;
@@ -254,6 +295,7 @@ function payoffMo(bal, apr, pay) {
   const m = -Math.log(1 - (r * b) / p) / Math.log(1 + r);
   return Number.isFinite(m) ? Math.ceil(m) : Infinity;
 }
+
 function payoffLabel(bal, apr, pay) {
   const m = payoffMo(bal, apr, pay);
   if (m === Infinity) return "Payment too low";
@@ -261,6 +303,7 @@ function payoffLabel(bal, apr, pay) {
   if (m < 12) return `${m}mo`;
   return `${(m / 12).toFixed(m / 12 >= 2 ? 1 : 2)}yr`;
 }
+
 function shouldAdvance(bill, payDate, advance) {
   if (!advance) return false;
   if (String(bill?.frequency || "").toLowerCase() === "one_time") return false;
@@ -270,6 +313,7 @@ function shouldAdvance(bill, payDate, advance) {
   if (!Number.isFinite(ps)) return true;
   return ps >= ds || ds <= todaySerial();
 }
+
 function emptyForm(aid = "") {
   return {
     name: "",
@@ -297,6 +341,7 @@ function emptyForm(aid = "") {
     newDebtAutopay: false,
   };
 }
+
 function editorState(bill, debt, aid = "") {
   if (!bill) return emptyForm(aid);
   return {
@@ -325,6 +370,7 @@ function editorState(bill, debt, aid = "") {
     newDebtAutopay: debt ? debt.autopay === true : bill.autopay === true,
   };
 }
+
 function payDraft(bill, aid = "") {
   return {
     amount: bill ? String(bill.amount || "") : "",
@@ -335,6 +381,7 @@ function payDraft(bill, aid = "") {
     saving: false,
   };
 }
+
 function mapBill(row) {
   return {
     id: row.id,
@@ -358,6 +405,7 @@ function mapBill(row) {
     updatedAt: row.updated_at || row.created_at || new Date().toISOString(),
   };
 }
+
 function mapAcct(row) {
   return {
     id: row.id,
@@ -367,6 +415,7 @@ function mapAcct(row) {
     updatedAt: row.updated_at ? new Date(row.updated_at).getTime() : Date.now(),
   };
 }
+
 function mapPayment(row) {
   return {
     id: row.id,
@@ -379,6 +428,7 @@ function mapPayment(row) {
     createdAt: row.created_at || new Date().toISOString(),
   };
 }
+
 function spendingRow(id, userId, bill, amt, date, acctName, note = "") {
   return {
     id,
@@ -392,6 +442,31 @@ function spendingRow(id, userId, bill, amt, date, acctName, note = "") {
     note: `[Bill Payment] ${bill.name || "Bill"}${note ? ` • ${note}` : ""}`,
     payment_method: "Bill Payment",
     account_name: acctName || "",
+    created_at: ledgerTs(date),
+    updated_at: new Date().toISOString(),
+  };
+}
+
+function calendarMirrorRow(id, userId, profileId, bill, amt, date, note = "") {
+  return {
+    id,
+    user_id: userId,
+    profile_id: profileId || null,
+    title: bill.name || "Bill Payment",
+    event_date: date,
+    event_time: null,
+    end_time: null,
+    category: bill.category || "Bill",
+    flow: "expense",
+    amount: round2(amt),
+    note: note || "",
+    status: "done",
+    color: "#ef4444",
+    source: "spending",
+    source_id: id,
+    source_table: "spending_transactions",
+    auto_created: true,
+    transaction_type: "expense",
     created_at: ledgerTs(date),
     updated_at: new Date().toISOString(),
   };
@@ -524,7 +599,11 @@ function MoreMenu({ bill, onEdit, onDuplicate, onToggle, onDelete, disabled = fa
 
           <div className="billDivider" />
 
-          <button type="button" className="billMenuItem billMenuItem_danger" onClick={() => run(onDelete)}>
+          <button
+            type="button"
+            className="billMenuItem billMenuItem_danger"
+            onClick={() => run(onDelete)}
+          >
             <Trash2 size={13} />
             Delete
           </button>
@@ -633,17 +712,30 @@ function DebtSection({ value, set, debtProfiles, accounts }) {
       <div className="billToggleRow">
         <Button
           variant={!value.isDebtBill ? "primary" : "ghost"}
-          onClick={() => set((p) => ({ ...p, isDebtBill: false, debtMode: "none", linkedDebtId: "" }))}
+          onClick={() =>
+            set((p) => ({
+              ...p,
+              isDebtBill: false,
+              debtMode: "none",
+              linkedDebtId: "",
+            }))
+          }
         >
           Fixed bill
         </Button>
+
         <Button
           variant={value.isDebtBill ? "primary" : "ghost"}
           onClick={() =>
             set((p) => ({
               ...p,
               isDebtBill: true,
-              debtMode: p.debtMode === "none" ? (debtProfiles.length ? "link_existing" : "create_new") : p.debtMode,
+              debtMode:
+                p.debtMode === "none"
+                  ? debtProfiles.length
+                    ? "link_existing"
+                    : "create_new"
+                  : p.debtMode,
             }))
           }
         >
@@ -660,9 +752,16 @@ function DebtSection({ value, set, debtProfiles, accounts }) {
             >
               Link existing
             </Button>
+
             <Button
               variant={value.debtMode === "create_new" ? "primary" : "ghost"}
-              onClick={() => set((p) => ({ ...p, debtMode: "create_new", linkedDebtId: "" }))}
+              onClick={() =>
+                set((p) => ({
+                  ...p,
+                  debtMode: "create_new",
+                  linkedDebtId: "",
+                }))
+              }
             >
               Create new
             </Button>
@@ -670,7 +769,10 @@ function DebtSection({ value, set, debtProfiles, accounts }) {
 
           {value.debtMode === "link_existing" ? (
             <Field label="Debt profile">
-              <select value={value.linkedDebtId} onChange={(e) => set((p) => ({ ...p, linkedDebtId: e.target.value }))}>
+              <select
+                value={value.linkedDebtId}
+                onChange={(e) => set((p) => ({ ...p, linkedDebtId: e.target.value }))}
+              >
                 <option value="">Select debt</option>
                 {debtProfiles.map((d) => (
                   <option key={d.id} value={d.id}>
@@ -691,6 +793,7 @@ function DebtSection({ value, set, debtProfiles, accounts }) {
                     placeholder="Capital One"
                   />
                 </Field>
+
                 <Field label="Balance">
                   <input
                     value={value.newDebtBalance}
@@ -699,6 +802,7 @@ function DebtSection({ value, set, debtProfiles, accounts }) {
                     placeholder="0.00"
                   />
                 </Field>
+
                 <Field label="APR %">
                   <input
                     value={value.newDebtAprPct}
@@ -707,6 +811,7 @@ function DebtSection({ value, set, debtProfiles, accounts }) {
                     placeholder="0"
                   />
                 </Field>
+
                 <Field label="Min pay">
                   <input
                     value={value.newDebtMinPay}
@@ -726,6 +831,7 @@ function DebtSection({ value, set, debtProfiles, accounts }) {
                     placeholder="0.00"
                   />
                 </Field>
+
                 <Field label="Due date">
                   <input
                     type="date"
@@ -733,6 +839,7 @@ function DebtSection({ value, set, debtProfiles, accounts }) {
                     onChange={(e) => set((p) => ({ ...p, newDebtDueDate: e.target.value }))}
                   />
                 </Field>
+
                 <Field label="Frequency">
                   <select
                     value={value.newDebtFrequency}
@@ -745,6 +852,7 @@ function DebtSection({ value, set, debtProfiles, accounts }) {
                     ))}
                   </select>
                 </Field>
+
                 <Field label="Account">
                   <select
                     value={value.newDebtAccountId}
@@ -1067,7 +1175,9 @@ function Roster({
 
       <div className="billRosterList">
         {bills.length ? (
-          bills.map((b) => <BillRow key={b.id} bill={b} selected={b.id === selectedId} onSelect={() => onSelect(b.id)} />)
+          bills.map((b) => (
+            <BillRow key={b.id} bill={b} selected={b.id === selectedId} onSelect={() => onSelect(b.id)} />
+          ))
         ) : (
           <div className="billEmptyState">
             <div className="billEmptyTitle">No bills found</div>
@@ -1110,7 +1220,9 @@ function FocusPanel({
             <Receipt size={20} />
           </div>
           <div className="billSelectPromptTitle">Select a bill</div>
-          <div className="billSelectPromptText">Pick one from the left to view details and log payments.</div>
+          <div className="billSelectPromptText">
+            Pick one from the left to view details and log payments.
+          </div>
         </div>
       </div>
     );
@@ -1122,7 +1234,11 @@ function FocusPanel({
   const monthlyImpact = moWeight(bill.amount, bill.frequency);
   const monthlyInterest = linkedDebt ? moInterest(linkedDebt.balance, linkedDebt.aprPct) : 0;
   const payoff = linkedDebt
-    ? payoffLabel(linkedDebt.balance, linkedDebt.aprPct, safeNum(linkedDebt.minPay) + safeNum(linkedDebt.extraPay))
+    ? payoffLabel(
+        linkedDebt.balance,
+        linkedDebt.aprPct,
+        safeNum(linkedDebt.minPay) + safeNum(linkedDebt.extraPay)
+      )
     : "—";
 
   return (
@@ -1143,245 +1259,198 @@ function FocusPanel({
             {linkedDebt ? (
               <Pill tone="blue">
                 <Link2 size={10} />
-                {linkedDebt.name}
+                Debt linked
               </Pill>
             ) : null}
-            {!bill.active ? <Pill>Inactive</Pill> : null}
           </div>
 
           <div className="billFocusMeta">
-            {bill.category || "No category"} · {FREQS.find((o) => o.value === bill.frequency)?.label} · Updated{" "}
-            {fmtAgo(bill.updatedAt)}
+            <CalendarDays size={13} />
+            {dueText(daysUntil(bill.dueDate))}
           </div>
         </div>
 
-        <div className="billFocusHeaderRight">
-          <Button onClick={onEdit}>
-            <PencilLine size={13} />
-            Edit
+        <div className="billFocusActions">
+          <Button size="xs" onClick={onOpenHist}>
+            <Receipt size={12} />
+            History
           </Button>
-          <MoreMenu bill={bill} onEdit={onEdit} onDuplicate={onDuplicate} onToggle={onToggle} onDelete={onDelete} />
+
+          <MoreMenu
+            bill={bill}
+            onEdit={onEdit}
+            onDuplicate={onDuplicate}
+            onToggle={onToggle}
+            onDelete={onDelete}
+          />
         </div>
       </div>
 
-      <div className="billFocusScroll">
-        <div className="billHeroShell">
-          <div className="billHeroTopRow">
-            <div className="billHeroPrimary">
-              <div className="billHeroLabel">Amount Due</div>
-              <div className={`billHeroValue ${s.tone === "red" ? "textNegative" : s.tone === "amber" ? "textWarning" : s.tone === "green" ? "textPositive" : ""}`}>
-                {money(bill.amount)}
-              </div>
-
-              <div className="billHeroStatusRow">
-                <Pill tone={s.tone} dot>
-                  {s.label}
-                </Pill>
-                <span className="billHeroSubtext">
-                  {s.isPaid ? `Paid ${shortDate(bill.lastPaidDate)}` : dueText(daysUntil(bill.dueDate))}
-                </span>
-              </div>
-            </div>
-
-            <div className="billHeroMetaStack">
-              <div className="billHeroMetaChip">
-                <CalendarDays size={13} />
-                {shortDate(bill.dueDate)}
-              </div>
-              <div className="billHeroMetaChip">
-                <Receipt size={13} />
-                {FREQS.find((o) => o.value === bill.frequency)?.label}
-              </div>
+      <div className="billActionGrid">
+        <div className="billPanel">
+          <div className="billPanelHead">
+            <div className="billPanelTitle">
+              <Wallet size={15} />
+              Log Payment
             </div>
           </div>
 
-          <div className="billHeroBarWrap">
-            <Progress pct={s.pct} tone={s.tone} h={6} />
-          </div>
+          <Grid cols={3}>
+            <Field label="Amount">
+              <input
+                value={draft.amount}
+                onChange={(e) => setDraft((p) => ({ ...p, amount: e.target.value }))}
+                inputMode="decimal"
+                placeholder="0.00"
+              />
+            </Field>
 
-          <div className="billHeroMetaGrid">
-            <div className="billHeroMetaCard">
-              <span>Pay from</span>
-              <strong>{accountNameById.get(bill.accountId) || "None"}</strong>
-            </div>
-            <div className="billHeroMetaCard">
-              <span>Category</span>
-              <strong>{bill.category || "—"}</strong>
-            </div>
-            <div className="billHeroMetaCard">
-              <span>Autopay</span>
-              <strong>{bill.autopay ? "Enabled" : "Off"}</strong>
-            </div>
-            <div className="billHeroMetaCard">
-              <span>Cycle</span>
-              <strong>{shortDate(cycleStart(bill))}</strong>
-            </div>
-          </div>
-        </div>
+            <Field label="Payment date">
+              <input
+                type="date"
+                value={draft.paymentDate}
+                onChange={(e) => setDraft((p) => ({ ...p, paymentDate: e.target.value }))}
+              />
+            </Field>
 
-        <div className="billMidGrid">
-          <div className="billPanel">
-            <div className="billPanelHead">
-              <div className="billPanelTitle">Make Payment</div>
-              <Button size="xs" onClick={onOpenHist}>
-                <Receipt size={12} />
-                History
+            <Field label="Pay from">
+              <select
+                value={draft.accountId}
+                onChange={(e) => setDraft((p) => ({ ...p, accountId: e.target.value }))}
+              >
+                <option value="">No account</option>
+                {payAccts.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.name} · {money(a.balance)}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          </Grid>
+
+          <Field label="Note">
+            <input
+              value={draft.note}
+              onChange={(e) => setDraft((p) => ({ ...p, note: e.target.value }))}
+              placeholder="Optional note…"
+            />
+          </Field>
+
+          <div className="billPayFoot">
+            <label className="billAdvanceToggle">
+              <input
+                type="checkbox"
+                checked={draft.advanceDue}
+                onChange={(e) => setDraft((p) => ({ ...p, advanceDue: e.target.checked }))}
+              />
+              Advance next due date after payment
+            </label>
+
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <Button size="sm" onClick={onOpenHist}>
+                View history
               </Button>
-            </div>
-
-            <Grid cols={2}>
-              <Field label="Amount">
-                <input
-                  value={draft.amount}
-                  onChange={(e) => setDraft((p) => ({ ...p, amount: e.target.value }))}
-                  inputMode="decimal"
-                  placeholder="0.00"
-                />
-              </Field>
-
-              <Field label="Date">
-                <input
-                  type="date"
-                  value={draft.paymentDate}
-                  onChange={(e) => setDraft((p) => ({ ...p, paymentDate: e.target.value }))}
-                />
-              </Field>
-
-              <Field label="From Account">
-                <select
-                  value={draft.accountId}
-                  onChange={(e) => setDraft((p) => ({ ...p, accountId: e.target.value }))}
-                >
-                  <option value="">No account</option>
-                  {payAccts.map((a) => (
-                    <option key={a.id} value={a.id}>
-                      {a.name} · {money(a.balance)}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-
-              <Field label="Note">
-                <input
-                  value={draft.note}
-                  onChange={(e) => setDraft((p) => ({ ...p, note: e.target.value }))}
-                  placeholder="Optional"
-                />
-              </Field>
-            </Grid>
-
-            <div className="billPayFoot">
-              <div className="billAdvanceToggle">
-                <span>Advance due date</span>
-                <Button size="xs" variant={draft.advanceDue ? "primary" : "ghost"} onClick={() => setDraft((p) => ({ ...p, advanceDue: true }))}>
-                  Yes
-                </Button>
-                <Button size="xs" variant={!draft.advanceDue ? "primary" : "ghost"} onClick={() => setDraft((p) => ({ ...p, advanceDue: false }))}>
-                  No
-                </Button>
-              </div>
-
-              <Button variant="success" size="md" onClick={onPay} disabled={payBusy}>
-                <BadgeDollarSign size={14} />
+              <Button variant="primary" size="sm" onClick={onPay} disabled={payBusy}>
+                <Save size={13} />
                 {payBusy ? "Saving…" : "Mark Paid"}
               </Button>
             </div>
           </div>
+        </div>
 
-          <div className="billPanel billDebtPanel">
-            <div className="billPanelHead">
-              <div className="billPanelTitle">
-                <TrendingDown size={15} />
-                Linked Debt
+        <div className="billPanel billDebtPanel">
+          <div className="billPanelHead">
+            <div className="billPanelTitle">
+              <TrendingDown size={15} />
+              Linked Debt
+            </div>
+          </div>
+
+          {linkedDebt ? (
+            <div className="billDebtStack">
+              <div className="billDebtStat">
+                <span>Balance</span>
+                <strong className="textNegative">{money(linkedDebt.balance)}</strong>
+              </div>
+              <div className="billDebtStat">
+                <span>APR</span>
+                <strong>{safeNum(linkedDebt.aprPct)}%</strong>
+              </div>
+              <div className="billDebtStat">
+                <span>Interest / mo</span>
+                <strong className="textWarning">{moneyTight(monthlyInterest)}</strong>
+              </div>
+              <div className="billDebtStat">
+                <span>Payoff est.</span>
+                <strong className="textPositive">{payoff}</strong>
+              </div>
+
+              <div className="billDebtPlan">
+                <div className="billDebtPlanLabel">Plan</div>
+                <div className="billDebtPlanValue">
+                  {moneyTight(safeNum(linkedDebt.minPay) + safeNum(linkedDebt.extraPay))}/mo · {payoff}
+                </div>
               </div>
             </div>
+          ) : (
+            <div className="billDebtEmpty">
+              <div>No debt profile linked.</div>
+              <div>Connect this bill if you want payoff tracking in the debt system.</div>
+              <Button size="xs" variant="primary" onClick={onEdit}>
+                <Link2 size={12} />
+                Link debt
+              </Button>
+            </div>
+          )}
+        </div>
+      </div>
 
-            {linkedDebt ? (
-              <div className="billDebtStack">
-                <div className="billDebtStat">
-                  <span>Balance</span>
-                  <strong className="textNegative">{money(linkedDebt.balance)}</strong>
-                </div>
-                <div className="billDebtStat">
-                  <span>APR</span>
-                  <strong>{safeNum(linkedDebt.aprPct)}%</strong>
-                </div>
-                <div className="billDebtStat">
-                  <span>Interest / mo</span>
-                  <strong className="textWarning">{moneyTight(monthlyInterest)}</strong>
-                </div>
-                <div className="billDebtStat">
-                  <span>Payoff est.</span>
-                  <strong className="textPositive">{payoff}</strong>
-                </div>
-
-                <div className="billDebtPlan">
-                  <div className="billDebtPlanLabel">Plan</div>
-                  <div className="billDebtPlanValue">
-                    {moneyTight(safeNum(linkedDebt.minPay) + safeNum(linkedDebt.extraPay))}/mo · {payoff}
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="billDebtEmpty">
-                <div>No debt profile linked.</div>
-                <div>Connect this bill if you want payoff tracking in the debt system.</div>
-                <Button size="xs" variant="primary" onClick={onEdit}>
-                  <Link2 size={12} />
-                  Link debt
-                </Button>
-              </div>
-            )}
-          </div>
+      <div className="billDetailRow">
+        <div className="billMetricCard">
+          <div className="billMetricLabel">Linked Account</div>
+          <div className="billMetricValue">{accountNameById.get(bill.accountId) || "None"}</div>
+          <div className="billMetricSub">Pay-from account</div>
         </div>
 
-        <div className="billDetailRow">
-          <div className="billMetricCard">
-            <div className="billMetricLabel">Linked Account</div>
-            <div className="billMetricValue">{accountNameById.get(bill.accountId) || "None"}</div>
-            <div className="billMetricSub">Pay-from account</div>
-          </div>
-
-          <div className="billMetricCard">
-            <div className="billMetricLabel">Last Paid</div>
-            <div className="billMetricValue">{shortDate(bill.lastPaidDate)}</div>
-            <div className="billMetricSub">{payments.length} payments logged</div>
-          </div>
-
-          <div className="billMetricCard">
-            <div className="billMetricLabel">Monthly Impact</div>
-            <div className="billMetricValue">{money(monthlyImpact)}</div>
-            <div className="billMetricSub">Normalized monthly view</div>
-          </div>
+        <div className="billMetricCard">
+          <div className="billMetricLabel">Last Paid</div>
+          <div className="billMetricValue">{shortDate(bill.lastPaidDate)}</div>
+          <div className="billMetricSub">{payments.length} payments logged</div>
         </div>
 
-        <div className="billPanel">
-          <div className="billPanelHead">
-            <div className="billPanelTitle">Bill Details</div>
-          </div>
+        <div className="billMetricCard">
+          <div className="billMetricLabel">Monthly Impact</div>
+          <div className="billMetricValue">{money(monthlyImpact)}</div>
+          <div className="billMetricSub">Normalized monthly view</div>
+        </div>
+      </div>
 
-          <div className="billDetailGrid">
-            {[
-              { label: "Category", value: bill.category || "—" },
-              { label: "Frequency", value: FREQS.find((o) => o.value === bill.frequency)?.label || bill.frequency },
-              { label: "Autopay", value: bill.autopay ? "Enabled" : "Disabled" },
-              { label: "Cycle start", value: shortDate(cycleStart(bill)) },
-              { label: "Cycle end", value: shortDate(cycleEnd(bill)) },
-              { label: "Last updated", value: fmtAgo(bill.updatedAt) },
-            ].map((d) => (
-              <div key={d.label} className="billDetailCard">
-                <div className="billDetailLabel">{d.label}</div>
-                <div className="billDetailValue">{d.value}</div>
-              </div>
-            ))}
+      <div className="billPanel">
+        <div className="billPanelHead">
+          <div className="billPanelTitle">Bill Details</div>
+        </div>
 
-            {bill.notes ? (
-              <div className="billDetailCard billDetailCard_notes">
-                <div className="billDetailLabel">Notes</div>
-                <div className="billDetailNotes">{bill.notes}</div>
-              </div>
-            ) : null}
-          </div>
+        <div className="billDetailGrid">
+          {[
+            { label: "Category", value: bill.category || "—" },
+            { label: "Frequency", value: FREQS.find((o) => o.value === bill.frequency)?.label || bill.frequency },
+            { label: "Autopay", value: bill.autopay ? "Enabled" : "Disabled" },
+            { label: "Cycle start", value: shortDate(cycleStart(bill)) },
+            { label: "Cycle end", value: shortDate(cycleEnd(bill)) },
+            { label: "Last updated", value: fmtAgo(bill.updatedAt) },
+          ].map((d) => (
+            <div key={d.label} className="billDetailCard">
+              <div className="billDetailLabel">{d.label}</div>
+              <div className="billDetailValue">{d.value}</div>
+            </div>
+          ))}
+
+          {bill.notes ? (
+            <div className="billDetailCard billDetailCard_notes">
+              <div className="billDetailLabel">Notes</div>
+              <div className="billDetailNotes">{bill.notes}</div>
+            </div>
+          ) : null}
         </div>
       </div>
 
@@ -1431,7 +1500,9 @@ function RightRail({ bill, linkedDebt, metrics, onOpenAdd, onOpenEdit }) {
           </div>
           <div className="billRailStat">
             <span>Due ≤7 days</span>
-            <strong className={metrics.dueSoonCount > 0 ? "textWarning" : "textPositive"}>{metrics.dueSoonCount}</strong>
+            <strong className={metrics.dueSoonCount > 0 ? "textWarning" : "textPositive"}>
+              {metrics.dueSoonCount}
+            </strong>
           </div>
           <div className="billRailStat">
             <span>Paid this month</span>
@@ -1467,7 +1538,11 @@ function RightRail({ bill, linkedDebt, metrics, onOpenAdd, onOpenEdit }) {
                 <div className="billSelectedDebtName">{linkedDebt.name}</div>
                 <div className="billSelectedDebtMeta">
                   {money(linkedDebt.balance)} ·{" "}
-                  {payoffLabel(linkedDebt.balance, linkedDebt.aprPct, safeNum(linkedDebt.minPay) + safeNum(linkedDebt.extraPay))}
+                  {payoffLabel(
+                    linkedDebt.balance,
+                    linkedDebt.aprPct,
+                    safeNum(linkedDebt.minPay) + safeNum(linkedDebt.extraPay)
+                  )}
                 </div>
               </div>
             ) : null}
@@ -1492,7 +1567,7 @@ function Toast({ error, status, onClearError }) {
 
       {error ? (
         <div className="billToast billToast_error">
-          <AlertCircle size={14} />
+          <X size={14} />
           {error}
           <button type="button" onClick={onClearError} className="billToastClose" aria-label="Dismiss">
             <X size={12} />
@@ -1517,12 +1592,15 @@ export default function BillsPage() {
   const [pageError, setPageError] = useState("");
   const [status, setStatus] = useState("");
   const [userId, setUserId] = useState(null);
+
   const [search, setSearch] = useState("");
   const [scope, setScope] = useState("active");
   const [sortBy, setSortBy] = useState("due_asc");
+
   const [savingSelected, setSavingSelected] = useState(false);
   const [addingBusy, setAddingBusy] = useState(false);
   const [deletingPaymentId, setDeletingPaymentId] = useState("");
+
   const [editor, setEditor] = useState(emptyForm(""));
   const [addForm, setAddForm] = useState(emptyForm(""));
   const [drawerMode, setDrawerMode] = useState(null);
@@ -1538,85 +1616,111 @@ export default function BillsPage() {
 
   const payAccts = useMemo(() => accounts.filter((a) => !isInvestment(a.type)), [accounts]);
 
-  const refreshPage = useCallback(async (preferredId = "") => {
-    if (!supabase) {
-      setLoading(false);
-      return;
-    }
-
-    setLoading(true);
-    setPageError("");
-
-    try {
-      const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser();
-      if (userError) throw userError;
-
-      if (!user) {
-        setUserId(null);
-        setBills([]);
-        setDebtProfiles([]);
-        setAccounts([]);
-        setPayments([]);
-        setSelectedBillId("");
+  const refreshPage = useCallback(
+    async (preferredId = "") => {
+      if (!supabase) {
         setLoading(false);
         return;
       }
 
-      setUserId(user.id);
+      setLoading(true);
+      setPageError("");
 
-      const [billsRes, debtRes, accountsRes, settingsRes, paymentsRes] = await Promise.all([
-        supabase.from("bills").select("*").eq("user_id", user.id).eq("type", "noncontrollable").order("due_date", { ascending: true }),
-        supabase.from("bills").select("*").eq("user_id", user.id).eq("type", "controllable").order("name", { ascending: true }),
-        supabase.from("accounts").select("*").eq("user_id", user.id).order("name", { ascending: true }),
-        supabase.from("account_settings").select("primary_account_id").eq("user_id", user.id).maybeSingle(),
-        supabase.from("bill_payments").select("*").eq("user_id", user.id).order("payment_date", { ascending: false }),
-      ]);
+      try {
+        const {
+          data: { user },
+          error: userError,
+        } = await supabase.auth.getUser();
 
-      if (billsRes.error) throw billsRes.error;
-      if (debtRes.error) throw debtRes.error;
-      if (accountsRes.error) throw accountsRes.error;
-      if (settingsRes.error) throw settingsRes.error;
-      if (paymentsRes.error) throw paymentsRes.error;
+        if (userError) throw userError;
 
-      const loadedBills = (billsRes.data || []).map(mapBill);
-      const loadedAccounts = (accountsRes.data || []).map(mapAcct);
-      const preferredAccountId = settingsRes.data?.primary_account_id || loadedAccounts[0]?.id || "";
+        if (!user) {
+          setUserId(null);
+          setBills([]);
+          setDebtProfiles([]);
+          setAccounts([]);
+          setPayments([]);
+          setSelectedBillId("");
+          setDefaultAccountId("");
+          setLoading(false);
+          return;
+        }
 
-      setBills(loadedBills);
-      setDebtProfiles((debtRes.data || []).map(mapBill));
-      setAccounts(loadedAccounts);
-      setPayments((paymentsRes.data || []).map(mapPayment));
-      setDefaultAccountId(preferredAccountId);
+        setUserId(user.id);
 
-      setSelectedBillId((prev) => {
-        if (preferredId && loadedBills.some((b) => b.id === preferredId)) return preferredId;
-        if (prev && loadedBills.some((b) => b.id === prev)) return prev;
-        return loadedBills[0]?.id || "";
-      });
+        const [billsRes, debtRes, accountsRes, settingsRes, paymentsRes] = await Promise.all([
+          supabase
+            .from("bills")
+            .select("*")
+            .eq("user_id", user.id)
+            .eq("type", "noncontrollable")
+            .order("due_date", { ascending: true }),
+          supabase
+            .from("bills")
+            .select("*")
+            .eq("user_id", user.id)
+            .eq("type", "controllable")
+            .order("name", { ascending: true }),
+          supabase.from("accounts").select("*").eq("user_id", user.id).order("name", { ascending: true }),
+          supabase.from("account_settings").select("primary_account_id").eq("user_id", user.id).maybeSingle(),
+          supabase
+            .from("bill_payments")
+            .select("*")
+            .eq("user_id", user.id)
+            .order("payment_date", { ascending: false })
+            .order("created_at", { ascending: false }),
+        ]);
 
-      setAddForm((prev) => ({
-        ...prev,
-        accountId: prev.accountId || preferredAccountId,
-        newDebtAccountId: prev.newDebtAccountId || preferredAccountId,
-      }));
-    } catch (err) {
-      setPageError(err?.message || "Failed to load.");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+        if (billsRes.error) throw billsRes.error;
+        if (debtRes.error) throw debtRes.error;
+        if (accountsRes.error) throw accountsRes.error;
+        if (settingsRes.error) throw settingsRes.error;
+        if (paymentsRes.error) throw paymentsRes.error;
+
+        const nextBills = (billsRes.data || []).map(mapBill);
+        const nextDebt = (debtRes.data || []).map(mapBill);
+        const nextAccounts = (accountsRes.data || []).map(mapAcct);
+        const nextPayments = (paymentsRes.data || []).map(mapPayment);
+        const nextDefaultAccountId = settingsRes.data?.primary_account_id || "";
+
+        setBills(nextBills);
+        setDebtProfiles(nextDebt);
+        setAccounts(nextAccounts);
+        setPayments(nextPayments);
+        setDefaultAccountId(nextDefaultAccountId);
+
+        setSelectedBillId((prev) => {
+          const nextId =
+            preferredId && nextBills.some((b) => b.id === preferredId)
+              ? preferredId
+              : prev && nextBills.some((b) => b.id === prev)
+              ? prev
+              : nextBills[0]?.id || "";
+          return nextId;
+        });
+      } catch (err) {
+        setPageError(err?.message || "Failed to load bills.");
+      } finally {
+        setLoading(false);
+      }
+    },
+    []
+  );
 
   useEffect(() => {
     refreshPage();
+
     if (!supabase) return;
+
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(() => refreshPage());
+    } = supabase.auth.onAuthStateChange(() => {
+      refreshPage();
+    });
 
-    return () => subscription?.unsubscribe?.();
+    return () => {
+      subscription?.unsubscribe?.();
+    };
   }, [refreshPage]);
 
   const visibleBills = useMemo(() => {
@@ -1632,19 +1736,20 @@ export default function BillsPage() {
     if (sortBy === "amount_desc") {
       return [...filtered].sort((a, b) => safeNum(b.amount) - safeNum(a.amount));
     }
+
     if (sortBy === "name_asc") {
-      return [...filtered].sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")));
-    }
-    if (sortBy === "updated_desc") {
-      return [...filtered].sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0));
+      return [...filtered].sort((a, b) => String(a.name).localeCompare(String(b.name)));
     }
 
-    return [...filtered].sort(
-      (a, b) =>
-        (Number.isFinite(daysUntil(a.dueDate)) ? daysUntil(a.dueDate) : 999999) -
-        (Number.isFinite(daysUntil(b.dueDate)) ? daysUntil(b.dueDate) : 999999)
-    );
-  }, [bills, scope, search, sortBy]);
+    if (sortBy === "updated_desc") {
+      return [...filtered].sort(
+        (a, b) =>
+          new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime()
+      );
+    }
+
+    return [...filtered].sort((a, b) => compareIsoDates(a.dueDate, b.dueDate));
+  }, [bills, search, scope, sortBy]);
 
   useEffect(() => {
     if (!visibleBills.length) {
@@ -1657,10 +1762,9 @@ export default function BillsPage() {
   }, [visibleBills, selectedBillId]);
 
   const selectedBill = bills.find((b) => b.id === selectedBillId) || visibleBills[0] || null;
-
-  const selectedLinkedDebt = useMemo(() => {
-    return selectedBill?.linkedDebtId ? debtProfiles.find((d) => d.id === selectedBill.linkedDebtId) || null : null;
-  }, [selectedBill, debtProfiles]);
+  const selectedLinkedDebt = selectedBill
+    ? debtProfiles.find((d) => d.id === selectedBill.linkedDebtId) || null
+    : null;
 
   useEffect(() => {
     if (!selectedBill) {
@@ -1668,9 +1772,10 @@ export default function BillsPage() {
       setPaymentDraft(payDraft(null, defaultAccountId));
       return;
     }
+
     setEditor(editorState(selectedBill, selectedLinkedDebt, defaultAccountId));
-    setPaymentDraft(payDraft(selectedBill, defaultAccountId));
-  }, [selectedBill, selectedLinkedDebt, defaultAccountId]);
+    setPaymentDraft(payDraft(selectedBill, selectedBill.accountId || defaultAccountId || ""));
+  }, [selectedBill?.id, selectedLinkedDebt?.id, defaultAccountId]);
 
   useEffect(() => {
     if (selectedBillId) setMobileSection("focus");
@@ -1687,38 +1792,103 @@ export default function BillsPage() {
       .sort(
         (a, b) =>
           compareIsoDates(b.paymentDate, a.paymentDate) ||
-          new Date(b.createdAt || 0) - new Date(a.createdAt || 0)
+          new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
       );
-  }, [payments, selectedBill?.id]);
+  }, [payments, selectedBill]);
 
   const metrics = useMemo(() => {
     const active = bills.filter((b) => b.active);
     const mk = monthKeyOf(isoDate());
-    const monthlyPressure = active.reduce((s, b) => s + moWeight(b.amount, b.frequency), 0);
     const dueSoonCount = active.filter((b) => {
       const d = daysUntil(b.dueDate);
-      return Number.isFinite(d) && d >= 0 && d <= 7;
+      return Number.isFinite(d) && d >= 0 && d <= 7 && !isPaidThisCycle(b);
     }).length;
-    const linkedDebtCount = active.filter((b) => !!b.linkedDebtId).length;
-    const paidThisMonth = payments
-      .filter((p) => monthKeyOf(p.paymentDate) === mk)
-      .reduce((s, p) => s + safeNum(p.amount), 0);
 
-    const nextBill = [...active].sort(
-      (a, b) =>
-        (Number.isFinite(daysUntil(a.dueDate)) ? daysUntil(a.dueDate) : 999999) -
-        (Number.isFinite(daysUntil(b.dueDate)) ? daysUntil(b.dueDate) : 999999)
-    )[0];
+    const nextBill =
+      [...active]
+        .filter((b) => !isPaidThisCycle(b))
+        .sort((a, b) => {
+          const ad = Number.isFinite(daysUntil(a.dueDate)) ? daysUntil(a.dueDate) : 999999;
+          const bd = Number.isFinite(daysUntil(b.dueDate)) ? daysUntil(b.dueDate) : 999999;
+          return ad - bd;
+        })[0] || null;
 
     return {
       activeCount: active.length,
-      linkedDebtCount,
-      monthlyPressure,
+      linkedDebtCount: active.filter((b) => !!b.linkedDebtId).length,
+      monthlyPressure: round2(active.reduce((sum, b) => sum + moWeight(b.amount, b.frequency), 0)),
+      paidThisMonth: round2(
+        payments
+          .filter((p) => monthKeyOf(p.paymentDate) === mk)
+          .reduce((sum, p) => sum + safeNum(p.amount), 0)
+      ),
       dueSoonCount,
-      paidThisMonth,
       nextBill,
     };
   }, [bills, payments]);
+
+  async function getCalProfileId() {
+    if (!userId) return null;
+    const { data, error } = await supabase
+      .from("calendar_profiles")
+      .select("id,is_default,created_at")
+      .eq("user_id", userId)
+      .order("is_default", { ascending: false })
+      .order("created_at", { ascending: true })
+      .limit(1);
+
+    if (error) throw error;
+    return data?.[0]?.id ?? null;
+  }
+
+  async function upsertCalendarMirror(paymentId, bill, amount, paymentDate, paymentNote) {
+    if (!userId) return;
+
+    const profileId = await getCalProfileId();
+    const payload = calendarMirrorRow(
+      paymentId,
+      userId,
+      profileId,
+      bill,
+      amount,
+      paymentDate,
+      paymentNote
+    );
+
+    const { data: existing, error: findError } = await supabase
+      .from("calendar_events")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("source", "spending")
+      .eq("source_id", paymentId)
+      .maybeSingle();
+
+    if (findError) throw findError;
+
+    if (existing?.id) {
+      const { error } = await supabase
+        .from("calendar_events")
+        .update(payload)
+        .eq("id", existing.id)
+        .eq("user_id", userId);
+      if (error) throw error;
+      return;
+    }
+
+    const { error } = await supabase.from("calendar_events").insert([payload]);
+    if (error) throw error;
+  }
+
+  async function deleteCalendarMirror(paymentId) {
+    if (!userId) return;
+    const { error } = await supabase
+      .from("calendar_events")
+      .delete()
+      .eq("user_id", userId)
+      .eq("source", "spending")
+      .eq("source_id", paymentId);
+    if (error) throw error;
+  }
 
   function openAdd() {
     setHistoryOpen(false);
@@ -1733,264 +1903,116 @@ export default function BillsPage() {
     setDrawerMode("edit");
   }
 
-  async function getCalProfileId() {
-    if (!userId) return null;
-    const { data, error } = await supabase
-      .from("calendar_profiles")
-      .select("id,is_default,created_at")
-      .eq("user_id", userId)
-      .order("is_default", { ascending: false })
-      .order("created_at", { ascending: true })
-      .limit(1);
-    if (error) throw error;
-    return data?.[0]?.id ?? null;
-  }
-
-  async function upsertCal(pid, bill, amt, date, note = "") {
-    const profileId = await getCalProfileId();
-    if (!profileId) return;
-
-    const payload = {
-      user_id: userId,
-      profile_id: profileId,
-      title: `Expense • ${bill.name || "Bill Payment"}`,
-      event_date: date,
-      event_time: null,
-      end_time: null,
-      category: "Expense",
-      flow: "expense",
-      amount: round2(amt),
-      note: `[Bill Payment] ${bill.name || "Bill"}${note ? ` • ${note}` : ""}`,
-      status: "scheduled",
-      color: "#ef4444",
-      source: "spending",
-      source_id: pid,
-      source_table: "spending_transactions",
-      auto_created: true,
-      transaction_type: "expense",
-      updated_at: new Date().toISOString(),
-    };
-
-    const { data: existing, error: findError } = await supabase
-      .from("calendar_events")
-      .select("id")
-      .eq("user_id", userId)
-      .eq("profile_id", profileId)
-      .eq("source", "spending")
-      .eq("source_id", pid)
-      .maybeSingle();
-
-    if (findError) throw findError;
-
-    if (existing?.id) {
-      const { error: updateError } = await supabase.from("calendar_events").update(payload).eq("id", existing.id);
-      if (updateError) throw updateError;
-      return;
+  async function createLinkedDebtIfNeeded(form) {
+    if (!form.isDebtBill) return { debtId: null, createdDebt: null };
+    if (form.debtMode === "link_existing") {
+      return { debtId: form.linkedDebtId || null, createdDebt: null };
     }
 
-    const { error: insertError } = await supabase.from("calendar_events").insert([
-      {
-        id: uid(),
-        created_at: new Date().toISOString(),
-        ...payload,
-      },
-    ]);
-    if (insertError) throw insertError;
-  }
+    const name = String(form.newDebtName || "").trim();
+    const balance = parseMoneyInput(form.newDebtBalance);
+    const aprPct = parseMoneyInput(form.newDebtAprPct || "0");
+    const minPay = parseMoneyInput(form.newDebtMinPay || "0");
+    const extraPay = parseMoneyInput(form.newDebtExtraPay || "0");
 
-  async function delCal(pid) {
-    const { error } = await supabase
-      .from("calendar_events")
-      .delete()
-      .eq("user_id", userId)
-      .eq("source", "spending")
-      .eq("source_id", pid);
-    if (error) throw error;
-  }
+    if (!name) throw new Error("Debt name required.");
+    if (!Number.isFinite(balance) || balance < 0) {
+      throw new Error("Debt balance must be 0 or greater.");
+    }
+    if (!Number.isFinite(minPay) || minPay < 0) {
+      throw new Error("Minimum payment must be 0 or greater.");
+    }
+    if (!Number.isFinite(extraPay) || extraPay < 0) {
+      throw new Error("Extra payment must be 0 or greater.");
+    }
 
-  async function applyDelta({
-    accountId,
-    delta,
-    kind,
-    note,
-    sourceType,
-    sourceId,
-    effectiveDate,
-    startingBalance,
-  }) {
-    if (!accountId) return { ok: true, previousBalance: null, balance: null };
+    const debtId = uid();
 
-    const acct = accounts.find((r) => r.id === accountId);
-    if (!acct) return { ok: false, message: "Account not found." };
-
-    const prev = Number.isFinite(startingBalance) ? safeNum(startingBalance) : safeNum(acct.balance);
-    const next = round2(prev + safeNum(delta));
-
-    const { error: accountError } = await supabase
-      .from("accounts")
-      .update({ balance: next, updated_at: new Date().toISOString() })
-      .eq("id", acct.id)
-      .eq("user_id", userId);
-    if (accountError) return { ok: false, message: accountError.message };
-
-    const { error: ledgerError } = await supabase.from("account_transactions").insert({
+    const insertRes = await supabase.from("bills").insert({
+      id: debtId,
       user_id: userId,
-      account_id: acct.id,
-      kind,
-      amount: round2(Math.abs(safeNum(delta))),
-      delta: round2(delta),
-      resulting_balance: next,
-      note: note || "",
-      related_account_id: null,
-      related_account_name: null,
-      source_type: sourceType,
-      source_id: sourceId,
-      created_at: ledgerTs(effectiveDate),
+      name,
+      type: "controllable",
+      frequency: form.newDebtFrequency || "monthly",
+      due_date: form.newDebtDueDate || null,
+      amount: round2(Number.isFinite(minPay) ? minPay : 0),
+      active: true,
+      notes: form.newDebtNotes || "",
+      balance: round2(balance),
+      apr_pct: round2(Number.isFinite(aprPct) ? aprPct : 0),
+      min_pay: round2(minPay),
+      extra_pay: round2(extraPay),
+      autopay: form.newDebtAutopay === true,
+      category: form.newDebtCategory || "",
+      account_id: form.newDebtAccountId || null,
+      linked_debt_id: null,
+      last_paid_date: null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
     });
 
-    if (ledgerError) {
-      await supabase
-        .from("accounts")
-        .update({ balance: prev, updated_at: new Date().toISOString() })
-        .eq("id", acct.id)
-        .eq("user_id", userId);
-      return { ok: false, message: ledgerError.message };
-    }
-
-    return { ok: true, previousBalance: prev, balance: next };
-  }
-
-  function acctEffect(accountId, amount) {
-    const a = accounts.find((r) => r.id === accountId);
-    if (!a) return { delta: 0, kind: "bill_payment" };
-    const abs = Math.abs(round2(amount));
-    if (isCredit(a.type)) return { delta: abs, kind: "bill_charge" };
-    return { delta: -abs, kind: "bill_payment" };
-  }
-
-  async function createDebt(draft) {
-    const billName = String(draft.name || "").trim();
-    const billAmount = parseMoneyInput(draft.amount);
-    const debtName = String(draft.newDebtName || billName).trim();
-    const balance = parseMoneyInput(draft.newDebtBalance);
-    const apr = parseMoneyInput(draft.newDebtAprPct || "0");
-    const minPayRaw = parseMoneyInput(draft.newDebtMinPay || "");
-    const extraPayRaw = parseMoneyInput(draft.newDebtExtraPay || "0");
-
-    if (!debtName) throw new Error("Debt name required.");
-    if (!Number.isFinite(balance) || balance < 0) throw new Error("Balance must be ≥ 0.");
-
-    const minPay =
-      Number.isFinite(minPayRaw) && minPayRaw >= 0
-        ? minPayRaw
-        : Number.isFinite(billAmount) && billAmount > 0
-        ? billAmount
-        : 0;
-    const extraPay = Number.isFinite(extraPayRaw) && extraPayRaw >= 0 ? extraPayRaw : 0;
-
-    const id = uid();
-
-    const res = await supabase
-      .from("bills")
-      .insert({
-        id,
-        user_id: userId,
-        name: debtName,
-        type: "controllable",
-        frequency: draft.newDebtFrequency || draft.frequency || "monthly",
-        due_date: draft.newDebtDueDate || draft.dueDate || isoDate(),
-        amount: round2(Number.isFinite(billAmount) && billAmount > 0 ? billAmount : minPay),
-        active: true,
-        balance: round2(balance),
-        min_pay: round2(minPay),
-        extra_pay: round2(extraPay),
-        apr_pct: round2(Number.isFinite(apr) ? apr : 0),
-        autopay: draft.newDebtAutopay === true,
-        category: draft.newDebtCategory || draft.category || "",
-        notes: draft.newDebtNotes || "",
-        account_id: draft.newDebtAccountId || draft.accountId || defaultAccountId || null,
-        linked_debt_id: null,
-        last_paid_date: null,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      })
-      .select()
-      .single();
-
-    if (res.error) throw new Error(res.error.message);
-    return mapBill(res.data);
-  }
-
-  async function resolveDebtId(draft) {
-    if (!draft.isDebtBill) return "";
-    if (draft.debtMode === "link_existing") {
-      if (!draft.linkedDebtId) throw new Error("Choose a debt.");
-      return draft.linkedDebtId;
-    }
-    if (draft.debtMode === "create_new") {
-      const d = await createDebt(draft);
-      return d.id;
-    }
-    throw new Error("Select debt mode.");
+    if (insertRes.error) throw insertRes.error;
+    return { debtId, createdDebt: debtId };
   }
 
   async function addBill() {
     if (!supabase || !userId || addingBusy) return;
 
     const name = String(addForm.name || "").trim();
-    const amount = parseMoneyInput(addForm.amount);
+    const amount = parseMoneyInput(addForm.amount || "0");
 
-    if (!name) return setPageError("Name required.");
-    if (!Number.isFinite(amount) || amount <= 0) return setPageError("Amount must be > 0.");
+    if (!name) return setPageError("Bill name required.");
+    if (!Number.isFinite(amount) || amount < 0) {
+      return setPageError("Amount must be 0 or greater.");
+    }
+    if (addForm.isDebtBill && addForm.debtMode === "link_existing" && !addForm.linkedDebtId) {
+      return setPageError("Select a debt profile or create a new one.");
+    }
 
     setAddingBusy(true);
     setPageError("");
 
-    let createdDebtId = "";
+    let createdDebtId = null;
 
     try {
-      const linkedDebtId = await resolveDebtId(addForm);
-      createdDebtId = addForm.isDebtBill && addForm.debtMode === "create_new" ? linkedDebtId : "";
+      const debtInfo = await createLinkedDebtIfNeeded(addForm);
+      createdDebtId = debtInfo.createdDebt;
 
-      const res = await supabase
-        .from("bills")
-        .insert({
-          id: uid(),
-          user_id: userId,
-          name,
-          type: "noncontrollable",
-          frequency: addForm.frequency || "monthly",
-          due_date: addForm.dueDate || null,
-          amount: round2(amount),
-          active: true,
-          balance: 0,
-          min_pay: 0,
-          extra_pay: 0,
-          apr_pct: 0,
-          autopay: addForm.autopay === true,
-          category: addForm.category || "",
-          notes: addForm.notes || "",
-          account_id: addForm.accountId || null,
-          linked_debt_id: linkedDebtId || null,
-          last_paid_date: null,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        })
-        .select()
-        .single();
+      const billId = uid();
+      const res = await supabase.from("bills").insert({
+        id: billId,
+        user_id: userId,
+        name,
+        type: "noncontrollable",
+        frequency: addForm.frequency || "monthly",
+        due_date: addForm.dueDate || null,
+        amount: round2(amount),
+        active: true,
+        notes: addForm.notes || "",
+        balance: round2(amount),
+        apr_pct: 0,
+        min_pay: 0,
+        extra_pay: 0,
+        autopay: addForm.autopay === true,
+        category: addForm.category || "",
+        account_id: addForm.accountId || null,
+        linked_debt_id: debtInfo.debtId || null,
+        last_paid_date: addForm.lastPaidDate || null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      });
 
-      if (res.error) throw new Error(res.error.message);
+      if (res.error) throw res.error;
 
-      const saved = mapBill(res.data);
-      setAddForm(emptyForm(defaultAccountId));
       setDrawerMode(null);
+      setAddForm(emptyForm(defaultAccountId));
       setStatus("Bill added.");
-      await refreshPage(saved.id);
+      await refreshPage(billId);
     } catch (err) {
       if (createdDebtId) {
         await supabase.from("bills").delete().eq("id", createdDebtId).eq("user_id", userId);
       }
-      setPageError(err?.message || "Could not add.");
+      setPageError(err?.message || "Could not add bill.");
     } finally {
       setAddingBusy(false);
     }
@@ -2000,18 +2022,33 @@ export default function BillsPage() {
     if (!supabase || !userId || !selectedBill || savingSelected) return;
 
     const name = String(editor.name || "").trim();
-    const amount = parseMoneyInput(editor.amount);
+    const amount = parseMoneyInput(editor.amount || "0");
 
-    if (!name) return setPageError("Name required.");
-    if (!Number.isFinite(amount) || amount <= 0) return setPageError("Amount must be > 0.");
+    if (!name) return setPageError("Bill name required.");
+    if (!Number.isFinite(amount) || amount < 0) {
+      return setPageError("Amount must be 0 or greater.");
+    }
+    if (editor.isDebtBill && editor.debtMode === "link_existing" && !editor.linkedDebtId) {
+      return setPageError("Select a debt profile or create a new one.");
+    }
 
     setSavingSelected(true);
     setPageError("");
-    let createdDebtId = "";
+
+    let createdDebtId = null;
 
     try {
-      const linkedDebtId = await resolveDebtId(editor);
-      createdDebtId = editor.isDebtBill && editor.debtMode === "create_new" ? linkedDebtId : "";
+      let nextLinkedDebtId = null;
+
+      if (editor.isDebtBill) {
+        if (editor.debtMode === "link_existing") {
+          nextLinkedDebtId = editor.linkedDebtId || null;
+        } else {
+          const debtInfo = await createLinkedDebtIfNeeded(editor);
+          nextLinkedDebtId = debtInfo.debtId;
+          createdDebtId = debtInfo.createdDebt;
+        }
+      }
 
       const res = await supabase
         .from("bills")
@@ -2020,20 +2057,23 @@ export default function BillsPage() {
           frequency: editor.frequency || "monthly",
           due_date: editor.dueDate || null,
           amount: round2(amount),
-          autopay: editor.autopay === true,
-          category: editor.category || "",
           notes: editor.notes || "",
+          category: editor.category || "",
           account_id: editor.accountId || null,
-          linked_debt_id: linkedDebtId || null,
+          autopay: editor.autopay === true,
+          linked_debt_id: nextLinkedDebtId,
           last_paid_date: editor.lastPaidDate || null,
+          balance: round2(
+            selectedBill.linkedDebtId
+              ? safeNum(selectedBill.balance)
+              : Math.max(0, Math.min(safeNum(selectedBill.balance, selectedBill.amount), round2(amount)))
+          ),
           updated_at: new Date().toISOString(),
         })
         .eq("id", selectedBill.id)
-        .eq("user_id", userId)
-        .select()
-        .single();
+        .eq("user_id", userId);
 
-      if (res.error) throw new Error(res.error.message);
+      if (res.error) throw res.error;
 
       setDrawerMode(null);
       setStatus("Bill saved.");
@@ -2042,175 +2082,165 @@ export default function BillsPage() {
       if (createdDebtId) {
         await supabase.from("bills").delete().eq("id", createdDebtId).eq("user_id", userId);
       }
-      setPageError(err?.message || "Could not save.");
+      setPageError(err?.message || "Could not save bill.");
     } finally {
       setSavingSelected(false);
     }
   }
 
   async function dupBill(bill) {
-    if (!supabase || !userId) return;
-    setPageError("");
+    if (!supabase || !userId || !bill) return;
 
-    const res = await supabase
-      .from("bills")
-      .insert({
-        id: uid(),
+    try {
+      const cloneId = uid();
+      const { error } = await supabase.from("bills").insert({
+        id: cloneId,
         user_id: userId,
-        name: `${bill.name || "Bill"} Copy`,
+        name: `${bill.name} Copy`,
         type: "noncontrollable",
         frequency: bill.frequency || "monthly",
         due_date: bill.dueDate || null,
         amount: round2(bill.amount),
         active: bill.active !== false,
-        balance: round2(bill.balance),
-        min_pay: round2(bill.minPay),
-        extra_pay: round2(bill.extraPay),
-        apr_pct: round2(bill.aprPct),
+        notes: bill.notes || "",
+        balance: round2(bill.amount),
+        apr_pct: 0,
+        min_pay: 0,
+        extra_pay: 0,
         autopay: bill.autopay === true,
         category: bill.category || "",
-        notes: bill.notes || "",
         account_id: bill.accountId || null,
-        linked_debt_id: bill.linkedDebtId || null,
+        linked_debt_id: null,
         last_paid_date: null,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
-      })
-      .select()
-      .single();
+      });
 
-    if (res.error) return setPageError(res.error.message);
-
-    const saved = mapBill(res.data);
-    setStatus("Bill duplicated.");
-    await refreshPage(saved.id);
-  }
-
-  async function delBillById(billId, billName = "this bill") {
-    if (!supabase || !userId || !billId) return false;
-    if (typeof window !== "undefined" && !window.confirm(`Delete ${billName}?`)) return false;
-
-    setPageError("");
-
-    const relatedPayments = payments.filter((p) => p.billId === billId);
-
-    if (relatedPayments.length) {
-      const ids = relatedPayments.map((p) => p.id);
-
-      const { error: e1 } = await supabase.from("spending_transactions").delete().in("id", ids).eq("user_id", userId);
-      if (e1) {
-        setPageError(e1.message);
-        return false;
-      }
-
-      const { error: e2 } = await supabase
-        .from("calendar_events")
-        .delete()
-        .eq("user_id", userId)
-        .eq("source", "spending")
-        .in("source_id", ids);
-      if (e2) {
-        setPageError(e2.message);
-        return false;
-      }
-
-      const { error: e3 } = await supabase.from("bill_payments").delete().eq("bill_id", billId).eq("user_id", userId);
-      if (e3) {
-        setPageError(e3.message);
-        return false;
-      }
+      if (error) throw error;
+      setStatus("Bill duplicated.");
+      await refreshPage(cloneId);
+    } catch (err) {
+      setPageError(err?.message || "Could not duplicate bill.");
     }
-
-    const { error } = await supabase.from("bills").delete().eq("id", billId).eq("user_id", userId);
-    if (error) {
-      setPageError(error.message);
-      return false;
-    }
-
-    setDrawerMode(null);
-    setStatus("Bill deleted.");
-    await refreshPage();
-    return true;
-  }
-
-  async function delBill() {
-    if (selectedBill) await delBillById(selectedBill.id, selectedBill.name);
   }
 
   async function toggleActive(bill) {
-    if (!supabase || !userId) return;
+    if (!supabase || !userId || !bill || savingSelected) return;
+
+    try {
+      const { error } = await supabase
+        .from("bills")
+        .update({
+          active: !bill.active,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", bill.id)
+        .eq("user_id", userId);
+
+      if (error) throw error;
+      setStatus(bill.active ? "Bill archived." : "Bill activated.");
+      await refreshPage(bill.id);
+    } catch (err) {
+      setPageError(err?.message || "Could not update bill.");
+    }
+  }
+
+  async function delBill() {
+    if (!supabase || !userId || !selectedBill || savingSelected) return;
+    if (typeof window !== "undefined" && !window.confirm(`Delete ${selectedBill.name}?`)) return;
+
+    setSavingSelected(true);
     setPageError("");
 
-    const res = await supabase
-      .from("bills")
-      .update({
-        active: !bill.active,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", bill.id)
-      .eq("user_id", userId)
-      .select()
-      .single();
+    try {
+      const relatedPayments = payments.filter((p) => p.billId === selectedBill.id);
 
-    if (res.error) return setPageError(res.error.message);
+      for (const payment of relatedPayments) {
+        await supabase
+          .from("spending_transactions")
+          .delete()
+          .eq("id", payment.id)
+          .eq("user_id", userId);
 
-    setStatus(bill.active ? "Bill archived." : "Bill activated.");
-    await refreshPage(bill.id);
+        await deleteCalendarMirror(payment.id).catch(() => {});
+      }
+
+      const { error: paymentsError } = await supabase
+        .from("bill_payments")
+        .delete()
+        .eq("user_id", userId)
+        .eq("bill_id", selectedBill.id);
+
+      if (paymentsError) throw paymentsError;
+
+      const { error: billError } = await supabase
+        .from("bills")
+        .delete()
+        .eq("user_id", userId)
+        .eq("id", selectedBill.id)
+        .eq("type", "noncontrollable");
+
+      if (billError) throw billError;
+
+      setDrawerMode(null);
+      setHistoryOpen(false);
+      setStatus("Bill deleted.");
+      await refreshPage();
+    } catch (err) {
+      setPageError(err?.message || "Could not delete bill.");
+      await refreshPage(selectedBill.id);
+    } finally {
+      setSavingSelected(false);
+    }
   }
 
   async function makePay() {
     if (!supabase || !userId || !selectedBill || paymentDraft.saving) return;
 
-    const amount = round2(parseMoneyInput(paymentDraft.amount));
-    if (!Number.isFinite(amount) || amount <= 0) return setPageError("Enter a valid amount.");
-
+    const amount = parseMoneyInput(paymentDraft.amount);
     const paymentDate = paymentDraft.paymentDate || isoDate();
     const paymentAccountId = paymentDraft.accountId || "";
     const paymentNote = String(paymentDraft.note || "").trim();
-    const payAccount = accounts.find((a) => a.id === paymentAccountId) || null;
 
-    const advance = selectedBill.frequency !== "one_time" && shouldAdvance(selectedBill, paymentDate, paymentDraft.advanceDue);
-    const nextDue = advance
+    if (!Number.isFinite(amount) || amount <= 0) {
+      return setPageError("Payment amount must be greater than 0.");
+    }
+
+    const pid = uid();
+    const linkedDebtNow =
+      debtProfiles.find((d) => d.id === (selectedBill.linkedDebtId || "")) || null;
+
+    const nextLastPaid = paymentDate || selectedBill.lastPaidDate || null;
+    const nextDue = shouldAdvance(selectedBill, paymentDate, paymentDraft.advanceDue)
       ? nextDueFromFreq(paymentDate || selectedBill.dueDate || isoDate(), selectedBill.frequency)
       : selectedBill.dueDate || "";
 
-    const nextLastPaid =
-      !selectedBill.lastPaidDate || compareIsoDates(paymentDate, selectedBill.lastPaidDate) > 0
-        ? paymentDate
-        : selectedBill.lastPaidDate;
+    const currentBillBalance = safeNum(selectedBill.balance, selectedBill.amount);
+    const nextBalance = round2(
+      selectedBill.linkedDebtId
+        ? Math.max(0, currentBillBalance - amount)
+        : Math.max(0, Math.min(safeNum(selectedBill.amount), currentBillBalance - amount))
+    );
 
-    const nextBalance =
-      safeNum(selectedBill.balance) > 0
-        ? Math.max(0, round2(safeNum(selectedBill.balance) - amount))
-        : safeNum(selectedBill.balance);
+    const nextDebtBalance = linkedDebtNow
+      ? round2(Math.max(0, safeNum(linkedDebtNow.balance) - amount))
+      : 0;
 
-    const linkedDebt = debtProfiles.find((r) => r.id === selectedBill.linkedDebtId) || null;
-    const nextDebtBalance = linkedDebt ? Math.max(0, round2(safeNum(linkedDebt.balance) - amount)) : 0;
-    const nextDebtLastPaid =
-      linkedDebt && (!linkedDebt.lastPaidDate || compareIsoDates(paymentDate, linkedDebt.lastPaidDate) > 0)
-        ? paymentDate
-        : linkedDebt?.lastPaidDate || "";
-
-    const advanceDebt =
-      linkedDebt &&
-      linkedDebt.frequency !== "one_time" &&
-      shouldAdvance(linkedDebt, paymentDate, paymentDraft.advanceDue);
-
-    const nextDebtDue =
-      linkedDebt && advanceDebt
-        ? nextDueFromFreq(paymentDate || linkedDebt.dueDate || isoDate(), linkedDebt.frequency)
-        : linkedDebt?.dueDate || "";
+    const nextDebtLastPaid = linkedDebtNow ? paymentDate : null;
+    const nextDebtDue = linkedDebtNow
+      ? shouldAdvance(linkedDebtNow, paymentDate, paymentDraft.advanceDue)
+        ? nextDueFromFreq(paymentDate || linkedDebtNow.dueDate || isoDate(), linkedDebtNow.frequency)
+        : linkedDebtNow.dueDate || ""
+      : "";
 
     setPaymentDraft((p) => ({ ...p, saving: true }));
     setPageError("");
 
-    const pid = uid();
-    let accountEffect = null;
-    let accountResult = null;
-    let billUpdated = false;
-    let debtUpdated = false;
+    let ledgerPosted = false;
     let spendingInserted = false;
     let calendarInserted = false;
+    let billUpdated = false;
+    let debtUpdated = false;
 
     try {
       const paymentInsert = await supabase.from("bill_payments").insert({
@@ -2218,28 +2248,30 @@ export default function BillsPage() {
         user_id: userId,
         bill_id: selectedBill.id,
         linked_debt_id: selectedBill.linkedDebtId || null,
-        amount,
+        amount: round2(amount),
         payment_date: paymentDate,
         payment_account_id: paymentAccountId || null,
         note: paymentNote || null,
       });
+
       if (paymentInsert.error) throw paymentInsert.error;
 
       if (paymentAccountId) {
-        accountEffect = acctEffect(paymentAccountId, amount);
-        accountResult = await applyDelta({
+        await writeAccountDelta({
+          userId,
           accountId: paymentAccountId,
-          delta: accountEffect.delta,
-          kind: accountEffect.kind,
+          delta: -round2(amount),
+          kind: "bill_payment",
+          amount: round2(amount),
           note: `${selectedBill.name || "Bill"}${paymentNote ? ` • ${paymentNote}` : ""}`,
           sourceType: "bill_payment",
           sourceId: pid,
-          effectiveDate: paymentDate,
+          createdAt: ledgerTs(paymentDate),
         });
-        if (!accountResult.ok) throw new Error(accountResult.message);
+        ledgerPosted = true;
       }
 
-      const { error: billError } = await supabase
+      const billRes = await supabase
         .from("bills")
         .update({
           last_paid_date: nextLastPaid || null,
@@ -2249,11 +2281,12 @@ export default function BillsPage() {
         })
         .eq("id", selectedBill.id)
         .eq("user_id", userId);
-      if (billError) throw billError;
+
+      if (billRes.error) throw billRes.error;
       billUpdated = true;
 
-      if (linkedDebt) {
-        const { error: debtError } = await supabase
+      if (linkedDebtNow) {
+        const debtRes = await supabase
           .from("bills")
           .update({
             balance: nextDebtBalance,
@@ -2261,44 +2294,57 @@ export default function BillsPage() {
             due_date: nextDebtDue || null,
             updated_at: new Date().toISOString(),
           })
-          .eq("id", linkedDebt.id)
+          .eq("id", linkedDebtNow.id)
           .eq("user_id", userId);
-        if (debtError) throw debtError;
+
+        if (debtRes.error) throw debtRes.error;
         debtUpdated = true;
       }
 
-      const spendRow = spendingRow(pid, userId, selectedBill, amount, paymentDate, payAccount?.name || "", paymentNote);
-      const { error: spendError } = await supabase.from("spending_transactions").insert([spendRow]);
-      if (spendError) throw spendError;
+      const payAccount = accounts.find((a) => a.id === paymentAccountId) || null;
+      const spendRow = spendingRow(
+        pid,
+        userId,
+        selectedBill,
+        amount,
+        paymentDate,
+        payAccount?.name || "",
+        paymentNote
+      );
+
+      const spendRes = await supabase.from("spending_transactions").insert([spendRow]);
+      if (spendRes.error) throw spendRes.error;
       spendingInserted = true;
 
       try {
-        await upsertCal(pid, selectedBill, amount, paymentDate, paymentNote);
+        await upsertCalendarMirror(pid, selectedBill, amount, paymentDate, paymentNote);
         calendarInserted = true;
       } catch (e) {
         console.error("Calendar mirror failed", e);
       }
 
       setPaymentDraft(payDraft(null, selectedBill.accountId || defaultAccountId || ""));
-      setStatus(linkedDebt ? "Paid · debt synced." : "Payment logged.");
+      setStatus(linkedDebtNow ? "Paid · debt synced." : "Payment logged.");
       await refreshPage(selectedBill.id);
     } catch (err) {
-      if (calendarInserted) await delCal(pid).catch(() => {});
+      if (calendarInserted) await deleteCalendarMirror(pid).catch(() => {});
       if (spendingInserted) {
         await supabase.from("spending_transactions").delete().eq("id", pid).eq("user_id", userId);
       }
-      if (linkedDebt && debtUpdated) {
+
+      if (linkedDebtNow && debtUpdated) {
         await supabase
           .from("bills")
           .update({
-            balance: linkedDebt.balance,
-            last_paid_date: linkedDebt.lastPaidDate || null,
-            due_date: linkedDebt.dueDate || null,
+            balance: linkedDebtNow.balance,
+            last_paid_date: linkedDebtNow.lastPaidDate || null,
+            due_date: linkedDebtNow.dueDate || null,
             updated_at: new Date().toISOString(),
           })
-          .eq("id", linkedDebt.id)
+          .eq("id", linkedDebtNow.id)
           .eq("user_id", userId);
       }
+
       if (billUpdated) {
         await supabase
           .from("bills")
@@ -2311,17 +2357,21 @@ export default function BillsPage() {
           .eq("id", selectedBill.id)
           .eq("user_id", userId);
       }
-      if (accountEffect && accountResult?.ok) {
-        await applyDelta({
-          accountId: paymentAccountId,
-          delta: -accountEffect.delta,
-          kind: "bill_payment_rollback",
-          note: `${selectedBill.name} rollback`,
-          sourceType: "bill_payment_rollback",
-          sourceId: pid,
-          effectiveDate: isoDate(),
-          startingBalance: accountResult.balance,
-        });
+
+      if (ledgerPosted && paymentAccountId) {
+        try {
+          await writeAccountDelta({
+            userId,
+            accountId: paymentAccountId,
+            delta: round2(amount),
+            kind: "bill_payment_rollback",
+            amount: round2(amount),
+            note: `${selectedBill.name || "Bill"} rollback`,
+            sourceType: "bill_payment_rollback",
+            sourceId: pid,
+            createdAt: new Date().toISOString(),
+          });
+        } catch {}
       }
 
       await supabase.from("bill_payments").delete().eq("id", pid).eq("user_id", userId);
@@ -2338,9 +2388,10 @@ export default function BillsPage() {
     setDeletingPaymentId(payment.id);
     setPageError("");
 
-    const currentBill = bills.find((b) => b.id === payment.billId);
-    const linkedDebt =
-      debtProfiles.find((d) => d.id === (payment.linkedDebtId || currentBill?.linkedDebtId || "")) || null;
+    const currentBill = bills.find((b) => b.id === payment.billId) || null;
+    const linkedDebtNow =
+      debtProfiles.find((d) => d.id === (payment.linkedDebtId || currentBill?.linkedDebtId || "")) ||
+      null;
 
     const remainingBillPayments = payments
       .filter((r) => r.billId === payment.billId && r.id !== payment.id)
@@ -2350,9 +2401,13 @@ export default function BillsPage() {
           new Date(b.createdAt || 0) - new Date(a.createdAt || 0)
       );
 
-    const remainingDebtPayments = linkedDebt
+    const remainingDebtPayments = linkedDebtNow
       ? payments
-          .filter((r) => r.id !== payment.id && (r.linkedDebtId === linkedDebt.id || r.billId === linkedDebt.id))
+          .filter(
+            (r) =>
+              r.id !== payment.id &&
+              (r.linkedDebtId === linkedDebtNow.id || r.billId === linkedDebtNow.id)
+          )
           .sort(
             (a, b) =>
               compareIsoDates(b.paymentDate, a.paymentDate) ||
@@ -2360,123 +2415,161 @@ export default function BillsPage() {
           )
       : [];
 
-    let rollbackResult = null;
-    let originalEffect = null;
+    let ledgerRollbackPosted = false;
     let billUpdated = false;
     let debtUpdated = false;
 
     try {
       if (payment.accountId) {
-        originalEffect = acctEffect(payment.accountId, payment.amount);
-        rollbackResult = await applyDelta({
+        await writeAccountDelta({
+          userId,
           accountId: payment.accountId,
-          delta: -originalEffect.delta,
+          delta: round2(payment.amount),
           kind: "bill_payment_delete",
+          amount: round2(payment.amount),
           note: `${currentBill?.name || "Bill"} payment deleted`,
           sourceType: "bill_payment_delete",
           sourceId: payment.id,
-          effectiveDate: isoDate(),
+          createdAt: new Date().toISOString(),
         });
-        if (!rollbackResult.ok) throw new Error(rollbackResult.message);
+        ledgerRollbackPosted = true;
       }
 
       if (currentBill) {
-        const nextLastPaid = remainingBillPayments[0]?.paymentDate || "";
-        const billPayload = {
-          last_paid_date: nextLastPaid || null,
-          updated_at: new Date().toISOString(),
-          balance:
-            safeNum(currentBill.balance) > 0
-              ? round2(safeNum(currentBill.balance) + safeNum(payment.amount))
-              : safeNum(currentBill.balance),
-        };
+        const latestRemaining = remainingBillPayments[0] || null;
+        const wasLatest = currentBill.lastPaidDate === payment.paymentDate;
+        const restoredBalance = round2(
+          Math.min(
+            safeNum(currentBill.amount),
+            Math.max(0, safeNum(currentBill.balance, currentBill.amount) + safeNum(payment.amount))
+          )
+        );
 
-        if (
-          currentBill.frequency !== "one_time" &&
-          currentBill.lastPaidDate &&
-          compareIsoDates(payment.paymentDate, currentBill.lastPaidDate) === 0
+        let nextDue = currentBill.dueDate || "";
+        if (latestRemaining?.paymentDate) {
+          nextDue =
+            String(currentBill.frequency || "").toLowerCase() === "one_time"
+              ? currentBill.dueDate || ""
+              : nextDueFromFreq(latestRemaining.paymentDate, currentBill.frequency);
+        } else if (
+          wasLatest &&
+          String(currentBill.frequency || "").toLowerCase() !== "one_time" &&
+          currentBill.dueDate
         ) {
-          billPayload.due_date = prevDueFromFreq(currentBill.dueDate, currentBill.frequency);
+          nextDue = prevDueFromFreq(currentBill.dueDate, currentBill.frequency);
         }
 
-        const { error } = await supabase.from("bills").update(billPayload).eq("id", currentBill.id).eq("user_id", userId);
-        if (error) throw error;
+        const billRes = await supabase
+          .from("bills")
+          .update({
+            balance: restoredBalance,
+            last_paid_date: latestRemaining?.paymentDate || null,
+            due_date: nextDue || null,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", currentBill.id)
+          .eq("user_id", userId);
+
+        if (billRes.error) throw billRes.error;
         billUpdated = true;
       }
 
-      if (linkedDebt) {
-        const nextDebtLastPaid = remainingDebtPayments[0]?.paymentDate || "";
-        const debtPayload = {
-          last_paid_date: nextDebtLastPaid || null,
-          balance: round2(safeNum(linkedDebt.balance) + safeNum(payment.amount)),
-          updated_at: new Date().toISOString(),
-        };
+      if (linkedDebtNow) {
+        const latestRemainingDebt = remainingDebtPayments[0] || null;
+        const wasLatestDebt = linkedDebtNow.lastPaidDate === payment.paymentDate;
 
-        if (
-          linkedDebt.frequency !== "one_time" &&
-          linkedDebt.lastPaidDate &&
-          compareIsoDates(payment.paymentDate, linkedDebt.lastPaidDate) === 0
+        let nextDebtDue = linkedDebtNow.dueDate || "";
+        if (latestRemainingDebt?.paymentDate) {
+          nextDebtDue =
+            String(linkedDebtNow.frequency || "").toLowerCase() === "one_time"
+              ? linkedDebtNow.dueDate || ""
+              : nextDueFromFreq(latestRemainingDebt.paymentDate, linkedDebtNow.frequency);
+        } else if (
+          wasLatestDebt &&
+          String(linkedDebtNow.frequency || "").toLowerCase() !== "one_time" &&
+          linkedDebtNow.dueDate
         ) {
-          debtPayload.due_date = prevDueFromFreq(linkedDebt.dueDate, linkedDebt.frequency);
+          nextDebtDue = prevDueFromFreq(linkedDebtNow.dueDate, linkedDebtNow.frequency);
         }
 
-        const { error } = await supabase.from("bills").update(debtPayload).eq("id", linkedDebt.id).eq("user_id", userId);
-        if (error) throw error;
+        const debtRes = await supabase
+          .from("bills")
+          .update({
+            balance: round2(Math.max(0, safeNum(linkedDebtNow.balance) + safeNum(payment.amount))),
+            last_paid_date: latestRemainingDebt?.paymentDate || null,
+            due_date: nextDebtDue || null,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", linkedDebtNow.id)
+          .eq("user_id", userId);
+
+        if (debtRes.error) throw debtRes.error;
         debtUpdated = true;
       }
 
-      const { error: e1 } = await supabase.from("spending_transactions").delete().eq("id", payment.id).eq("user_id", userId);
-      if (e1) throw e1;
+      const spendDelete = await supabase
+        .from("spending_transactions")
+        .delete()
+        .eq("id", payment.id)
+        .eq("user_id", userId);
 
-      await delCal(payment.id).catch(() => {});
+      if (spendDelete.error) throw spendDelete.error;
 
-      const { error: e2 } = await supabase.from("bill_payments").delete().eq("id", payment.id).eq("user_id", userId);
-      if (e2) {
-        if (currentBill && billUpdated) {
-          await supabase
-            .from("bills")
-            .update({
-              last_paid_date: currentBill.lastPaidDate || null,
-              due_date: currentBill.dueDate || null,
-              balance: currentBill.balance,
-              updated_at: new Date().toISOString(),
-            })
-            .eq("id", currentBill.id)
-            .eq("user_id", userId);
-        }
+      await deleteCalendarMirror(payment.id).catch(() => {});
 
-        if (linkedDebt && debtUpdated) {
-          await supabase
-            .from("bills")
-            .update({
-              last_paid_date: linkedDebt.lastPaidDate || null,
-              due_date: linkedDebt.dueDate || null,
-              balance: linkedDebt.balance,
-              updated_at: new Date().toISOString(),
-            })
-            .eq("id", linkedDebt.id)
-            .eq("user_id", userId);
-        }
+      const paymentDelete = await supabase
+        .from("bill_payments")
+        .delete()
+        .eq("id", payment.id)
+        .eq("user_id", userId);
 
-        if (payment.accountId && originalEffect && rollbackResult?.ok) {
-          await applyDelta({
+      if (paymentDelete.error) throw paymentDelete.error;
+
+      setStatus(linkedDebtNow ? "Payment deleted · debt resynced." : "Payment deleted.");
+      await refreshPage(currentBill?.id || selectedBillId);
+    } catch (err) {
+      if (currentBill && billUpdated) {
+        await supabase
+          .from("bills")
+          .update({
+            last_paid_date: currentBill.lastPaidDate || null,
+            due_date: currentBill.dueDate || null,
+            balance: currentBill.balance,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", currentBill.id)
+          .eq("user_id", userId);
+      }
+
+      if (linkedDebtNow && debtUpdated) {
+        await supabase
+          .from("bills")
+          .update({
+            last_paid_date: linkedDebtNow.lastPaidDate || null,
+            due_date: linkedDebtNow.dueDate || null,
+            balance: linkedDebtNow.balance,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", linkedDebtNow.id)
+          .eq("user_id", userId);
+      }
+
+      if (payment.accountId && ledgerRollbackPosted) {
+        try {
+          await writeAccountDelta({
+            userId,
             accountId: payment.accountId,
-            delta: originalEffect.delta,
+            delta: -round2(payment.amount),
             kind: "bill_payment_delete_rollback",
+            amount: round2(payment.amount),
             note: `${currentBill?.name || "Bill"} delete rollback`,
             sourceType: "bill_payment_delete_rollback",
             sourceId: payment.id,
-            effectiveDate: isoDate(),
-            startingBalance: rollbackResult.balance,
+            createdAt: new Date().toISOString(),
           });
-        }
-
-        throw e2;
+        } catch {}
       }
 
-      setStatus(linkedDebt ? "Payment deleted · debt resynced." : "Payment deleted.");
-      await refreshPage(currentBill?.id || selectedBillId);
-    } catch (err) {
       setPageError(err?.message || "Could not delete.");
       await refreshPage(currentBill?.id || selectedBillId);
     } finally {
@@ -2620,344 +2713,247 @@ export default function BillsPage() {
           border-radius: var(--lcc-radius-lg);
           border: 1px solid var(--lcc-border);
           background:
-            linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0)),
-            rgba(18, 22, 32, 0.86);
-          box-shadow: var(--lcc-shadow-sm);
+            linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.02)),
+            rgba(9, 12, 20, 0.82);
+          box-shadow: var(--lcc-shadow-md);
         }
 
-        .billSummaryLeft {
+        .billSummaryLeft,
+        .billSummaryRight {
           display: flex;
           align-items: center;
-          gap: 18px;
-          min-width: 0;
+          gap: 14px;
+          flex-wrap: wrap;
         }
 
         .billPageTitleWrap {
-          min-width: 0;
+          display: grid;
+          gap: 4px;
         }
 
         .billEyebrow {
-          font-size: 10.5px;
-          font-weight: 600;
-          letter-spacing: 0.08em;
+          font-size: 10px;
+          font-weight: 800;
+          letter-spacing: 0.16em;
           text-transform: uppercase;
           color: var(--lcc-text-soft);
         }
 
-        .billPageTitle {
-          margin-top: 4px;
-          font-size: clamp(24px, 2.4vw, 32px);
+        .billPageTitle,
+        .billDrawerTitle {
+          font-size: clamp(24px, 2vw, 30px);
           line-height: 1;
-          font-weight: 700;
+          font-weight: 900;
           letter-spacing: -0.04em;
         }
 
         .billSummaryMiniList {
           display: flex;
-          align-items: stretch;
           gap: 10px;
           flex-wrap: wrap;
         }
 
         .billMiniStat {
-          min-width: 110px;
+          min-width: 118px;
           padding: 10px 12px;
           border-radius: 12px;
           border: 1px solid var(--lcc-border);
           background: rgba(255,255,255,0.03);
+          display: grid;
+          gap: 4px;
         }
 
         .billMiniLabel {
-          display: block;
           font-size: 10px;
-          font-weight: 600;
-          letter-spacing: 0.07em;
+          letter-spacing: 0.12em;
           text-transform: uppercase;
           color: var(--lcc-text-soft);
+          font-weight: 800;
         }
 
         .billMiniValue {
-          display: block;
-          margin-top: 5px;
-          font-size: 15px;
-          font-weight: 700;
-          letter-spacing: -0.02em;
-        }
-
-        .billSummaryRight {
-          display: flex;
-          align-items: center;
-          gap: 10px;
-          flex-wrap: wrap;
-          justify-content: flex-end;
+          font-size: 16px;
+          font-weight: 800;
+          letter-spacing: -0.03em;
         }
 
         .billNextDue {
-          font-size: 12.5px;
-          color: var(--lcc-text-soft);
-          white-space: nowrap;
+          font-size: 13px;
+          color: var(--lcc-text-muted);
         }
 
         .billNextDue span {
           color: var(--lcc-text);
-          font-weight: 600;
+          font-weight: 700;
         }
 
-        .billMobileTabs {
-          display: none;
-          border-radius: var(--lcc-radius-md);
+        .billPill {
+          min-height: 26px;
+          display: inline-flex;
+          align-items: center;
+          gap: 7px;
+          padding: 0 10px;
+          border-radius: 999px;
+          border: 1px solid rgba(255,255,255,0.08);
+          background: rgba(255,255,255,0.04);
+          font-size: 11px;
+          font-weight: 800;
+          letter-spacing: 0.03em;
+          white-space: nowrap;
+        }
+
+        .billPillDot {
+          width: 7px;
+          height: 7px;
+          border-radius: 999px;
+          background: currentColor;
+          box-shadow: 0 0 10px currentColor;
+        }
+
+        .toneGreen {
+          color: var(--lcc-green);
+        }
+
+        .toneAmber {
+          color: var(--lcc-amber);
+        }
+
+        .toneRed {
+          color: var(--lcc-red);
+        }
+
+        .toneBlue {
+          color: var(--lcc-blue);
+        }
+
+        .toneNeutral {
+          color: var(--lcc-text-muted);
+        }
+
+        .textPositive {
+          color: var(--lcc-green);
+        }
+
+        .textWarning {
+          color: var(--lcc-amber);
+        }
+
+        .textNegative {
+          color: var(--lcc-red);
+        }
+
+        .billBtn,
+        .billScopeTab,
+        .billMobileTab,
+        .billMenuItem,
+        .billSearchClear,
+        .billRosterSort,
+        .billField input,
+        .billField select,
+        .billField textarea {
+          font: inherit;
+        }
+
+        .billBtn {
+          min-height: 36px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+          padding: 0 13px;
+          border-radius: 12px;
           border: 1px solid var(--lcc-border);
-          background: rgba(18, 22, 32, 0.78);
-          overflow: hidden;
+          background: rgba(255,255,255,0.03);
+          color: var(--lcc-text);
+          cursor: pointer;
+          transition: 180ms ease;
         }
 
-        .billMobileTab {
-          flex: 1;
-          min-height: 42px;
-          border: 0;
-          background: transparent;
-          color: var(--lcc-text-soft);
+        .billBtn:hover {
+          background: rgba(255,255,255,0.06);
+        }
+
+        .billBtn:disabled {
+          opacity: 0.52;
+          cursor: not-allowed;
+        }
+
+        .billBtn_primary {
+          border-color: rgba(102, 159, 255, 0.34);
+          background: linear-gradient(180deg, rgba(63,127,255,0.24), rgba(63,127,255,0.09));
+        }
+
+        .billBtn_success {
+          border-color: rgba(74, 222, 128, 0.28);
+          background: linear-gradient(180deg, rgba(74,222,128,0.22), rgba(74,222,128,0.07));
+        }
+
+        .billBtn_xs {
+          min-height: 30px;
+          padding: 0 10px;
           font-size: 12px;
-          font-weight: 600;
+        }
+
+        .billBtn_sm {
+          min-height: 36px;
+          padding: 0 13px;
+          font-size: 13px;
+        }
+
+        .billBtn_full {
+          width: 100%;
+        }
+
+        .billIconBtn {
+          width: 34px;
+          height: 34px;
+          display: inline-grid;
+          place-items: center;
+          border-radius: 10px;
+          border: 1px solid var(--lcc-border);
+          background: rgba(255,255,255,0.03);
+          color: var(--lcc-text);
           cursor: pointer;
         }
 
-        .billMobileTab_active {
-          background: rgba(79, 142, 255, 0.10);
-          color: var(--lcc-blue);
-          box-shadow: inset 0 -2px 0 var(--lcc-blue);
+        .billIconBtn_danger {
+          color: var(--lcc-red);
+          border-color: rgba(239, 68, 68, 0.18);
+          background: rgba(239, 68, 68, 0.08);
         }
 
         .billWorkspace {
-          min-height: 0;
           display: grid;
-          grid-template-columns: 290px minmax(0, 1fr) 240px;
+          grid-template-columns: 0.96fr 1.4fr 0.84fr;
           gap: 12px;
-          flex: 1;
+          min-height: 0;
         }
 
         .billCol {
-          min-height: 0;
           min-width: 0;
+          min-height: 0;
         }
 
         .billSidebarPane,
         .billFocusPane,
         .billRailPane {
           height: 100%;
-          min-height: 0;
           border-radius: var(--lcc-radius-lg);
           border: 1px solid var(--lcc-border);
           background:
-            linear-gradient(180deg, rgba(255,255,255,0.028), rgba(255,255,255,0) 48px),
-            rgba(18, 22, 32, 0.88);
-          box-shadow: var(--lcc-shadow-sm);
+            linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02)),
+            rgba(10, 13, 21, 0.82);
+          box-shadow: var(--lcc-shadow-md);
         }
 
-        .billSidebarPane {
-          display: grid;
-          grid-template-rows: auto 1fr;
-          overflow: hidden;
-        }
-
-        .billRosterHead {
-          padding: 12px;
-          border-bottom: 1px solid var(--lcc-border);
-          display: grid;
-          gap: 10px;
-        }
-
-        .billSearch {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          min-height: 40px;
-          padding: 0 12px;
-          border-radius: var(--lcc-radius-md);
-          border: 1px solid var(--lcc-border);
-          background: rgba(255,255,255,0.03);
-          color: var(--lcc-text-soft);
-        }
-
-        .billSearch input,
-        .billSearch input:focus {
-          border: 0 !important;
-          box-shadow: none !important;
-          background: transparent !important;
-          padding: 0 !important;
-          min-height: auto !important;
-        }
-
-        .billSearchClear {
-          display: grid;
-          place-items: center;
-          padding: 0;
-          color: var(--lcc-text-soft);
-          cursor: pointer;
-          flex-shrink: 0;
-        }
-
-        .billScopeTabs {
-          display: grid;
-          grid-template-columns: repeat(3, 1fr);
-          gap: 6px;
-        }
-
-        .billScopeTab {
-          min-height: 34px;
-          border-radius: 9px;
-          border: 1px solid var(--lcc-border);
-          background: rgba(255,255,255,0.02);
-          color: var(--lcc-text-soft);
-          font-size: 11px;
-          font-weight: 600;
-          text-transform: capitalize;
-          cursor: pointer;
-        }
-
-        .billScopeTab_active {
-          background: rgba(79, 142, 255, 0.10);
-          border-color: rgba(79, 142, 255, 0.28);
-          color: var(--lcc-blue);
-        }
-
-        .billRosterMeta {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 8px;
-          font-size: 11px;
-          color: var(--lcc-text-soft);
-        }
-
-        .billRosterSort,
-        .billRosterSort:focus {
-          width: auto;
-          padding: 0;
-          border: 0 !important;
-          box-shadow: none !important;
-          background: transparent !important;
-          color: var(--lcc-text-soft);
-          cursor: pointer;
-        }
-
-        .billRosterList {
-          min-height: 0;
-          overflow: auto;
-          padding: 4px 0;
-        }
-
-        .billRow {
-          position: relative;
-          width: 100%;
-          padding: 12px 14px 12px 16px;
-          display: flex;
-          align-items: flex-start;
-          gap: 12px;
-          border: 0;
-          border-bottom: 1px solid rgba(255,255,255,0.04);
-          background: transparent;
-          text-align: left;
-          cursor: pointer;
-          transition: background 140ms ease;
-        }
-
-        .billRow:hover {
-          background: rgba(255,255,255,0.03);
-        }
-
-        .billRow_active {
-          background: rgba(79, 142, 255, 0.08);
-        }
-
-        .billRowAccent {
-          width: 2px;
-          align-self: stretch;
-          border-radius: 999px;
-          background: transparent;
-          flex-shrink: 0;
-          opacity: 0;
-        }
-
-        .billRow_active .billRowAccent {
-          opacity: 1;
-        }
-
-        .billRowMain {
-          flex: 1;
-          min-width: 0;
-        }
-
-        .billRowTop {
-          display: flex;
-          align-items: baseline;
-          justify-content: space-between;
-          gap: 8px;
-        }
-
-        .billRowName {
-          min-width: 0;
-          font-size: 14px;
-          font-weight: 600;
-          color: var(--lcc-text);
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-        }
-
-        .billRowAmount {
-          flex-shrink: 0;
-          font-size: 15px;
-          font-weight: 700;
-          letter-spacing: -0.02em;
-          color: var(--lcc-text);
-        }
-
-        .billRowMeta {
-          display: flex;
-          align-items: center;
-          gap: 5px;
-          margin-top: 4px;
-          font-size: 12px;
-          min-width: 0;
-          flex-wrap: wrap;
-        }
-
-        .billRowCategory {
-          color: var(--lcc-text-muted);
-        }
-
-        .billRowDot {
-          color: var(--lcc-text-dim);
-        }
-
-        .billRowStatus {
-          font-weight: 600;
-        }
-
-        .billRowAuto {
-          color: var(--lcc-green);
-          font-weight: 600;
-        }
-
-        .billEmptyState {
-          padding: 28px 18px;
-          display: grid;
-          gap: 12px;
-          place-items: center;
-          text-align: center;
-        }
-
-        .billEmptyTitle {
-          font-size: 13px;
-          color: var(--lcc-text-muted);
+        .billSidebarPane,
+        .billRailPane {
+          padding: 14px;
         }
 
         .billFocusPane {
-          display: grid;
-          grid-template-rows: auto 1fr;
-          min-height: 0;
-          overflow: hidden;
+          padding: 14px;
+          overflow: auto;
         }
 
         .billFocusPane_empty {
@@ -2966,192 +2962,295 @@ export default function BillsPage() {
         }
 
         .billSelectPrompt {
-          text-align: center;
-          padding: 40px 20px;
-        }
-
-        .billSelectPromptIcon {
-          width: 56px;
-          height: 56px;
-          margin: 0 auto 14px;
-          border-radius: 16px;
+          max-width: 360px;
           display: grid;
-          place-items: center;
-          border: 1px solid var(--lcc-border);
-          background: rgba(255,255,255,0.03);
-          color: var(--lcc-text-soft);
-        }
-
-        .billSelectPromptTitle {
-          font-size: 16px;
-          font-weight: 700;
-        }
-
-        .billSelectPromptText {
-          margin-top: 6px;
-          font-size: 13px;
+          justify-items: center;
+          gap: 10px;
+          text-align: center;
           color: var(--lcc-text-muted);
         }
 
+        .billSelectPromptIcon {
+          width: 52px;
+          height: 52px;
+          display: grid;
+          place-items: center;
+          border-radius: 18px;
+          border: 1px solid var(--lcc-border);
+          background: rgba(255,255,255,0.04);
+        }
+
+        .billSelectPromptTitle {
+          font-size: 18px;
+          font-weight: 800;
+          color: var(--lcc-text);
+        }
+
+        .billMobileTabs {
+          display: none;
+          gap: 8px;
+        }
+
+        .billMobileTab {
+          flex: 1;
+          min-height: 38px;
+          border-radius: 12px;
+          border: 1px solid var(--lcc-border);
+          background: rgba(255,255,255,0.03);
+          color: var(--lcc-text-muted);
+          cursor: pointer;
+        }
+
+        .billMobileTab_active {
+          color: var(--lcc-text);
+          border-color: rgba(102, 159, 255, 0.34);
+          background: linear-gradient(180deg, rgba(63,127,255,0.22), rgba(63,127,255,0.08));
+        }
+
+        .billRosterHead {
+          display: grid;
+          gap: 10px;
+          margin-bottom: 12px;
+        }
+
+        .billSearch {
+          position: relative;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          min-height: 40px;
+          padding: 0 12px;
+          border-radius: 12px;
+          border: 1px solid var(--lcc-border);
+          background: rgba(255,255,255,0.03);
+          color: var(--lcc-text-muted);
+        }
+
+        .billSearch input {
+          flex: 1;
+          min-width: 0;
+          background: transparent;
+          border: 0;
+          outline: 0;
+          color: var(--lcc-text);
+        }
+
+        .billSearchClear {
+          width: 24px;
+          height: 24px;
+          display: grid;
+          place-items: center;
+          border-radius: 8px;
+          border: 0;
+          background: transparent;
+          color: var(--lcc-text-muted);
+          cursor: pointer;
+        }
+
+        .billScopeTabs {
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 8px;
+        }
+
+        .billScopeTab {
+          min-height: 34px;
+          border-radius: 10px;
+          border: 1px solid var(--lcc-border);
+          background: rgba(255,255,255,0.03);
+          color: var(--lcc-text-muted);
+          cursor: pointer;
+          text-transform: capitalize;
+        }
+
+        .billScopeTab_active {
+          color: var(--lcc-text);
+          border-color: rgba(102, 159, 255, 0.34);
+          background: linear-gradient(180deg, rgba(63,127,255,0.22), rgba(63,127,255,0.08));
+        }
+
+        .billRosterMeta {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+          font-size: 12px;
+          color: var(--lcc-text-soft);
+        }
+
+        .billRosterSort,
+        .billField input,
+        .billField select,
+        .billField textarea {
+          width: 100%;
+          min-height: 40px;
+          padding: 10px 12px;
+          border-radius: 12px;
+          border: 1px solid var(--lcc-border);
+          background: rgba(255,255,255,0.03);
+          color: var(--lcc-text);
+          outline: none;
+        }
+
+        .billField textarea {
+          min-height: 92px;
+          resize: vertical;
+        }
+
+        .billField {
+          display: grid;
+          gap: 7px;
+        }
+
+        .billFieldLabel {
+          font-size: 12px;
+          font-weight: 700;
+          color: var(--lcc-text-soft);
+        }
+
+        .billGrid {
+          display: grid;
+          gap: 12px;
+        }
+
+        .billGrid_2 {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .billGrid_3 {
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+
+        .billGrid_4 {
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+        }
+
+        .billRosterList {
+          display: grid;
+          gap: 8px;
+          max-height: calc(100svh - 280px);
+          overflow: auto;
+          padding-right: 2px;
+        }
+
+        .billRow {
+          width: 100%;
+          display: grid;
+          grid-template-columns: 4px 1fr;
+          gap: 10px;
+          text-align: left;
+          padding: 0;
+          border: 1px solid var(--lcc-border);
+          border-radius: 14px;
+          background: rgba(255,255,255,0.03);
+          color: var(--lcc-text);
+          cursor: pointer;
+          overflow: hidden;
+        }
+
+        .billRow:hover,
+        .billRow_active {
+          border-color: rgba(102, 159, 255, 0.28);
+          background: rgba(255,255,255,0.055);
+        }
+
+        .billRowAccent {
+          min-height: 100%;
+          background: rgba(255,255,255,0.06);
+        }
+
+        .billRowMain {
+          padding: 12px 12px 12px 0;
+          display: grid;
+          gap: 7px;
+        }
+
+        .billRowTop {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+        }
+
+        .billRowName {
+          font-size: 14px;
+          font-weight: 800;
+          letter-spacing: -0.02em;
+        }
+
+        .billRowAmount {
+          font-size: 14px;
+          font-weight: 800;
+        }
+
+        .billRowMeta {
+          display: flex;
+          align-items: center;
+          flex-wrap: wrap;
+          gap: 6px;
+          font-size: 12px;
+          color: var(--lcc-text-muted);
+        }
+
+        .billRowDot {
+          opacity: 0.45;
+        }
+
+        .billRowStatus.toneGreen,
+        .billRowStatus.toneAmber,
+        .billRowStatus.toneRed {
+          font-weight: 700;
+        }
+
         .billFocusHeader {
-          padding: 16px 18px 14px;
-          border-bottom: 1px solid var(--lcc-border);
           display: flex;
           align-items: flex-start;
           justify-content: space-between;
           gap: 12px;
+          margin-bottom: 12px;
+          flex-wrap: wrap;
+        }
+
+        .billFocusHeaderLeft {
+          display: grid;
+          gap: 8px;
         }
 
         .billFocusTitleRow {
           display: flex;
           align-items: center;
-          gap: 8px;
           flex-wrap: wrap;
+          gap: 8px;
         }
 
         .billFocusTitle {
           margin: 0;
-          font-size: 21px;
-          font-weight: 700;
-          letter-spacing: -0.03em;
+          font-size: clamp(22px, 2.1vw, 28px);
+          line-height: 1;
+          font-weight: 900;
+          letter-spacing: -0.04em;
         }
 
         .billFocusMeta {
-          margin-top: 5px;
-          font-size: 12.5px;
-          color: var(--lcc-text-soft);
+          display: inline-flex;
+          align-items: center;
+          gap: 7px;
+          font-size: 13px;
+          color: var(--lcc-text-muted);
         }
 
-        .billFocusHeaderRight {
+        .billFocusActions {
           display: flex;
           align-items: center;
-          gap: 6px;
-          flex-shrink: 0;
-        }
-
-        .billFocusScroll {
-          min-height: 0;
-          overflow: auto;
-          padding: 14px;
-          display: grid;
-          gap: 12px;
-          align-content: start;
-        }
-
-        .billHeroShell {
-          padding: 18px;
-          border-radius: 14px;
-          border: 1px solid var(--lcc-border);
-          background:
-            linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0)),
-            rgba(255,255,255,0.025);
-        }
-
-        .billHeroTopRow {
-          display: flex;
-          align-items: flex-start;
-          justify-content: space-between;
-          gap: 16px;
-        }
-
-        .billHeroPrimary {
-          min-width: 0;
-        }
-
-        .billHeroLabel {
-          font-size: 10.5px;
-          font-weight: 600;
-          text-transform: uppercase;
-          letter-spacing: 0.08em;
-          color: var(--lcc-text-soft);
-        }
-
-        .billHeroValue {
-          margin-top: 8px;
-          font-size: clamp(34px, 4vw, 46px);
-          line-height: 1;
-          font-weight: 700;
-          letter-spacing: -0.05em;
-        }
-
-        .billHeroStatusRow {
-          margin-top: 12px;
-          display: flex;
-          align-items: center;
-          gap: 10px;
+          gap: 8px;
           flex-wrap: wrap;
         }
 
-        .billHeroSubtext {
-          font-size: 13px;
-          color: var(--lcc-text-muted);
-        }
-
-        .billHeroMetaStack {
-          display: flex;
-          align-items: flex-end;
-          flex-direction: column;
-          gap: 8px;
-          flex-shrink: 0;
-        }
-
-        .billHeroMetaChip {
-          display: inline-flex;
-          align-items: center;
-          gap: 6px;
-          min-height: 34px;
-          padding: 0 11px;
-          border-radius: 10px;
-          border: 1px solid rgba(255,255,255,0.07);
-          background: rgba(255,255,255,0.04);
-          color: var(--lcc-text-muted);
-          font-size: 12px;
-          white-space: nowrap;
-        }
-
-        .billHeroBarWrap {
-          margin-top: 16px;
-        }
-
-        .billHeroMetaGrid {
-          margin-top: 16px;
+        .billActionGrid {
           display: grid;
-          grid-template-columns: repeat(4, minmax(0, 1fr));
-          gap: 10px;
-        }
-
-        .billHeroMetaCard {
-          min-width: 0;
-          padding: 12px;
-          border-radius: 12px;
-          border: 1px solid rgba(255,255,255,0.05);
-          background: rgba(255,255,255,0.03);
-        }
-
-        .billHeroMetaCard span {
-          display: block;
-          font-size: 10px;
-          font-weight: 600;
-          text-transform: uppercase;
-          letter-spacing: 0.07em;
-          color: var(--lcc-text-soft);
-        }
-
-        .billHeroMetaCard strong {
-          display: block;
-          margin-top: 5px;
-          font-size: 13px;
-          font-weight: 700;
-          color: var(--lcc-text);
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-        }
-
-        .billMidGrid {
-          display: grid;
-          grid-template-columns: minmax(0, 1fr) 250px;
+          grid-template-columns: 1.12fr 0.88fr;
           gap: 12px;
+          margin-bottom: 12px;
         }
 
         .billPanel {
@@ -3261,6 +3360,7 @@ export default function BillsPage() {
           display: grid;
           grid-template-columns: repeat(3, minmax(0, 1fr));
           gap: 12px;
+          margin-bottom: 12px;
         }
 
         .billMetricCard {
@@ -3268,463 +3368,290 @@ export default function BillsPage() {
           border-radius: 12px;
           border: 1px solid var(--lcc-border);
           background: rgba(255,255,255,0.03);
+          display: grid;
+          gap: 5px;
         }
 
-        .billMetricLabel {
-          font-size: 10.5px;
-          font-weight: 600;
+        .billMetricLabel,
+        .billDetailLabel {
+          font-size: 10px;
+          font-weight: 800;
+          letter-spacing: 0.11em;
           text-transform: uppercase;
-          letter-spacing: 0.07em;
           color: var(--lcc-text-soft);
         }
 
-        .billMetricValue {
-          margin-top: 6px;
-          font-size: 17px;
-          font-weight: 700;
-          letter-spacing: -0.02em;
+        .billMetricValue,
+        .billDetailValue {
+          font-size: 15px;
+          font-weight: 800;
+          letter-spacing: -0.03em;
         }
 
         .billMetricSub {
-          margin-top: 4px;
           font-size: 12px;
-          color: var(--lcc-text-soft);
+          color: var(--lcc-text-muted);
         }
 
         .billDetailGrid {
           display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-          gap: 10px;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 12px;
         }
 
         .billDetailCard {
-          padding: 11px 12px;
+          padding: 12px 13px;
           border-radius: 12px;
-          border: 1px solid rgba(255,255,255,0.04);
-          background: rgba(255,255,255,0.03);
+          border: 1px solid var(--lcc-border);
+          background: rgba(255,255,255,0.02);
+          display: grid;
+          gap: 5px;
+          min-height: 88px;
+          align-content: start;
         }
 
         .billDetailCard_notes {
           grid-column: 1 / -1;
         }
 
-        .billDetailLabel {
-          font-size: 10.5px;
-          font-weight: 600;
-          text-transform: uppercase;
-          letter-spacing: 0.07em;
-          color: var(--lcc-text-soft);
-        }
-
-        .billDetailValue {
-          margin-top: 6px;
-          font-size: 14px;
-          font-weight: 600;
-        }
-
         .billDetailNotes {
-          margin-top: 6px;
-          font-size: 14px;
-          line-height: 1.55;
+          font-size: 13px;
           color: var(--lcc-text-muted);
+          line-height: 1.55;
+          white-space: pre-wrap;
         }
 
         .billRailPane {
-          display: flex;
-          flex-direction: column;
-          overflow: hidden;
+          display: grid;
+          gap: 12px;
         }
 
         .billRailSection {
-          padding: 13px 12px;
-          border-bottom: 1px solid var(--lcc-border);
+          padding: 14px;
+          border-radius: 14px;
+          border: 1px solid var(--lcc-border);
+          background: rgba(255,255,255,0.03);
         }
 
         .billRailSection_fill {
-          border-bottom: 0;
-          flex: 1;
-          overflow: auto;
+          min-height: 0;
         }
 
         .billRailLabel {
           margin-bottom: 10px;
-          font-size: 10.5px;
-          font-weight: 700;
+          font-size: 11px;
+          font-weight: 800;
+          letter-spacing: 0.12em;
           text-transform: uppercase;
-          letter-spacing: 0.08em;
           color: var(--lcc-text-soft);
         }
 
-        .billRailActionStack {
-          display: grid;
-          gap: 7px;
-        }
-
+        .billRailActionStack,
         .billRailStatList {
           display: grid;
-          gap: 7px;
+          gap: 9px;
         }
 
         .billRailStat {
           display: flex;
           align-items: center;
           justify-content: space-between;
-          gap: 8px;
-          padding: 9px 10px;
-          border-radius: 10px;
-          border: 1px solid rgba(255,255,255,0.04);
-          background: rgba(255,255,255,0.03);
-          font-size: 12px;
+          gap: 10px;
+          font-size: 13px;
           color: var(--lcc-text-muted);
         }
 
         .billRailStat strong {
-          font-size: 14px;
           color: var(--lcc-text);
         }
 
         .billSelectedCard {
+          display: grid;
+          gap: 10px;
           padding: 12px;
           border-radius: 12px;
           border: 1px solid rgba(255,255,255,0.05);
-          background: rgba(255,255,255,0.03);
+          background: rgba(255,255,255,0.02);
         }
 
         .billSelectedTop {
           display: flex;
-          align-items: flex-start;
+          align-items: center;
           justify-content: space-between;
-          gap: 8px;
-          margin-bottom: 8px;
+          gap: 10px;
         }
 
         .billSelectedName {
-          min-width: 0;
-          font-size: 13px;
-          font-weight: 700;
-          color: var(--lcc-text);
+          font-size: 15px;
+          font-weight: 800;
         }
 
         .billSelectedAmount {
-          margin-bottom: 8px;
           font-size: 24px;
-          font-weight: 700;
+          font-weight: 900;
           letter-spacing: -0.04em;
         }
 
         .billSelectedMeta {
-          margin-top: 8px;
-          font-size: 11.5px;
-          color: var(--lcc-text-soft);
+          font-size: 13px;
+          color: var(--lcc-text-muted);
         }
 
         .billSelectedDebt {
-          margin-top: 10px;
-          padding: 10px;
-          border-radius: 10px;
-          background: rgba(79, 142, 255, 0.07);
-          border: 1px solid rgba(79, 142, 255, 0.15);
+          padding-top: 10px;
+          border-top: 1px solid rgba(255,255,255,0.06);
+          display: grid;
+          gap: 4px;
         }
 
         .billSelectedDebtLabel {
           font-size: 10px;
-          font-weight: 700;
-          letter-spacing: 0.08em;
+          font-weight: 800;
+          letter-spacing: 0.1em;
           text-transform: uppercase;
-          color: var(--lcc-blue);
+          color: var(--lcc-text-soft);
         }
 
         .billSelectedDebtName {
-          margin-top: 4px;
-          font-size: 12.5px;
+          font-size: 14px;
           font-weight: 700;
         }
 
         .billSelectedDebtMeta {
-          margin-top: 3px;
-          font-size: 11.5px;
-          color: var(--lcc-text-muted);
-        }
-
-        .billHistoryList {
-          display: grid;
-          gap: 8px;
-        }
-
-        .billHistoryCard {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 12px;
-          padding: 12px 14px;
-          border-radius: 12px;
-          border: 1px solid var(--lcc-border);
-          background: rgba(255,255,255,0.03);
-        }
-
-        .billHistoryLeft {
-          min-width: 0;
-        }
-
-        .billHistoryAmount {
-          font-size: 18px;
-          font-weight: 700;
-          letter-spacing: -0.02em;
-        }
-
-        .billHistoryMeta {
-          margin-top: 4px;
           font-size: 13px;
           color: var(--lcc-text-muted);
-        }
-
-        .billHistoryNote {
-          margin-top: 3px;
-          font-size: 13px;
-          color: var(--lcc-text-soft);
-        }
-
-        .billHistoryRight {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          flex-shrink: 0;
-        }
-
-        .billEmptyHistory {
-          padding: 48px 18px;
-          text-align: center;
-          color: var(--lcc-text-muted);
-          font-size: 13px;
-        }
-
-        .billPill {
-          display: inline-flex;
-          align-items: center;
-          gap: 5px;
-          min-height: 24px;
-          padding: 0 9px;
-          border-radius: 7px;
-          border: 1px solid var(--lcc-border);
-          background: rgba(255,255,255,0.05);
-          color: var(--lcc-text-muted);
-          font-size: 11px;
-          font-weight: 600;
-          white-space: nowrap;
-        }
-
-        .billPillDot {
-          width: 6px;
-          height: 6px;
-          border-radius: 999px;
-          background: currentColor;
-          opacity: 0.95;
-        }
-
-        .toneNeutral {
-          color: var(--lcc-text-muted);
-          border-color: var(--lcc-border);
-          background: rgba(255,255,255,0.05);
-        }
-
-        .toneBlue {
-          color: var(--lcc-blue);
-          border-color: rgba(79, 142, 255, 0.18);
-          background: rgba(79, 142, 255, 0.10);
-        }
-
-        .toneGreen {
-          color: var(--lcc-green);
-          border-color: rgba(34, 199, 125, 0.18);
-          background: rgba(34, 199, 125, 0.10);
-        }
-
-        .toneAmber {
-          color: var(--lcc-amber);
-          border-color: rgba(232, 162, 69, 0.2);
-          background: rgba(232, 162, 69, 0.12);
-        }
-
-        .toneRed {
-          color: var(--lcc-red);
-          border-color: rgba(224, 84, 106, 0.2);
-          background: rgba(224, 84, 106, 0.12);
         }
 
         .billProgress {
-          width: 100%;
-          border-radius: 999px;
-          background: rgba(255,255,255,0.07);
+          position: relative;
           overflow: hidden;
+          border-radius: 999px;
+          background: rgba(255,255,255,0.06);
         }
 
         .billProgressFill {
           height: 100%;
           border-radius: 999px;
-          transition: width 280ms ease;
+          background: currentColor;
+          box-shadow: 0 0 18px currentColor;
         }
 
-        .billBtn {
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          gap: 6px;
-          border-radius: 10px;
-          font-weight: 600;
-          cursor: pointer;
-          white-space: nowrap;
-          transition: transform 120ms ease, background 120ms ease, border-color 120ms ease, opacity 120ms ease;
-        }
-
-        .billBtn:hover:not(:disabled) {
-          transform: translateY(-1px);
-        }
-
-        .billBtn:disabled {
-          cursor: not-allowed;
-          opacity: 0.5;
-        }
-
-        .billBtn_xs {
-          min-height: 30px;
-          padding: 0 10px;
-          font-size: 12px;
-        }
-
-        .billBtn_sm {
-          min-height: 34px;
-          padding: 0 12px;
-          font-size: 13px;
-        }
-
-        .billBtn_md {
-          min-height: 40px;
-          padding: 0 15px;
-          font-size: 13.5px;
-        }
-
-        .billBtn_full {
-          width: 100%;
-        }
-
-        .billBtn_ghost {
-          border: 1px solid var(--lcc-border);
-          background: rgba(255,255,255,0.04);
-          color: var(--lcc-text-muted);
-        }
-
-        .billBtn_ghost:hover:not(:disabled) {
-          color: var(--lcc-text);
-          background: rgba(255,255,255,0.07);
-          border-color: var(--lcc-border-strong);
-        }
-
-        .billBtn_primary {
-          border: 1px solid rgba(79, 142, 255, 0.28);
-          background: linear-gradient(180deg, #4f90ff, #3a7af0);
-          color: #fff;
-          box-shadow: 0 2px 8px rgba(58, 122, 240, 0.26);
-        }
-
-        .billBtn_primary:hover:not(:disabled) {
-          background: linear-gradient(180deg, #5a99ff, #4588f7);
-        }
-
-        .billBtn_success {
-          border: 1px solid rgba(34, 199, 125, 0.24);
-          background: linear-gradient(180deg, rgba(34, 199, 125, 0.22), rgba(34, 199, 125, 0.14));
-          color: var(--lcc-green);
-        }
-
-        .billIconBtn {
-          width: 32px;
-          height: 32px;
+        .billOverlay {
+          position: fixed;
+          inset: 0;
+          z-index: 80;
           display: grid;
           place-items: center;
-          border-radius: 10px;
-          border: 1px solid var(--lcc-border);
-          background: rgba(255,255,255,0.04);
-          color: var(--lcc-text-muted);
+          padding: 20px;
+        }
+
+        .billOverlay_drawer {
+          justify-items: end;
+        }
+
+        .billOverlayBackdrop {
+          position: absolute;
+          inset: 0;
+          border: 0;
+          background: rgba(0,0,0,0.64);
+          backdrop-filter: blur(8px);
           cursor: pointer;
-          transition: background 120ms ease, border-color 120ms ease;
         }
 
-        .billIconBtn:hover:not(:disabled) {
-          background: rgba(255,255,255,0.07);
-          border-color: var(--lcc-border-strong);
-          color: var(--lcc-text);
+        .billDrawer,
+        .billModal {
+          position: relative;
+          z-index: 1;
+          border-radius: 22px;
+          border: 1px solid var(--lcc-border);
+          background:
+            linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02)),
+            rgba(9, 12, 20, 0.96);
+          box-shadow: var(--lcc-shadow-lg);
         }
 
-        .billIconBtn_danger {
-          color: var(--lcc-red);
-          border-color: rgba(224,84,106,0.18);
-          background: rgba(224,84,106,0.08);
-        }
-
-        .billIconBtn:disabled {
-          opacity: 0.45;
-          cursor: not-allowed;
-        }
-
-        .billField {
+        .billDrawer {
+          width: min(760px, calc(100vw - 24px));
+          height: min(100svh - 24px, 920px);
           display: grid;
-          gap: 6px;
+          grid-template-rows: auto 1fr auto;
         }
 
-        .billFieldLabel {
-          font-size: 11px;
-          font-weight: 600;
-          text-transform: uppercase;
-          letter-spacing: 0.06em;
-          color: var(--lcc-text-soft);
-        }
-
-        .billGrid {
+        .billModal {
+          width: min(680px, calc(100vw - 24px));
+          max-height: min(100svh - 24px, 720px);
           display: grid;
-          gap: 10px;
+          grid-template-rows: auto 1fr auto;
         }
 
-        .billGrid_2 {
-          grid-template-columns: repeat(2, minmax(0, 1fr));
+        .billDrawerHead,
+        .billModalHead {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 12px;
+          padding: 18px 18px 0;
         }
 
-        .billGrid_3 {
-          grid-template-columns: repeat(3, minmax(0, 1fr));
+        .billDrawerSub {
+          margin-top: 6px;
+          font-size: 13px;
+          color: var(--lcc-text-muted);
         }
 
-        .billGrid_4 {
-          grid-template-columns: repeat(4, minmax(0, 1fr));
+        .billModalTitle {
+          font-size: 20px;
+          font-weight: 900;
+          letter-spacing: -0.03em;
         }
 
-        .billStack {
+        .billDrawerBody,
+        .billModalBody {
+          min-height: 0;
+          overflow: auto;
+          padding: 18px;
+        }
+
+        .billDrawerFoot,
+        .billModalFoot {
+          display: flex;
+          align-items: center;
+          justify-content: flex-end;
+          gap: 8px;
+          padding: 0 18px 18px;
+          flex-wrap: wrap;
+        }
+
+        .billFormBlock {
+          padding: 14px;
+          border-radius: 14px;
+          border: 1px solid var(--lcc-border);
+          background: rgba(255,255,255,0.03);
+        }
+
+        .billFormBlock + .billFormBlock {
+          margin-top: 12px;
+        }
+
+        .billFormBlockTitle {
+          margin-bottom: 12px;
+          font-size: 14px;
+          font-weight: 800;
+          letter-spacing: -0.02em;
+        }
+
+        .billFormBlockBody {
           display: grid;
           gap: 12px;
         }
 
         .billToggleRow {
           display: flex;
-          align-items: center;
-          gap: 7px;
+          gap: 8px;
           flex-wrap: wrap;
         }
 
-        .billFormBlock {
-          padding: 16px;
-          border-radius: 14px;
-          border: 1px solid var(--lcc-border);
-          background: rgba(255,255,255,0.03);
-        }
-
-        .billFormBlockTitle {
-          margin-bottom: 14px;
-          font-size: 10.5px;
-          font-weight: 700;
-          letter-spacing: 0.08em;
-          text-transform: uppercase;
-          color: var(--lcc-text-soft);
-        }
-
-        .billFormBlockBody {
+        .billStack {
           display: grid;
           gap: 12px;
         }
@@ -3735,34 +3662,35 @@ export default function BillsPage() {
 
         .billMenu {
           position: absolute;
-          top: calc(100% + 6px);
+          top: calc(100% + 8px);
           right: 0;
-          min-width: 172px;
-          padding: 5px;
-          border-radius: 12px;
-          border: 1px solid var(--lcc-border-strong);
-          background: rgba(17, 21, 31, 0.98);
-          box-shadow: var(--lcc-shadow-lg);
-          z-index: 40;
+          min-width: 180px;
+          padding: 8px;
+          border-radius: 14px;
+          border: 1px solid var(--lcc-border);
+          background: rgba(10, 13, 21, 0.98);
+          box-shadow: var(--lcc-shadow-md);
+          display: grid;
+          gap: 4px;
+          z-index: 5;
         }
 
         .billMenuItem {
-          width: 100%;
           min-height: 34px;
           display: flex;
           align-items: center;
           gap: 8px;
           padding: 0 10px;
-          border-radius: 8px;
-          color: var(--lcc-text-muted);
+          border-radius: 10px;
+          border: 0;
+          background: transparent;
+          color: var(--lcc-text);
           cursor: pointer;
-          font-size: 12.5px;
-          font-weight: 500;
+          text-align: left;
         }
 
         .billMenuItem:hover {
           background: rgba(255,255,255,0.05);
-          color: var(--lcc-text);
         }
 
         .billMenuItem_danger {
@@ -3772,329 +3700,163 @@ export default function BillsPage() {
         .billDivider {
           height: 1px;
           margin: 4px 0;
-          background: var(--lcc-border);
+          background: rgba(255,255,255,0.06);
         }
 
-        .billOverlay {
-          position: fixed;
-          inset: 0;
-          z-index: 1300;
+        .billHistoryList {
           display: grid;
-          place-items: center;
-          padding: 18px;
+          gap: 10px;
         }
 
-        .billOverlay_drawer {
-          display: flex;
-          justify-content: flex-end;
-          padding: 0;
-        }
-
-        .billOverlayBackdrop {
-          position: absolute;
-          inset: 0;
-          border: 0;
-          background: rgba(8, 11, 16, 0.76);
-          backdrop-filter: blur(7px);
-          -webkit-backdrop-filter: blur(7px);
-          cursor: pointer;
-        }
-
-        .billDrawer {
-          position: relative;
-          width: min(760px, 100%);
-          height: 100%;
-          display: grid;
-          grid-template-rows: auto 1fr auto;
-          background: rgba(15, 18, 27, 0.98);
-          border-left: 1px solid var(--lcc-border);
-          box-shadow: -24px 0 80px rgba(0,0,0,0.45);
-        }
-
-        .billDrawerHead,
-        .billDrawerFoot {
-          padding: 18px 20px;
-          border-bottom: 1px solid var(--lcc-border);
-        }
-
-        .billDrawerFoot {
-          border-bottom: 0;
-          border-top: 1px solid var(--lcc-border);
-          display: flex;
-          justify-content: flex-end;
-          gap: 8px;
-        }
-
-        .billDrawerHead {
+        .billHistoryCard {
           display: flex;
           align-items: flex-start;
           justify-content: space-between;
           gap: 12px;
+          padding: 12px;
+          border-radius: 12px;
+          border: 1px solid var(--lcc-border);
+          background: rgba(255,255,255,0.03);
         }
 
-        .billDrawerTitle {
-          margin-top: 4px;
-          font-size: 20px;
-          font-weight: 700;
-          letter-spacing: -0.03em;
+        .billHistoryLeft {
+          display: grid;
+          gap: 5px;
         }
 
-        .billDrawerSub {
-          margin-top: 5px;
-          font-size: 12.5px;
+        .billHistoryAmount {
+          font-size: 16px;
+          font-weight: 800;
+        }
+
+        .billHistoryMeta,
+        .billHistoryNote,
+        .billEmptyHistory {
+          font-size: 13px;
           color: var(--lcc-text-muted);
         }
 
-        .billDrawerBody {
-          overflow: auto;
-          padding: 18px 20px;
-          display: grid;
-          gap: 14px;
-          align-content: start;
-        }
-
-        .billModal {
-          position: relative;
-          width: min(780px, 100%);
-          max-height: min(82svh, 860px);
-          display: grid;
-          grid-template-rows: auto 1fr auto;
-          border-radius: 16px;
-          overflow: hidden;
-          border: 1px solid var(--lcc-border-strong);
-          background: rgba(15, 18, 27, 0.98);
-          box-shadow: var(--lcc-shadow-lg);
-        }
-
-        .billModalHead,
-        .billModalFoot {
-          padding: 15px 18px;
-          border-bottom: 1px solid var(--lcc-border);
-        }
-
-        .billModalFoot {
-          border-bottom: 0;
-          border-top: 1px solid var(--lcc-border);
-          display: flex;
-          justify-content: flex-end;
-          gap: 8px;
-        }
-
-        .billModalHead {
+        .billHistoryRight {
           display: flex;
           align-items: center;
-          justify-content: space-between;
-          gap: 10px;
+          gap: 8px;
+          flex-wrap: wrap;
         }
 
-        .billModalTitle {
-          font-size: 15px;
-          font-weight: 700;
+        .billEmptyState,
+        .billEmptyHistory {
+          padding: 14px;
+          border-radius: 12px;
+          border: 1px dashed rgba(255,255,255,0.12);
+          background: rgba(255,255,255,0.02);
         }
 
-        .billModalBody {
-          min-height: 0;
-          overflow: auto;
-          padding: 18px;
+        .billEmptyTitle {
+          font-size: 14px;
+          font-weight: 800;
+          margin-bottom: 8px;
         }
 
         .billToastStack {
           position: fixed;
-          right: 22px;
-          bottom: 22px;
-          z-index: 1500;
+          right: 16px;
+          bottom: 16px;
+          z-index: 90;
           display: grid;
           gap: 8px;
+          width: min(420px, calc(100vw - 32px));
         }
 
         .billToast {
           display: flex;
           align-items: center;
-          gap: 8px;
-          min-height: 42px;
-          padding: 0 12px;
-          border-radius: 12px;
-          font-size: 12.5px;
-          font-weight: 600;
+          gap: 10px;
+          padding: 12px 14px;
+          border-radius: 14px;
+          border: 1px solid var(--lcc-border);
           box-shadow: var(--lcc-shadow-md);
+          background: rgba(9, 12, 20, 0.96);
         }
 
         .billToast_success {
           color: var(--lcc-green);
-          border: 1px solid rgba(34, 199, 125, 0.22);
-          background: rgba(10, 24, 17, 0.96);
         }
 
         .billToast_error {
-          color: #ff8ea1;
-          border: 1px solid rgba(224, 84, 106, 0.24);
-          background: rgba(30, 11, 15, 0.96);
-        }
-
-        .billToastClose {
-          display: grid;
-          place-items: center;
-          padding: 0;
-          margin-left: 4px;
-          color: inherit;
-          cursor: pointer;
-        }
-
-        .textPositive {
-          color: var(--lcc-green);
-        }
-
-        .textWarning {
-          color: var(--lcc-amber);
-        }
-
-        .textNegative {
           color: var(--lcc-red);
         }
 
-        @media (max-width: 1320px) {
-          .billWorkspace {
-            grid-template-columns: 272px minmax(0, 1fr) 224px;
-          }
-
-          .billMidGrid {
-            grid-template-columns: minmax(0, 1fr) 234px;
-          }
-
-          .billHeroMetaGrid {
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-          }
+        .billToastClose {
+          margin-left: auto;
+          width: 24px;
+          height: 24px;
+          display: grid;
+          place-items: center;
+          border: 0;
+          border-radius: 8px;
+          background: transparent;
+          color: currentColor;
+          cursor: pointer;
         }
 
-        @media (max-width: 1100px) {
-          .billMobileTabs {
-            display: flex;
-          }
-
+        @media (max-width: 1180px) {
           .billWorkspace {
             grid-template-columns: 1fr;
           }
 
           .billCol {
             display: none;
-            min-height: 0;
           }
 
           .billCol_show {
             display: block;
           }
 
-          .billSidebarPane,
-          .billFocusPane,
-          .billRailPane {
-            min-height: calc(100svh - 210px);
+          .billMobileTabs {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
           }
 
-          .billRailPane {
-            height: auto;
+          .billRosterList {
+            max-height: none;
+          }
+
+          .billActionGrid {
+            grid-template-columns: 1fr;
           }
         }
 
         @media (max-width: 860px) {
           .billSummaryStrip {
-            flex-direction: column;
-            align-items: flex-start;
+            padding: 14px;
           }
 
           .billSummaryLeft,
           .billSummaryRight {
-            width: 100%;
-          }
-
-          .billSummaryRight {
+            align-items: flex-start;
             justify-content: flex-start;
           }
 
-          .billMidGrid,
-          .billDetailRow {
-            grid-template-columns: 1fr;
-          }
-
-          .billGrid_4 {
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-          }
-
-          .billHeroTopRow {
-            flex-direction: column;
-            align-items: flex-start;
-          }
-
-          .billHeroMetaStack {
-            width: 100%;
-            flex-direction: row;
-            flex-wrap: wrap;
-            align-items: flex-start;
-          }
-        }
-
-        @media (max-width: 640px) {
-          .billsRoot {
-            min-height: calc(100svh - 16px);
-            gap: 10px;
-          }
-
           .billSummaryStrip {
-            padding: 14px;
-          }
-
-          .billSummaryMiniList {
-            width: 100%;
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-          }
-
-          .billFocusHeader {
-            padding: 14px;
             flex-direction: column;
-            align-items: stretch;
-          }
-
-          .billFocusHeaderRight {
-            justify-content: flex-end;
-          }
-
-          .billFocusScroll {
-            padding: 10px;
+            align-items: flex-start;
           }
 
           .billGrid_2,
           .billGrid_3,
           .billGrid_4,
-          .billHeroMetaGrid {
+          .billDetailRow,
+          .billDetailGrid {
             grid-template-columns: 1fr;
           }
 
-          .billPayFoot {
-            align-items: stretch;
+          .billDrawer {
+            width: calc(100vw - 16px);
+            height: calc(100svh - 16px);
           }
 
-          .billAdvanceToggle {
-            width: 100%;
-          }
-
-          .billHistoryCard {
-            align-items: flex-start;
-            flex-direction: column;
-          }
-
-          .billHistoryRight {
-            width: 100%;
-            justify-content: space-between;
-          }
-
-          .billToastStack {
-            left: 12px;
-            right: 12px;
-            bottom: 12px;
-          }
-
-          .billOverlay {
-            padding: 10px;
+          .billModal {
+            width: calc(100vw - 16px);
           }
         }
       `}</style>

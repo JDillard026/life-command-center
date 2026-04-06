@@ -813,7 +813,7 @@ function PaymentHistory({ payments, accountNameById, selectedDebtId }) {
   return (
     <div className="debtHistoryList">
       {payments.map((p) => {
-        const sourceLabel = p.billId === selectedDebtId ? "Direct" : "From bill";
+        const sourceLabel = p.billId === selectedDebtId ? "Debt legacy" : "From bill";
         return (
           <div key={p.id} className="debtHistoryCard">
             <div className="debtHistoryLeft">
@@ -826,7 +826,7 @@ function PaymentHistory({ payments, accountNameById, selectedDebtId }) {
             </div>
 
             <div className="debtHistoryRight">
-              <Pill tone={sourceLabel === "Direct" ? "amber" : "blue"} dot>
+              <Pill tone={sourceLabel === "From bill" ? "blue" : "amber"} dot>
                 {sourceLabel}
               </Pill>
             </div>
@@ -1273,6 +1273,16 @@ function FocusPanel({
                 <div className="debtDetailNotes">{debt.notes}</div>
               </div>
             ) : null}
+          </div>
+        </div>
+
+        <div className="debtPanel">
+          <div className="debtPanelHead">
+            <div className="debtPanelTitle">Money Flow Ownership</div>
+          </div>
+          <div className="debtDetailNotes">
+            Bills owns payment posting. Debt reads synced history from bill activity and legacy debt-only rows,
+            but this page does not post money into accounts or spending.
           </div>
         </div>
       </div>
@@ -1883,7 +1893,7 @@ export default function DebtPage() {
       typeof window === "undefined"
         ? true
         : window.confirm(
-            `Delete ${selectedDebt.name || "this debt"}?\n\nThis will unlink bills attached to it and remove debt-only legacy payment history.`
+            `Delete ${selectedDebt.name || "this debt"}?\n\nThis will unlink bills attached to it and remove debt-only history rows.`
           );
 
     if (!ok) return;
@@ -1892,10 +1902,6 @@ export default function DebtPage() {
     setPageError("");
 
     try {
-      const legacyPaymentIds = payments
-        .filter((payment) => payment.billId === selectedDebt.id)
-        .map((payment) => payment.id);
-
       const { error: unlinkBillsError } = await supabase
         .from("bills")
         .update({ linked_debt_id: null, updated_at: new Date().toISOString() })
@@ -1909,23 +1915,6 @@ export default function DebtPage() {
         .eq("user_id", userId)
         .eq("linked_debt_id", selectedDebt.id);
       if (unlinkPaymentRefsError) throw unlinkPaymentRefsError;
-
-      if (legacyPaymentIds.length) {
-        const { error: spendDeleteError } = await supabase
-          .from("spending_transactions")
-          .delete()
-          .eq("user_id", userId)
-          .in("id", legacyPaymentIds);
-        if (spendDeleteError) throw spendDeleteError;
-
-        const { error: calDeleteError } = await supabase
-          .from("calendar_events")
-          .delete()
-          .eq("user_id", userId)
-          .eq("source", "spending")
-          .in("source_id", legacyPaymentIds);
-        if (calDeleteError) throw calDeleteError;
-      }
 
       const { error: deleteDebtPaymentsError } = await supabase
         .from("bill_payments")
