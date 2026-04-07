@@ -1,8 +1,8 @@
 .pane {
-  --pane-border: rgba(160, 190, 255, 0.16);
-  --pane-edge: rgba(255, 255, 255, 0.055);
-  --pane-glow: rgba(84, 124, 255, 0.11);
-  --pane-fill: rgba(7, 11, 18, 0.5);
+  --pane-border: rgba(255, 255, 255, 0.064);
+  --pane-edge: rgba(255, 255, 255, 0.034);
+  --pane-fill: rgba(8, 12, 19, 0.82);
+  --pane-fill-2: rgba(10, 15, 24, 0.88);
   --pane-shadow: rgba(0, 0, 0, 0.36);
 
   position: relative;
@@ -13,26 +13,25 @@
   background:
     linear-gradient(
       180deg,
-      rgba(255, 255, 255, 0.085) 0%,
-      rgba(255, 255, 255, 0.032) 12%,
-      rgba(255, 255, 255, 0.012) 24%,
-      rgba(255, 255, 255, 0) 38%
+      rgba(255, 255, 255, 0.026) 0%,
+      rgba(255, 255, 255, 0.012) 16%,
+      rgba(255, 255, 255, 0.005) 34%,
+      rgba(255, 255, 255, 0.001) 52%,
+      rgba(255, 255, 255, 0) 72%
     ),
-    linear-gradient(
-      135deg,
-      rgba(255, 255, 255, 0.06) 0%,
-      rgba(255, 255, 255, 0.018) 20%,
-      rgba(255, 255, 255, 0) 48%
+    radial-gradient(
+      circle at 18% -4%,
+      rgba(86, 108, 146, 0.07),
+      transparent 32%
     ),
-    var(--pane-fill);
-  backdrop-filter: blur(16px) saturate(128%);
-  -webkit-backdrop-filter: blur(16px) saturate(128%);
+    linear-gradient(180deg, var(--pane-fill), var(--pane-fill-2));
+  backdrop-filter: blur(10px) saturate(106%);
+  -webkit-backdrop-filter: blur(10px) saturate(106%);
   box-shadow:
     inset 0 1px 0 var(--pane-edge),
-    inset 0 -1px 0 rgba(255, 255, 255, 0.012),
-    0 16px 40px var(--pane-shadow),
-    0 0 0 1px rgba(255, 255, 255, 0.012),
-    0 0 28px var(--pane-glow);
+    inset 0 -1px 0 rgba(255, 255, 255, 0.008),
+    0 14px 36px var(--pane-shadow),
+    0 0 0 1px rgba(255, 255, 255, 0.01);
 }
 
 .pane::before {
@@ -41,10 +40,9 @@
   inset: 0;
   pointer-events: none;
   background:
-    radial-gradient(circle at 82% 12%, rgba(255, 255, 255, 0.08), transparent 18%),
-    radial-gradient(circle at 0% 100%, rgba(255, 255, 255, 0.03), transparent 22%),
-    radial-gradient(circle at 100% 100%, var(--pane-glow), transparent 36%);
-  opacity: 0.8;
+    radial-gradient(circle at 88% 12%, rgba(255, 255, 255, 0.028), transparent 18%),
+    radial-gradient(circle at 0% 100%, rgba(255, 255, 255, 0.014), transparent 26%);
+  opacity: 0.9;
 }
 
 .pane::after {
@@ -54,8 +52,8 @@
   border-radius: inherit;
   pointer-events: none;
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.045),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.16);
+    inset 0 1px 0 rgba(255, 255, 255, 0.02),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.14);
 }
 
 .inner {
@@ -65,76 +63,76 @@
 
 .sizeHero {
   border-radius: 28px;
-  padding: 22px;
+  padding: 20px;
 }
 
 .sizeCard {
-  border-radius: 24px;
-  padding: 18px;
+  border-radius: 22px;
+  padding: 16px;
 }
 
 .sizeCompact {
   border-radius: 18px;
-  padding: 14px;
+  padding: 12px;
 }
 
 .toneNeutral {
-  --pane-border: rgba(174, 197, 255, 0.16);
-  --pane-edge: rgba(255, 255, 255, 0.06);
-  --pane-glow: rgba(84, 124, 255, 0.12);
-  --pane-fill: rgba(7, 11, 18, 0.5);
-  --pane-shadow: rgba(0, 0, 0, 0.38);
+  --pane-border: rgba(255, 255, 255, 0.064);
+  --pane-edge: rgba(255, 255, 255, 0.034);
+  --pane-fill: rgba(8, 12, 19, 0.82);
+  --pane-fill-2: rgba(10, 15, 24, 0.88);
+  --pane-shadow: rgba(0, 0, 0, 0.36);
 }
 
 .toneGreen {
-  --pane-border: rgba(112, 234, 178, 0.16);
-  --pane-edge: rgba(255, 255, 255, 0.05);
-  --pane-glow: rgba(66, 214, 151, 0.12);
-  --pane-fill: rgba(6, 15, 12, 0.5);
-  --pane-shadow: rgba(0, 0, 0, 0.38);
+  --pane-border: rgba(126, 216, 170, 0.08);
+  --pane-edge: rgba(255, 255, 255, 0.032);
+  --pane-fill: rgba(9, 14, 18, 0.82);
+  --pane-fill-2: rgba(10, 16, 21, 0.88);
+  --pane-shadow: rgba(0, 0, 0, 0.36);
 }
 
 .toneAmber {
-  --pane-border: rgba(255, 191, 92, 0.18);
-  --pane-edge: rgba(255, 255, 255, 0.05);
-  --pane-glow: rgba(255, 184, 77, 0.12);
-  --pane-fill: rgba(17, 12, 7, 0.52);
-  --pane-shadow: rgba(0, 0, 0, 0.38);
+  --pane-border: rgba(227, 191, 122, 0.08);
+  --pane-edge: rgba(255, 255, 255, 0.032);
+  --pane-fill: rgba(13, 12, 10, 0.82);
+  --pane-fill-2: rgba(17, 15, 12, 0.88);
+  --pane-shadow: rgba(0, 0, 0, 0.36);
 }
 
 .toneRed {
-  --pane-border: rgba(255, 118, 146, 0.18);
-  --pane-edge: rgba(255, 255, 255, 0.05);
-  --pane-glow: rgba(255, 96, 128, 0.12);
-  --pane-fill: rgba(18, 9, 12, 0.52);
-  --pane-shadow: rgba(0, 0, 0, 0.38);
+  --pane-border: rgba(240, 165, 181, 0.08);
+  --pane-edge: rgba(255, 255, 255, 0.032);
+  --pane-fill: rgba(14, 10, 13, 0.82);
+  --pane-fill-2: rgba(18, 12, 16, 0.88);
+  --pane-shadow: rgba(0, 0, 0, 0.36);
 }
 
 @media (max-width: 920px) {
   .pane {
     border-radius: 20px;
-    backdrop-filter: blur(12px) saturate(120%);
-    -webkit-backdrop-filter: blur(12px) saturate(120%);
+    backdrop-filter: blur(8px) saturate(104%);
+    -webkit-backdrop-filter: blur(8px) saturate(104%);
     box-shadow:
       inset 0 1px 0 var(--pane-edge),
-      inset 0 -1px 0 rgba(255, 255, 255, 0.012),
-      0 12px 28px var(--pane-shadow),
-      0 0 20px var(--pane-glow);
+      inset 0 -1px 0 rgba(255, 255, 255, 0.008),
+      0 10px 24px var(--pane-shadow),
+      0 0 0 1px rgba(255, 255, 255, 0.01);
   }
 
   .sizeHero {
     border-radius: 22px;
-    padding: 18px;
+    padding: 16px;
   }
 
   .sizeCard {
-    border-radius: 20px;
-    padding: 16px;
+    border-radius: 18px;
+    padding: 14px;
   }
 
   .sizeCompact {
     border-radius: 16px;
-    padding: 12px;
+    padding: 11px;
   }
 }
 
@@ -145,10 +143,10 @@
 
   .sizeHero,
   .sizeCard {
-    padding: 14px;
+    padding: 13px;
   }
 
   .sizeCompact {
-    padding: 11px;
+    padding: 10px;
   }
 }

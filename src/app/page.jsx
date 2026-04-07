@@ -1,15 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useId, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowRight,
-  ChevronRight,
-  CreditCard,
-  Landmark,
-  PiggyBank,
-  TrendingUp,
-  Wallet,
+  Bell,
+  CalendarDays,
+  CircleHelp,
+  MoreHorizontal,
+  Plus,
+  Receipt,
+  Search,
   X,
 } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
@@ -17,128 +18,49 @@ import GlassPane from "./components/GlassPane";
 
 export const dynamic = "force-dynamic";
 
+/* ──────────────────────────────────────────────────────────────────────────
+   Helpers
+   ────────────────────────────────────────────────────────────────────────── */
+
 function safeNum(value, fallback = 0) {
   const num = Number(value);
   return Number.isFinite(num) ? num : fallback;
 }
 
-function money(value) {
+function money(value, digits = 2) {
   const num = Number(value);
   if (!Number.isFinite(num)) return "—";
   return num.toLocaleString(undefined, {
     style: "currency",
     currency: "USD",
-    maximumFractionDigits: 0,
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
   });
 }
 
-function signedMoney(value) {
+function signedMoney(value, digits = 2) {
   const num = Number(value);
   if (!Number.isFinite(num)) return "—";
   const abs = Math.abs(num).toLocaleString(undefined, {
     style: "currency",
     currency: "USD",
-    maximumFractionDigits: 0,
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
   });
   if (num > 0) return `+${abs}`;
   if (num < 0) return `-${abs}`;
   return abs;
 }
 
+function pct(value, digits = 1) {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return "—";
+  return `${num.toFixed(digits)}%`;
+}
+
 function startOfToday() {
   const now = new Date();
   return new Date(now.getFullYear(), now.getMonth(), now.getDate());
-}
-
-function toISODateLocal(date = new Date()) {
-  const yyyy = date.getFullYear();
-  const mm = String(date.getMonth() + 1).padStart(2, "0");
-  const dd = String(date.getDate()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd}`;
-}
-
-function parseISODateLocal(iso) {
-  const raw = String(iso || "").trim();
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return null;
-
-  const [y, m, d] = raw.split("-").map(Number);
-  const out = new Date(y, m - 1, d);
-
-  if (
-    out.getFullYear() !== y ||
-    out.getMonth() !== m - 1 ||
-    out.getDate() !== d
-  ) {
-    return null;
-  }
-
-  return out;
-}
-
-function startOfMonthISO(date = new Date()) {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(
-    2,
-    "0"
-  )}-01`;
-}
-
-function endOfMonthISO(date = new Date()) {
-  const end = new Date(date.getFullYear(), date.getMonth() + 1, 0);
-  return toISODateLocal(end);
-}
-
-function monthKeyFromISO(iso) {
-  const value = String(iso || "");
-  return value.length >= 7 ? value.slice(0, 7) : "";
-}
-
-function fmtMonthLabel(ym) {
-  if (!ym || ym.length < 7) return "—";
-  const [year, month] = ym.split("-").map(Number);
-  if (!Number.isFinite(year) || !Number.isFinite(month)) return ym;
-
-  return new Date(year, month - 1, 1).toLocaleDateString(undefined, {
-    month: "long",
-    year: "numeric",
-  });
-}
-
-function fmtShort(iso) {
-  const date = parseISODateLocal(iso);
-  if (!date) return "—";
-  return date.toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-  });
-}
-
-function fmtDateTime(iso) {
-  const date = parseISODateLocal(iso);
-  if (!date) return "—";
-  return date.toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-  });
-}
-
-function diffCalendarDays(left, right = startOfToday()) {
-  const leftDate = left instanceof Date ? left : parseISODateLocal(left);
-  const rightDate = right instanceof Date ? right : parseISODateLocal(right);
-
-  if (!leftDate || !rightDate) return null;
-
-  const a = new Date(
-    leftDate.getFullYear(),
-    leftDate.getMonth(),
-    leftDate.getDate()
-  ).getTime();
-  const b = new Date(
-    rightDate.getFullYear(),
-    rightDate.getMonth(),
-    rightDate.getDate()
-  ).getTime();
-
-  return Math.round((a - b) / 86400000);
 }
 
 function addDays(date, days) {
@@ -170,16 +92,57 @@ function addYearsClamped(date, years) {
   return addMonthsClamped(date, years * 12);
 }
 
+function toISODateLocal(date = new Date()) {
+  const yyyy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  const dd = String(date.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function parseISODateLocal(iso) {
+  const raw = String(iso || "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return null;
+  const [y, m, d] = raw.split("-").map(Number);
+  const out = new Date(y, m - 1, d);
+  if (out.getFullYear() !== y || out.getMonth() !== m - 1 || out.getDate() !== d) {
+    return null;
+  }
+  return out;
+}
+
+function startOfMonthISO(date = new Date()) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-01`;
+}
+
+function endOfMonthISO(date = new Date()) {
+  const end = new Date(date.getFullYear(), date.getMonth() + 1, 0);
+  return toISODateLocal(end);
+}
+
+function monthKeyFromISO(iso) {
+  const value = String(iso || "");
+  return value.length >= 7 ? value.slice(0, 7) : "";
+}
+
+function fmtShort(iso) {
+  const date = parseISODateLocal(iso);
+  if (!date) return "—";
+  return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+function diffCalendarDays(left, right = startOfToday()) {
+  const leftDate = left instanceof Date ? left : parseISODateLocal(left);
+  const rightDate = right instanceof Date ? right : parseISODateLocal(right);
+  if (!leftDate || !rightDate) return null;
+
+  const a = new Date(leftDate.getFullYear(), leftDate.getMonth(), leftDate.getDate()).getTime();
+  const b = new Date(rightDate.getFullYear(), rightDate.getMonth(), rightDate.getDate()).getTime();
+  return Math.round((a - b) / 86400000);
+}
+
 function normalizeFrequency(freq) {
   const value = String(freq || "").toLowerCase().trim();
-  if (
-    value === "weekly" ||
-    value === "biweekly" ||
-    value === "monthly" ||
-    value === "quarterly" ||
-    value === "yearly" ||
-    value === "one_time"
-  ) {
+  if (["weekly", "biweekly", "monthly", "quarterly", "yearly", "one_time"].includes(value)) {
     return value;
   }
   return "monthly";
@@ -197,7 +160,6 @@ function addByFrequency(date, freq) {
       return addYearsClamped(date, 1);
     case "one_time":
       return date;
-    case "monthly":
     default:
       return addMonthsClamped(date, 1);
   }
@@ -215,7 +177,6 @@ function freqToMonthlyMult(freq) {
       return 1 / 12;
     case "one_time":
       return 0;
-    case "monthly":
     default:
       return 1;
   }
@@ -263,12 +224,7 @@ function getEffectiveBillAmount(bill) {
 
 function getBillDueMeta(bill, reference = startOfToday()) {
   if (bill.active === false) {
-    return {
-      dueDate: null,
-      days: null,
-      isOverdue: false,
-      amountDue: 0,
-    };
+    return { dueDate: null, days: null, isOverdue: false, amountDue: 0 };
   }
 
   const anchor = parseISODateLocal(bill.dueDate);
@@ -277,24 +233,13 @@ function getBillDueMeta(bill, reference = startOfToday()) {
   const amountDue = getEffectiveBillAmount(bill);
 
   if (!anchor) {
-    return {
-      dueDate: null,
-      days: null,
-      isOverdue: false,
-      amountDue,
-    };
+    return { dueDate: null, days: null, isOverdue: false, amountDue };
   }
 
   if (freq === "one_time") {
     if (lastPaid && isSameOrAfter(lastPaid, anchor)) {
-      return {
-        dueDate: null,
-        days: null,
-        isOverdue: false,
-        amountDue: 0,
-      };
+      return { dueDate: null, days: null, isOverdue: false, amountDue: 0 };
     }
-
     const days = diffCalendarDays(anchor, reference);
     return {
       dueDate: toISODateLocal(anchor),
@@ -304,9 +249,7 @@ function getBillDueMeta(bill, reference = startOfToday()) {
     };
   }
 
-  const currentCycleDue =
-    getLastOccurrenceOnOrBefore(anchor, freq, reference) || anchor;
-
+  const currentCycleDue = getLastOccurrenceOnOrBefore(anchor, freq, reference) || anchor;
   let effectiveDue = currentCycleDue;
 
   if (currentCycleDue <= reference && lastPaid && isSameOrAfter(lastPaid, currentCycleDue)) {
@@ -314,7 +257,6 @@ function getBillDueMeta(bill, reference = startOfToday()) {
   }
 
   const days = diffCalendarDays(effectiveDue, reference);
-
   return {
     dueDate: toISODateLocal(effectiveDue),
     days,
@@ -328,7 +270,6 @@ function getBillMonthlyPressureAmount(bill, reference = startOfToday()) {
   if (amount <= 0 || bill.active === false) return 0;
 
   const freq = normalizeFrequency(bill.frequency);
-
   if (freq === "one_time") {
     const dueMeta = getBillDueMeta(bill, reference);
     if (!dueMeta.dueDate) return 0;
@@ -338,196 +279,6 @@ function getBillMonthlyPressureAmount(bill, reference = startOfToday()) {
   }
 
   return amount * freqToMonthlyMult(freq);
-}
-
-function toneByValue(value, inverse = false) {
-  const num = safeNum(value, 0);
-  if (num === 0) return "neutral";
-  if (inverse) return num > 0 ? "red" : "green";
-  return num > 0 ? "green" : "red";
-}
-
-function toneMeta(tone = "neutral") {
-  if (tone === "green") {
-    return {
-      text: "#97efc7",
-      border: "rgba(143, 240, 191, 0.16)",
-      glow: "rgba(110, 229, 173, 0.10)",
-      dot: "#8ef4bb",
-      iconBg: "rgba(12, 22, 17, 0.72)",
-    };
-  }
-
-  if (tone === "amber") {
-    return {
-      text: "#f5cf88",
-      border: "rgba(255, 204, 112, 0.16)",
-      glow: "rgba(255, 194, 92, 0.10)",
-      dot: "#ffd089",
-      iconBg: "rgba(24, 18, 11, 0.72)",
-    };
-  }
-
-  if (tone === "red") {
-    return {
-      text: "#ffb4c5",
-      border: "rgba(255, 132, 163, 0.16)",
-      glow: "rgba(255, 108, 145, 0.10)",
-      dot: "#ff96ae",
-      iconBg: "rgba(24, 11, 15, 0.72)",
-    };
-  }
-
-  return {
-    text: "#f7fbff",
-    border: "rgba(214, 226, 255, 0.13)",
-    glow: "rgba(140, 170, 255, 0.08)",
-    dot: "#f7fbff",
-    iconBg: "rgba(12, 16, 24, 0.72)",
-  };
-}
-
-function normalizeText(value = "") {
-  return String(value || "")
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, " ");
-}
-
-function makeAmountKey(amount) {
-  return safeNum(amount, 0).toFixed(2);
-}
-
-function buildCanonicalIncomeRows(spendingTx, incomeDeposits) {
-  const strictDepositCounts = new Map();
-  const looseDepositCounts = new Map();
-
-  function addCount(map, key) {
-    map.set(key, safeNum(map.get(key), 0) + 1);
-  }
-
-  function useCount(map, key) {
-    const count = safeNum(map.get(key), 0);
-    if (count <= 0) return false;
-    if (count === 1) map.delete(key);
-    else map.set(key, count - 1);
-    return true;
-  }
-
-  const deposits = incomeDeposits.map((row) => ({
-    id: `deposit-${row.id}`,
-    sourceRowId: row.id,
-    kind: "deposit",
-    date: row.date || "",
-    label: row.source || "Income",
-    note: row.note || "",
-    amount: safeNum(row.amount, 0),
-  }));
-
-  deposits.forEach((row) => {
-    const amountKey = makeAmountKey(row.amount);
-    const strictKey = `${row.date}|${amountKey}|${normalizeText(
-      row.label || row.note
-    )}`;
-    const looseKey = `${row.date}|${amountKey}`;
-    addCount(strictDepositCounts, strictKey);
-    addCount(looseDepositCounts, looseKey);
-  });
-
-  const extraIncomeTx = [];
-
-  spendingTx
-    .filter((row) => String(row.type || "").toLowerCase() === "income")
-    .forEach((row) => {
-      const amountKey = makeAmountKey(row.amount);
-      const strictKey = `${row.date}|${amountKey}|${normalizeText(
-        row.merchant || row.note
-      )}`;
-      const looseKey = `${row.date}|${amountKey}`;
-
-      if (useCount(strictDepositCounts, strictKey)) return;
-      if (useCount(looseDepositCounts, looseKey)) return;
-
-      extraIncomeTx.push({
-        id: `spending-income-${row.id}`,
-        sourceRowId: row.id,
-        kind: "spending_income",
-        date: row.date || "",
-        label: row.merchant || "Income",
-        note: row.note || "",
-        amount: safeNum(row.amount, 0),
-      });
-    });
-
-  return [...deposits, ...extraIncomeTx];
-}
-
-function samplePoints(points, maxPoints = 6) {
-  if (points.length <= maxPoints) return points;
-  if (maxPoints < 3) return [points[0], points[points.length - 1]];
-
-  const sampled = [points[0]];
-  const middleCount = maxPoints - 2;
-  const step = (points.length - 2) / middleCount;
-
-  for (let i = 1; i <= middleCount; i += 1) {
-    const index = Math.min(
-      points.length - 2,
-      Math.max(1, Math.round(i * step))
-    );
-    sampled.push(points[index]);
-  }
-
-  sampled.push(points[points.length - 1]);
-
-  const seen = new Set();
-  const out = [];
-
-  sampled.forEach((point) => {
-    const key = `${point.iso}-${point.value}`;
-    if (seen.has(key)) return;
-    seen.add(key);
-    out.push(point);
-  });
-
-  return out;
-}
-
-function buildCashMovementPoints(monthStart, today, incomeRows, expenseRows) {
-  const daily = new Map();
-
-  function addDelta(date, delta) {
-    if (!date) return;
-    daily.set(date, safeNum(daily.get(date), 0) + safeNum(delta, 0));
-  }
-
-  incomeRows.forEach((row) => addDelta(row.date, row.amount));
-  expenseRows.forEach((row) => addDelta(row.date, -safeNum(row.amount, 0)));
-
-  const dates = [...daily.keys()].sort((a, b) => String(a).localeCompare(String(b)));
-  let running = 0;
-
-  const raw = [{ iso: monthStart, label: "Start", value: 0 }];
-
-  dates.forEach((date) => {
-    running += safeNum(daily.get(date), 0);
-    raw.push({
-      iso: date,
-      label: fmtShort(date),
-      value: running,
-    });
-  });
-
-  const last = raw[raw.length - 1];
-  if (!last || last.iso !== today) {
-    raw.push({
-      iso: today,
-      label: fmtShort(today),
-      value: running,
-    });
-  }
-
-  return samplePoints(raw, 6);
 }
 
 function normalizeAccountType(type) {
@@ -561,13 +312,75 @@ function isLiquidCashAccount(type) {
   );
 }
 
+function normalizeText(value = "") {
+  return String(value || "").trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function makeAmountKey(amount) {
+  return safeNum(amount, 0).toFixed(2);
+}
+
+function buildCanonicalIncomeRows(spendingTx, incomeDeposits) {
+  const strictDepositCounts = new Map();
+  const looseDepositCounts = new Map();
+
+  function addCount(map, key) {
+    map.set(key, safeNum(map.get(key), 0) + 1);
+  }
+
+  function useCount(map, key) {
+    const count = safeNum(map.get(key), 0);
+    if (count <= 0) return false;
+    if (count === 1) map.delete(key);
+    else map.set(key, count - 1);
+    return true;
+  }
+
+  const deposits = incomeDeposits.map((row) => ({
+    id: `deposit-${row.id}`,
+    date: row.date || "",
+    label: row.source || "Income",
+    note: row.note || "",
+    amount: safeNum(row.amount, 0),
+  }));
+
+  deposits.forEach((row) => {
+    const amountKey = makeAmountKey(row.amount);
+    const strictKey = `${row.date}|${amountKey}|${normalizeText(row.label || row.note)}`;
+    const looseKey = `${row.date}|${amountKey}`;
+    addCount(strictDepositCounts, strictKey);
+    addCount(looseDepositCounts, looseKey);
+  });
+
+  const extraIncomeTx = [];
+  spendingTx
+    .filter((row) => String(row.type || "").toLowerCase() === "income")
+    .forEach((row) => {
+      const amountKey = makeAmountKey(row.amount);
+      const strictKey = `${row.date}|${amountKey}|${normalizeText(row.merchant || row.note)}`;
+      const looseKey = `${row.date}|${amountKey}`;
+
+      if (useCount(strictDepositCounts, strictKey)) return;
+      if (useCount(looseDepositCounts, looseKey)) return;
+
+      extraIncomeTx.push({
+        id: `spending-income-${row.id}`,
+        date: row.date || "",
+        label: row.merchant || "Income",
+        note: row.note || "",
+        amount: safeNum(row.amount, 0),
+      });
+    });
+
+  return [...deposits, ...extraIncomeTx];
+}
+
 function mapAccountRowToClient(row) {
   return {
     id: row.id,
     name: row.name || "",
     type: row.account_type || "other",
     balance: safeNum(row.balance, 0),
-    updatedAt: row.updated_at ? new Date(row.updated_at).getTime() : Date.now(),
   };
 }
 
@@ -584,9 +397,6 @@ function mapBillRowToClient(row) {
     balance: safeNum(row.balance, 0),
     minPay: safeNum(row.min_pay, 0),
     extraPay: safeNum(row.extra_pay, 0),
-    autopay: row.autopay === true,
-    category: row.category || "",
-    notes: row.notes || "",
   };
 }
 
@@ -598,8 +408,13 @@ function mapSpendingTxRowToClient(row) {
     date: row.tx_date || "",
     merchant: row.merchant || "",
     note: row.note || "",
-    paymentMethod: row.payment_method || "",
     accountName: row.account_name || "",
+    category:
+      row.category ||
+      row.category_name ||
+      row.category_label ||
+      row.category_id ||
+      "Other",
   };
 }
 
@@ -618,8 +433,6 @@ function mapInvestmentAssetRow(row) {
     id: row.id,
     symbol: String(row.symbol || "").trim().toUpperCase(),
     name: row.name || row.symbol || "Asset",
-    assetType: row.asset_type || "asset",
-    account: row.account || "",
   };
 }
 
@@ -634,22 +447,15 @@ function mapInvestmentTxnRow(row) {
   };
 }
 
-function initialsFromLabel(label = "") {
-  const clean = String(label).trim();
-  if (!clean) return "—";
-
-  return clean
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((part) => part[0])
-    .join("")
-    .toUpperCase();
-}
-
-function severityRank(severity) {
-  if (severity === "critical") return 0;
-  if (severity === "warning") return 1;
-  return 2;
+function mapSavingsGoalRow(row) {
+  return {
+    id: row.id,
+    name: row.name || row.title || "Goal",
+    currentAmount: safeNum(row.current_amount ?? row.currentAmount, 0),
+    targetAmount: safeNum(row.target_amount ?? row.targetAmount, 0),
+    dueDate: row.due_date || row.dueDate || "",
+    priority: safeNum(row.priority, 0),
+  };
 }
 
 function buildPositionMap(assets, txns, quoteMap) {
@@ -697,7 +503,6 @@ function buildPositionMap(assets, txns, quoteMap) {
   byAsset.forEach((entry) => {
     const symbol = String(entry.asset.symbol || "").toUpperCase();
     const live = safeNum(quoteMap[symbol], NaN);
-
     if (Number.isFinite(live) && entry.shares > 0) {
       entry.currentValue = entry.shares * live;
       entry.unrealizedPnl = entry.currentValue - entry.basis;
@@ -708,24 +513,14 @@ function buildPositionMap(assets, txns, quoteMap) {
 }
 
 async function fetchQuoteMap(symbols) {
-  const unique = [
-    ...new Set(
-      symbols
-        .map((symbol) => String(symbol || "").trim().toUpperCase())
-        .filter(Boolean)
-    ),
-  ];
-
+  const unique = [...new Set(symbols.map((symbol) => String(symbol || "").trim().toUpperCase()).filter(Boolean))];
   if (!unique.length) return {};
 
   try {
-    const res = await fetch(
-      `/api/prices-batch?symbols=${encodeURIComponent(unique.join(","))}`,
-      { cache: "no-store" }
-    );
-
+    const res = await fetch(`/api/prices-batch?symbols=${encodeURIComponent(unique.join(","))}`, {
+      cache: "no-store",
+    });
     if (!res.ok) return {};
-
     const json = await res.json();
     const out = {};
 
@@ -766,10 +561,7 @@ async function fetchQuoteMap(symbols) {
     if (json?.prices && typeof json.prices === "object") {
       Object.entries(json.prices).forEach(([symbol, value]) => {
         if (typeof value === "object" && value !== null) {
-          assign(
-            symbol,
-            value.price ?? value.currentPrice ?? value.last ?? value.close
-          );
+          assign(symbol, value.price ?? value.currentPrice ?? value.last ?? value.close);
         } else {
           assign(symbol, value);
         }
@@ -779,17 +571,10 @@ async function fetchQuoteMap(symbols) {
     if (json && typeof json === "object" && !Array.isArray(json)) {
       Object.entries(json).forEach(([symbol, value]) => {
         if (out[String(symbol).toUpperCase()]) return;
-
         if (typeof value === "number") {
           assign(symbol, value);
-          return;
-        }
-
-        if (value && typeof value === "object") {
-          assign(
-            value.symbol ?? symbol,
-            value.price ?? value.currentPrice ?? value.last ?? value.close
-          );
+        } else if (value && typeof value === "object") {
+          assign(value.symbol ?? symbol, value.price ?? value.currentPrice ?? value.last ?? value.close);
         }
       });
     }
@@ -800,1011 +585,547 @@ async function fetchQuoteMap(symbols) {
   }
 }
 
-function StatusDot({ tone = "neutral", size = 8 }) {
-  const meta = toneMeta(tone);
+function buildDailyCumulativeSeries(startISO, endISO, incomeRows, expenseRows) {
+  const start = parseISODateLocal(startISO);
+  const end = parseISODateLocal(endISO);
+  if (!start || !end || start > end) return [];
 
-  return (
-    <span
-      style={{
-        width: size,
-        height: size,
-        borderRadius: 999,
-        background: meta.dot,
-        boxShadow: `0 0 10px ${meta.glow}`,
-        flexShrink: 0,
-      }}
-    />
-  );
+  const deltas = new Map();
+
+  function addDelta(date, delta) {
+    if (!date) return;
+    deltas.set(date, safeNum(deltas.get(date), 0) + safeNum(delta, 0));
+  }
+
+  incomeRows.forEach((row) => addDelta(row.date, row.amount));
+  expenseRows.forEach((row) => addDelta(row.date, -safeNum(row.amount, 0)));
+
+  const out = [];
+  let running = 0;
+  let current = new Date(start.getTime());
+
+  while (current <= end) {
+    const iso = toISODateLocal(current);
+    running += safeNum(deltas.get(iso), 0);
+    out.push({ iso, label: fmtShort(iso), value: running });
+    current = addDays(current, 1);
+  }
+
+  return out.length ? out : [{ iso: startISO, label: fmtShort(startISO), value: 0 }];
 }
 
-function MiniPill({ children, tone = "neutral" }) {
-  const meta = toneMeta(tone);
+function buildSpendingBuckets(expenseRows) {
+  const map = new Map();
 
-  return (
-    <div
-      style={{
-        minHeight: 30,
-        display: "inline-flex",
-        alignItems: "center",
-        gap: 8,
-        padding: "0 10px",
-        borderRadius: 999,
-        border: `1px solid ${meta.border}`,
-        background:
-          "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01))",
-        boxShadow: `inset 0 1px 0 rgba(255,255,255,0.035), 0 0 10px ${meta.glow}`,
-        color: tone === "neutral" ? "rgba(255,255,255,0.88)" : meta.text,
-        fontSize: 11,
-        fontWeight: 800,
-        whiteSpace: "nowrap",
-      }}
-    >
-      {children}
-    </div>
-  );
-}
-
-function PaneHeader({ title, subcopy, right }) {
-  return (
-    <div
-      style={{
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "flex-start",
-        gap: 10,
-        flexWrap: "wrap",
-        marginBottom: 10,
-      }}
-    >
-      <div style={{ minWidth: 0 }}>
-        <div
-          style={{
-            fontSize: 17,
-            lineHeight: 1.08,
-            fontWeight: 850,
-            letterSpacing: "-0.035em",
-            color: "#fff",
-          }}
-        >
-          {title}
-        </div>
-
-        {subcopy ? (
-          <div
-            style={{
-              marginTop: 3,
-              fontSize: 12,
-              lineHeight: 1.45,
-              color: "rgba(255,255,255,0.60)",
-            }}
-          >
-            {subcopy}
-          </div>
-        ) : null}
-      </div>
-
-      {right || null}
-    </div>
-  );
-}
-
-function ActionLink({ href, children, full = false }) {
-  return (
-    <Link
-      href={href}
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        justifyContent: "center",
-        gap: 8,
-        width: full ? "100%" : undefined,
-        minHeight: 40,
-        padding: "10px 13px",
-        borderRadius: 14,
-        border: "1px solid rgba(214,226,255,0.10)",
-        background:
-          "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.012))",
-        color: "#f7fbff",
-        textDecoration: "none",
-        fontWeight: 800,
-        fontSize: 13,
-        boxShadow:
-          "inset 0 1px 0 rgba(255,255,255,0.04), 0 10px 18px rgba(0,0,0,0.12)",
-      }}
-    >
-      {children}
-    </Link>
-  );
-}
-
-function ActionButton({ onClick, children, full = false }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        justifyContent: "center",
-        gap: 8,
-        width: full ? "100%" : undefined,
-        minHeight: 40,
-        padding: "10px 13px",
-        borderRadius: 14,
-        border: "1px solid rgba(214,226,255,0.10)",
-        background:
-          "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.012))",
-        color: "#f7fbff",
-        fontWeight: 800,
-        fontSize: 13,
-        boxShadow:
-          "inset 0 1px 0 rgba(255,255,255,0.04), 0 10px 18px rgba(0,0,0,0.12)",
-        cursor: "pointer",
-      }}
-    >
-      {children}
-    </button>
-  );
-}
-
-function StatCard({
-  icon: Icon,
-  label,
-  value,
-  detail,
-  tone = "neutral",
-  badge = "",
-}) {
-  const meta = toneMeta(tone);
-
-  return (
-    <GlassPane tone={tone} size="card" style={{ height: "100%" }}>
-      <div
-        style={{
-          minHeight: 118,
-          height: "100%",
-          display: "grid",
-          gridTemplateRows: "auto auto auto 1fr",
-          gap: 7,
-        }}
-      >
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: 10,
-          }}
-        >
-          <div
-            style={{
-              width: 34,
-              height: 34,
-              borderRadius: 12,
-              display: "grid",
-              placeItems: "center",
-              border: `1px solid ${meta.border}`,
-              background: meta.iconBg,
-              color: tone === "neutral" ? "#fff" : meta.text,
-              boxShadow: `0 0 10px ${meta.glow}`,
-              flexShrink: 0,
-            }}
-          >
-            <Icon size={15} />
-          </div>
-
-          <StatusDot tone={tone} size={7} />
-        </div>
-
-        <div style={{ minWidth: 0 }}>
-          <div
-            style={{
-              fontSize: 10,
-              textTransform: "uppercase",
-              letterSpacing: ".2em",
-              fontWeight: 800,
-              color: "rgba(255,255,255,0.40)",
-            }}
-          >
-            {label}
-          </div>
-
-          {badge ? (
-            <div style={{ marginTop: 6 }}>
-              <div
-                style={{
-                  minHeight: 20,
-                  display: "inline-flex",
-                  alignItems: "center",
-                  padding: "0 7px",
-                  borderRadius: 999,
-                  fontSize: 9,
-                  fontWeight: 800,
-                  letterSpacing: ".08em",
-                  textTransform: "uppercase",
-                  border: `1px solid ${meta.border}`,
-                  color: tone === "neutral" ? "rgba(255,255,255,0.82)" : meta.text,
-                  background: "rgba(255,255,255,0.03)",
-                  lineHeight: 1.15,
-                }}
-              >
-                {badge}
-              </div>
-            </div>
-          ) : null}
-        </div>
-
-        <div
-          style={{
-            fontSize: "clamp(18px, 2.3vw, 28px)",
-            lineHeight: 1,
-            fontWeight: 850,
-            letterSpacing: "-0.05em",
-            color: tone === "neutral" ? "#fff" : meta.text,
-            overflowWrap: "anywhere",
-          }}
-        >
-          {value}
-        </div>
-
-        <div
-          style={{
-            fontSize: 11.5,
-            lineHeight: 1.4,
-            color: "rgba(255,255,255,0.60)",
-            overflowWrap: "anywhere",
-          }}
-        >
-          {detail}
-        </div>
-      </div>
-    </GlassPane>
-  );
-}
-
-function HeaderBar({
-  monthLabel,
-  primaryName,
-  focusTitle,
-  focusTone,
-  accountCount,
-  onOpenAlerts,
-}) {
-  return (
-    <GlassPane size="card">
-      <div className="lccDashHeroGrid" style={{ alignItems: "center" }}>
-        <div style={{ minWidth: 0 }}>
-          <div
-            style={{
-              fontSize: 10,
-              textTransform: "uppercase",
-              letterSpacing: ".22em",
-              fontWeight: 800,
-              color: "rgba(255,255,255,0.42)",
-            }}
-          >
-            Life Command Center
-          </div>
-
-          <div
-            style={{
-              marginTop: 8,
-              fontSize: "clamp(24px, 3.2vw, 34px)",
-              lineHeight: 1.02,
-              fontWeight: 850,
-              letterSpacing: "-0.05em",
-              color: "#fff",
-            }}
-          >
-            Financial Overview
-          </div>
-
-          <div
-            style={{
-              marginTop: 10,
-              display: "flex",
-              alignItems: "center",
-              gap: 10,
-              minWidth: 0,
-            }}
-          >
-            <StatusDot tone={focusTone} />
-            <div
-              style={{
-                fontSize: 13,
-                lineHeight: 1.5,
-                color: "rgba(255,255,255,0.62)",
-                whiteSpace: "normal",
-                overflowWrap: "anywhere",
-              }}
-            >
-              {focusTitle}
-            </div>
-          </div>
-        </div>
-
-        <div
-          style={{
-            display: "flex",
-            gap: 8,
-            flexWrap: "wrap",
-            justifyContent: "flex-end",
-          }}
-        >
-          <MiniPill>{monthLabel}</MiniPill>
-          <MiniPill>{primaryName || "Primary account"}</MiniPill>
-          <MiniPill>{accountCount} accounts</MiniPill>
-
-          <button
-            type="button"
-            onClick={onOpenAlerts}
-            style={{
-              minHeight: 30,
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 8,
-              padding: "0 10px",
-              borderRadius: 999,
-              border: "1px solid rgba(214,226,255,0.14)",
-              background:
-                "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.012))",
-              color: "#fff",
-              fontSize: 11,
-              fontWeight: 800,
-              cursor: "pointer",
-            }}
-          >
-            Open alerts <ChevronRight size={14} />
-          </button>
-        </div>
-      </div>
-    </GlassPane>
-  );
-}
-
-function EmptyState({ title, detail, linkHref, linkLabel }) {
-  return (
-    <div
-      style={{
-        minHeight: 130,
-        display: "grid",
-        placeItems: "center",
-      }}
-    >
-      <div style={{ width: "100%", maxWidth: 360 }}>
-        <div
-          style={{
-            fontSize: 17,
-            fontWeight: 800,
-            color: "#fff",
-            textAlign: "center",
-          }}
-        >
-          {title}
-        </div>
-
-        <div
-          style={{
-            marginTop: 8,
-            fontSize: 13,
-            lineHeight: 1.55,
-            color: "rgba(255,255,255,0.64)",
-            textAlign: "center",
-          }}
-        >
-          {detail}
-        </div>
-
-        {linkHref && linkLabel ? (
-          <div
-            style={{
-              marginTop: 14,
-              display: "flex",
-              justifyContent: "center",
-            }}
-          >
-            <ActionLink href={linkHref}>
-              {linkLabel} <ArrowRight size={14} />
-            </ActionLink>
-          </div>
-        ) : null}
-      </div>
-    </div>
-  );
-}
-
-function ListRow({
-  title,
-  subtitle,
-  value,
-  tone = "neutral",
-  initials = "—",
-}) {
-  const meta = toneMeta(tone);
-
-  return (
-    <div
-      style={{
-        minHeight: 60,
-        display: "grid",
-        gridTemplateColumns: "42px minmax(0, 1fr) auto",
-        gap: 10,
-        alignItems: "center",
-        padding: "10px 12px",
-        borderRadius: 16,
-        border: `1px solid ${meta.border}`,
-        background:
-          "linear-gradient(180deg, rgba(255,255,255,0.028), rgba(255,255,255,0.01))",
-        boxShadow: `inset 0 1px 0 rgba(255,255,255,0.03), 0 0 10px ${meta.glow}`,
-      }}
-    >
-      <div
-        style={{
-          width: 42,
-          height: 42,
-          borderRadius: 13,
-          display: "grid",
-          placeItems: "center",
-          border: `1px solid ${meta.border}`,
-          background:
-            "linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01))",
-          color: tone === "neutral" ? "#fff" : meta.text,
-          fontWeight: 800,
-          fontSize: 12,
-          letterSpacing: ".05em",
-        }}
-      >
-        {initials}
-      </div>
-
-      <div style={{ minWidth: 0 }}>
-        <div
-          style={{
-            fontSize: 13,
-            fontWeight: 800,
-            color: "#fff",
-            lineHeight: 1.2,
-            overflowWrap: "anywhere",
-          }}
-        >
-          {title}
-        </div>
-
-        <div
-          style={{
-            marginTop: 2,
-            fontSize: 11.5,
-            color: "rgba(255,255,255,0.56)",
-            lineHeight: 1.3,
-            overflowWrap: "anywhere",
-          }}
-        >
-          {subtitle}
-        </div>
-      </div>
-
-      <div
-        style={{
-          fontSize: 13,
-          fontWeight: 800,
-          color: tone === "neutral" ? "rgba(255,255,255,0.92)" : meta.text,
-          whiteSpace: "nowrap",
-        }}
-      >
-        {value}
-      </div>
-    </div>
-  );
-}
-
-function ChartSummaryTile({ label, value, tone = "neutral" }) {
-  const meta = toneMeta(tone);
-
-  return (
-    <div
-      style={{
-        minHeight: 68,
-        borderRadius: 15,
-        border: `1px solid ${meta.border}`,
-        background:
-          "linear-gradient(180deg, rgba(255,255,255,0.028), rgba(255,255,255,0.01))",
-        padding: 11,
-      }}
-    >
-      <div
-        style={{
-          fontSize: 10,
-          textTransform: "uppercase",
-          letterSpacing: ".2em",
-          fontWeight: 800,
-          color: "rgba(255,255,255,0.40)",
-        }}
-      >
-        {label}
-      </div>
-
-      <div
-        style={{
-          marginTop: 6,
-          fontSize: 16,
-          fontWeight: 850,
-          letterSpacing: "-0.04em",
-          color: tone === "neutral" ? "#fff" : meta.text,
-          overflowWrap: "anywhere",
-        }}
-      >
-        {value}
-      </div>
-    </div>
-  );
-}
-
-function CashMovementCard({
-  points,
-  chartValue,
-  chartTone = "neutral",
-  monthIncome,
-  monthSpending,
-  monthPressure,
-}) {
-  const chartId = useId().replace(/:/g, "");
-  const safePoints =
-    points.length > 1
-      ? points
-      : [
-          { iso: "start", label: "Start", value: 0 },
-          { iso: "now", label: "Now", value: 0 },
-        ];
-
-  const width = 980;
-  const height = 236;
-  const padLeft = 14;
-  const padRight = 14;
-  const padTop = 14;
-  const padBottom = 32;
-
-  const values = safePoints.map((point) => safeNum(point.value, 0));
-  const minVal = Math.min(0, ...values);
-  const maxVal = Math.max(0, ...values);
-  const range = Math.max(maxVal - minVal, 1);
-
-  const innerW = width - padLeft - padRight;
-  const innerH = height - padTop - padBottom;
-  const step = safePoints.length > 1 ? innerW / (safePoints.length - 1) : innerW;
-
-  const coords = safePoints.map((point, index) => {
-    const x = padLeft + index * step;
-    const y =
-      height -
-      padBottom -
-      ((safeNum(point.value, 0) - minVal) / range) * innerH;
-
-    return { ...point, x, y };
+  expenseRows.forEach((row) => {
+    const label = String(row.category || "Other").replace(/_/g, " ").trim() || "Other";
+    map.set(label, safeNum(map.get(label), 0) + safeNum(row.amount, 0));
   });
 
-  const linePath = coords
-    .map((point, index) => `${index === 0 ? "M" : "L"} ${point.x} ${point.y}`)
+  const total = [...map.values()].reduce((sum, value) => sum + safeNum(value, 0), 0);
+
+  const sorted = [...map.entries()]
+    .map(([label, amount]) => ({
+      label,
+      amount,
+      pct: total > 0 ? (amount / total) * 100 : 0,
+    }))
+    .sort((a, b) => b.amount - a.amount);
+
+  return {
+    total,
+    items: sorted.slice(0, 6),
+  };
+}
+
+function buildSvgLinePath(series, width = 100, height = 36, pad = 3) {
+  if (!series.length) return "";
+
+  const values = series.map((point) => safeNum(point.value, 0));
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = max - min || 1;
+
+  return series
+    .map((point, index) => {
+      const x =
+        series.length === 1
+          ? width / 2
+          : (index / (series.length - 1)) * (width - pad * 2) + pad;
+
+      const y =
+        height -
+        ((safeNum(point.value, 0) - min) / range) * (height - pad * 2) -
+        pad;
+
+      return `${index === 0 ? "M" : "L"} ${x.toFixed(2)} ${y.toFixed(2)}`;
+    })
     .join(" ");
-
-  const areaPath = [
-    `M ${coords[0]?.x || padLeft} ${height - padBottom}`,
-    ...coords.map((point) => `L ${point.x} ${point.y}`),
-    `L ${coords[coords.length - 1]?.x || width - padRight} ${height - padBottom}`,
-    "Z",
-  ].join(" ");
-
-  const lastPoint = coords[coords.length - 1];
-  const bubbleTone =
-    chartTone === "red"
-      ? {
-          border: "rgba(255,178,194,0.18)",
-          text: "#ffb2c2",
-          glow: "rgba(255,178,194,0.08)",
-        }
-      : chartTone === "green"
-      ? {
-          border: "rgba(158,240,192,0.18)",
-          text: "#9ef0c0",
-          glow: "rgba(158,240,192,0.08)",
-        }
-      : {
-          border: "rgba(214,226,255,0.14)",
-          text: "#ffffff",
-          glow: "rgba(214,226,255,0.06)",
-        };
-
-  return (
-    <GlassPane size="card">
-      <PaneHeader
-        title="Cash Movement"
-        subcopy="Month-to-date income minus true spending. Transfers are ignored so the math stops lying."
-      />
-
-      <div className="lccDashChartSummaryGrid" style={{ marginBottom: 10 }}>
-        <ChartSummaryTile label="Movement" value={chartValue} tone={chartTone} />
-        <ChartSummaryTile label="Income" value={money(monthIncome)} tone="green" />
-        <ChartSummaryTile label="Spending" value={money(monthSpending)} tone="neutral" />
-        <ChartSummaryTile
-          label="Bill Pressure"
-          value={money(monthPressure)}
-          tone="amber"
-        />
-      </div>
-
-      <div
-        style={{
-          position: "relative",
-          minHeight: "clamp(180px, 22vw, 236px)",
-        }}
-      >
-        <svg
-          viewBox={`0 0 ${width} ${height}`}
-          style={{ width: "100%", display: "block" }}
-          aria-hidden="true"
-        >
-          <defs>
-            <linearGradient id={`lcc-chart-area-${chartId}`} x1="0" x2="0" y1="0" y2="1">
-              <stop offset="0%" stopColor="rgba(136,170,255,0.10)" />
-              <stop offset="55%" stopColor="rgba(117,122,255,0.03)" />
-              <stop offset="100%" stopColor="rgba(255,255,255,0)" />
-            </linearGradient>
-
-            <linearGradient id={`lcc-chart-line-${chartId}`} x1="0" x2="1" y1="0" y2="0">
-              <stop offset="0%" stopColor="rgba(196,220,255,0.9)" />
-              <stop offset="60%" stopColor="rgba(181,198,255,0.92)" />
-              <stop offset="100%" stopColor="rgba(196,177,255,0.92)" />
-            </linearGradient>
-
-            <filter id={`lcc-chart-glow-${chartId}`}>
-              <feGaussianBlur stdDeviation="3.25" result="blur" />
-              <feMerge>
-                <feMergeNode in="blur" />
-                <feMergeNode in="SourceGraphic" />
-              </feMerge>
-            </filter>
-          </defs>
-
-          {[0.22, 0.5, 0.78].map((ratio) => {
-            const y = padTop + innerH * ratio;
-            return (
-              <line
-                key={ratio}
-                x1={padLeft}
-                x2={width - padRight}
-                y1={y}
-                y2={y}
-                stroke="rgba(255,255,255,0.02)"
-                strokeWidth="1"
-                strokeDasharray="4 10"
-              />
-            );
-          })}
-
-          {coords.map((point) => (
-            <line
-              key={`${point.iso}-grid`}
-              x1={point.x}
-              x2={point.x}
-              y1={padTop}
-              y2={height - padBottom}
-              stroke="rgba(255,255,255,0.009)"
-              strokeWidth="1"
-            />
-          ))}
-
-          <path d={areaPath} fill={`url(#lcc-chart-area-${chartId})`} />
-
-          <path
-            d={linePath}
-            fill="none"
-            stroke={`url(#lcc-chart-line-${chartId})`}
-            strokeWidth="3"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            filter={`url(#lcc-chart-glow-${chartId})`}
-          />
-
-          {coords.map((point) => (
-            <g key={`${point.iso}-dot`}>
-              <circle
-                cx={point.x}
-                cy={point.y}
-                r="5"
-                fill="rgba(8,10,14,0.9)"
-                stroke="rgba(245,248,255,0.92)"
-                strokeWidth="2"
-              />
-              <circle cx={point.x} cy={point.y} r="1.7" fill="rgba(255,255,255,0.98)" />
-            </g>
-          ))}
-
-          {coords.map((point) => (
-            <text
-              key={`${point.iso}-label`}
-              x={point.x}
-              y={height - 8}
-              fill="rgba(255,255,255,0.40)"
-              fontSize="10"
-              fontWeight="700"
-              textAnchor="middle"
-            >
-              {point.label}
-            </text>
-          ))}
-        </svg>
-
-        {lastPoint ? (
-          <div
-            style={{
-              position: "absolute",
-              right: 10,
-              top: 12,
-              minHeight: 30,
-              padding: "7px 10px",
-              borderRadius: 13,
-              border: `1px solid ${bubbleTone.border}`,
-              background: "rgba(6,10,16,0.76)",
-              color: bubbleTone.text,
-              fontSize: 11.5,
-              fontWeight: 800,
-              boxShadow: `0 0 16px ${bubbleTone.glow}`,
-            }}
-          >
-            {signedMoney(lastPoint.value)}
-          </div>
-        ) : null}
-      </div>
-    </GlassPane>
-  );
 }
 
-function SignalBadge({ severity }) {
-  const tone =
-    severity === "critical"
-      ? "red"
-      : severity === "warning"
-      ? "amber"
-      : "green";
-
-  const label =
-    severity === "critical"
-      ? "Critical"
-      : severity === "warning"
-      ? "Watch"
-      : "Stable";
-
-  return <MiniPill tone={tone}>{label}</MiniPill>;
+function buildSvgAreaPath(series, width = 100, height = 36, pad = 3) {
+  if (!series.length) return "";
+  const line = buildSvgLinePath(series, width, height, pad);
+  return `${line} L ${width - pad} ${height - pad} L ${pad} ${height - pad} Z`;
 }
 
-function SignalPreviewRow({ item }) {
-  const tone =
-    item.severity === "critical"
-      ? "red"
-      : item.severity === "warning"
-      ? "amber"
-      : "green";
+function sampleSeriesLabels(series, count = 6) {
+  if (!series.length) return [];
+  if (series.length <= count) {
+    return series.map((item, index) => ({ index, ...item }));
+  }
 
-  const meta = toneMeta(tone);
+  const indices = [...new Set(
+    Array.from({ length: count }, (_, i) =>
+      Math.round((i / Math.max(count - 1, 1)) * (series.length - 1))
+    )
+  )];
 
-  return (
-    <div
-      style={{
-        minHeight: 56,
-        display: "grid",
-        gridTemplateColumns: "minmax(0, 1fr) auto",
-        gap: 10,
-        alignItems: "center",
-        padding: "10px 12px",
-        borderRadius: 16,
-        border: `1px solid ${meta.border}`,
-        background:
-          "linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01))",
-      }}
-    >
-      <div style={{ minWidth: 0 }}>
-        <div
-          style={{
-            fontSize: 13,
-            fontWeight: 800,
-            color: "#fff",
-            lineHeight: 1.25,
-            overflowWrap: "anywhere",
-          }}
-        >
-          {item.title}
-        </div>
-
-        <div
-          style={{
-            marginTop: 3,
-            fontSize: 11.5,
-            color: "rgba(255,255,255,0.58)",
-            lineHeight: 1.3,
-            overflowWrap: "anywhere",
-          }}
-        >
-          {item.detail}
-        </div>
-      </div>
-
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 8,
-          flexWrap: "wrap",
-          justifyContent: "flex-end",
-        }}
-      >
-        {item.amount ? (
-          <div
-            style={{
-              fontSize: 12,
-              fontWeight: 800,
-              color: "rgba(255,255,255,0.86)",
-              whiteSpace: "nowrap",
-            }}
-          >
-            {item.amount}
-          </div>
-        ) : null}
-
-        <SignalBadge severity={item.severity} />
-      </div>
-    </div>
-  );
+  return indices
+    .sort((a, b) => a - b)
+    .map((index) => ({ index, ...series[index] }));
 }
 
-function SignalCenterModal({
-  open,
-  onClose,
-  signalLabel,
-  signalTone,
-  signalItems,
-  cashPosition,
-  cashMovement,
-  dueSoonTotal,
-}) {
+function toneClass(value, inverse = false) {
+  const num = safeNum(value, 0);
+  if (!num) return "neutral";
+  if (inverse) return num > 0 ? "negative" : "positive";
+  return num > 0 ? "positive" : "negative";
+}
+
+function dayLabelFromDiff(days) {
+  if (days == null) return "Scheduled";
+  if (days === 0) return "Today";
+  if (days === 1) return "Tomorrow";
+  return `In ${days} days`;
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+   UI
+   ────────────────────────────────────────────────────────────────────────── */
+
+function MenuPanel({ title, open, onClose, items = [] }) {
   if (!open) return null;
 
   return (
-    <div className="lccSignalModalRoot">
-      <div className="lccSignalBackdrop" onClick={onClose} />
-      <div className="lccSignalModalCard">
-        <GlassPane tone={signalTone} size="card">
-          <div
-            style={{
-              display: "flex",
-              alignItems: "flex-start",
-              justifyContent: "space-between",
-              gap: 12,
-            }}
-          >
-            <div style={{ minWidth: 0 }}>
-              <div
-                style={{
-                  fontSize: 10,
-                  textTransform: "uppercase",
-                  letterSpacing: ".22em",
-                  fontWeight: 800,
-                  color: "rgba(255,255,255,0.42)",
-                }}
-              >
-                Signal Center
-              </div>
+    <div className="opsMenu" onClick={(e) => e.stopPropagation()}>
+      <div className="opsMenuHead">
+        <div className="opsMenuTitle">{title}</div>
+        <button type="button" className="opsMenuClose" onClick={onClose} aria-label="Close menu">
+          <X size={13} />
+        </button>
+      </div>
 
-              <div
-                style={{
-                  marginTop: 8,
-                  fontSize: "clamp(24px, 3vw, 30px)",
-                  lineHeight: 1.02,
-                  fontWeight: 850,
-                  letterSpacing: "-0.05em",
-                  color: "#fff",
-                }}
-              >
-                {signalLabel}
-              </div>
-
-              <div
-                style={{
-                  marginTop: 8,
-                  fontSize: 13,
-                  lineHeight: 1.55,
-                  color: "rgba(255,255,255,0.66)",
-                  maxWidth: 720,
-                }}
-              >
-                Quick read on what needs attention right now.
-              </div>
-            </div>
-
-            <button
-              type="button"
-              onClick={onClose}
-              aria-label="Close signal center"
-              style={{
-                width: 40,
-                height: 40,
-                borderRadius: 14,
-                border: "1px solid rgba(214,226,255,0.10)",
-                background: "rgba(255,255,255,0.03)",
-                color: "#fff",
-                display: "grid",
-                placeItems: "center",
-                cursor: "pointer",
-                flexShrink: 0,
-              }}
-            >
-              <X size={16} />
-            </button>
-          </div>
-
-          <div className="lccSignalSummaryGrid" style={{ marginTop: 14 }}>
-            <ChartSummaryTile
-              label="Cash Position"
-              value={money(cashPosition)}
-              tone={cashPosition < 0 ? "red" : cashPosition < 500 ? "amber" : "neutral"}
-            />
-            <ChartSummaryTile
-              label="Month Movement"
-              value={signedMoney(cashMovement)}
-              tone={toneByValue(cashMovement)}
-            />
-            <ChartSummaryTile
-              label="Due Soon"
-              value={money(dueSoonTotal)}
-              tone={dueSoonTotal > 0 ? "amber" : "green"}
-            />
-          </div>
-        </GlassPane>
-
-        <div style={{ height: 14 }} />
-
-        <GlassPane size="card">
-          <PaneHeader
-            title="Active signals"
-            subcopy={`${signalItems.length} items on the board right now.`}
-          />
-
-          {signalItems.length ? (
-            <div className="lccDashStack">
-              {signalItems.map((item) => (
-                <SignalPreviewRow key={item.id} item={item} />
-              ))}
-            </div>
-          ) : (
-            <EmptyState
-              title="No active signals"
-              detail="Nothing is pressing right now. That is the goal."
-            />
-          )}
-        </GlassPane>
+      <div className="opsMenuList">
+        {items.map((item) => (
+          <Link key={`${item.href}-${item.label}`} href={item.href} className="opsMenuLink" onClick={onClose}>
+            <div className="opsMenuLinkTitle">{item.label}</div>
+            <div className="opsMenuLinkNote">{item.note}</div>
+          </Link>
+        ))}
       </div>
     </div>
   );
 }
 
-function recentActivityLabel(count) {
-  if (!count) return "No movement";
-  if (count === 1) return "1 item";
-  return `${count} items`;
+function NotificationPanel({ open, onClose, items }) {
+  if (!open) return null;
+
+  return (
+    <div className="opsMenu" onClick={(e) => e.stopPropagation()}>
+      <div className="opsMenuHead">
+        <div className="opsMenuTitle">Signals</div>
+        <button type="button" className="opsMenuClose" onClick={onClose} aria-label="Close notifications">
+          <X size={13} />
+        </button>
+      </div>
+
+      <div className="opsSignalList">
+        {items.length ? (
+          items.map((item) => (
+            <div className="opsSignalRow" key={item.id}>
+              <div className={`opsSignalDot opsToneBg-${item.tone}`} />
+              <div className="opsSignalCopy">
+                <div className="opsSignalTitle">{item.title}</div>
+                <div className="opsSignalText">{item.detail}</div>
+              </div>
+              <div className={`opsSignalValue opsTone-${item.tone}`}>{item.value}</div>
+            </div>
+          ))
+        ) : (
+          <div className="opsEmpty">
+            <div className="opsEmptyTitle">No active signals</div>
+            <div className="opsEmptyDetail">Nothing urgent is showing on the board.</div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function CalendarQuickPanel({ open, onClose, items, todayCount, upcomingCount }) {
+  if (!open) return null;
+
+  const todayItems = items.filter((item) => item.bucket === "today");
+  const upcomingItems = items.filter((item) => item.bucket === "upcoming");
+
+  return (
+    <div
+      className="opsMenu"
+      style={{ width: "min(370px, calc(100vw - 32px))" }}
+      onClick={(e) => e.stopPropagation()}
+    >
+      <div className="opsMenuHead">
+        <div>
+          <div className="opsMenuTitle">Calendar quick view</div>
+          <div className="opsMenuLinkNote" style={{ marginTop: 2 }}>
+            {todayCount} today · {upcomingCount} upcoming
+          </div>
+        </div>
+        <button type="button" className="opsMenuClose" onClick={onClose} aria-label="Close calendar panel">
+          <X size={13} />
+        </button>
+      </div>
+
+      {items.length ? (
+        <div className="opsMenuList">
+          {todayItems.length ? (
+            <div
+              style={{
+                padding: "2px 2px 0",
+                fontSize: 10,
+                fontWeight: 800,
+                letterSpacing: "0.1em",
+                textTransform: "uppercase",
+                color: "rgba(255,255,255,0.32)",
+              }}
+            >
+              Today
+            </div>
+          ) : null}
+
+          {todayItems.map((item) => (
+            <Link key={item.id} href="/calendar" className="opsMenuLink" onClick={onClose}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start" }}>
+                <div style={{ minWidth: 0 }}>
+                  <div className="opsMenuLinkTitle">{item.title}</div>
+                  <div className="opsMenuLinkNote">{item.note}</div>
+                </div>
+                <div className={`opsSignalValue opsTone-${item.tone}`}>{item.amount}</div>
+              </div>
+
+              <div style={{ display: "flex", gap: 8, marginTop: 8, alignItems: "center", flexWrap: "wrap" }}>
+                <span className={`opsChip ${item.kind === "income" ? "opsChipBlue" : item.tone === "warning" ? "opsChipWarning" : "opsChipNeutral"}`}>
+                  {item.kindLabel}
+                </span>
+                <span className="opsMenuLinkNote">{item.whenLabel}</span>
+              </div>
+            </Link>
+          ))}
+
+          {upcomingItems.length ? (
+            <div
+              style={{
+                padding: "6px 2px 0",
+                fontSize: 10,
+                fontWeight: 800,
+                letterSpacing: "0.1em",
+                textTransform: "uppercase",
+                color: "rgba(255,255,255,0.32)",
+              }}
+            >
+              Upcoming
+            </div>
+          ) : null}
+
+          {upcomingItems.map((item) => (
+            <Link key={item.id} href="/calendar" className="opsMenuLink" onClick={onClose}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start" }}>
+                <div style={{ minWidth: 0 }}>
+                  <div className="opsMenuLinkTitle">{item.title}</div>
+                  <div className="opsMenuLinkNote">{item.note}</div>
+                </div>
+                <div className={`opsSignalValue opsTone-${item.tone}`}>{item.amount}</div>
+              </div>
+
+              <div style={{ display: "flex", gap: 8, marginTop: 8, alignItems: "center", flexWrap: "wrap" }}>
+                <span className={`opsChip ${item.kind === "income" ? "opsChipBlue" : item.tone === "warning" ? "opsChipWarning" : "opsChipNeutral"}`}>
+                  {item.kindLabel}
+                </span>
+                <span className="opsMenuLinkNote">{item.whenLabel}</span>
+              </div>
+            </Link>
+          ))}
+
+          <div style={{ paddingTop: 6 }}>
+            <Link href="/calendar" className="opsTopButton opsTopButtonWide" onClick={onClose}>
+              <CalendarDays size={14} />
+              <span>Open calendar</span>
+            </Link>
+          </div>
+        </div>
+      ) : (
+        <div className="opsEmpty">
+          <div className="opsEmptyTitle">No scheduled money events</div>
+          <div className="opsEmptyDetail">Nothing is queued for today or the next two weeks.</div>
+          <div style={{ marginTop: 12 }}>
+            <Link href="/calendar" className="opsTopButton opsTopButtonWide" onClick={onClose}>
+              <CalendarDays size={14} />
+              <span>Open calendar</span>
+            </Link>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function KpiCell({ label, value, sub, tone = "neutral", active = false }) {
+  return (
+    <div className={`opsKpiCell ${active ? "opsKpiCellActive" : ""}`}>
+      <div className="opsKpiLabel">{label}</div>
+      <div className={`opsKpiValue opsTone-${tone}`}>{value}</div>
+      <div className={`opsKpiSub opsTone-${tone === "neutral" ? "muted" : tone}`}>{sub}</div>
+    </div>
+  );
+}
+
+function CardHeader({ title, right }) {
+  return (
+    <div className="opsCardHead">
+      <div className="opsCardTitle">{title}</div>
+      <div className="opsCardHeadRight">{right}</div>
+    </div>
+  );
+}
+
+function StatRow({ label, value, tone = "neutral" }) {
+  return (
+    <div className="opsStatRow">
+      <span className="opsStatRowLabel">{label}</span>
+      <span className={`opsStatRowValue opsTone-${tone}`}>{value}</span>
+    </div>
+  );
+}
+
+function MetricCell({ label, value, sub, tone = "neutral" }) {
+  return (
+    <div className="opsMetricCell">
+      <div className="opsMetricLabel">{label}</div>
+      <div className={`opsMetricValue opsTone-${tone}`}>{value}</div>
+      <div className="opsMetricSub">{sub}</div>
+    </div>
+  );
+}
+
+function LineChart({ series, compareSeries = [] }) {
+  const linePath = buildSvgLinePath(series, 100, 36, 3.5);
+  const areaPath = buildSvgAreaPath(series, 100, 36, 3.5);
+  const comparePath = compareSeries.length
+    ? buildSvgLinePath(compareSeries, 100, 36, 3.5)
+    : "";
+  const labels = sampleSeriesLabels(series, 6);
+
+  return (
+    <div className="opsChartWrap">
+      <svg viewBox="0 0 100 36" className="opsChartSvg" preserveAspectRatio="none">
+        <defs>
+          <linearGradient id="opsAreaFade" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0%" stopColor="rgba(164, 186, 232, 0.22)" />
+            <stop offset="70%" stopColor="rgba(164, 186, 232, 0.05)" />
+            <stop offset="100%" stopColor="rgba(164, 186, 232, 0)" />
+          </linearGradient>
+        </defs>
+
+        {comparePath ? (
+          <path
+            d={comparePath}
+            fill="none"
+            stroke="rgba(108, 126, 166, 0.34)"
+            strokeWidth="0.62"
+            strokeDasharray="1.6 1.8"
+            strokeLinecap="round"
+          />
+        ) : null}
+
+        {areaPath ? <path d={areaPath} fill="url(#opsAreaFade)" /> : null}
+
+        {linePath ? (
+          <path
+            d={linePath}
+            fill="none"
+            stroke="rgba(235, 240, 250, 0.98)"
+            strokeWidth="0.9"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        ) : null}
+      </svg>
+
+      {labels.length ? (
+        <div className="opsChartLabels">
+          {labels.map((item) => (
+            <span key={`${item.iso}-${item.index}`}>{item.label}</span>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function TransactionTable({ items }) {
+  if (!items.length) {
+    return (
+      <div className="opsEmpty">
+        <div className="opsEmptyTitle">No recent transactions</div>
+        <div className="opsEmptyDetail">Once money moves, it will show here.</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="opsTableWrap">
+      <div className="opsTableHead">
+        <span>Merchant</span>
+        <span>Category</span>
+        <span>Amount</span>
+        <span>Date</span>
+      </div>
+
+      {items.map((item) => (
+        <div className="opsTableRow" key={item.id}>
+          <div className="opsTableCell opsTableCellMain">
+            <div className="opsTableName">{item.title}</div>
+            <div className="opsTableMeta">{item.accountName || item.source || item.note || "Recorded item"}</div>
+          </div>
+          <div className="opsTableCell">{item.category || "General"}</div>
+          <div className={`opsTableCell opsTableAmount opsTone-${item.tone}`}>{item.value}</div>
+          <div className="opsTableCell opsTableDate">{item.dateLabel}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function BillList({ items }) {
+  if (!items.length) {
+    return (
+      <div className="opsEmpty">
+        <div className="opsEmptyTitle">No upcoming bills</div>
+        <div className="opsEmptyDetail">Nothing is close enough to matter right now.</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="opsBillList">
+      {items.map((bill) => (
+        <div className="opsBillRow" key={bill.id}>
+          <div className={`opsBillIcon opsToneBg-${bill.tone}`}>
+            <Receipt size={14} />
+          </div>
+
+          <div className="opsBillCopy">
+            <div className="opsBillName">{bill.name}</div>
+            <div className="opsBillMeta">{bill.meta}</div>
+          </div>
+
+          <div className="opsBillRight">
+            <div className={`opsBillAmount opsTone-${bill.tone}`}>{bill.amount}</div>
+            <div className={`opsBillStatus opsTone-${bill.tone}`}>{bill.status}</div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function SignalCard({ items }) {
+  if (!items.length) {
+    return (
+      <div className="opsEmpty">
+        <div className="opsEmptyTitle">No active signals</div>
+        <div className="opsEmptyDetail">The system is quiet right now.</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="opsSignalList">
+      {items.map((item) => (
+        <div className="opsSignalItem" key={item.id}>
+          <div className="opsSignalItemTop">
+            <div className="opsSignalItemText">
+              <strong>{item.title}</strong> — {item.detail}
+            </div>
+            <span className="opsSignalItemValue">{item.value}</span>
+          </div>
+          <div className={`opsSignalBar opsToneBg-${item.tone}`} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function CategoryList({ items, total }) {
+  if (!items.length || total <= 0) {
+    return (
+      <div className="opsEmpty">
+        <div className="opsEmptyTitle">No spending mix yet</div>
+        <div className="opsEmptyDetail">Log expenses to unlock category concentration.</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="opsCategoryList">
+      {items.map((item) => (
+        <div className="opsCategoryRow" key={item.label}>
+          <div className="opsCategoryLeft">
+            <div className="opsCategoryLabel">{item.label}</div>
+            <div className="opsCategoryBarTrack">
+              <div className="opsCategoryBarFill" style={{ width: `${Math.max(4, Math.min(100, item.pct))}%` }} />
+            </div>
+          </div>
+
+          <div className="opsCategoryRight">
+            <div className="opsCategoryAmount">{money(item.amount)}</div>
+            <div className="opsCategoryPct">{pct(item.pct, 0)}</div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 export default function DashboardPage() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [pageError, setPageError] = useState("");
+  const [search, setSearch] = useState("");
+
+  const [addMenuOpen, setAddMenuOpen] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [calendarOpen, setCalendarOpen] = useState(false);
 
   const [accounts, setAccounts] = useState([]);
-  const [primaryId, setPrimaryId] = useState("");
   const [bills, setBills] = useState([]);
   const [spendingTx, setSpendingTx] = useState([]);
   const [incomeDeposits, setIncomeDeposits] = useState([]);
   const [investmentAssets, setInvestmentAssets] = useState([]);
   const [investmentTxns, setInvestmentTxns] = useState([]);
+  const [savingsGoals, setSavingsGoals] = useState([]);
   const [quoteMap, setQuoteMap] = useState({});
-  const [signalsOpen, setSignalsOpen] = useState(false);
+
+  const topbarMenusRef = useRef(null);
+
+  const closeAllPanels = useCallback(() => {
+    setNotificationsOpen(false);
+    setAddMenuOpen(false);
+    setHelpOpen(false);
+    setCalendarOpen(false);
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -1835,98 +1156,60 @@ export default function DashboardPage() {
         if (!mounted) return;
         setUser(currentUser);
 
-        const monthStart = startOfMonthISO();
-        const monthEnd = endOfMonthISO();
+        const today = startOfToday();
+        const prevMonthStart = startOfMonthISO(addMonthsClamped(today, -1));
+        const monthEnd = endOfMonthISO(today);
 
         const [
           accRes,
-          settingsRes,
           billsRes,
           spendingRes,
           incomeRes,
           assetRes,
           txnRes,
+          goalsRes,
         ] = await Promise.all([
-          supabase
-            .from("accounts")
-            .select("*")
-            .eq("user_id", currentUser.id)
-            .order("updated_at", { ascending: false }),
-
-          supabase
-            .from("account_settings")
-            .select("primary_account_id")
-            .eq("user_id", currentUser.id)
-            .maybeSingle(),
-
-          supabase
-            .from("bills")
-            .select("*")
-            .eq("user_id", currentUser.id)
-            .order("due_date", { ascending: true }),
-
+          supabase.from("accounts").select("*").eq("user_id", currentUser.id),
+          supabase.from("bills").select("*").eq("user_id", currentUser.id),
           supabase
             .from("spending_transactions")
             .select("*")
             .eq("user_id", currentUser.id)
-            .gte("tx_date", monthStart)
-            .lte("tx_date", monthEnd)
-            .order("tx_date", { ascending: false }),
-
+            .gte("tx_date", prevMonthStart)
+            .lte("tx_date", monthEnd),
           supabase
             .from("income_deposits")
             .select("*")
             .eq("user_id", currentUser.id)
-            .gte("deposit_date", monthStart)
-            .lte("deposit_date", monthEnd)
-            .order("deposit_date", { ascending: false }),
-
-          supabase
-            .from("investment_assets")
-            .select("*")
-            .eq("user_id", currentUser.id)
-            .order("symbol", { ascending: true }),
-
-          supabase
-            .from("investment_transactions")
-            .select("*")
-            .eq("user_id", currentUser.id)
-            .order("txn_date", { ascending: true }),
+            .gte("deposit_date", prevMonthStart)
+            .lte("deposit_date", monthEnd),
+          supabase.from("investment_assets").select("*").eq("user_id", currentUser.id),
+          supabase.from("investment_transactions").select("*").eq("user_id", currentUser.id),
+          supabase.from("savings_goals").select("*").eq("user_id", currentUser.id),
         ]);
 
         if (accRes.error) throw accRes.error;
-        if (settingsRes.error) throw settingsRes.error;
         if (billsRes.error) throw billsRes.error;
         if (spendingRes.error) throw spendingRes.error;
         if (incomeRes.error) throw incomeRes.error;
         if (assetRes.error) throw assetRes.error;
         if (txnRes.error) throw txnRes.error;
+        if (goalsRes.error) throw goalsRes.error;
 
-        const loadedAccounts = (accRes.data || []).map(mapAccountRowToClient);
-        const loadedBills = (billsRes.data || []).map(mapBillRowToClient);
-        const loadedSpending = (spendingRes.data || []).map(mapSpendingTxRowToClient);
-        const loadedIncome = (incomeRes.data || []).map(mapIncomeDepositRowToClient);
         const loadedAssets = (assetRes.data || []).map(mapInvestmentAssetRow);
-        const loadedTxns = (txnRes.data || []).map(mapInvestmentTxnRow);
-
-        const nextPrimary =
-          settingsRes.data?.primary_account_id &&
-          loadedAccounts.some((account) => account.id === settingsRes.data.primary_account_id)
-            ? settingsRes.data.primary_account_id
-            : loadedAccounts[0]?.id || "";
-
-        const symbols = loadedAssets.map((asset) => asset.symbol).filter(Boolean);
-        const nextQuotes = await fetchQuoteMap(symbols);
+        const nextQuotes = await fetchQuoteMap(
+          loadedAssets.map((asset) => asset.symbol).filter(Boolean)
+        );
 
         if (!mounted) return;
 
-        setAccounts(loadedAccounts);
-        setPrimaryId(nextPrimary);
-        setBills(loadedBills);
-        setSpendingTx(loadedSpending);
-        setIncomeDeposits(loadedIncome);
+        setAccounts((accRes.data || []).map(mapAccountRowToClient));
+        setBills((billsRes.data || []).map(mapBillRowToClient));
+        setSpendingTx((spendingRes.data || []).map(mapSpendingTxRowToClient));
+        setIncomeDeposits((incomeRes.data || []).map(mapIncomeDepositRowToClient));
         setInvestmentAssets(loadedAssets);
-        setInvestmentTxns(loadedTxns);
+        setInvestmentTxns((txnRes.data || []).map(mapInvestmentTxnRow));
+        setSavingsGoals((goalsRes.data || []).map(mapSavingsGoalRow));
         setQuoteMap(nextQuotes);
       } catch (err) {
         if (!mounted) return;
@@ -1943,811 +1226,802 @@ export default function DashboardPage() {
     };
   }, []);
 
+  useEffect(() => {
+    function handlePointerDown(event) {
+      if (!topbarMenusRef.current) return;
+      if (!topbarMenusRef.current.contains(event.target)) {
+        closeAllPanels();
+      }
+    }
+
+    function handleKeyDown(event) {
+      if (event.key === "Escape") {
+        closeAllPanels();
+      }
+    }
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("touchstart", handlePointerDown, { passive: true });
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("touchstart", handlePointerDown);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [closeAllPanels]);
+
   const computed = useMemo(() => {
-    const todayDate = startOfToday();
-    const todayISO = toISODateLocal(todayDate);
-    const monthStart = startOfMonthISO(todayDate);
-    const thisMonth = monthKeyFromISO(todayISO);
+    const today = startOfToday();
+    const todayISO = toISODateLocal(today);
+    const currentMonthStart = startOfMonthISO(today);
+    const currentMonthKey = monthKeyFromISO(todayISO);
 
-    const primary = accounts.find((account) => account.id === primaryId) || accounts[0] || null;
-
-    const cashPositionAccounts = accounts.filter(
-      (account) => !isInvestmentAccount(account.type) && !isDebtAccount(account.type)
-    );
-
-    const creditAccounts = accounts.filter(
-      (account) => normalizeAccountType(account.type) === "credit"
-    );
-
-    const liquidAccounts = accounts.filter((account) => isLiquidCashAccount(account.type));
+    const previousMonthDate = addMonthsClamped(today, -1);
+    const previousMonthStart = startOfMonthISO(previousMonthDate);
+    const previousMonthEnd = endOfMonthISO(previousMonthDate);
+    const previousMonthKey = monthKeyFromISO(previousMonthStart);
 
     const incomeRows = buildCanonicalIncomeRows(spendingTx, incomeDeposits);
 
-    const expenseRows = spendingTx.filter((row) => {
+    const currentIncomeRows = incomeRows.filter(
+      (row) => monthKeyFromISO(row.date) === currentMonthKey
+    );
+    const previousIncomeRows = incomeRows.filter(
+      (row) => monthKeyFromISO(row.date) === previousMonthKey
+    );
+
+    const currentExpenseRows = spendingTx.filter((row) => {
       const type = String(row.type || "").toLowerCase();
-      return type !== "income" && type !== "transfer";
+      return (
+        monthKeyFromISO(row.date) === currentMonthKey &&
+        type !== "income" &&
+        type !== "transfer"
+      );
     });
 
-    const monthlyIncome = incomeRows.reduce(
-      (sum, row) => sum + safeNum(row.amount, 0),
-      0
-    );
+    const previousExpenseRows = spendingTx.filter((row) => {
+      const type = String(row.type || "").toLowerCase();
+      return (
+        monthKeyFromISO(row.date) === previousMonthKey &&
+        type !== "income" &&
+        type !== "transfer"
+      );
+    });
 
-    const monthlySpending = expenseRows.reduce(
-      (sum, row) => sum + safeNum(row.amount, 0),
-      0
-    );
+    const monthlyIncome = currentIncomeRows.reduce((sum, row) => sum + safeNum(row.amount, 0), 0);
+    const monthlySpending = currentExpenseRows.reduce((sum, row) => sum + safeNum(row.amount, 0), 0);
+    const monthMovement = monthlyIncome - monthlySpending;
 
     const billMetaList = bills
       .filter((bill) => bill.active !== false)
-      .map((bill) => {
-        const dueMeta = getBillDueMeta(bill, todayDate);
-        return {
-          ...bill,
-          ...dueMeta,
-        };
-      });
-
-    const monthlyBillPressure = billMetaList.reduce(
-      (sum, bill) => sum + getBillMonthlyPressureAmount(bill, todayDate),
-      0
-    );
-
-    const accountBalancesExInvestments = cashPositionAccounts.reduce(
-      (sum, account) => sum + safeNum(account.balance, 0),
-      0
-    );
-
-    const creditDebt = creditAccounts.reduce(
-      (sum, account) => sum + Math.abs(Math.min(safeNum(account.balance, 0), 0)) + Math.max(safeNum(account.balance, 0), 0),
-      0
-    );
-
-    const positionMap = buildPositionMap(investmentAssets, investmentTxns, quoteMap);
-    const positions = [...positionMap.values()].filter((entry) => entry.shares > 0);
-
-    const holdingCount = positions.length;
-    const pricedHoldingCount = positions.filter((entry) => entry.currentValue != null).length;
-
-    const portfolioMarketValue = positions.reduce(
-      (sum, entry) => sum + safeNum(entry.currentValue, 0),
-      0
-    );
-
-    const portfolioCostBasis = positions.reduce(
-      (sum, entry) => sum + safeNum(entry.basis, 0),
-      0
-    );
-
-    const portfolioPnL = positions.reduce(
-      (sum, entry) => sum + safeNum(entry.unrealizedPnl, 0),
-      0
-    );
-
-    const investmentTotal = pricedHoldingCount ? portfolioMarketValue : portfolioCostBasis;
-    const netWorth = accountBalancesExInvestments + investmentTotal - creditDebt;
-
-    const upcomingBills = billMetaList
-      .filter((bill) => bill.dueDate && bill.days != null && bill.days <= 21)
-      .sort((a, b) => safeNum(a.days, 9999) - safeNum(b.days, 9999))
-      .slice(0, 4);
-
-    const dueSoonTotal = upcomingBills
-      .filter((bill) => bill.days != null && bill.days >= 0 && bill.days <= 14)
-      .reduce((sum, bill) => sum + safeNum(bill.amountDue, 0), 0);
-
-    const recentActivity = [
-      ...incomeRows.map((row) => ({
-        id: row.id,
-        title: row.label || "Income",
-        subtitle: `${fmtDateTime(row.date)} • deposit`,
-        value: signedMoney(row.amount),
-        tone: "green",
-        initials: initialsFromLabel(row.label || "Income"),
-        sortDate: row.date || "",
-      })),
-      ...expenseRows.map((row) => ({
-        id: `expense-${row.id}`,
-        title: row.merchant || "Expense",
-        subtitle: `${fmtDateTime(row.date)} • ${row.note || "spending"}`,
-        value: signedMoney(-safeNum(row.amount, 0)),
-        tone: "red",
-        initials: initialsFromLabel(row.merchant || "Expense"),
-        sortDate: row.date || "",
-      })),
-    ]
-      .sort((a, b) => String(b.sortDate).localeCompare(String(a.sortDate)))
-      .slice(0, 4);
-
-    const topAccounts = [...cashPositionAccounts]
-      .sort(
-        (a, b) => Math.abs(safeNum(b.balance, 0)) - Math.abs(safeNum(a.balance, 0))
-      )
-      .slice(0, 4)
-      .map((account) => ({
-        id: account.id,
-        title: account.name || "Account",
-        subtitle: String(account.type || "other").replace(/_/g, " "),
-        value: money(account.balance),
-        tone: safeNum(account.balance, 0) < 0 ? "red" : "neutral",
-        initials: initialsFromLabel(account.name || "A"),
+      .map((bill) => ({
+        ...bill,
+        ...getBillDueMeta(bill, today),
       }));
 
-    const cashMovement = monthlyIncome - monthlySpending;
-
-    const chartPoints = buildCashMovementPoints(
-      monthStart,
-      todayISO,
-      incomeRows,
-      expenseRows
+    const monthlyBillPressure = billMetaList.reduce(
+      (sum, bill) => sum + getBillMonthlyPressureAmount(bill, today),
+      0
     );
 
-    const signalItems = [];
-
-    if (!accounts.length) {
-      signalItems.push({
-        id: "no-accounts",
-        severity: "critical",
-        title: "No real accounts added",
-        detail:
-          "Add your actual money buckets first so the dashboard stops being fake.",
-        amount: "",
-      });
-    }
+    const dueSoonBills = billMetaList
+      .filter((bill) => bill.days != null && bill.days >= 0 && bill.days <= 14)
+      .sort((a, b) => safeNum(a.days, 9999) - safeNum(b.days, 9999));
 
     const overdueBills = billMetaList
       .filter((bill) => bill.days != null && bill.days < 0)
       .sort((a, b) => safeNum(a.days, 0) - safeNum(b.days, 0));
 
-    const dueSoonBills = billMetaList
-      .filter((bill) => bill.days != null && bill.days >= 0 && bill.days <= 7)
-      .sort((a, b) => safeNum(a.days, 9999) - safeNum(b.days, 9999));
+    const upcomingBills = billMetaList
+      .filter((bill) => bill.dueDate && bill.days != null && bill.days <= 30)
+      .sort((a, b) => safeNum(a.days, 9999) - safeNum(b.days, 9999))
+      .slice(0, 5);
+
+    const dueSoonTotal = dueSoonBills.reduce((sum, bill) => sum + safeNum(bill.amountDue, 0), 0);
+
+    const cashAccounts = accounts.filter(
+      (account) => !isInvestmentAccount(account.type) && !isDebtAccount(account.type)
+    );
+    const liquidAccounts = accounts.filter((account) => isLiquidCashAccount(account.type));
+    const creditAccounts = accounts.filter(
+      (account) => normalizeAccountType(account.type) === "credit"
+    );
+
+    const cashTotal = cashAccounts.reduce((sum, account) => sum + safeNum(account.balance, 0), 0);
+    const liquidTotal = liquidAccounts.reduce((sum, account) => sum + safeNum(account.balance, 0), 0);
+    const creditDebt = creditAccounts.reduce(
+      (sum, account) =>
+        sum +
+        Math.abs(Math.min(safeNum(account.balance, 0), 0)) +
+        Math.max(safeNum(account.balance, 0), 0),
+      0
+    );
+
+    const positionMap = buildPositionMap(investmentAssets, investmentTxns, quoteMap);
+    const positions = [...positionMap.values()].filter((entry) => entry.shares > 0);
+    const portfolioMarketValue = positions.reduce(
+      (sum, entry) => sum + safeNum(entry.currentValue, 0),
+      0
+    );
+    const portfolioCostBasis = positions.reduce(
+      (sum, entry) => sum + safeNum(entry.basis, 0),
+      0
+    );
+    const portfolioPnL = positions.reduce(
+      (sum, entry) => sum + safeNum(entry.unrealizedPnl, 0),
+      0
+    );
+    const investmentTotal = portfolioMarketValue || portfolioCostBasis;
+
+    const netWorth = cashTotal + investmentTotal - creditDebt;
+
+    const goalRows = [...savingsGoals].sort((a, b) => b.priority - a.priority);
+
+    const cashFlowSeries = buildDailyCumulativeSeries(
+      currentMonthStart,
+      todayISO,
+      currentIncomeRows,
+      currentExpenseRows
+    );
+
+    const previousCashFlowSeries = buildDailyCumulativeSeries(
+      previousMonthStart,
+      previousMonthEnd,
+      previousIncomeRows,
+      previousExpenseRows
+    );
+
+    const spendingBuckets = buildSpendingBuckets(currentExpenseRows);
+    const largestCategory = spendingBuckets.items[0] || null;
+    const monthlyCapacity = monthlyIncome - monthlySpending - monthlyBillPressure;
+
+    const recentTransactions = [
+      ...currentIncomeRows.map((row) => ({
+        id: `income-${row.id}`,
+        title: row.label || "Income",
+        category: "Income",
+        accountName: row.note || "Deposit",
+        value: signedMoney(row.amount),
+        tone: "positive",
+        dateLabel: fmtShort(row.date),
+        rawDate: row.date || "",
+      })),
+      ...currentExpenseRows.map((row) => ({
+        id: `expense-${row.id}`,
+        title: row.merchant || "Expense",
+        category: row.category || "Other",
+        accountName: row.accountName || row.note || "Expense",
+        value: signedMoney(-safeNum(row.amount, 0)),
+        tone: "negative",
+        dateLabel: fmtShort(row.date),
+        rawDate: row.date || "",
+      })),
+    ]
+      .sort((a, b) => {
+        if (a.rawDate === b.rawDate) return String(b.id).localeCompare(String(a.id));
+        return String(b.rawDate).localeCompare(String(a.rawDate));
+      })
+      .slice(0, 6);
+
+    const notifications = [];
 
     overdueBills.forEach((bill) => {
-      signalItems.push({
-        id: `bill-overdue-${bill.id}`,
-        severity: "critical",
-        title: `${bill.name} is overdue`,
-        detail: `${Math.abs(bill.days)} day${
-          Math.abs(bill.days) === 1 ? "" : "s"
-        } late.`,
-        amount: money(bill.amountDue),
+      notifications.push({
+        id: `overdue-${bill.id}`,
+        title: `${bill.name} overdue`,
+        detail: `${Math.abs(bill.days)} day${Math.abs(bill.days) === 1 ? "" : "s"} late`,
+        value: money(bill.amountDue),
+        tone: "negative",
       });
     });
 
     dueSoonBills.slice(0, 3).forEach((bill) => {
-      signalItems.push({
-        id: `bill-due-${bill.id}`,
-        severity: bill.days <= 2 ? "critical" : "warning",
-        title: `${bill.name} due ${
-          bill.days === 0 ? "today" : `in ${bill.days} day${bill.days === 1 ? "" : "s"}`
-        }`,
-        detail: "This one is close enough that it should already be on your radar.",
-        amount: money(bill.amountDue),
+      notifications.push({
+        id: `due-${bill.id}`,
+        title: `${bill.name} due soon`,
+        detail:
+          bill.days === 0
+            ? "Due today"
+            : `Due in ${bill.days} day${bill.days === 1 ? "" : "s"}`,
+        value: money(bill.amountDue),
+        tone: bill.days <= 2 ? "negative" : "warning",
       });
     });
 
-    if (accountBalancesExInvestments < 0) {
-      signalItems.push({
-        id: "cash-negative",
-        severity: "critical",
-        title: "Cash position is negative",
-        detail: "Your non-investment balances are underwater right now.",
-        amount: money(accountBalancesExInvestments),
-      });
-    } else if (accountBalancesExInvestments > 0 && accountBalancesExInvestments < 500) {
-      signalItems.push({
-        id: "cash-low",
-        severity: "warning",
-        title: "Cash position is thin",
-        detail: "You do not have much room if something hits this week.",
-        amount: money(accountBalancesExInvestments),
-      });
-    }
-
     if (monthlyIncome > 0 && monthlySpending > monthlyIncome) {
-      signalItems.push({
-        id: "cash-burn",
-        severity: "warning",
-        title: "Spending is outrunning income",
-        detail: "This month is currently burning more cash than it is bringing in.",
-        amount: signedMoney(cashMovement),
+      notifications.push({
+        id: "burn-rate",
+        title: "Spending outpacing income",
+        detail: "Current month outflow is higher than inflow.",
+        value: signedMoney(monthMovement),
+        tone: "warning",
       });
     }
 
-    if (creditDebt > 0) {
-      signalItems.push({
-        id: "credit-debt",
-        severity: creditDebt >= 3000 ? "critical" : "warning",
-        title: "Credit debt is still sitting there",
-        detail: "This is pressure, not background noise.",
-        amount: money(creditDebt),
+    if (!goalRows.length) {
+      notifications.push({
+        id: "goals-empty",
+        title: "No savings goal set",
+        detail: "Liquid balance is idle with no active target.",
+        value: money(liquidTotal),
+        tone: "neutral",
       });
     }
 
-    if (holdingCount > 0 && pricedHoldingCount < holdingCount) {
-      signalItems.push({
-        id: "unpriced-holdings",
-        severity: "warning",
-        title: "Some holdings are not live priced",
-        detail:
-          "Part of the portfolio view is still relying on stored values instead of live quotes.",
-        amount: `${pricedHoldingCount}/${holdingCount} live`,
-      });
-    }
+    const q = normalizeText(search);
+    const filteredTransactions = recentTransactions.filter((item) => {
+      if (!q) return true;
+      return (
+        normalizeText(item.title).includes(q) ||
+        normalizeText(item.category).includes(q) ||
+        normalizeText(item.accountName).includes(q)
+      );
+    });
 
-    signalItems.sort(
-      (a, b) => severityRank(a.severity) - severityRank(b.severity)
-    );
+    const billCards = upcomingBills.map((bill) => {
+      const tone =
+        bill.days != null && bill.days < 0
+          ? "negative"
+          : bill.days != null && bill.days <= 7
+          ? "warning"
+          : "neutral";
 
-    const signalCount = signalItems.length;
-    const signalTone =
-      signalItems[0]?.severity === "critical"
-        ? "red"
-        : signalItems[0]?.severity === "warning"
-        ? "amber"
-        : "green";
+      return {
+        id: bill.id,
+        name: bill.name,
+        meta:
+          bill.days == null
+            ? "No due date"
+            : bill.days < 0
+            ? `Was due ${fmtShort(bill.dueDate)}`
+            : `Due ${fmtShort(bill.dueDate)}`,
+        amount: money(bill.amountDue),
+        status:
+          bill.days == null
+            ? "Scheduled"
+            : bill.days < 0
+            ? "Overdue"
+            : bill.days === 0
+            ? "Today"
+            : `${bill.days} day${bill.days === 1 ? "" : "s"}`,
+        tone,
+      };
+    });
 
-    const signalLabel =
-      signalCount === 0
-        ? "Stable"
-        : signalItems[0]?.severity === "critical"
-        ? "Critical"
-        : "Watch";
+    const calendarBills = billMetaList
+      .filter((bill) => bill.dueDate && bill.days != null && bill.days >= 0 && bill.days <= 14)
+      .map((bill) => ({
+        id: `cal-bill-${bill.id}`,
+        rawDate: bill.dueDate,
+        bucket: bill.days === 0 ? "today" : "upcoming",
+        title: bill.name,
+        note: bill.days === 0 ? "Payment due today" : `Bill due ${fmtShort(bill.dueDate)}`,
+        amount: money(bill.amountDue),
+        tone: bill.days <= 2 ? "warning" : "neutral",
+        whenLabel: dayLabelFromDiff(bill.days),
+        kind: "bill",
+        kindLabel: "Bill",
+      }));
 
-    const focus =
-      signalCount > 0
-        ? signalItems[0].title
-        : accountBalancesExInvestments > 0
-        ? "Cash position is holding. Keep the board clean and stay ahead of due dates."
-        : "Get the base accounts in so the dashboard can show real numbers.";
+    const calendarIncome = incomeRows
+      .map((row) => {
+        const days = diffCalendarDays(row.date, today);
+        return {
+          id: `cal-income-${row.id}`,
+          rawDate: row.date,
+          days,
+          title: row.label || "Income",
+          note: row.note || "Scheduled deposit",
+          amount: signedMoney(row.amount),
+          tone: "positive",
+        };
+      })
+      .filter((row) => row.days != null && row.days >= 0 && row.days <= 14)
+      .map((row) => ({
+        id: row.id,
+        rawDate: row.rawDate,
+        bucket: row.days === 0 ? "today" : "upcoming",
+        title: row.title,
+        note: row.note,
+        amount: row.amount,
+        tone: row.tone,
+        whenLabel: dayLabelFromDiff(row.days),
+        kind: "income",
+        kindLabel: "Income",
+      }));
+
+    const calendarItems = [...calendarBills, ...calendarIncome].sort((a, b) => {
+      if (a.rawDate === b.rawDate) {
+        if (a.kind === b.kind) return String(a.title).localeCompare(String(b.title));
+        return a.kind === "income" ? -1 : 1;
+      }
+      return String(a.rawDate).localeCompare(String(b.rawDate));
+    });
+
+    const todayCalendarCount = calendarItems.filter((item) => item.bucket === "today").length;
+    const upcomingCalendarCount = calendarItems.filter((item) => item.bucket === "upcoming").length;
 
     return {
-      monthLabel: fmtMonthLabel(thisMonth),
-      primaryName: primary?.name || "",
-      accountCount: accounts.length,
-      focus,
+      dateLabel: new Date().toLocaleDateString(undefined, {
+        month: "long",
+        day: "numeric",
+        year: "numeric",
+      }),
       netWorth,
-      accountBalancesExInvestments,
-      signalLabel,
-      signalTone,
-      signalCount,
-      signalItems,
-      topAccounts,
-      recentActivity,
-      upcomingBills,
-      chartPoints,
-      chartValue: signedMoney(cashMovement),
-      chartTone:
-        cashMovement < 0 ? "red" : cashMovement > 0 ? "green" : "neutral",
-      dueSoonTotal,
-      cashMovement,
+      accountsCount: accounts.length,
+      cashTotal,
+      liquidTotal,
+      monthMovement,
       monthlyIncome,
       monthlySpending,
       monthlyBillPressure,
+      dueSoonTotal,
+      dueSoonCount: dueSoonBills.length,
+      overdueCount: overdueBills.length,
+      monthlyCapacity,
       investmentTotal,
-      creditDebt,
-      liquidTotal: liquidAccounts.reduce(
-        (sum, account) => sum + safeNum(account.balance, 0),
-        0
-      ),
-      portfolioPnLText: signedMoney(portfolioPnL),
-      portfolioTone: toneByValue(portfolioPnL),
-      portfolioDetail:
-        holdingCount > 0
-          ? `${pricedHoldingCount}/${holdingCount} live priced • basis ${money(
-              portfolioCostBasis
-            )}`
-          : "No live positions yet.",
-      portfolioBadge:
-        holdingCount > 0
-          ? `${holdingCount} holding${holdingCount === 1 ? "" : "s"}`
-          : "",
-      portfolioMarketValue,
-      portfolioCostBasis,
+      positionsCount: positions.length,
+      cashFlowSeries,
+      previousCashFlowSeries,
+      filteredTransactions,
+      billCards,
+      notifications,
+      notificationCount: notifications.length,
+      spendingBuckets,
+      largestCategory,
+      portfolioPnL,
+      calendarItems,
+      todayCalendarCount,
+      upcomingCalendarCount,
+      totalCalendarCount: todayCalendarCount + upcomingCalendarCount,
     };
   }, [
     accounts,
-    primaryId,
     bills,
     spendingTx,
     incomeDeposits,
     investmentAssets,
     investmentTxns,
+    savingsGoals,
     quoteMap,
+    search,
   ]);
+
+  function toggleNotifications() {
+    setNotificationsOpen((prev) => {
+      const next = !prev;
+      setAddMenuOpen(false);
+      setHelpOpen(false);
+      setCalendarOpen(false);
+      return next;
+    });
+  }
+
+  function toggleCalendar() {
+    setCalendarOpen((prev) => {
+      const next = !prev;
+      setNotificationsOpen(false);
+      setAddMenuOpen(false);
+      setHelpOpen(false);
+      return next;
+    });
+  }
+
+  function toggleAddMenu() {
+    setAddMenuOpen((prev) => {
+      const next = !prev;
+      setNotificationsOpen(false);
+      setHelpOpen(false);
+      setCalendarOpen(false);
+      return next;
+    });
+  }
+
+  function toggleHelpMenu() {
+    setHelpOpen((prev) => {
+      const next = !prev;
+      setNotificationsOpen(false);
+      setAddMenuOpen(false);
+      setCalendarOpen(false);
+      return next;
+    });
+  }
+
+  const addMenuItems = [
+    { href: "/accounts", label: "Add account", note: "Create or adjust a money bucket." },
+    { href: "/income", label: "Log income", note: "Record deposits and inflow." },
+    { href: "/spending", label: "Add expense", note: "Capture true outflow or transfer." },
+    { href: "/bills", label: "Add bill", note: "Create recurring or one-time pressure." },
+    { href: "/savings", label: "Create goal", note: "Add a savings target to fund." },
+  ];
+
+  const helpMenuItems = [
+    { href: "/accounts", label: "Open accounts", note: "Review live balance buckets." },
+    { href: "/bills", label: "Open bills", note: "Manage due dates and pressure." },
+    { href: "/calendar", label: "Open calendar", note: "See upcoming items on the board." },
+  ];
 
   if (loading) {
     return (
-      <main className="lccDashRoot">
-        <div className="lccDashInner">
-          <GlassPane size="card">
-            <div style={{ fontWeight: 800, fontSize: 18, color: "#fff" }}>
-              Loading dashboard.
-            </div>
-          </GlassPane>
-        </div>
+      <main className="opsDashRoot">
+        <GlassPane size="hero" className="opsShell">
+          <div className="opsLoading">Loading dashboard.</div>
+        </GlassPane>
       </main>
     );
   }
 
   if (!user) {
     return (
-      <main className="lccDashRoot">
-        <div className="lccDashInner">
-          <GlassPane size="card">
-            <div style={{ fontWeight: 800, fontSize: 18, color: "#fff" }}>
-              Please log in
-            </div>
-            <div
-              style={{
-                marginTop: 8,
-                fontSize: 14,
-                color: "rgba(255,255,255,0.66)",
-              }}
-            >
-              This dashboard needs an authenticated user.
-            </div>
-            <div style={{ marginTop: 14 }}>
-              <ActionLink href="/login">
-                Go to login <ArrowRight size={14} />
-              </ActionLink>
-            </div>
-          </GlassPane>
-        </div>
+      <main className="opsDashRoot">
+        <GlassPane size="hero" className="opsShell">
+          <div className="opsLoading">Please log in.</div>
+          <div className="opsLoginSub">This dashboard requires an authenticated user.</div>
+          <div style={{ marginTop: 14 }}>
+            <Link href="/login" className="opsActionLink">
+              Go to login <ArrowRight size={14} />
+            </Link>
+          </div>
+        </GlassPane>
       </main>
     );
   }
 
   return (
-    <>
-      <SignalCenterModal
-        open={signalsOpen}
-        onClose={() => setSignalsOpen(false)}
-        signalLabel={computed.signalLabel}
-        signalTone={computed.signalTone}
-        signalItems={computed.signalItems}
-        cashPosition={computed.accountBalancesExInvestments}
-        cashMovement={computed.cashMovement}
-        dueSoonTotal={computed.dueSoonTotal}
-      />
+    <main className="opsDashRoot">
+      <GlassPane size="hero" className="opsShell">
+        {pageError ? (
+          <div className="opsErrorBox">
+            <div className="opsErrorTitle">Dashboard error</div>
+            <div className="opsErrorText">{pageError}</div>
+          </div>
+        ) : null}
 
-      <main className="lccDashRoot">
-        <div className="lccDashInner">
-          {pageError ? (
-            <GlassPane tone="red" size="card">
-              <div style={{ fontWeight: 800, fontSize: 16, color: "#fff" }}>
-                Dashboard error
-              </div>
-              <div
-                style={{
-                  marginTop: 6,
-                  fontSize: 13,
-                  color: "rgba(255,255,255,0.74)",
-                }}
+        <div className="opsTopbar">
+          <div className="opsTopbarLeft">
+            <div className="opsBreadcrumb">
+              Dashboard <span>/ Overview</span>
+            </div>
+            <div className="opsStatusPill">
+              <div className="opsStatusDot" />
+              <span>Live</span>
+            </div>
+            <div className="opsTopbarDate">{computed.dateLabel}</div>
+          </div>
+
+          <div className="opsTopbarRight" ref={topbarMenusRef}>
+            <label className="opsSearch">
+              <Search size={14} />
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                onFocus={closeAllPanels}
+                placeholder="Search workspace..."
+              />
+              <span>⌘K</span>
+            </label>
+
+            <div className="opsMenuWrap">
+              <button
+                type="button"
+                className="opsTopButton"
+                onClick={toggleNotifications}
+                aria-label="Signals"
+                aria-expanded={notificationsOpen}
               >
-                {pageError}
-              </div>
-            </GlassPane>
-          ) : null}
+                <Bell size={14} />
+                {computed.notificationCount ? (
+                  <span className="opsTopButtonDot">{computed.notificationCount}</span>
+                ) : null}
+              </button>
 
-          <HeaderBar
-            monthLabel={computed.monthLabel}
-            primaryName={computed.primaryName}
-            focusTitle={computed.focus}
-            focusTone={computed.signalTone}
-            accountCount={computed.accountCount}
-            onOpenAlerts={() => setSignalsOpen(true)}
+              <NotificationPanel
+                open={notificationsOpen}
+                onClose={() => setNotificationsOpen(false)}
+                items={computed.notifications}
+              />
+            </div>
+
+            <div className="opsMenuWrap">
+              <button
+                type="button"
+                className="opsTopButton opsTopButtonWide"
+                onClick={toggleCalendar}
+                aria-label="Calendar quick view"
+                aria-expanded={calendarOpen}
+              >
+                <CalendarDays size={14} />
+                <span>Calendar</span>
+                {computed.totalCalendarCount ? (
+                  <span className="opsTopButtonDot">{computed.totalCalendarCount}</span>
+                ) : null}
+              </button>
+
+              <CalendarQuickPanel
+                open={calendarOpen}
+                onClose={() => setCalendarOpen(false)}
+                items={computed.calendarItems}
+                todayCount={computed.todayCalendarCount}
+                upcomingCount={computed.upcomingCalendarCount}
+              />
+            </div>
+
+            <div className="opsMenuWrap">
+              <button
+                type="button"
+                className="opsTopButton opsTopButtonPrimary"
+                onClick={toggleAddMenu}
+                aria-expanded={addMenuOpen}
+              >
+                <Plus size={14} />
+                <span>Add</span>
+              </button>
+
+              <MenuPanel
+                title="Quick add"
+                open={addMenuOpen}
+                onClose={() => setAddMenuOpen(false)}
+                items={addMenuItems}
+              />
+            </div>
+
+            <div className="opsMenuWrap">
+              <button
+                type="button"
+                className="opsTopButton"
+                onClick={toggleHelpMenu}
+                aria-label="Help"
+                aria-expanded={helpOpen}
+              >
+                <CircleHelp size={14} />
+              </button>
+
+              <MenuPanel
+                title="Helpful shortcuts"
+                open={helpOpen}
+                onClose={() => setHelpOpen(false)}
+                items={helpMenuItems}
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="opsKpiStrip">
+          <KpiCell
+            label="Net Worth"
+            value={money(computed.netWorth)}
+            sub={`${computed.accountsCount} accounts`}
+            tone="neutral"
+            active
           />
+          <KpiCell
+            label="Cash Available"
+            value={money(computed.liquidTotal)}
+            sub="liquid"
+            tone="neutral"
+          />
+          <KpiCell
+            label="Month Movement"
+            value={signedMoney(computed.monthMovement)}
+            sub={computed.monthMovement < 0 ? "spending > income" : "positive month flow"}
+            tone={toneClass(computed.monthMovement)}
+          />
+          <KpiCell
+            label="Income MTD"
+            value={money(computed.monthlyIncome)}
+            sub="recorded"
+            tone="positive"
+          />
+          <KpiCell
+            label="Spending MTD"
+            value={money(computed.monthlySpending)}
+            sub="true outflow"
+            tone={computed.monthlySpending > computed.monthlyIncome ? "warning" : "neutral"}
+          />
+          <KpiCell
+            label="Bill Pressure"
+            value={money(computed.monthlyBillPressure)}
+            sub={`${computed.overdueCount} overdue`}
+            tone={computed.overdueCount ? "negative" : computed.dueSoonCount ? "warning" : "neutral"}
+          />
+        </div>
 
-          <section className="lccDashMetricGrid">
-            <StatCard
-              icon={Landmark}
-              label="Net Worth"
-              value={money(computed.netWorth)}
-              detail="Cash-position accounts plus portfolio value minus credit debt."
-              tone={toneByValue(computed.netWorth)}
-            />
-            <StatCard
-              icon={Wallet}
-              label="Cash Position"
-              value={money(computed.accountBalancesExInvestments)}
-              detail="Only true cash-position accounts. Debt and investment buckets are excluded."
-              tone={
-                computed.accountBalancesExInvestments < 0
-                  ? "red"
-                  : computed.accountBalancesExInvestments < 500
-                  ? "amber"
-                  : "neutral"
-              }
-            />
-            <StatCard
-              icon={PiggyBank}
-              label="Bill Pressure"
-              value={money(computed.monthlyBillPressure)}
-              detail="Recurring bill pressure using real payment amounts, not raw stale due dates."
-              tone={computed.monthlyBillPressure > 0 ? "amber" : "green"}
-              badge={
-                computed.dueSoonTotal > 0
-                  ? `${money(computed.dueSoonTotal)} due soon`
-                  : ""
-              }
-            />
-            <StatCard
-              icon={CreditCard}
-              label="Credit Debt"
-              value={money(computed.creditDebt)}
-              detail="Outstanding balance sitting in credit accounts."
-              tone={computed.creditDebt > 0 ? "red" : "green"}
-            />
-            <StatCard
-              icon={TrendingUp}
-              label="Portfolio P/L"
-              value={computed.portfolioPnLText}
-              detail={computed.portfolioDetail}
-              tone={computed.portfolioTone}
-              badge={computed.portfolioBadge}
-            />
-          </section>
-
-          <GlassPane size="card">
-            <PaneHeader
-              title="Action Strip"
-              subcopy="Go straight to the pages that usually need the next move."
-              right={
-                <MiniPill tone={computed.signalTone}>
-                  {computed.signalCount} signals
-                </MiniPill>
-              }
-            />
-
-            <div className="lccDashActionGrid">
-              <ActionLink href="/accounts" full>
-                Open Accounts <ArrowRight size={14} />
-              </ActionLink>
-              <ActionLink href="/bills" full>
-                Review Bills <ArrowRight size={14} />
-              </ActionLink>
-              <ActionLink href="/spending" full>
-                Check Spending <ArrowRight size={14} />
-              </ActionLink>
-              <ActionLink href="/calendar" full>
-                Open Calendar <ArrowRight size={14} />
-              </ActionLink>
-            </div>
-          </GlassPane>
-
-          <section className="lccDashMainGrid">
-            <div className="lccDashStack">
-              <CashMovementCard
-                points={computed.chartPoints}
-                chartValue={computed.chartValue}
-                chartTone={computed.chartTone}
-                monthIncome={computed.monthlyIncome}
-                monthSpending={computed.monthlySpending}
-                monthPressure={computed.monthlyBillPressure}
-              />
-
-              <GlassPane size="card">
-                <PaneHeader
-                  title="Top Accounts"
-                  subcopy="Highest-impact real-money buckets, not filler cards."
-                  right={<MiniPill>{computed.topAccounts.length} shown</MiniPill>}
-                />
-
-                {computed.topAccounts.length ? (
-                  <div className="lccDashStack">
-                    {computed.topAccounts.map((item) => (
-                      <ListRow
-                        key={item.id}
-                        title={item.title}
-                        subtitle={item.subtitle}
-                        value={item.value}
-                        tone={item.tone}
-                        initials={item.initials}
-                      />
-                    ))}
-                  </div>
-                ) : (
-                  <EmptyState
-                    title="No accounts yet"
-                    detail="Add your real checking, savings, cash, and debt buckets first."
-                    linkHref="/accounts"
-                    linkLabel="Add accounts"
-                  />
-                )}
-              </GlassPane>
-            </div>
-
-            <div className="lccDashStack">
-              <GlassPane tone={computed.signalTone} size="card">
-                <PaneHeader
-                  title="Signal Center"
-                  subcopy="The pressure board for what needs attention first."
-                  right={<MiniPill tone={computed.signalTone}>{computed.signalLabel}</MiniPill>}
-                />
-
-                <div className="lccDashStack">
-                  {computed.signalItems.length ? (
-                    computed.signalItems.slice(0, 4).map((item) => (
-                      <SignalPreviewRow key={item.id} item={item} />
-                    ))
-                  ) : (
-                    <EmptyState
-                      title="Nothing urgent"
-                      detail="This is exactly how the board should look when things are under control."
-                    />
-                  )}
-                </div>
-
-                <div style={{ height: 10 }} />
-
-                <ActionButton onClick={() => setSignalsOpen(true)} full>
-                  Open full signal center <ChevronRight size={14} />
-                </ActionButton>
-              </GlassPane>
-
-              <GlassPane size="card">
-                <PaneHeader
-                  title="Upcoming Bills"
-                  subcopy="Bills close enough to matter right now."
-                  right={
-                    <MiniPill tone={computed.dueSoonTotal > 0 ? "amber" : "green"}>
-                      {money(computed.dueSoonTotal)} due soon
-                    </MiniPill>
-                  }
-                />
-
-                {computed.upcomingBills.length ? (
-                  <div className="lccDashStack">
-                    {computed.upcomingBills.map((bill) => (
-                      <ListRow
-                        key={bill.id}
-                        title={bill.name}
-                        subtitle={
-                          bill.days == null
-                            ? "No due date"
-                            : bill.days < 0
-                            ? `${Math.abs(bill.days)} day${
-                                Math.abs(bill.days) === 1 ? "" : "s"
-                              } overdue`
-                            : bill.days === 0
-                            ? "Due today"
-                            : `Due in ${bill.days} day${bill.days === 1 ? "" : "s"}`
-                        }
-                        value={money(bill.amountDue)}
-                        tone={
-                          bill.days != null && bill.days < 0
-                            ? "red"
-                            : bill.days != null && bill.days <= 7
-                            ? "amber"
-                            : "neutral"
-                        }
-                        initials={initialsFromLabel(bill.name)}
-                      />
-                    ))}
-                  </div>
-                ) : (
-                  <EmptyState
-                    title="No upcoming bills"
-                    detail="Nothing in the next couple weeks is showing pressure right now."
-                  />
-                )}
-              </GlassPane>
-            </div>
-          </section>
-
-          <section className="lccDashBottomGrid">
-            <GlassPane size="card">
-              <PaneHeader
-                title="Recent Activity"
-                subcopy="Latest true income and spending movement this month."
-                right={<MiniPill>{recentActivityLabel(computed.recentActivity.length)}</MiniPill>}
-              />
-
-              {computed.recentActivity.length ? (
-                <div className="lccDashStack">
-                  {computed.recentActivity.map((item) => (
-                    <ListRow
-                      key={item.id}
-                      title={item.title}
-                      subtitle={item.subtitle}
-                      value={item.value}
-                      tone={item.tone}
-                      initials={item.initials}
-                    />
-                  ))}
-                </div>
-              ) : (
-                <EmptyState
-                  title="No recent activity"
-                  detail="Once you log income or spending this month, it will show up here."
-                />
-              )}
-            </GlassPane>
-
-            <GlassPane size="card">
-              <PaneHeader
-                title="Portfolio Snapshot"
-                subcopy="What the investment side is doing without overpowering the dashboard."
+        <div className="opsContent">
+          <div className="opsGrid2to1">
+            <section className="opsCard opsCardLarge">
+              <CardHeader
+                title="Cash Position"
                 right={
-                  <MiniPill tone={computed.portfolioTone}>
-                    {computed.portfolioBadge || "No holdings"}
-                  </MiniPill>
+                  <div className="opsCardHeadRight">
+                    <span className="opsChip opsChipBlue">Watch</span>
+                    <span className="opsChip opsChipNeutral">{computed.notificationCount} signals</span>
+                    <button type="button" className="opsGhostBtn" aria-label="More options">
+                      <MoreHorizontal size={14} />
+                    </button>
+                  </div>
                 }
               />
 
-              <div className="lccDashChartSummaryGrid">
-                <ChartSummaryTile
-                  label="Market Value"
-                  value={money(computed.portfolioMarketValue)}
-                  tone="neutral"
+              <div className="opsHeroBlock">
+                <div className="opsHeroValue">{money(computed.liquidTotal)}</div>
+                <div className="opsHeroSub">
+                  Month-to-date movement{" "}
+                  <span className={`opsTone-${toneClass(computed.monthMovement)}`}>
+                    {signedMoney(computed.monthMovement)}
+                  </span>
+                </div>
+              </div>
+
+              <LineChart
+                series={computed.cashFlowSeries}
+                compareSeries={computed.previousCashFlowSeries}
+              />
+
+              <div className="opsMetricRow">
+                <MetricCell label="Income" value={money(computed.monthlyIncome)} sub="This month" tone="positive" />
+                <MetricCell label="Spending" value={money(computed.monthlySpending)} sub="This month" tone="negative" />
+                <MetricCell label="Liquid" value={money(computed.liquidTotal)} sub="Available now" />
+                <MetricCell
+                  label="Capacity"
+                  value={signedMoney(computed.monthlyCapacity)}
+                  sub="After spending & bills"
+                  tone={toneClass(computed.monthlyCapacity)}
                 />
-                <ChartSummaryTile
-                  label="Cost Basis"
-                  value={money(computed.portfolioCostBasis)}
-                  tone="neutral"
-                />
-                <ChartSummaryTile
-                  label="Unrealized P/L"
-                  value={computed.portfolioPnLText}
-                  tone={computed.portfolioTone}
-                />
-                <ChartSummaryTile
-                  label="Liquid Cash"
-                  value={money(computed.liquidTotal)}
-                  tone="green"
+              </div>
+            </section>
+
+            <section className="opsCard">
+              <CardHeader
+                title="Monthly Capacity"
+                right={
+                  <button type="button" className="opsGhostBtn" aria-label="More options">
+                    <MoreHorizontal size={14} />
+                  </button>
+                }
+              />
+
+              <div className="opsGaugeTop">
+                <div className="opsGaugeLabel">Income − Spending − Bills</div>
+                <div className={`opsGaugeValue opsTone-${toneClass(computed.monthlyCapacity)}`}>
+                  {signedMoney(computed.monthlyCapacity)}
+                </div>
+              </div>
+
+              <div className="opsGaugeTrack">
+                <div
+                  className="opsGaugeFill"
+                  style={{
+                    width: `${Math.max(
+                      6,
+                      Math.min(
+                        100,
+                        computed.monthlyIncome > 0
+                          ? (Math.abs(computed.monthlyCapacity) / Math.max(computed.monthlyIncome, 1)) * 100
+                          : 14
+                      )
+                    )}%`,
+                  }}
                 />
               </div>
 
-              <div style={{ height: 10 }} />
-
-              <div
-                className="lccDashActionGrid"
-                style={{ gridTemplateColumns: "repeat(2, minmax(0, 1fr))" }}
-              >
-                <ActionLink href="/investments" full>
-                  Open Investments <ArrowRight size={14} />
-                </ActionLink>
-                <ActionLink href="/market/SPY" full>
-                  Open Market <ArrowRight size={14} />
-                </ActionLink>
+              <div className="opsGaugeSub">
+                {computed.monthlyCapacity < 0
+                  ? "Current pressure is consuming the month."
+                  : "You still have room left to allocate."}
               </div>
-            </GlassPane>
-          </section>
+
+              <div className="opsStatList">
+                <StatRow label="Income" value={money(computed.monthlyIncome)} tone="positive" />
+                <StatRow label="Spending" value={signedMoney(-computed.monthlySpending)} tone="negative" />
+                <StatRow
+                  label="Bill Pressure"
+                  value={signedMoney(-computed.monthlyBillPressure)}
+                  tone={computed.overdueCount ? "negative" : "warning"}
+                />
+                <StatRow
+                  label="Due Soon"
+                  value={money(computed.dueSoonTotal)}
+                  tone={computed.dueSoonCount ? "warning" : "neutral"}
+                />
+              </div>
+            </section>
+          </div>
+
+          <div className="opsGrid2to1">
+            <section className="opsCard opsCardLarge">
+              <CardHeader
+                title="Recent Transactions"
+                right={
+                  <div className="opsCardHeadRight">
+                    <span className="opsChip opsChipBlue">Latest</span>
+                    <Link href="/spending" className="opsMiniAction">Open</Link>
+                  </div>
+                }
+              />
+              <TransactionTable items={computed.filteredTransactions} />
+            </section>
+
+            <section className="opsCard">
+              <CardHeader
+                title="Signals"
+                right={<span className="opsChip opsChipNegative">{computed.notificationCount} active</span>}
+              />
+              <SignalCard items={computed.notifications.slice(0, 4)} />
+            </section>
+          </div>
+
+          <div className="opsGrid3">
+            <section className="opsCard">
+              <CardHeader
+                title="Upcoming Bills"
+                right={
+                  <div className="opsCardHeadRight">
+                    <span className="opsChip opsChipWarning">{computed.overdueCount} overdue</span>
+                    <Link href="/bills" className="opsMiniAction">Open</Link>
+                  </div>
+                }
+              />
+              <BillList items={computed.billCards} />
+            </section>
+
+            <section className="opsCard">
+              <CardHeader
+                title="Net Worth"
+                right={
+                  <div className="opsCardHeadRight">
+                    <span className="opsChip opsChipBlue">{computed.accountsCount} accounts</span>
+                  </div>
+                }
+              />
+
+              <div className="opsWealthBlock">
+                <div className="opsWealthValue">{money(computed.netWorth)}</div>
+                <div className="opsWealthTrack">
+                  <div
+                    className="opsWealthFill"
+                    style={{
+                      width: `${Math.max(
+                        8,
+                        Math.min(
+                          100,
+                          computed.netWorth > 0 && computed.cashTotal > 0
+                            ? (computed.netWorth / Math.max(computed.cashTotal + Math.max(computed.investmentTotal, 0), 1)) * 100
+                            : 12
+                        )
+                      )}%`,
+                    }}
+                  />
+                </div>
+                <div className="opsWealthSub">
+                  {computed.investmentTotal > 0
+                    ? `${money(computed.investmentTotal)} invested`
+                    : "No active investments yet"}
+                </div>
+              </div>
+
+              <div className="opsStatList">
+                <StatRow label="Assets" value={money(computed.cashTotal + computed.investmentTotal)} tone="positive" />
+                <StatRow label="Cash" value={money(computed.cashTotal)} />
+                <StatRow label="Investments" value={money(computed.investmentTotal)} tone={computed.positionsCount ? "positive" : "neutral"} />
+                <StatRow label="Portfolio P/L" value={signedMoney(computed.portfolioPnL)} tone={toneClass(computed.portfolioPnL)} />
+              </div>
+            </section>
+
+            <section className="opsCard">
+              <CardHeader
+                title="Spending Mix"
+                right={
+                  computed.largestCategory ? (
+                    <span className="opsChip opsChipNeutral">{computed.largestCategory.label}</span>
+                  ) : null
+                }
+              />
+              <CategoryList items={computed.spendingBuckets.items.slice(0, 5)} total={computed.spendingBuckets.total} />
+            </section>
+          </div>
         </div>
-      </main>
-
-      <style jsx global>{`
-        .lccDashRoot {
-          width: 100%;
-          padding: 0 0 20px;
-          font-family: var(--lcc-font-sans);
-          box-sizing: border-box;
-        }
-
-        .lccDashInner {
-          width: 100%;
-          max-width: none;
-          margin: 0;
-          display: grid;
-          gap: 12px;
-          box-sizing: border-box;
-        }
-
-        .lccDashStack {
-          display: grid;
-          gap: 10px;
-        }
-
-        .lccDashHeroGrid {
-          display: grid;
-          grid-template-columns: minmax(0, 1.1fr) auto;
-          gap: 12px;
-        }
-
-        .lccDashMetricGrid {
-          display: grid;
-          grid-template-columns: repeat(5, minmax(0, 1fr));
-          gap: 12px;
-        }
-
-        .lccDashActionGrid {
-          display: grid;
-          grid-template-columns: repeat(4, minmax(0, 1fr));
-          gap: 8px;
-        }
-
-        .lccDashMainGrid {
-          display: grid;
-          grid-template-columns: minmax(0, 1.24fr) minmax(300px, 0.8fr);
-          gap: 12px;
-          align-items: start;
-        }
-
-        .lccDashBottomGrid {
-          display: grid;
-          grid-template-columns: minmax(0, 1.08fr) minmax(320px, 0.92fr);
-          gap: 12px;
-          align-items: start;
-        }
-
-        .lccDashChartSummaryGrid,
-        .lccSignalSummaryGrid {
-          display: grid;
-          grid-template-columns: repeat(4, minmax(0, 1fr));
-          gap: 8px;
-        }
-
-        .lccSignalModalRoot {
-          position: fixed;
-          inset: 0;
-          z-index: 90;
-          display: grid;
-          place-items: center;
-          padding: 18px;
-        }
-
-        .lccSignalBackdrop {
-          position: absolute;
-          inset: 0;
-          background: rgba(2, 5, 10, 0.68);
-          backdrop-filter: blur(8px);
-          -webkit-backdrop-filter: blur(8px);
-        }
-
-        .lccSignalModalCard {
-          position: relative;
-          z-index: 1;
-          width: min(100%, 980px);
-          max-height: min(88vh, 920px);
-          overflow: auto;
-        }
-
-        @media (max-width: 1260px) {
-          .lccDashMetricGrid {
-            grid-template-columns: repeat(3, minmax(0, 1fr));
-          }
-
-          .lccDashActionGrid {
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-          }
-        }
-
-        @media (max-width: 1024px) {
-          .lccDashHeroGrid,
-          .lccDashMainGrid,
-          .lccDashBottomGrid {
-            grid-template-columns: 1fr;
-          }
-
-          .lccDashMetricGrid {
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-          }
-
-          .lccDashChartSummaryGrid,
-          .lccSignalSummaryGrid {
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-          }
-        }
-
-        @media (max-width: 640px) {
-          .lccDashRoot {
-            padding: 0 0 14px;
-          }
-
-          .lccDashMetricGrid,
-          .lccDashActionGrid,
-          .lccDashChartSummaryGrid,
-          .lccSignalSummaryGrid {
-            grid-template-columns: 1fr;
-          }
-
-          .lccSignalModalRoot {
-            padding: 10px;
-          }
-        }
-      `}</style>
-    </>
+      </GlassPane>
+    </main>
   );
 }

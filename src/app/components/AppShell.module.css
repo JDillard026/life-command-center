@@ -1,9 +1,5 @@
-/* ─────────────────────────────────────────────────────────────
-   APP SHELL — step 3 spine lock
-   ───────────────────────────────────────────────────────────── */
-
 .shell {
-  --shell-sidebar-width: var(--lcc-sidebar-width, 250px);
+  --shell-sidebar-width: 304px;
   position: relative;
   min-height: 100svh;
   width: 100%;
@@ -11,6 +7,12 @@
   grid-template-columns: var(--shell-sidebar-width) minmax(0, 1fr);
   align-items: stretch;
   gap: 0;
+  overflow: clip;
+  transition: grid-template-columns 180ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.shellCollapsed {
+  --shell-sidebar-width: 82px;
 }
 
 .sidebarColumn {
@@ -18,20 +20,21 @@
   top: 0;
   z-index: 30;
   height: 100svh;
-  padding: 10px 0 10px 10px;
+  padding: 12px 0 12px 12px;
   transition:
-    width 170ms cubic-bezier(0.4, 0, 0.2, 1),
-    padding 170ms cubic-bezier(0.4, 0, 0.2, 1);
+    width 180ms cubic-bezier(0.4, 0, 0.2, 1),
+    padding 180ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .sidebarColumnCollapsed {
-  --shell-sidebar-width: 84px;
+  /* width is controlled by .shell */
 }
 
 .sidebarInner {
-  width: calc(var(--shell-sidebar-width) - 10px);
-  height: calc(100svh - 20px);
-  transition: width 170ms cubic-bezier(0.4, 0, 0.2, 1);
+  width: calc(var(--shell-sidebar-width) - 12px);
+  height: calc(100svh - 24px);
+  min-height: 0;
+  transition: width 180ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .mainColumn {
@@ -39,13 +42,16 @@
   width: 100%;
   display: flex;
   flex-direction: column;
+  position: relative;
+  isolation: isolate;
 }
 
 .mainContent {
   min-width: 0;
   width: 100%;
   flex: 1;
-  padding: 10px 12px 20px 10px;
+  padding: 12px 14px 18px 10px;
+  transition: padding 180ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .pageFrame {
@@ -60,17 +66,23 @@
   min-width: 0;
 }
 
-/* mobile pieces hidden by default */
 .mobileTopbar,
 .mobileOverlay,
 .mobileDrawer {
   display: none;
 }
 
-@media (max-width: 1100px) {
+@media (max-width: 1280px) {
   .shell {
+    --shell-sidebar-width: 292px;
+  }
+}
+
+@media (max-width: 1100px) {
+  .shell,
+  .shellCollapsed {
     grid-template-columns: 1fr;
-    padding-top: 58px;
+    padding-top: 56px;
   }
 
   .sidebarColumn {
@@ -83,41 +95,43 @@
     z-index: 60;
     height: 56px;
     display: grid;
-    grid-template-columns: 42px minmax(0, 1fr) 42px;
+    grid-template-columns: 40px minmax(0, 1fr) 40px;
     align-items: center;
     gap: 8px;
-    padding: 7px 10px;
+    padding: 8px 10px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.06);
     background:
-      linear-gradient(180deg, rgba(255,255,255,0.025), rgba(255,255,255,0)),
-      rgba(15, 18, 27, 0.92);
-    backdrop-filter: blur(18px) saturate(125%);
-    -webkit-backdrop-filter: blur(18px) saturate(125%);
+      linear-gradient(180deg, rgba(255, 255, 255, 0.024), rgba(255, 255, 255, 0)),
+      rgba(7, 10, 16, 0.94);
+    backdrop-filter: blur(16px) saturate(118%);
+    -webkit-backdrop-filter: blur(16px) saturate(118%);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.22);
   }
 
   .mobileMenuBtn,
   .mobileCollapseBtn {
-    width: 38px;
-    height: 38px;
+    appearance: none;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    width: 36px;
+    height: 36px;
     display: grid;
     place-items: center;
     border-radius: 10px;
-    border: 1px solid rgba(255, 255, 255, 0.085);
-    background: rgba(255, 255, 255, 0.04);
-    color: rgba(232, 237, 245, 0.84);
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0)),
+      rgba(255, 255, 255, 0.035);
+    color: rgba(232, 237, 245, 0.86);
     cursor: pointer;
     transition:
       background 140ms ease,
       border-color 140ms ease,
-      color 140ms ease,
       transform 140ms ease;
   }
 
   .mobileMenuBtn:hover,
   .mobileCollapseBtn:hover {
-    background: rgba(255, 255, 255, 0.07);
+    background: rgba(255, 255, 255, 0.06);
     border-color: rgba(255, 255, 255, 0.14);
-    color: rgba(232, 237, 245, 0.96);
     transform: translateY(-1px);
   }
 
@@ -127,38 +141,39 @@
 
   .mobileTopbarEyebrow {
     font-size: 9px;
-    font-weight: 600;
-    letter-spacing: 0.08em;
+    font-weight: 800;
+    letter-spacing: 0.12em;
     text-transform: uppercase;
-    color: rgba(160, 178, 210, 0.46);
+    color: rgba(160, 178, 210, 0.4);
   }
 
   .mobileTopbarTitle {
     margin-top: 2px;
-    font-size: 14px;
+    font-size: 13px;
     line-height: 1.1;
-    font-weight: 700;
-    letter-spacing: -0.02em;
-    color: rgba(232, 237, 245, 0.97);
+    font-weight: 800;
+    color: rgba(232, 237, 245, 0.96);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
 
   .mainContent {
-    padding: 8px 10px 18px;
+    padding: 8px 8px 16px;
   }
 
   .pageFrame {
-    min-height: calc(100svh - 74px);
+    min-height: calc(100svh - 72px);
   }
 
   .mobileOverlay {
+    appearance: none;
+    border: 0;
     position: fixed;
     inset: 0;
     z-index: 80;
     display: block;
-    background: rgba(8, 10, 16, 0.68);
+    background: rgba(4, 7, 11, 0.74);
     opacity: 0;
     pointer-events: none;
     backdrop-filter: blur(4px);
@@ -176,9 +191,9 @@
     inset: 0 auto 0 0;
     z-index: 90;
     display: block;
-    width: min(84vw, 290px);
+    width: min(92vw, 318px);
     transform: translateX(-105%);
-    transition: transform 230ms cubic-bezier(0.4, 0, 0.2, 1);
+    transition: transform 220ms cubic-bezier(0.4, 0, 0.2, 1);
     padding: 8px;
     pointer-events: none;
   }
@@ -191,37 +206,35 @@
   .mobileDrawerInner {
     width: 100%;
     height: 100%;
+    min-height: 0;
   }
 }
 
 @media (max-width: 640px) {
-  .shell {
-    padding-top: 54px;
+  .shell,
+  .shellCollapsed {
+    padding-top: 52px;
   }
 
   .mobileTopbar {
     height: 52px;
-    grid-template-columns: 40px minmax(0, 1fr) 40px;
-    padding: 6px 8px;
+    grid-template-columns: 38px minmax(0, 1fr) 38px;
+    padding: 7px 8px;
   }
 
   .mobileMenuBtn,
   .mobileCollapseBtn {
-    width: 36px;
-    height: 36px;
+    width: 34px;
+    height: 34px;
     border-radius: 9px;
   }
 
-  .mainContent {
-    padding: 8px 8px 16px;
-  }
-
   .pageFrame {
-    min-height: calc(100svh - 68px);
+    min-height: calc(100svh - 66px);
   }
 
   .mobileDrawer {
-    width: min(88vw, 286px);
+    width: min(94vw, 304px);
     padding: 6px;
   }
 }

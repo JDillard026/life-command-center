@@ -1,12 +1,11 @@
 /* ═══════════════════════════════════════════════════════════════════
-   LIFE COMMAND CENTER — PREMIUM DESIGN SYSTEM v2
-   Drop-in replacement for src/app/globals.css
+   LIFE COMMAND CENTER — SYSTEM LOCK
+   Shared shell + dashboard language
    ═══════════════════════════════════════════════════════════════════ */
 
 :root {
   color-scheme: dark;
 
-  /* ── Fonts ──────────────────────────────────────────────────────── */
   --lcc-font-sans:
     Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
     "Segoe UI", sans-serif;
@@ -14,62 +13,68 @@
     ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
     "Courier New", monospace;
 
-  /* ── Base backgrounds ────────────────────────────────────────────
-     Deep slate — not pure black. Matches Vercel/Linear's warmth.    */
-  --lcc-bg:          #0f1117;
-  --lcc-bg-elevated: #161b27;
-  --lcc-bg-card:     rgba(22, 27, 39, 0.92);
-  --lcc-bg-soft:     rgba(255, 255, 255, 0.026);
-  --lcc-bg-hover:    rgba(255, 255, 255, 0.038);
+  /* base */
+  --lcc-bg: #05070c;
+  --lcc-bg-elevated: #0a0e16;
+  --lcc-bg-card: rgba(9, 13, 21, 0.88);
+  --lcc-bg-card-2: rgba(11, 16, 26, 0.92);
+  --lcc-bg-soft: rgba(255, 255, 255, 0.018);
+  --lcc-bg-hover: rgba(255, 255, 255, 0.04);
+  --lcc-shell-bg: rgba(6, 10, 16, 0.92);
+  --lcc-shell-bg-2: rgba(8, 12, 19, 0.94);
 
-  /* ── Text ────────────────────────────────────────────────────────
-     Warm-cool white — easier on the eyes than pure #fff             */
-  --lcc-text:       #e8edf5;
-  --lcc-text-muted: rgba(180, 195, 220, 0.72);
-  --lcc-text-soft:  rgba(160, 178, 210, 0.46);
-  --lcc-text-dim:   rgba(140, 160, 196, 0.32);
+  /* text */
+  --lcc-text: #edf2fb;
+  --lcc-text-muted: rgba(191, 203, 225, 0.74);
+  --lcc-text-soft: rgba(149, 165, 194, 0.48);
+  --lcc-text-dim: rgba(126, 141, 168, 0.34);
 
-  /* ── Borders ─────────────────────────────────────────────────────
-     Very subtle — visible without being loud                         */
-  --lcc-border:        rgba(255, 255, 255, 0.072);
-  --lcc-border-strong: rgba(255, 255, 255, 0.12);
-  --lcc-border-focus:  rgba(79, 142, 255, 0.42);
+  /* border */
+  --lcc-border: rgba(255, 255, 255, 0.06);
+  --lcc-border-strong: rgba(255, 255, 255, 0.1);
+  --lcc-border-focus: rgba(107, 145, 219, 0.42);
 
-  /* ── Semantic accent colors ──────────────────────────────────────
-     Restrained palette — each color has ONE job                      */
-  --lcc-blue:   #4f8eff;        /* primary actions, links              */
-  --lcc-violet: #9c82f0;        /* secondary / investments             */
-  --lcc-green:  #22c77d;        /* positive, success, income           */
-  --lcc-amber:  #e8a245;        /* warnings, upcoming, attention       */
-  --lcc-red:    #e0546a;        /* negative, overdue, danger           */
-  --lcc-teal:   #2ac8be;        /* spending, transfers                 */
-  --lcc-gold:   #d4a843;        /* premium, savings                    */
+  /* semantic */
+  --lcc-blue: #7ba6f7;
+  --lcc-violet: #9d89e6;
+  --lcc-green: #7ed8aa;
+  --lcc-amber: #e3bf7a;
+  --lcc-red: #f0a5b5;
+  --lcc-teal: #86d2e7;
+  --lcc-gold: #d9b56a;
 
-  /* ── Semantic color backgrounds (for chips/badges/status) ───────  */
-  --lcc-blue-bg:   rgba(79, 142, 255, 0.10);
-  --lcc-green-bg:  rgba(34, 199, 125, 0.10);
-  --lcc-amber-bg:  rgba(232, 162, 69, 0.12);
-  --lcc-red-bg:    rgba(224, 84, 106, 0.11);
-  --lcc-violet-bg: rgba(156, 130, 240, 0.10);
+  --lcc-blue-bg: rgba(123, 166, 247, 0.12);
+  --lcc-green-bg: rgba(126, 216, 170, 0.12);
+  --lcc-amber-bg: rgba(227, 191, 122, 0.12);
+  --lcc-red-bg: rgba(240, 165, 181, 0.12);
+  --lcc-violet-bg: rgba(157, 137, 230, 0.12);
 
-  /* ── Shadow system ───────────────────────────────────────────────
-     Blue-tinted shadows for a "lit from above" feeling               */
-  --lcc-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.36), 0 2px 8px rgba(0, 0, 0, 0.22);
-  --lcc-shadow-md: 0 2px 8px rgba(0, 0, 0, 0.38), 0 8px 24px rgba(0, 0, 0, 0.28), 0 0 0 1px rgba(255,255,255,0.04);
-  --lcc-shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.44), 0 16px 48px rgba(0, 0, 0, 0.34), 0 0 0 1px rgba(255,255,255,0.03);
-  --lcc-shadow-blue: 0 0 0 1px rgba(79, 142, 255, 0.16), 0 8px 28px rgba(79, 142, 255, 0.10);
+  /* shadow */
+  --lcc-shadow-sm:
+    0 1px 3px rgba(0, 0, 0, 0.42),
+    0 6px 14px rgba(0, 0, 0, 0.18);
+  --lcc-shadow-md:
+    0 2px 8px rgba(0, 0, 0, 0.44),
+    0 14px 34px rgba(0, 0, 0, 0.24),
+    0 0 0 1px rgba(255, 255, 255, 0.03);
+  --lcc-shadow-lg:
+    0 6px 18px rgba(0, 0, 0, 0.5),
+    0 20px 56px rgba(0, 0, 0, 0.34),
+    0 0 0 1px rgba(255, 255, 255, 0.03);
+  --lcc-shadow-blue:
+    0 0 0 1px rgba(123, 166, 247, 0.16),
+    0 10px 26px rgba(123, 166, 247, 0.08);
 
-  /* ── Border radius ───────────────────────────────────────────────
-     Refined — less "bouncy", more sophisticated                       */
-  --lcc-radius-xl: 20px;
-  --lcc-radius-lg: 14px;
-  --lcc-radius-md: 10px;
-  --lcc-radius-sm:  7px;
+  /* radius */
+  --lcc-radius-xl: 22px;
+  --lcc-radius-lg: 16px;
+  --lcc-radius-md: 11px;
+  --lcc-radius-sm: 8px;
 
-  /* ── Layout ──────────────────────────────────────────────────────  */
-  --lcc-page-max:    1360px;
-  --lcc-page-pad-x:  20px;
-  --lcc-page-pad-y:  20px;
+  /* layout */
+  --lcc-page-max: 1460px;
+  --lcc-page-pad-x: 18px;
+  --lcc-page-pad-y: 18px;
 }
 
 /* ── Reset ─────────────────────────────────────────────────────────── */
@@ -90,11 +95,11 @@ body {
   min-height: 100%;
   margin: 0;
   overflow-x: hidden;
-  /* Subtle layered background — feels "lit" rather than flat black */
   background:
-    radial-gradient(ellipse 80% 40% at 50% -10%, rgba(30, 60, 140, 0.14), transparent),
-    radial-gradient(ellipse 60% 30% at 80% 80%, rgba(20, 40, 110, 0.06), transparent),
-    #0f1117;
+    radial-gradient(circle at 50% -20%, rgba(42, 61, 104, 0.18), transparent 28%),
+    radial-gradient(circle at 82% 18%, rgba(32, 50, 84, 0.12), transparent 22%),
+    radial-gradient(circle at 18% 82%, rgba(18, 31, 56, 0.1), transparent 24%),
+    linear-gradient(180deg, #02040a 0%, #04070d 28%, #05070c 100%);
   color: var(--lcc-text);
   font-family: var(--lcc-font-sans);
   font-size: 14px;
@@ -102,7 +107,6 @@ body {
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  /* Tabular numbers everywhere by default — crucial for finance */
   font-variant-numeric: tabular-nums;
   font-feature-settings: "tnum" 1, "kern" 1;
 }
@@ -148,14 +152,14 @@ svg {
   max-width: 100%;
 }
 
-/* ── Form elements ──────────────────────────────────────────────────── */
+/* ── Forms ─────────────────────────────────────────────────────────── */
 input,
 textarea,
 select {
   width: 100%;
   border-radius: var(--lcc-radius-md);
   border: 1px solid var(--lcc-border);
-  background: rgba(15, 20, 32, 0.80);
+  background: rgba(10, 14, 22, 0.86);
   color: var(--lcc-text);
   padding: 10px 13px;
   outline: none;
@@ -171,7 +175,7 @@ textarea::placeholder {
 }
 
 select option {
-  background: #161b27;
+  background: #101622;
   color: var(--lcc-text);
 }
 
@@ -180,8 +184,8 @@ textarea:focus,
 select:focus {
   border-color: var(--lcc-border-focus);
   box-shadow:
-    0 0 0 3px rgba(79, 142, 255, 0.10),
-    0 1px 3px rgba(0, 0, 0, 0.3);
+    0 0 0 3px rgba(107, 145, 219, 0.1),
+    0 1px 3px rgba(0, 0, 0, 0.34);
 }
 
 textarea {
@@ -194,21 +198,20 @@ textarea {
 }
 
 ::selection {
-  background: rgba(79, 142, 255, 0.24);
+  background: rgba(123, 166, 247, 0.22);
   color: #fff;
 }
 
-/* ── Card ───────────────────────────────────────────────────────────── */
+/* ── Shared utilities ──────────────────────────────────────────────── */
 .card {
   border-radius: var(--lcc-radius-lg);
   border: 1px solid var(--lcc-border);
-  background: var(--lcc-bg-card);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.028) 0%, rgba(255,255,255,0.006) 36%, rgba(255,255,255,0.01) 100%),
+    var(--lcc-bg-card);
   box-shadow: var(--lcc-shadow-md);
-  /* Subtle inner highlight at top edge — looks physically lit */
-  background-image: linear-gradient(180deg, rgba(255,255,255,0.038) 0%, rgba(255,255,255,0) 48px);
 }
 
-/* ── Layout helpers ─────────────────────────────────────────────────── */
 .container {
   width: min(100%, var(--lcc-page-max));
   margin: 0 auto;
@@ -238,7 +241,6 @@ textarea {
   gap: 12px;
 }
 
-/* ── Typography classes ─────────────────────────────────────────────── */
 .muted,
 .text-muted {
   color: var(--lcc-text-muted);
@@ -248,8 +250,6 @@ textarea {
   color: var(--lcc-text-soft);
 }
 
-/* Eyebrow — used for tiny uppercase labels above content.
-   Reduced tracking so it doesn't read like a template.              */
 .eyebrow {
   font-size: 10.5px;
   font-weight: 600;
@@ -258,7 +258,6 @@ textarea {
   color: var(--lcc-text-soft);
 }
 
-/* Section title — tight, confident, not over-kerned                  */
 .sectionTitle {
   font-size: clamp(22px, 2.6vw, 34px);
   line-height: 1.06;
@@ -267,7 +266,6 @@ textarea {
   color: var(--lcc-text);
 }
 
-/* Field label above inputs                                            */
 .fieldLabel {
   display: block;
   margin-bottom: 6px;
@@ -277,8 +275,6 @@ textarea {
   letter-spacing: 0.01em;
 }
 
-/* ── Money display ──────────────────────────────────────────────────── */
-/* Apply to any dollar amount for proper numeric rendering             */
 .money,
 [data-money] {
   font-variant-numeric: tabular-nums;
@@ -294,20 +290,18 @@ textarea {
   font-feature-settings: "tnum" 1;
 }
 
-/* ── Status / semantic text ─────────────────────────────────────────── */
-.textPositive  { color: var(--lcc-green); }
-.textNegative  { color: var(--lcc-red); }
-.textWarning   { color: var(--lcc-amber); }
-.textBlue      { color: var(--lcc-blue); }
+.textPositive { color: var(--lcc-green); }
+.textNegative { color: var(--lcc-red); }
+.textWarning { color: var(--lcc-amber); }
+.textBlue { color: var(--lcc-blue); }
 
-/* ── Badge / chip ───────────────────────────────────────────────────── */
 .chip {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  height: 22px;
+  min-height: 22px;
   padding: 0 9px;
-  border-radius: 6px;
+  border-radius: 7px;
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.02em;
@@ -317,34 +311,33 @@ textarea {
 .chipPositive {
   background: var(--lcc-green-bg);
   color: var(--lcc-green);
-  border: 1px solid rgba(34, 199, 125, 0.18);
+  border: 1px solid rgba(126, 216, 170, 0.18);
 }
 
 .chipNegative {
   background: var(--lcc-red-bg);
   color: var(--lcc-red);
-  border: 1px solid rgba(224, 84, 106, 0.20);
+  border: 1px solid rgba(240, 165, 181, 0.18);
 }
 
 .chipWarning {
   background: var(--lcc-amber-bg);
   color: var(--lcc-amber);
-  border: 1px solid rgba(232, 162, 69, 0.22);
+  border: 1px solid rgba(227, 191, 122, 0.2);
 }
 
 .chipBlue {
   background: var(--lcc-blue-bg);
   color: var(--lcc-blue);
-  border: 1px solid rgba(79, 142, 255, 0.18);
+  border: 1px solid rgba(123, 166, 247, 0.18);
 }
 
 .chipNeutral {
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(255,255,255,0.045);
   color: var(--lcc-text-muted);
   border: 1px solid var(--lcc-border);
 }
 
-/* ── Buttons ────────────────────────────────────────────────────────── */
 .btnPrimaryDark,
 .btnNeutral,
 .btnBlue {
@@ -368,49 +361,51 @@ textarea {
   white-space: nowrap;
 }
 
-/* Dark / ghost button */
 .btnPrimaryDark {
   color: var(--lcc-text);
   border: 1px solid var(--lcc-border-strong);
   background: rgba(255, 255, 255, 0.05);
-  box-shadow: 0 1px 3px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.04);
+  box-shadow:
+    0 1px 3px rgba(0,0,0,0.34),
+    inset 0 1px 0 rgba(255,255,255,0.04);
 }
 
 .btnPrimaryDark:hover {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(255, 255, 255, 0.16);
+  background: rgba(255,255,255,0.08);
+  border-color: rgba(255,255,255,0.15);
   transform: translateY(-1px);
 }
 
-/* Neutral / subtle button */
 .btnNeutral {
   color: var(--lcc-text-muted);
   border: 1px solid var(--lcc-border);
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(255,255,255,0.03);
 }
 
 .btnNeutral:hover {
   color: var(--lcc-text);
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(255,255,255,0.06);
   border-color: var(--lcc-border-strong);
   transform: translateY(-1px);
 }
 
-/* Blue accent button — for primary CTAs */
 .btnBlue {
   color: #fff;
-  border: 1px solid rgba(79, 142, 255, 0.35);
-  background: linear-gradient(180deg, #4f90ff, #3a7af0);
-  box-shadow: 0 2px 8px rgba(58, 122, 240, 0.30), inset 0 1px 0 rgba(255,255,255,0.12);
+  border: 1px solid rgba(123, 166, 247, 0.34);
+  background: linear-gradient(180deg, #5b8fe8, #486fba);
+  box-shadow:
+    0 2px 8px rgba(72, 111, 186, 0.28),
+    inset 0 1px 0 rgba(255,255,255,0.1);
 }
 
 .btnBlue:hover {
-  background: linear-gradient(180deg, #5a99ff, #4588f7);
-  box-shadow: 0 4px 14px rgba(58, 122, 240, 0.38), inset 0 1px 0 rgba(255,255,255,0.14);
+  background: linear-gradient(180deg, #6799ef, #537cc9);
+  box-shadow:
+    0 4px 14px rgba(72, 111, 186, 0.34),
+    inset 0 1px 0 rgba(255,255,255,0.12);
   transform: translateY(-1px);
 }
 
-/* ── Auth / gate screens ────────────────────────────────────────────── */
 .lccGate {
   min-height: 100svh;
   display: grid;
@@ -442,7 +437,6 @@ textarea {
   color: var(--lcc-text-muted);
 }
 
-/* ── Divider ─────────────────────────────────────────────────────────  */
 .divider {
   height: 1px;
   background: var(--lcc-border);
@@ -450,12 +444,11 @@ textarea {
   margin: 0;
 }
 
-/* ── Stat / KPI card ─────────────────────────────────────────────────  */
 .statCard {
   border-radius: var(--lcc-radius-lg);
   border: 1px solid var(--lcc-border);
   background: var(--lcc-bg-card);
-  background-image: linear-gradient(180deg, rgba(255,255,255,0.034) 0%, rgba(255,255,255,0) 40px);
+  background-image: linear-gradient(180deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0) 40px);
   padding: 18px 20px;
   box-shadow: var(--lcc-shadow-sm);
 }
@@ -485,7 +478,6 @@ textarea {
   color: var(--lcc-text-soft);
 }
 
-/* ── Section header ─────────────────────────────────────────────────── */
 .sectionHeader {
   display: flex;
   align-items: baseline;
@@ -506,7 +498,6 @@ textarea {
   font-weight: 500;
 }
 
-/* ── Utility ────────────────────────────────────────────────────────── */
 .sr-only {
   position: absolute;
   width: 1px;
@@ -519,7 +510,6 @@ textarea {
   border: 0;
 }
 
-/* ── Scrollbar ──────────────────────────────────────────────────────── */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -538,14 +528,1059 @@ textarea {
   background: rgba(180, 195, 220, 0.22);
 }
 
-/* ── Responsive ─────────────────────────────────────────────────────── */
-@media (max-width: 920px) {
+/* ═══════════════════════════════════════════════════════════════════
+   DASHBOARD SYSTEM CLASSES
+   Permanent shared page language seed
+   ═══════════════════════════════════════════════════════════════════ */
+
+.opsDashRoot {
+  width: 100%;
+  padding: 0 0 16px;
+}
+
+.opsShell {
+  border-radius: 22px !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  border: 1px solid rgba(255, 255, 255, 0.06) !important;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.014), rgba(255,255,255,0.004)),
+    rgba(7, 10, 16, 0.92) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.028),
+    0 20px 50px rgba(0,0,0,0.34) !important;
+}
+
+.opsLoading {
+  padding: 24px;
+  font-size: 18px;
+  font-weight: 800;
+  color: #fff;
+}
+
+.opsLoginSub {
+  padding: 0 24px 24px;
+  color: rgba(255,255,255,0.62);
+}
+
+.opsActionLink {
+  margin: 0 24px 24px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 0 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.03);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.opsErrorBox {
+  margin: 18px 18px 0;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(240,165,181,0.16);
+  background: rgba(53, 24, 32, 0.32);
+}
+
+.opsErrorTitle {
+  font-size: 14px;
+  font-weight: 800;
+  color: #fff;
+}
+
+.opsErrorText {
+  margin-top: 4px;
+  color: rgba(255,255,255,0.7);
+  font-size: 12px;
+}
+
+/* topbar */
+.opsTopbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  min-height: 56px;
+  padding: 0 18px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.018), rgba(255,255,255,0)),
+    rgba(10, 14, 22, 0.92);
+}
+
+.opsTopbarLeft,
+.opsTopbarRight {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.opsTopbarRight {
+  flex: 1 1 auto;
+  justify-content: flex-end;
+}
+
+.opsBreadcrumb {
+  font-size: 12px;
+  color: rgba(255,255,255,0.42);
+  white-space: nowrap;
+}
+
+.opsBreadcrumb span {
+  color: rgba(255,255,255,0.9);
+  font-weight: 700;
+}
+
+.opsStatusPill {
+  min-height: 24px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(126,216,170,0.18);
+  background: rgba(126,216,170,0.1);
+  color: var(--lcc-green);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.opsStatusDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--lcc-green);
+}
+
+.opsTopbarDate {
+  font-size: 11px;
+  color: rgba(255,255,255,0.34);
+  white-space: nowrap;
+}
+
+.opsSearch {
+  flex: 0 1 320px;
+  min-width: 190px;
+  height: 38px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 11px;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,0.07);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.018), rgba(255,255,255,0)),
+    rgba(255,255,255,0.024);
+  color: rgba(255,255,255,0.4);
+}
+
+.opsSearch input {
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  height: auto !important;
+  min-height: 0 !important;
+  padding: 0 !important;
+  color: #fff !important;
+  font-size: 12px !important;
+}
+
+.opsSearch span {
+  font-size: 10px;
+  color: rgba(255,255,255,0.26);
+  white-space: nowrap;
+}
+
+.opsMenuWrap {
+  position: relative;
+}
+
+.opsTopButton,
+.opsMenuClose,
+.opsGhostBtn {
+  border: 1px solid rgba(255,255,255,0.07);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.016), rgba(255,255,255,0)),
+    rgba(255,255,255,0.025);
+  color: rgba(255,255,255,0.88);
+  border-radius: 10px;
+  cursor: pointer;
+  transition:
+    background 140ms ease,
+    border-color 140ms ease,
+    transform 140ms ease;
+}
+
+.opsTopButton:hover,
+.opsMenuClose:hover,
+.opsGhostBtn:hover {
+  background: rgba(255,255,255,0.05);
+  border-color: rgba(255,255,255,0.12);
+  transform: translateY(-1px);
+}
+
+.opsTopButton {
+  height: 38px;
+  min-width: 38px;
+  padding: 0 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  position: relative;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.opsTopButtonWide {
+  min-width: 94px;
+}
+
+.opsTopButtonPrimary {
+  background:
+    linear-gradient(180deg, rgba(123,166,247,0.14), rgba(123,166,247,0.08)),
+    rgba(255,255,255,0.02);
+  border-color: rgba(123,166,247,0.22);
+  color: #dbe8ff;
+}
+
+.opsTopButtonDot {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: #d96b85;
+  color: #fff;
+  font-size: 9px;
+  font-weight: 900;
+  display: grid;
+  place-items: center;
+  border: 2px solid rgba(10,14,22,0.96);
+}
+
+/* KPI strip */
+.opsKpiStrip {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+
+.opsKpiCell {
+  padding: 13px 16px;
+  border-right: 1px solid rgba(255,255,255,0.06);
+  background: rgba(255,255,255,0.004);
+}
+
+.opsKpiCell:last-child {
+  border-right: 0;
+}
+
+.opsKpiCellActive {
+  background: rgba(255,255,255,0.018);
+  box-shadow: inset 0 -2px 0 rgba(123,166,247,0.76);
+}
+
+.opsKpiLabel {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: rgba(255,255,255,0.34);
+}
+
+.opsKpiValue {
+  margin-top: 6px;
+  font-size: 18px;
+  line-height: 1;
+  font-weight: 900;
+  letter-spacing: -0.05em;
+  color: #fff;
+}
+
+.opsKpiSub {
+  margin-top: 5px;
+  font-size: 10px;
+  color: rgba(255,255,255,0.42);
+}
+
+/* content grids */
+.opsContent {
+  padding: 18px;
+  display: grid;
+  gap: 14px;
+}
+
+.opsGrid2to1 {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(300px, 1fr);
+  gap: 14px;
+}
+
+.opsGrid3 {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+/* cards */
+.opsCard {
+  border-radius: 18px;
+  border: 1px solid rgba(255,255,255,0.06);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.006) 34%, rgba(255,255,255,0.012)),
+    rgba(8,12,19,0.72);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.022),
+    0 14px 30px rgba(0,0,0,0.18);
+  overflow: hidden;
+}
+
+.opsCardLarge {
+  min-width: 0;
+}
+
+.opsCardHead {
+  min-height: 50px;
+  padding: 0 14px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.opsCardTitle {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.34);
+}
+
+.opsCardHeadRight {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.opsChip {
+  min-height: 22px;
+  padding: 0 8px;
+  border-radius: 7px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+}
+
+.opsChipBlue {
+  background: rgba(123,166,247,0.12);
+  color: #a8c5ff;
+  border: 1px solid rgba(123,166,247,0.14);
+}
+
+.opsChipNeutral {
+  background: rgba(255,255,255,0.05);
+  color: rgba(255,255,255,0.78);
+  border: 1px solid rgba(255,255,255,0.06);
+}
+
+.opsChipWarning {
+  background: rgba(227,191,122,0.12);
+  color: var(--lcc-amber);
+  border: 1px solid rgba(227,191,122,0.16);
+}
+
+.opsChipNegative {
+  background: rgba(240,165,181,0.12);
+  color: var(--lcc-red);
+  border: 1px solid rgba(240,165,181,0.16);
+}
+
+.opsGhostBtn {
+  width: 30px;
+  height: 30px;
+  display: inline-grid;
+  place-items: center;
+}
+
+.opsMiniAction {
+  min-height: 24px;
+  padding: 0 8px;
+  border-radius: 7px;
+  border: 1px solid rgba(255,255,255,0.07);
+  display: inline-flex;
+  align-items: center;
+  background: rgba(255,255,255,0.03);
+  color: rgba(255,255,255,0.8);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+/* hero */
+.opsHeroBlock {
+  padding: 18px 16px 8px;
+}
+
+.opsHeroValue {
+  font-size: clamp(34px, 3.5vw, 46px);
+  line-height: 1;
+  font-weight: 900;
+  letter-spacing: -0.06em;
+  color: #fff;
+}
+
+.opsHeroSub {
+  margin-top: 7px;
+  font-size: 12px;
+  color: rgba(255,255,255,0.44);
+}
+
+.opsChartWrap {
+  padding: 0 12px 12px;
+  display: grid;
+  gap: 10px;
+}
+
+.opsChartSvg {
+  width: 100%;
+  height: 96px;
+}
+
+.opsChartLabels {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 6px;
+  font-size: 10px;
+  color: rgba(255,255,255,0.28);
+}
+
+.opsChartLabels span:nth-child(2),
+.opsChartLabels span:nth-child(3),
+.opsChartLabels span:nth-child(4),
+.opsChartLabels span:nth-child(5) {
+  text-align: center;
+}
+
+.opsChartLabels span:last-child {
+  text-align: right;
+}
+
+.opsMetricRow {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border-top: 1px solid rgba(255,255,255,0.06);
+}
+
+.opsMetricCell {
+  padding: 12px 14px;
+  border-right: 1px solid rgba(255,255,255,0.06);
+}
+
+.opsMetricCell:last-child {
+  border-right: 0;
+}
+
+.opsMetricLabel {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: rgba(255,255,255,0.32);
+}
+
+.opsMetricValue {
+  margin-top: 7px;
+  font-size: 16px;
+  font-weight: 900;
+  letter-spacing: -0.04em;
+  color: #fff;
+}
+
+.opsMetricSub {
+  margin-top: 4px;
+  font-size: 10px;
+  color: rgba(255,255,255,0.38);
+}
+
+/* side summary cards */
+.opsGaugeTop {
+  padding: 16px;
+}
+
+.opsGaugeLabel {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: rgba(255,255,255,0.34);
+}
+
+.opsGaugeValue {
+  margin-top: 8px;
+  font-size: clamp(28px, 2.4vw, 34px);
+  line-height: 1;
+  font-weight: 900;
+  letter-spacing: -0.05em;
+  color: #fff;
+}
+
+.opsGaugeTrack {
+  height: 6px;
+  margin: 0 16px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.08);
+  overflow: hidden;
+}
+
+.opsGaugeFill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, rgba(227,191,122,0.92), rgba(217,107,133,0.92));
+}
+
+.opsGaugeSub {
+  padding: 10px 16px 14px;
+  font-size: 11px;
+  color: rgba(255,255,255,0.42);
+}
+
+.opsStatList {
+  border-top: 1px solid rgba(255,255,255,0.06);
+}
+
+.opsStatRow {
+  min-height: 42px;
+  padding: 0 16px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.opsStatRow:last-child {
+  border-bottom: 0;
+}
+
+.opsStatRowLabel {
+  font-size: 12px;
+  color: rgba(255,255,255,0.56);
+}
+
+.opsStatRowValue {
+  font-size: 12px;
+  font-weight: 800;
+  color: #fff;
+  white-space: nowrap;
+}
+
+/* transactions */
+.opsTableWrap {
+  width: 100%;
+}
+
+.opsTableHead,
+.opsTableRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1.8fr) minmax(0, 1fr) 120px 78px;
+  gap: 12px;
+  align-items: center;
+  padding: 0 14px;
+}
+
+.opsTableHead {
+  min-height: 38px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: rgba(255,255,255,0.3);
+}
+
+.opsTableRow {
+  min-height: 56px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  font-size: 12px;
+  color: rgba(255,255,255,0.74);
+}
+
+.opsTableRow:last-child {
+  border-bottom: 0;
+}
+
+.opsTableCellMain {
+  min-width: 0;
+}
+
+.opsTableName {
+  font-size: 12px;
+  font-weight: 800;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.opsTableMeta {
+  margin-top: 2px;
+  font-size: 10px;
+  color: rgba(255,255,255,0.36);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.opsTableAmount {
+  font-weight: 900;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.opsTableDate {
+  color: rgba(255,255,255,0.34);
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* list cards */
+.opsBillList,
+.opsSignalList,
+.opsCategoryList {
+  display: grid;
+}
+
+.opsBillRow {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 12px 14px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+
+.opsBillRow:last-child {
+  border-bottom: 0;
+}
+
+.opsBillIcon {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255,255,255,0.06);
+  color: rgba(255,255,255,0.86);
+}
+
+.opsBillCopy {
+  min-width: 0;
+}
+
+.opsBillName {
+  font-size: 12px;
+  font-weight: 800;
+  color: #fff;
+}
+
+.opsBillMeta {
+  margin-top: 2px;
+  font-size: 10px;
+  color: rgba(255,255,255,0.38);
+}
+
+.opsBillRight {
+  text-align: right;
+}
+
+.opsBillAmount {
+  font-size: 13px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.opsBillStatus {
+  margin-top: 2px;
+  font-size: 10px;
+}
+
+.opsSignalItem {
+  padding: 12px 14px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+
+.opsSignalItem:last-child {
+  border-bottom: 0;
+}
+
+.opsSignalItemTop {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.opsSignalItemText {
+  font-size: 12px;
+  line-height: 1.45;
+  color: rgba(255,255,255,0.58);
+}
+
+.opsSignalItemText strong {
+  color: #fff;
+}
+
+.opsSignalItemValue {
+  font-size: 10px;
+  color: rgba(255,255,255,0.34);
+  white-space: nowrap;
+}
+
+.opsSignalBar {
+  height: 3px;
+  border-radius: 999px;
+  margin-top: 10px;
+  opacity: 0.88;
+}
+
+.opsWealthBlock {
+  padding: 16px 16px 14px;
+}
+
+.opsWealthValue {
+  font-size: clamp(28px, 2.4vw, 34px);
+  line-height: 1;
+  font-weight: 900;
+  letter-spacing: -0.05em;
+  color: #fff;
+}
+
+.opsWealthTrack {
+  height: 5px;
+  margin-top: 12px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.08);
+  overflow: hidden;
+}
+
+.opsWealthFill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, rgba(123,166,247,0.92), rgba(126,216,170,0.88));
+}
+
+.opsWealthSub {
+  margin-top: 10px;
+  font-size: 11px;
+  color: rgba(255,255,255,0.42);
+}
+
+.opsCategoryRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: center;
+  padding: 12px 14px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+
+.opsCategoryRow:last-child {
+  border-bottom: 0;
+}
+
+.opsCategoryLeft {
+  min-width: 0;
+}
+
+.opsCategoryLabel {
+  font-size: 12px;
+  font-weight: 800;
+  color: #fff;
+}
+
+.opsCategoryBarTrack {
+  height: 5px;
+  margin-top: 8px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.07);
+  overflow: hidden;
+}
+
+.opsCategoryBarFill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, rgba(123,166,247,0.9), rgba(134,210,231,0.85));
+}
+
+.opsCategoryRight {
+  text-align: right;
+}
+
+.opsCategoryAmount {
+  font-size: 12px;
+  font-weight: 900;
+  color: #fff;
+  white-space: nowrap;
+}
+
+.opsCategoryPct {
+  margin-top: 2px;
+  font-size: 10px;
+  color: rgba(255,255,255,0.38);
+}
+
+/* menus */
+.opsMenu {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  width: min(320px, calc(100vw - 32px));
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(255,255,255,0.08);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.006)),
+    rgba(8, 12, 19, 0.98);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.03),
+    0 20px 44px rgba(0,0,0,0.4);
+  z-index: 80;
+}
+
+.opsMenuHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.opsMenuTitle {
+  font-size: 13px;
+  font-weight: 800;
+  color: #fff;
+}
+
+.opsMenuClose {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+}
+
+.opsMenuList,
+.opsSignalList {
+  display: grid;
+  gap: 6px;
+}
+
+.opsMenuLink {
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,0.05);
+  background: rgba(255,255,255,0.01);
+}
+
+.opsMenuLinkTitle {
+  font-size: 12px;
+  font-weight: 800;
+  color: #fff;
+}
+
+.opsMenuLinkNote {
+  margin-top: 3px;
+  font-size: 10px;
+  color: rgba(255,255,255,0.4);
+}
+
+.opsSignalRow {
+  display: grid;
+  grid-template-columns: 9px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+  padding: 10px 0;
+  border-top: 1px solid rgba(255,255,255,0.05);
+}
+
+.opsSignalRow:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.opsSignalDot {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  margin-top: 5px;
+}
+
+.opsSignalCopy {
+  min-width: 0;
+}
+
+.opsSignalTitle {
+  font-size: 12px;
+  font-weight: 800;
+  color: #fff;
+}
+
+.opsSignalText {
+  margin-top: 2px;
+  font-size: 11px;
+  color: rgba(255,255,255,0.46);
+}
+
+.opsSignalValue {
+  font-size: 11px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.opsEmpty {
+  padding: 14px;
+}
+
+.opsEmptyTitle {
+  font-size: 12px;
+  font-weight: 800;
+  color: rgba(255,255,255,0.84);
+}
+
+.opsEmptyDetail {
+  margin-top: 4px;
+  font-size: 11px;
+  color: rgba(255,255,255,0.4);
+}
+
+/* tones */
+.opsTone-positive {
+  color: var(--lcc-green);
+}
+
+.opsTone-negative {
+  color: var(--lcc-red);
+}
+
+.opsTone-warning {
+  color: var(--lcc-amber);
+}
+
+.opsTone-neutral {
+  color: #fff;
+}
+
+.opsTone-muted {
+  color: rgba(255,255,255,0.42);
+}
+
+.opsToneBg-positive {
+  background: rgba(126,216,170,0.14);
+}
+
+.opsToneBg-negative {
+  background: rgba(240,165,181,0.14);
+}
+
+.opsToneBg-warning {
+  background: rgba(227,191,122,0.14);
+}
+
+.opsToneBg-neutral {
+  background: rgba(123,166,247,0.12);
+}
+
+/* responsive */
+@media (max-width: 1400px) {
+  .opsKpiStrip {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .opsGrid3 {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 1180px) {
+  .opsTopbar {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 12px 16px;
+  }
+
+  .opsTopbarLeft,
+  .opsTopbarRight {
+    flex-wrap: wrap;
+  }
+
+  .opsTopbarRight {
+    justify-content: flex-start;
+  }
+
+  .opsSearch {
+    flex: 1 1 100%;
+    min-width: 100%;
+  }
+
+  .opsGrid2to1 {
+    grid-template-columns: 1fr;
+  }
+
+  .opsMetricRow {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 860px) {
+  .opsKpiStrip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .opsTableHead {
+    display: none;
+  }
+
+  .opsTableRow {
+    grid-template-columns: 1fr auto;
+    gap: 6px 12px;
+    min-height: 0;
+    padding: 12px 14px;
+  }
+
+  .opsTableCell:nth-child(2) {
+    grid-column: 1;
+    color: rgba(255,255,255,0.4);
+  }
+
+  .opsTableCell:nth-child(3) {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    align-self: center;
+  }
+
+  .opsTableCell:nth-child(4) {
+    grid-column: 1;
+    text-align: left;
+  }
+}
+
+@media (max-width: 640px) {
   :root {
-    --lcc-page-pad-x: 14px;
-    --lcc-page-pad-y: 14px;
+    --lcc-page-pad-x: 12px;
+    --lcc-page-pad-y: 12px;
     --lcc-radius-xl: 18px;
-    --lcc-radius-lg: 12px;
-    --lcc-radius-md:  9px;
+    --lcc-radius-lg: 14px;
+    --lcc-radius-md: 10px;
   }
 
   body {
@@ -562,11 +1597,41 @@ textarea {
   .threeCol {
     grid-template-columns: 1fr;
   }
-}
 
-@media (max-width: 640px) {
-  :root {
-    --lcc-page-pad-x: 12px;
-    --lcc-page-pad-y: 12px;
+  .opsContent {
+    padding: 12px;
+  }
+
+  .opsKpiStrip,
+  .opsMetricRow {
+    grid-template-columns: 1fr;
+  }
+
+  .opsCardHead {
+    padding: 0 12px;
+  }
+
+  .opsHeroValue,
+  .opsGaugeValue,
+  .opsWealthValue {
+    font-size: 28px;
+  }
+
+  .opsChartLabels {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .opsChartLabels span:nth-child(2) {
+    text-align: center;
+  }
+
+  .opsChartLabels span:nth-child(3) {
+    text-align: right;
+  }
+
+  .opsChartLabels span:nth-child(4),
+  .opsChartLabels span:nth-child(5),
+  .opsChartLabels span:nth-child(6) {
+    display: none;
   }
 }

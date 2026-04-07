@@ -81,10 +81,20 @@ export default function AppShell({ children }) {
   useEffect(() => {
     if (typeof document === "undefined") return;
 
-    document.body.classList.toggle("lcc-nav-open", mobileNavOpen);
+    const prevBodyOverflow = document.body.style.overflow;
+    const prevHtmlOverflow = document.documentElement.style.overflow;
+
+    if (mobileNavOpen) {
+      document.body.style.overflow = "hidden";
+      document.documentElement.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+      document.documentElement.style.overflow = "";
+    }
 
     return () => {
-      document.body.classList.remove("lcc-nav-open");
+      document.body.style.overflow = prevBodyOverflow;
+      document.documentElement.style.overflow = prevHtmlOverflow;
     };
   }, [mobileNavOpen]);
 
@@ -124,7 +134,7 @@ export default function AppShell({ children }) {
 
   return (
     <RippleProvider>
-      <div className={styles.shell}>
+      <div className={`${styles.shell} ${collapsed ? styles.shellCollapsed : ""}`}>
         <aside
           className={`${styles.sidebarColumn} ${collapsed ? styles.sidebarColumnCollapsed : ""}`}
           aria-hidden={isMobileViewport ? "true" : undefined}
