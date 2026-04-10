@@ -1,3 +1,4 @@
+
 .shell {
   --shell-sidebar-width: 304px;
   position: relative;
@@ -7,13 +8,12 @@
   grid-template-columns: var(--shell-sidebar-width) minmax(0, 1fr);
   align-items: stretch;
   gap: 0;
-  overflow: clip;
+  overflow-x: clip;
+  overflow-y: visible;
   transition: grid-template-columns 180ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.shellCollapsed {
-  --shell-sidebar-width: 82px;
-}
+.shellCollapsed { --shell-sidebar-width: 82px; }
 
 .sidebarColumn {
   position: sticky;
@@ -24,10 +24,6 @@
   transition:
     width 180ms cubic-bezier(0.4, 0, 0.2, 1),
     padding 180ms cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.sidebarColumnCollapsed {
-  /* width is controlled by .shell */
 }
 
 .sidebarInner {
@@ -44,6 +40,7 @@
   flex-direction: column;
   position: relative;
   isolation: isolate;
+  overflow: visible;
 }
 
 .mainContent {
@@ -52,6 +49,7 @@
   flex: 1;
   padding: 12px 14px 18px 10px;
   transition: padding 180ms cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: visible;
 }
 
 .pageFrame {
@@ -60,181 +58,11 @@
   min-width: 0;
   max-width: none;
   min-height: calc(100svh - 30px);
+  overflow: visible;
 }
 
-.pageFrame > * {
-  min-width: 0;
-}
+.pageFrame > * { min-width: 0; }
 
 .mobileTopbar,
 .mobileOverlay,
-.mobileDrawer {
-  display: none;
-}
-
-@media (max-width: 1280px) {
-  .shell {
-    --shell-sidebar-width: 292px;
-  }
-}
-
-@media (max-width: 1100px) {
-  .shell,
-  .shellCollapsed {
-    grid-template-columns: 1fr;
-    padding-top: 56px;
-  }
-
-  .sidebarColumn {
-    display: none;
-  }
-
-  .mobileTopbar {
-    position: fixed;
-    inset: 0 0 auto 0;
-    z-index: 60;
-    height: 56px;
-    display: grid;
-    grid-template-columns: 40px minmax(0, 1fr) 40px;
-    align-items: center;
-    gap: 8px;
-    padding: 8px 10px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-    background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.024), rgba(255, 255, 255, 0)),
-      rgba(7, 10, 16, 0.94);
-    backdrop-filter: blur(16px) saturate(118%);
-    -webkit-backdrop-filter: blur(16px) saturate(118%);
-    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.22);
-  }
-
-  .mobileMenuBtn,
-  .mobileCollapseBtn {
-    appearance: none;
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    width: 36px;
-    height: 36px;
-    display: grid;
-    place-items: center;
-    border-radius: 10px;
-    background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0)),
-      rgba(255, 255, 255, 0.035);
-    color: rgba(232, 237, 245, 0.86);
-    cursor: pointer;
-    transition:
-      background 140ms ease,
-      border-color 140ms ease,
-      transform 140ms ease;
-  }
-
-  .mobileMenuBtn:hover,
-  .mobileCollapseBtn:hover {
-    background: rgba(255, 255, 255, 0.06);
-    border-color: rgba(255, 255, 255, 0.14);
-    transform: translateY(-1px);
-  }
-
-  .mobileTopbarCopy {
-    min-width: 0;
-  }
-
-  .mobileTopbarEyebrow {
-    font-size: 9px;
-    font-weight: 800;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    color: rgba(160, 178, 210, 0.4);
-  }
-
-  .mobileTopbarTitle {
-    margin-top: 2px;
-    font-size: 13px;
-    line-height: 1.1;
-    font-weight: 800;
-    color: rgba(232, 237, 245, 0.96);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .mainContent {
-    padding: 8px 8px 16px;
-  }
-
-  .pageFrame {
-    min-height: calc(100svh - 72px);
-  }
-
-  .mobileOverlay {
-    appearance: none;
-    border: 0;
-    position: fixed;
-    inset: 0;
-    z-index: 80;
-    display: block;
-    background: rgba(4, 7, 11, 0.74);
-    opacity: 0;
-    pointer-events: none;
-    backdrop-filter: blur(4px);
-    -webkit-backdrop-filter: blur(4px);
-    transition: opacity 200ms ease;
-  }
-
-  .mobileOverlayOpen {
-    opacity: 1;
-    pointer-events: auto;
-  }
-
-  .mobileDrawer {
-    position: fixed;
-    inset: 0 auto 0 0;
-    z-index: 90;
-    display: block;
-    width: min(92vw, 318px);
-    transform: translateX(-105%);
-    transition: transform 220ms cubic-bezier(0.4, 0, 0.2, 1);
-    padding: 8px;
-    pointer-events: none;
-  }
-
-  .mobileDrawerOpen {
-    transform: translateX(0);
-    pointer-events: auto;
-  }
-
-  .mobileDrawerInner {
-    width: 100%;
-    height: 100%;
-    min-height: 0;
-  }
-}
-
-@media (max-width: 640px) {
-  .shell,
-  .shellCollapsed {
-    padding-top: 52px;
-  }
-
-  .mobileTopbar {
-    height: 52px;
-    grid-template-columns: 38px minmax(0, 1fr) 38px;
-    padding: 7px 8px;
-  }
-
-  .mobileMenuBtn,
-  .mobileCollapseBtn {
-    width: 34px;
-    height: 34px;
-    border-radius: 9px;
-  }
-
-  .pageFrame {
-    min-height: calc(100svh - 66px);
-  }
-
-  .mobileDrawer {
-    width: min(94vw, 304px);
-    padding: 6px;
-  }
-}
+.mobileDrawer { display: none; }

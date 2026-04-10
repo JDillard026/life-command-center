@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ArrowRight,
   Bell,
@@ -671,17 +671,15 @@ function buildSvgAreaPath(series, width = 100, height = 36, pad = 3) {
 
 function sampleSeriesLabels(series, count = 6) {
   if (!series.length) return [];
-  if (series.length <= count) {
-    return series.map((item, index) => ({ index, ...item }));
+  if (series.length <= count) return series;
+
+  const indices = new Set([0, series.length - 1]);
+  while (indices.size < count) {
+    const ratio = (indices.size - 1) / (count - 1);
+    indices.add(Math.round(ratio * (series.length - 1)));
   }
 
-  const indices = [...new Set(
-    Array.from({ length: count }, (_, i) =>
-      Math.round((i / Math.max(count - 1, 1)) * (series.length - 1))
-    )
-  )];
-
-  return indices
+  return [...indices]
     .sort((a, b) => a - b)
     .map((index) => ({ index, ...series[index] }));
 }
@@ -708,7 +706,7 @@ function MenuPanel({ title, open, onClose, items = [] }) {
   if (!open) return null;
 
   return (
-    <div className="opsMenu" onClick={(e) => e.stopPropagation()}>
+    <div className="opsMenu">
       <div className="opsMenuHead">
         <div className="opsMenuTitle">{title}</div>
         <button type="button" className="opsMenuClose" onClick={onClose} aria-label="Close menu">
@@ -732,7 +730,7 @@ function NotificationPanel({ open, onClose, items }) {
   if (!open) return null;
 
   return (
-    <div className="opsMenu" onClick={(e) => e.stopPropagation()}>
+    <div className="opsMenu">
       <div className="opsMenuHead">
         <div className="opsMenuTitle">Signals</div>
         <button type="button" className="opsMenuClose" onClick={onClose} aria-label="Close notifications">
@@ -770,11 +768,7 @@ function CalendarQuickPanel({ open, onClose, items, todayCount, upcomingCount })
   const upcomingItems = items.filter((item) => item.bucket === "upcoming");
 
   return (
-    <div
-      className="opsMenu"
-      style={{ width: "min(370px, calc(100vw - 32px))" }}
-      onClick={(e) => e.stopPropagation()}
-    >
+    <div className="opsMenu" style={{ width: "min(370px, calc(100vw - 32px))" }}>
       <div className="opsMenuHead">
         <div>
           <div className="opsMenuTitle">Calendar quick view</div>
@@ -805,7 +799,12 @@ function CalendarQuickPanel({ open, onClose, items, todayCount, upcomingCount })
           ) : null}
 
           {todayItems.map((item) => (
-            <Link key={item.id} href="/calendar" className="opsMenuLink" onClick={onClose}>
+            <Link
+              key={item.id}
+              href="/calendar"
+              className="opsMenuLink"
+              onClick={onClose}
+            >
               <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start" }}>
                 <div style={{ minWidth: 0 }}>
                   <div className="opsMenuLinkTitle">{item.title}</div>
@@ -839,7 +838,12 @@ function CalendarQuickPanel({ open, onClose, items, todayCount, upcomingCount })
           ) : null}
 
           {upcomingItems.map((item) => (
-            <Link key={item.id} href="/calendar" className="opsMenuLink" onClick={onClose}>
+            <Link
+              key={item.id}
+              href="/calendar"
+              className="opsMenuLink"
+              onClick={onClose}
+            >
               <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start" }}>
                 <div style={{ minWidth: 0 }}>
                   <div className="opsMenuLinkTitle">{item.title}</div>
@@ -1118,15 +1122,6 @@ export default function DashboardPage() {
   const [savingsGoals, setSavingsGoals] = useState([]);
   const [quoteMap, setQuoteMap] = useState({});
 
-  const topbarMenusRef = useRef(null);
-
-  const closeAllPanels = useCallback(() => {
-    setNotificationsOpen(false);
-    setAddMenuOpen(false);
-    setHelpOpen(false);
-    setCalendarOpen(false);
-  }, []);
-
   useEffect(() => {
     let mounted = true;
 
@@ -1225,31 +1220,6 @@ export default function DashboardPage() {
       mounted = false;
     };
   }, []);
-
-  useEffect(() => {
-    function handlePointerDown(event) {
-      if (!topbarMenusRef.current) return;
-      if (!topbarMenusRef.current.contains(event.target)) {
-        closeAllPanels();
-      }
-    }
-
-    function handleKeyDown(event) {
-      if (event.key === "Escape") {
-        closeAllPanels();
-      }
-    }
-
-    document.addEventListener("mousedown", handlePointerDown);
-    document.addEventListener("touchstart", handlePointerDown, { passive: true });
-    window.addEventListener("keydown", handleKeyDown);
-
-    return () => {
-      document.removeEventListener("mousedown", handlePointerDown);
-      document.removeEventListener("touchstart", handlePointerDown);
-      window.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [closeAllPanels]);
 
   const computed = useMemo(() => {
     const today = startOfToday();
@@ -1443,14 +1413,14 @@ export default function DashboardPage() {
       notifications.push({
         id: "goals-empty",
         title: "No savings goal set",
-        detail: "Liquid balance is idle with no active target.",
+        detail: "Liquid balance is idle without an active goal.",
         value: money(liquidTotal),
         tone: "neutral",
       });
     }
 
-    const q = normalizeText(search);
     const filteredTransactions = recentTransactions.filter((item) => {
+      const q = normalizeText(search);
       if (!q) return true;
       return (
         normalizeText(item.title).includes(q) ||
@@ -1588,6 +1558,13 @@ export default function DashboardPage() {
     search,
   ]);
 
+  function closeAllPanels() {
+    setNotificationsOpen(false);
+    setAddMenuOpen(false);
+    setHelpOpen(false);
+    setCalendarOpen(false);
+  }
+
   function toggleNotifications() {
     setNotificationsOpen((prev) => {
       const next = !prev;
@@ -1669,7 +1646,7 @@ export default function DashboardPage() {
   }
 
   return (
-    <main className="opsDashRoot">
+    <main className="opsDashRoot" onClick={() => {}}>
       <GlassPane size="hero" className="opsShell">
         {pageError ? (
           <div className="opsErrorBox">
@@ -1680,9 +1657,7 @@ export default function DashboardPage() {
 
         <div className="opsTopbar">
           <div className="opsTopbarLeft">
-            <div className="opsBreadcrumb">
-              Dashboard <span>/ Overview</span>
-            </div>
+            <div className="opsBreadcrumb">Dashboard <span>/ Overview</span></div>
             <div className="opsStatusPill">
               <div className="opsStatusDot" />
               <span>Live</span>
@@ -1690,13 +1665,12 @@ export default function DashboardPage() {
             <div className="opsTopbarDate">{computed.dateLabel}</div>
           </div>
 
-          <div className="opsTopbarRight" ref={topbarMenusRef}>
+          <div className="opsTopbarRight">
             <label className="opsSearch">
               <Search size={14} />
               <input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                onFocus={closeAllPanels}
                 placeholder="Search workspace..."
               />
               <span>⌘K</span>
@@ -1708,7 +1682,6 @@ export default function DashboardPage() {
                 className="opsTopButton"
                 onClick={toggleNotifications}
                 aria-label="Signals"
-                aria-expanded={notificationsOpen}
               >
                 <Bell size={14} />
                 {computed.notificationCount ? (
@@ -1729,7 +1702,6 @@ export default function DashboardPage() {
                 className="opsTopButton opsTopButtonWide"
                 onClick={toggleCalendar}
                 aria-label="Calendar quick view"
-                aria-expanded={calendarOpen}
               >
                 <CalendarDays size={14} />
                 <span>Calendar</span>
@@ -1752,7 +1724,6 @@ export default function DashboardPage() {
                 type="button"
                 className="opsTopButton opsTopButtonPrimary"
                 onClick={toggleAddMenu}
-                aria-expanded={addMenuOpen}
               >
                 <Plus size={14} />
                 <span>Add</span>
@@ -1772,7 +1743,6 @@ export default function DashboardPage() {
                 className="opsTopButton"
                 onClick={toggleHelpMenu}
                 aria-label="Help"
-                aria-expanded={helpOpen}
               >
                 <CircleHelp size={14} />
               </button>
@@ -1797,7 +1767,7 @@ export default function DashboardPage() {
           />
           <KpiCell
             label="Cash Available"
-            value={money(computed.liquidTotal)}
+            value={money(computed.cashTotal)}
             sub="liquid"
             tone="neutral"
           />
@@ -1820,7 +1790,7 @@ export default function DashboardPage() {
             tone={computed.monthlySpending > computed.monthlyIncome ? "warning" : "neutral"}
           />
           <KpiCell
-            label="Bill Pressure"
+            label="Scheduled Debits"
             value={money(computed.monthlyBillPressure)}
             sub={`${computed.overdueCount} overdue`}
             tone={computed.overdueCount ? "negative" : computed.dueSoonCount ? "warning" : "neutral"}
@@ -1844,7 +1814,7 @@ export default function DashboardPage() {
               />
 
               <div className="opsHeroBlock">
-                <div className="opsHeroValue">{money(computed.liquidTotal)}</div>
+                <div className="opsHeroValue">{money(computed.cashTotal)}</div>
                 <div className="opsHeroSub">
                   Month-to-date movement{" "}
                   <span className={`opsTone-${toneClass(computed.monthMovement)}`}>
@@ -1873,7 +1843,7 @@ export default function DashboardPage() {
 
             <section className="opsCard">
               <CardHeader
-                title="Monthly Capacity"
+                title="Cash Runway"
                 right={
                   <button type="button" className="opsGhostBtn" aria-label="More options">
                     <MoreHorizontal size={14} />
@@ -1882,7 +1852,7 @@ export default function DashboardPage() {
               />
 
               <div className="opsGaugeTop">
-                <div className="opsGaugeLabel">Income − Spending − Bills</div>
+                <div className="opsGaugeLabel">Income − Spending − Scheduled debits</div>
                 <div className={`opsGaugeValue opsTone-${toneClass(computed.monthlyCapacity)}`}>
                   {signedMoney(computed.monthlyCapacity)}
                 </div>
@@ -1915,15 +1885,11 @@ export default function DashboardPage() {
                 <StatRow label="Income" value={money(computed.monthlyIncome)} tone="positive" />
                 <StatRow label="Spending" value={signedMoney(-computed.monthlySpending)} tone="negative" />
                 <StatRow
-                  label="Bill Pressure"
+                  label="Scheduled Debits"
                   value={signedMoney(-computed.monthlyBillPressure)}
                   tone={computed.overdueCount ? "negative" : "warning"}
                 />
-                <StatRow
-                  label="Due Soon"
-                  value={money(computed.dueSoonTotal)}
-                  tone={computed.dueSoonCount ? "warning" : "neutral"}
-                />
+                <StatRow label="Due Soon" value={money(computed.dueSoonTotal)} tone={computed.dueSoonCount ? "warning" : "neutral"} />
               </div>
             </section>
           </div>
@@ -1954,7 +1920,7 @@ export default function DashboardPage() {
           <div className="opsGrid3">
             <section className="opsCard">
               <CardHeader
-                title="Upcoming Bills"
+                title="Scheduled Debits"
                 right={
                   <div className="opsCardHeadRight">
                     <span className="opsChip opsChipWarning">{computed.overdueCount} overdue</span>

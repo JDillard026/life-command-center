@@ -39,14 +39,14 @@
   --lcc-violet: #9d89e6;
   --lcc-green: #7ed8aa;
   --lcc-amber: #e3bf7a;
-  --lcc-red: #f0a5b5;
+  --lcc-red: #ff5a5f;
   --lcc-teal: #86d2e7;
   --lcc-gold: #d9b56a;
 
   --lcc-blue-bg: rgba(123, 166, 247, 0.12);
   --lcc-green-bg: rgba(126, 216, 170, 0.12);
   --lcc-amber-bg: rgba(227, 191, 122, 0.12);
-  --lcc-red-bg: rgba(240, 165, 181, 0.12);
+  --lcc-red-bg: rgba(255, 90, 95, 0.12);
   --lcc-violet-bg: rgba(157, 137, 230, 0.12);
 
   /* shadow */
@@ -317,7 +317,7 @@ textarea {
 .chipNegative {
   background: var(--lcc-red-bg);
   color: var(--lcc-red);
-  border: 1px solid rgba(240, 165, 181, 0.18);
+  border: 1px solid rgba(255, 90, 95, 0.18);
 }
 
 .chipWarning {
@@ -582,8 +582,8 @@ textarea {
   margin: 18px 18px 0;
   padding: 12px 14px;
   border-radius: 12px;
-  border: 1px solid rgba(240,165,181,0.16);
-  background: rgba(53, 24, 32, 0.32);
+  border: 1px solid rgba(255, 90, 95, 0.16);
+  background: rgba(58, 18, 21, 0.32);
 }
 
 .opsErrorTitle {
@@ -760,7 +760,7 @@ textarea {
   height: 17px;
   padding: 0 4px;
   border-radius: 999px;
-  background: #d96b85;
+  background: #ff5a5f;
   color: #fff;
   font-size: 9px;
   font-weight: 900;
@@ -838,10 +838,10 @@ textarea {
   border: 1px solid rgba(255,255,255,0.06);
   background:
     linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.006) 34%, rgba(255,255,255,0.012)),
-    rgba(8,12,19,0.72);
+    rgba(8, 12, 19, 0.76);
   box-shadow:
     inset 0 1px 0 rgba(255,255,255,0.022),
-    0 14px 30px rgba(0,0,0,0.18);
+    0 14px 30px rgba(0,0,0,0.2);
   overflow: hidden;
 }
 
@@ -905,9 +905,9 @@ textarea {
 }
 
 .opsChipNegative {
-  background: rgba(240,165,181,0.12);
+  background: rgba(255,90,95,0.12);
   color: var(--lcc-red);
-  border: 1px solid rgba(240,165,181,0.16);
+  border: 1px solid rgba(255, 90, 95, 0.16);
 }
 
 .opsGhostBtn {
@@ -1047,7 +1047,7 @@ textarea {
 .opsGaugeFill {
   height: 100%;
   border-radius: inherit;
-  background: linear-gradient(90deg, rgba(227,191,122,0.92), rgba(217,107,133,0.92));
+  background: linear-gradient(90deg, rgba(227,191,122,0.92), rgba(255,90,95,0.92));
 }
 
 .opsGaugeSub {
@@ -1489,7 +1489,7 @@ textarea {
 }
 
 .opsToneBg-negative {
-  background: rgba(240,165,181,0.14);
+  background: rgba(255, 90, 95, 0.14);
 }
 
 .opsToneBg-warning {

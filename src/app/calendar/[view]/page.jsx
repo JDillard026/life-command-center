@@ -1,109 +1,248 @@
 "use client";
 
-import * as React from "react";
-import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { supabase } from "@/lib/supabaseClient";
-import {
-  AlertTriangle,
-  CalendarDays,
-  ChevronDown,
-  ChevronLeft,
-  ChevronRight,
-  Copy,
-  Pencil,
-  Plus,
-  Search,
-  Trash2,
-  X,
-} from "lucide-react";
-
 export const dynamic = "force-dynamic";
 
-const TONE = {
-  green: "#8ef4bb",
-  red: "#ff9fb2",
-  amber: "#ffd089",
-  blue: "#8ecbff",
-  white: "#f7fbff",
-};
+import Link from "next/link";
+import { useParams } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
+import {
+  ArrowDownRight,
+  ArrowUpRight,
+  CalendarDays,
+  ChevronLeft,
+  ChevronRight,
+  Layers3,
+  ListTodo,
+  Search,
+  Sparkles,
+} from "lucide-react";
+import { supabase } from "@/lib/supabaseClient";
+import GlassPane from "../../components/GlassPane";
+import styles from "../CalendarPage.module.css";
 
-function uid() {
-  return (
-    globalThis.crypto?.randomUUID?.() ??
-    `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
-  );
+/* ──────────────────────────────────────────────────────────────────────────
+   Constants
+   ────────────────────────────────────────────────────────────────────────── */
+
+const ALLOWED_VIEWS = new Set(["agenda", "month", "upcoming"]);
+const DAY_MS = 86400000;
+
+/* ──────────────────────────────────────────────────────────────────────────
+   Helpers
+   ────────────────────────────────────────────────────────────────────────── */
+
+function safeNum(value, fallback = 0) {
+  const num = Number(value);
+  return Number.isFinite(num) ? num : fallback;
 }
 
-function money(n) {
-  const num = Number(n);
+function money(value, digits = 2) {
+  const num = Number(value);
   if (!Number.isFinite(num)) return "—";
   return num.toLocaleString(undefined, {
     style: "currency",
     currency: "USD",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
   });
 }
 
-function safeNum(n, fallback = 0) {
-  const num = Number(n);
-  return Number.isFinite(num) ? num : fallback;
+function signedMoney(value, digits = 2) {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return "—";
+  const abs = Math.abs(num).toLocaleString(undefined, {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  });
+  if (num > 0) return `+${abs}`;
+  if (num < 0) return `-${abs}`;
+  return abs;
 }
 
-function pad2(n) {
-  return String(n).padStart(2, "0");
+function normalizeText(value = "") {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
 }
 
-function todayISO() {
-  const d = new Date();
-  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+function normalizeFrequency(freq) {
+  const value = String(freq || "").trim().toLowerCase();
+  if (["weekly", "biweekly", "monthly", "quarterly", "yearly", "one_time"].includes(value)) {
+    return value;
+  }
+  return "monthly";
 }
 
-function parseISO(iso) {
-  const [y, m, d] = String(iso || "")
-    .split("-")
-    .map(Number);
-  if (!y || !m || !d) return null;
-  return new Date(y, m - 1, d);
+function startOfToday() {
+  const now = new Date();
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate());
 }
 
-function toISODate(d) {
-  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+function startOfMonth(date) {
+  return new Date(date.getFullYear(), date.getMonth(), 1);
 }
 
-function startOfMonthISO(iso) {
-  const d = parseISO(iso) ?? new Date();
-  return toISODate(new Date(d.getFullYear(), d.getMonth(), 1));
+function endOfMonth(date) {
+  return new Date(date.getFullYear(), date.getMonth() + 1, 0);
 }
 
-function addMonthsISO(monthStartISO, delta) {
-  const d = parseISO(monthStartISO) ?? new Date();
-  return toISODate(new Date(d.getFullYear(), d.getMonth() + delta, 1));
+function startOfWeekSunday(date) {
+  const out = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  out.setDate(out.getDate() - out.getDay());
+  return out;
 }
 
-function addDaysISO(iso, delta) {
-  const d = parseISO(iso) ?? new Date();
-  d.setDate(d.getDate() + delta);
-  return toISODate(d);
+function endOfWeekSaturday(date) {
+  const start = startOfWeekSunday(date);
+  return addDays(start, 6);
 }
 
-function startOfWeekISO(iso, weekStartsOn = 0) {
-  const d = parseISO(iso) ?? new Date();
-  const day = d.getDay();
-  const diff = (day - weekStartsOn + 7) % 7;
-  d.setDate(d.getDate() - diff);
-  return toISODate(d);
+function addDays(date, days) {
+  const out = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  out.setDate(out.getDate() + days);
+  return out;
 }
 
-function monthLabel(monthStartISO) {
-  const d = parseISO(monthStartISO) ?? new Date();
-  return d.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+function addMonthsClamped(date, months) {
+  const baseYear = date.getFullYear();
+  const baseMonth = date.getMonth() + months;
+  const baseDay = date.getDate();
+
+  const monthStart = new Date(baseYear, baseMonth, 1);
+  const monthEndDay = new Date(
+    monthStart.getFullYear(),
+    monthStart.getMonth() + 1,
+    0
+  ).getDate();
+
+  return new Date(
+    monthStart.getFullYear(),
+    monthStart.getMonth(),
+    Math.min(baseDay, monthEndDay)
+  );
 }
 
-function fmtLongDate(iso) {
-  const d = parseISO(iso);
-  if (!d) return "";
-  return d.toLocaleDateString(undefined, {
+function addYearsClamped(date, years) {
+  return addMonthsClamped(date, years * 12);
+}
+
+function addByFrequency(date, freq) {
+  switch (normalizeFrequency(freq)) {
+    case "weekly":
+      return addDays(date, 7);
+    case "biweekly":
+      return addDays(date, 14);
+    case "quarterly":
+      return addMonthsClamped(date, 3);
+    case "yearly":
+      return addYearsClamped(date, 1);
+    case "one_time":
+      return date;
+    default:
+      return addMonthsClamped(date, 1);
+  }
+}
+
+function toISODateLocal(date = new Date()) {
+  const yyyy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  const dd = String(date.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function parseISODateLocal(iso) {
+  const raw = String(iso || "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return null;
+  const [y, m, d] = raw.split("-").map(Number);
+  const out = new Date(y, m - 1, d);
+  if (out.getFullYear() !== y || out.getMonth() !== m - 1 || out.getDate() !== d) {
+    return null;
+  }
+  return out;
+}
+
+function parseDateLike(value) {
+  if (!value) return null;
+
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return new Date(value.getFullYear(), value.getMonth(), value.getDate());
+  }
+
+  const text = String(value).trim();
+  if (!text) return null;
+
+  const localDate = parseISODateLocal(text.slice(0, 10));
+  if (localDate) return localDate;
+
+  const parsed = new Date(text);
+  if (Number.isNaN(parsed.getTime())) return null;
+
+  return new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate());
+}
+
+function extractDateTime(value) {
+  if (!value) return { dateISO: "", timeLabel: "" };
+
+  const text = String(value).trim();
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) {
+    return { dateISO: text, timeLabel: "" };
+  }
+
+  const parsed = new Date(text);
+  if (Number.isNaN(parsed.getTime())) {
+    return {
+      dateISO: text.slice(0, 10),
+      timeLabel: text.includes("T") ? text.slice(11, 16) : "",
+    };
+  }
+
+  return {
+    dateISO: toISODateLocal(parsed),
+    timeLabel: parsed.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }),
+  };
+}
+
+function diffDays(left, right = startOfToday()) {
+  const a = left instanceof Date ? left : parseDateLike(left);
+  const b = right instanceof Date ? right : parseDateLike(right);
+  if (!a || !b) return null;
+
+  const x = new Date(a.getFullYear(), a.getMonth(), a.getDate()).getTime();
+  const y = new Date(b.getFullYear(), b.getMonth(), b.getDate()).getTime();
+  return Math.round((x - y) / DAY_MS);
+}
+
+function monthKey(dateOrIso) {
+  const date = dateOrIso instanceof Date ? dateOrIso : parseDateLike(dateOrIso);
+  if (!date) return "";
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function fmtMonthTitle(date) {
+  return date.toLocaleDateString(undefined, {
+    month: "long",
+    year: "numeric",
+  });
+}
+
+function fmtDayShort(iso) {
+  const date = parseDateLike(iso);
+  if (!date) return "—";
+  return date.toLocaleDateString(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  });
+}
+
+function fmtDayLong(iso) {
+  const date = parseDateLike(iso);
+  if (!date) return "—";
+  return date.toLocaleDateString(undefined, {
     weekday: "long",
     month: "long",
     day: "numeric",
@@ -111,832 +250,711 @@ function fmtLongDate(iso) {
   });
 }
 
-function fmtShortDate(iso) {
-  const d = parseISO(iso);
-  if (!d) return "";
-  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+function buildMonthGrid(anchorMonthDate) {
+  const monthStart = startOfMonth(anchorMonthDate);
+  const monthEnd = endOfMonth(anchorMonthDate);
+  const gridStart = startOfWeekSunday(monthStart);
+  const gridEnd = endOfWeekSaturday(monthEnd);
+
+  const cells = [];
+  let cursor = new Date(gridStart.getTime());
+
+  while (cursor <= gridEnd) {
+    cells.push(new Date(cursor.getTime()));
+    cursor = addDays(cursor, 1);
+  }
+
+  return cells;
 }
 
-function weekdayShort(i) {
-  const base = new Date(2021, 7, 1 + i);
-  return base.toLocaleDateString(undefined, { weekday: "short" });
+function getManualCalendarDate(row) {
+  return (
+    row.event_date ||
+    row.date ||
+    row.start_date ||
+    row.due_date ||
+    row.starts_on ||
+    row.day ||
+    extractDateTime(row.start_at || row.starts_at || row.datetime || row.timestamp).dateISO
+  );
 }
 
-function fmtTime(hhmm) {
-  if (!hhmm) return "All day";
-  const [h, m] = String(hhmm)
-    .split(":")
-    .map(Number);
-  if (!Number.isFinite(h) || !Number.isFinite(m)) return hhmm;
-  const d = new Date();
-  d.setHours(h, m, 0, 0);
-  return d.toLocaleTimeString(undefined, {
-    hour: "numeric",
-    minute: "2-digit",
-  });
+function getManualCalendarTime(row) {
+  if (row.event_time) return String(row.event_time);
+  if (row.time) return String(row.time);
+  if (row.start_time) return String(row.start_time);
+  if (row.starts_at || row.start_at || row.datetime || row.timestamp) {
+    return extractDateTime(row.starts_at || row.start_at || row.datetime || row.timestamp).timeLabel;
+  }
+  return "";
 }
 
-function timeSortValue(hhmm) {
-  if (!hhmm) return -1;
-  const [h, m] = String(hhmm)
-    .split(":")
-    .map(Number);
-  if (!Number.isFinite(h) || !Number.isFinite(m)) return -1;
-  return h * 60 + m;
+function getEffectiveBillAmount(bill) {
+  const amount = safeNum(bill.amount, 0);
+  const balance = safeNum(bill.balance, 0);
+  const minPay = safeNum(bill.minPay, 0);
+  const extraPay = safeNum(bill.extraPay, 0);
+
+  if (bill.type === "controllable") {
+    let planned = minPay + extraPay;
+    if (planned <= 0) planned = amount > 0 ? amount : balance > 0 ? balance : 0;
+    if (balance > 0) planned = Math.min(planned, balance);
+    return Math.max(planned, 0);
+  }
+
+  if (amount > 0) return amount;
+  if (minPay + extraPay > 0) return minPay + extraPay;
+  return 0;
 }
 
-function isTodayISO(iso) {
-  return iso === todayISO();
-}
-
-function inSameMonth(dayISO, monthStartISO) {
-  const d = parseISO(dayISO);
-  const m = parseISO(monthStartISO);
-  if (!d || !m) return false;
-  return d.getFullYear() === m.getFullYear() && d.getMonth() === m.getMonth();
-}
-
-function parseMoneyInput(v) {
-  const cleaned = String(v ?? "").replace(/[^0-9.-]/g, "");
-  const num = Number(cleaned);
-  return Number.isFinite(num) ? num : NaN;
-}
-
-function buildFetchWindow(monthStart) {
-  const firstVisible = startOfWeekISO(monthStart, 0);
-  const lastVisible = addDaysISO(firstVisible, 41);
-  return {
-    gridStart: firstVisible,
-    gridEnd: lastVisible,
-    loadStart: addDaysISO(firstVisible, -14),
-    loadEnd: addDaysISO(lastVisible, 84),
-  };
-}
-
-function mapProfileRow(row) {
+function mapBillRow(row) {
   return {
     id: row.id,
-    name: row.name || "Default",
-    is_default: Boolean(row.is_default),
-    color: row.color || "#94a3b8",
-  };
-}
-
-function mapEventRow(row) {
-  return {
-    id: row.id,
-    profile_id: row.profile_id || "",
-    title: row.title || "",
-    event_date: row.event_date,
-    event_time: row.event_time || "",
-    end_time: row.end_time || "",
-    category: row.category || "General",
-    flow: row.flow || "none",
+    name: row.name || "Bill",
+    type: row.type === "controllable" ? "controllable" : "noncontrollable",
+    frequency: row.frequency || "monthly",
+    dueDate: row.due_date || "",
+    lastPaidDate: row.last_paid_date || "",
     amount: safeNum(row.amount, 0),
-    note: row.note || "",
-    status: row.status || "scheduled",
-    color: row.color || "#94a3b8",
-    source: row.source || "manual",
-    source_id: row.source_id || "",
-    source_table: row.source_table || "",
-    auto_created: Boolean(row.auto_created),
-    transaction_type: row.transaction_type || null,
+    active: row.active !== false,
+    balance: safeNum(row.balance, 0),
+    minPay: safeNum(row.min_pay, 0),
+    extraPay: safeNum(row.extra_pay, 0),
   };
 }
 
-function isSourceOwnedEvent(ev) {
-  const source = String(ev?.source || "manual").toLowerCase();
-  const sourceTable = String(ev?.source_table || "").toLowerCase();
-  const txType = String(ev?.transaction_type || "").toLowerCase();
+function buildBillOccurrences(bill, rangeStart, rangeEnd, today) {
+  if (bill.active === false) return [];
 
-  return Boolean(
-    ev?.auto_created ||
-      (source && source !== "manual") ||
-      sourceTable ||
-      ev?.source_id ||
-      txType
-  );
+  const anchor = parseDateLike(bill.dueDate);
+  const lastPaid = parseDateLike(bill.lastPaidDate);
+  const freq = normalizeFrequency(bill.frequency);
+  const amountDue = getEffectiveBillAmount(bill);
+
+  if (!anchor) return [];
+
+  const items = [];
+
+  if (freq === "one_time") {
+    if (lastPaid && anchor <= lastPaid) return [];
+    if (anchor >= rangeStart && anchor <= rangeEnd) {
+      const days = diffDays(anchor, today);
+      items.push({
+        id: `bill-${bill.id}-${toISODateLocal(anchor)}`,
+        dateISO: toISODateLocal(anchor),
+        timeLabel: "",
+        title: bill.name,
+        note: "Bill due",
+        amount: amountDue,
+        amountLabel: money(amountDue),
+        kind: "bill",
+        tone: days != null && days < 0 ? "negative" : days != null && days <= 3 ? "warning" : "neutral",
+        sourceLabel: "Bills",
+        href: "/bills",
+      });
+    }
+    return items;
+  }
+
+  let current = new Date(anchor.getTime());
+  let guard = 0;
+
+  while (current < rangeStart && guard < 800) {
+    current = addByFrequency(current, freq);
+    guard += 1;
+  }
+
+  while (current <= rangeEnd && guard < 1600) {
+    const include = !lastPaid || current > lastPaid;
+
+    if (include) {
+      const days = diffDays(current, today);
+      items.push({
+        id: `bill-${bill.id}-${toISODateLocal(current)}`,
+        dateISO: toISODateLocal(current),
+        timeLabel: "",
+        title: bill.name,
+        note: `${bill.frequency || "monthly"} bill`,
+        amount: amountDue,
+        amountLabel: money(amountDue),
+        kind: "bill",
+        tone: days != null && days < 0 ? "negative" : days != null && days <= 3 ? "warning" : "neutral",
+        sourceLabel: "Bills",
+        href: "/bills",
+      });
+    }
+
+    current = addByFrequency(current, freq);
+    guard += 1;
+  }
+
+  return items;
 }
 
-function isManualEvent(ev) {
-  return !isSourceOwnedEvent(ev);
-}
+function mapManualEventRow(row) {
+  const dateISO = getManualCalendarDate(row);
+  if (!dateISO) return null;
 
-function isBillEvent(ev) {
-  const source = String(ev?.source || "").toLowerCase();
-  const sourceTable = String(ev?.source_table || "").toLowerCase();
-  const category = String(ev?.category || "").toLowerCase();
-  return source === "bill" || sourceTable === "bills" || category === "bill";
-}
+  const amount = safeNum(row.amount, NaN);
+  const sourceText = String(row.source || row.source_table || row.transaction_type || "manual").toLowerCase();
 
-function isIncomeEvent(ev) {
-  const source = String(ev?.source || "").toLowerCase();
-  const sourceTable = String(ev?.source_table || "").toLowerCase();
-  const flow = String(ev?.flow || "").toLowerCase();
-  const category = String(ev?.category || "").toLowerCase();
-  const title = String(ev?.title || "").toLowerCase();
-  const txType = String(ev?.transaction_type || "").toLowerCase();
+  let kind = "event";
+  let tone = "neutral";
 
-  return (
-    flow === "income" ||
-    txType === "income" ||
-    source === "income" ||
-    sourceTable === "income_deposits" ||
-    category === "payday" ||
-    title.includes("payday") ||
-    title.includes("income")
-  );
-}
+  if (sourceText.includes("income")) {
+    kind = "income";
+    tone = "positive";
+  } else if (sourceText.includes("expense") || sourceText.includes("spending")) {
+    kind = "expense";
+    tone = "negative";
+  } else if (sourceText.includes("bill")) {
+    kind = "bill";
+    tone = "warning";
+  }
 
-function isPlannedExpenseEvent(ev) {
-  return String(ev?.source || "").toLowerCase() === "planned_expense";
-}
-
-function isExpenseEvent(ev) {
-  const source = String(ev?.source || "").toLowerCase();
-  const sourceTable = String(ev?.source_table || "").toLowerCase();
-  const flow = String(ev?.flow || "").toLowerCase();
-  const txType = String(ev?.transaction_type || "").toLowerCase();
-
-  if (isIncomeEvent(ev) || isPlannedExpenseEvent(ev)) return false;
-
-  return (
-    flow === "expense" ||
-    txType === "expense" ||
-    source === "spending" ||
-    sourceTable === "spending_transactions" ||
-    isBillEvent(ev)
-  );
-}
-
-function emptyEvent(dateISO, profileId = "") {
   return {
-    id: "",
-    profile_id: profileId,
-    title: "",
-    event_date: dateISO,
-    event_time: "",
-    end_time: "",
-    category: "General",
-    flow: "none",
-    amount: "",
-    note: "",
-    status: "scheduled",
-    color: "#94a3b8",
-    source: "manual",
-    source_id: "",
-    source_table: "",
-    auto_created: false,
-    transaction_type: null,
+    id: `manual-${row.id}`,
+    dateISO,
+    timeLabel: getManualCalendarTime(row),
+    title: row.title || row.name || row.label || "Calendar event",
+    note: row.note || row.description || row.source || "Manual calendar item",
+    amount: Number.isFinite(amount) ? amount : null,
+    amountLabel: Number.isFinite(amount)
+      ? kind === "income"
+        ? signedMoney(amount)
+        : kind === "expense" || kind === "bill"
+        ? signedMoney(-Math.abs(amount))
+        : money(amount)
+      : "",
+    kind,
+    tone,
+    sourceLabel: "Calendar",
+    href: "/calendar",
   };
 }
 
-function paydayTemplate(dateISO, profileId = "") {
+function mapPlannedSpendingRow(row) {
+  const dateISO = row.planned_date || row.date || "";
+  if (!dateISO) return null;
+
+  const amount = safeNum(row.amount, 0);
+
   return {
-    ...emptyEvent(dateISO, profileId),
-    title: "Payday",
-    event_time: "09:00",
-    category: "Payday",
-    flow: "income",
-    color: "#22c55e",
-    transaction_type: "income",
+    id: `planned-${row.id}`,
+    dateISO,
+    timeLabel: "",
+    title: row.merchant || row.name || "Planned expense",
+    note: row.note || "Planned spending item",
+    amount,
+    amountLabel: signedMoney(-Math.abs(amount)),
+    kind: "expense",
+    tone: "negative",
+    sourceLabel: "Spending",
+    href: "/spending",
   };
 }
 
-function expenseTemplate(dateISO, profileId = "") {
+function mapIncomeDepositRow(row) {
+  const dateISO = row.deposit_date || row.date || "";
+  if (!dateISO) return null;
+
+  const amount = safeNum(row.amount, 0);
+
   return {
-    ...emptyEvent(dateISO, profileId),
-    title: "Expense",
-    category: "Expense",
-    flow: "expense",
-    color: "#ef4444",
-    transaction_type: "expense",
+    id: `deposit-${row.id}`,
+    dateISO,
+    timeLabel: "",
+    title: row.source || "Income",
+    note: row.note || "Recorded deposit",
+    amount,
+    amountLabel: signedMoney(amount),
+    kind: "income",
+    tone: "positive",
+    sourceLabel: "Income",
+    href: "/income",
   };
 }
 
-function toneMeta(tone = "neutral") {
-  if (tone === "green") {
+function mapSpendingTransactionRow(row) {
+  const dateISO = row.tx_date || row.date || "";
+  if (!dateISO) return null;
+
+  const type = String(row.type || "expense").toLowerCase();
+  const amount = safeNum(row.amount, 0);
+
+  if (type === "transfer") {
     return {
-      text: "#8ef4bb",
-      border: "rgba(142,244,187,0.18)",
-      softBorder: "rgba(142,244,187,0.12)",
-      bg: "rgba(15,30,22,0.78)",
-      glow: "rgba(142,244,187,0.12)",
-      dot: "#8ef4bb",
+      id: `tx-${row.id}`,
+      dateISO,
+      timeLabel: "",
+      title: row.merchant || "Transfer",
+      note: row.note || row.account_name || "Money transfer",
+      amount,
+      amountLabel: money(amount),
+      kind: "transfer",
+      tone: "neutral",
+      sourceLabel: "Spending",
+      href: "/spending",
     };
   }
-  if (tone === "amber") {
+
+  if (type === "income") {
     return {
-      text: "#ffd089",
-      border: "rgba(255,208,137,0.18)",
-      softBorder: "rgba(255,208,137,0.12)",
-      bg: "rgba(34,24,12,0.78)",
-      glow: "rgba(255,208,137,0.10)",
-      dot: "#ffd089",
+      id: `tx-${row.id}`,
+      dateISO,
+      timeLabel: "",
+      title: row.merchant || "Income",
+      note: row.note || row.account_name || "Recorded income",
+      amount,
+      amountLabel: signedMoney(amount),
+      kind: "income",
+      tone: "positive",
+      sourceLabel: "Spending",
+      href: "/spending",
     };
   }
-  if (tone === "red") {
-    return {
-      text: "#ff9fb2",
-      border: "rgba(255,159,178,0.18)",
-      softBorder: "rgba(255,159,178,0.12)",
-      bg: "rgba(34,14,18,0.78)",
-      glow: "rgba(255,159,178,0.10)",
-      dot: "#ff9fb2",
-    };
-  }
-  if (tone === "blue") {
-    return {
-      text: "#8ecbff",
-      border: "rgba(142,203,255,0.18)",
-      softBorder: "rgba(142,203,255,0.12)",
-      bg: "rgba(12,20,34,0.78)",
-      glow: "rgba(142,203,255,0.10)",
-      dot: "#8ecbff",
-    };
-  }
+
   return {
-    text: "#f7fbff",
-    border: "rgba(214,226,255,0.12)",
-    softBorder: "rgba(214,226,255,0.08)",
-    bg: "rgba(18,22,30,0.78)",
-    glow: "rgba(214,226,255,0.06)",
-    dot: "#f7fbff",
+    id: `tx-${row.id}`,
+    dateISO,
+    timeLabel: "",
+    title: row.merchant || "Expense",
+    note:
+      row.note ||
+      row.account_name ||
+      row.category ||
+      row.category_name ||
+      "Recorded expense",
+    amount,
+    amountLabel: signedMoney(-Math.abs(amount)),
+    kind: "expense",
+    tone: "negative",
+    sourceLabel: "Spending",
+    href: "/spending",
   };
 }
 
-function toneForEvent(ev) {
-  if (isIncomeEvent(ev)) {
-    return { tone: "green", label: "Income", line: TONE.green };
+function sortEvents(a, b) {
+  if (a.dateISO !== b.dateISO) return String(a.dateISO).localeCompare(String(b.dateISO));
+  if ((a.timeLabel || "") !== (b.timeLabel || "")) {
+    return String(a.timeLabel || "").localeCompare(String(b.timeLabel || ""));
   }
-
-  if (isBillEvent(ev)) {
-    return { tone: "amber", label: "Bill", line: TONE.amber };
-  }
-
-  if (isPlannedExpenseEvent(ev)) {
-    return { tone: "amber", label: "Planned", line: TONE.amber };
-  }
-
-  if (isExpenseEvent(ev)) {
-    return { tone: "red", label: "Expense", line: TONE.red };
-  }
-
-  return { tone: "blue", label: isManualEvent(ev) ? "Manual" : "General", line: TONE.blue };
+  return String(a.title || "").localeCompare(String(b.title || ""));
 }
 
-function sourceLabel(ev) {
-  const source = String(ev?.source || "").toLowerCase();
-  const sourceTable = String(ev?.source_table || "").toLowerCase();
-
-  if (source === "income" || sourceTable === "income_deposits") return "Synced from Income";
-  if (source === "spending" || sourceTable === "spending_transactions") return "Synced from Spending";
-  if (source === "bill" || sourceTable === "bills") return "Synced from Bills";
-  if (source === "planned_expense") return "Synced planned item";
-  if (isSourceOwnedEvent(ev)) return "Source-owned sync";
-  return "Manual event";
+function buildSearchHaystack(event) {
+  return normalizeText(
+    [
+      event.title,
+      event.note,
+      event.kind,
+      event.sourceLabel,
+      event.amountLabel,
+      event.dateISO,
+    ].join(" ")
+  );
 }
 
-function buildRoute(view, selectedDate, monthStart, profileId) {
-  const qp = new URLSearchParams();
-  if (selectedDate) qp.set("date", selectedDate);
-  if (monthStart) qp.set("month", monthStart);
-  if (profileId) qp.set("profile", profileId);
-  const query = qp.toString();
-  return `/calendar/${view}${query ? `?${query}` : ""}`;
+function groupedByDay(events) {
+  const map = new Map();
+
+  events.forEach((event) => {
+    const key = event.dateISO || "";
+    if (!map.has(key)) map.set(key, []);
+    map.get(key).push(event);
+  });
+
+  return [...map.entries()]
+    .sort((a, b) => String(a[0]).localeCompare(String(b[0])))
+    .map(([dateISO, items]) => ({
+      dateISO,
+      items: items.sort(sortEvents),
+    }));
 }
 
-function eyebrowStyle() {
-  return {
-    fontSize: 10,
-    textTransform: "uppercase",
-    letterSpacing: ".16em",
-    fontWeight: 800,
-    color: "rgba(255,255,255,0.42)",
+function toneAmountClass(stylesObj, tone) {
+  if (tone === "positive") return stylesObj.amountPositive;
+  if (tone === "negative") return stylesObj.amountNegative;
+  if (tone === "warning") return stylesObj.amountWarning;
+  return stylesObj.amountNeutral;
+}
+
+function eventDotClass(stylesObj, tone) {
+  if (tone === "positive") return stylesObj.dotPositive;
+  if (tone === "negative") return stylesObj.dotNegative;
+  if (tone === "warning") return stylesObj.dotWarning;
+  return stylesObj.dotNeutral;
+}
+
+function eventPillClass(stylesObj, tone) {
+  if (tone === "positive") return stylesObj.pillPositive;
+  if (tone === "negative") return stylesObj.pillNegative;
+  if (tone === "warning") return stylesObj.pillWarning;
+  return stylesObj.pillNeutral;
+}
+
+function upcomingBucketLabel(days) {
+  if (days === 0) return "Today";
+  if (days >= 1 && days <= 7) return "Next 7 days";
+  return "Later";
+}
+
+function buildUpcomingBuckets(events, today) {
+  const buckets = {
+    Today: [],
+    "Next 7 days": [],
+    Later: [],
   };
+
+  events.forEach((event) => {
+    const days = diffDays(event.dateISO, today);
+    if (days == null || days < 0) return;
+    const key = upcomingBucketLabel(days);
+    buckets[key].push({ ...event, daysAway: days });
+  });
+
+  return Object.entries(buckets)
+    .map(([label, items]) => ({
+      label,
+      items: items.sort(sortEvents),
+    }))
+    .filter((bucket) => bucket.items.length);
 }
 
-function mutedStyle() {
-  return {
-    fontSize: 12,
-    color: "rgba(255,255,255,0.58)",
-    lineHeight: 1.45,
-  };
+function relativeDayLabel(days) {
+  if (days == null) return "";
+  if (days === 0) return "Today";
+  if (days === 1) return "Tomorrow";
+  return `In ${days} days`;
 }
 
-function cls(...parts) {
-  return parts.filter(Boolean).join(" ");
-}
+/* ──────────────────────────────────────────────────────────────────────────
+   UI
+   ────────────────────────────────────────────────────────────────────────── */
 
-function Panel({ children, className = "", accent = "default", style }) {
+function ViewTab({ href, active, icon: Icon, label }) {
   return (
-    <div
-      className={cls("calOpsPanel", accent !== "default" && `accent-${accent}`, className)}
-      style={style}
-    >
-      {children}
-    </div>
+    <Link href={href} className={`${styles.viewTab} ${active ? styles.viewTabActive : ""}`}>
+      <Icon size={14} />
+      <span>{label}</span>
+    </Link>
   );
 }
 
-function StatusDot({ tone = "neutral", size = 8 }) {
-  const meta = toneMeta(tone);
+function SummaryCard({ label, value, sub, tone = "neutral" }) {
   return (
-    <span
-      style={{
-        width: size,
-        height: size,
-        borderRadius: 999,
-        background: meta.dot,
-        boxShadow: `0 0 16px ${meta.glow}`,
-        flexShrink: 0,
-      }}
-    />
-  );
-}
-
-function Tag({ children, tone = "neutral" }) {
-  const meta = toneMeta(tone);
-  return (
-    <span
-      style={{
-        minHeight: 24,
-        display: "inline-flex",
-        alignItems: "center",
-        gap: 7,
-        padding: "0 9px",
-        borderRadius: 999,
-        border: `1px solid ${meta.softBorder}`,
-        background: meta.bg,
-        color: tone === "neutral" ? "rgba(255,255,255,0.86)" : meta.text,
-        fontSize: 10.5,
-        fontWeight: 900,
-        letterSpacing: ".12em",
-        textTransform: "uppercase",
-        whiteSpace: "nowrap",
-      }}
-    >
-      {children}
-    </span>
-  );
-}
-
-function SurfaceButton({
-  children,
-  onClick,
-  icon,
-  active = false,
-  tone = "default",
-  type = "button",
-  style,
-}) {
-  return (
-    <button
-      type={type}
-      onClick={onClick}
-      className={cls("calOpsBtn", active && "active", tone !== "default" && `tone-${tone}`)}
-      style={style}
-    >
-      {icon || null}
-      {children}
-    </button>
-  );
-}
-
-function PrimaryButton({ children, onClick, icon, type = "button", style }) {
-  return (
-    <button type={type} onClick={onClick} className="calOpsBtn calOpsBtnPrimary" style={style}>
-      {icon || null}
-      {children}
-    </button>
-  );
-}
-
-function FieldLabel({ children }) {
-  return (
-    <label
-      style={{
-        display: "block",
-        marginBottom: 8,
-        fontSize: 12,
-        color: "rgba(255,255,255,0.72)",
-        fontWeight: 700,
-      }}
-    >
-      {children}
-    </label>
-  );
-}
-
-function FieldInput(props) {
-  return <input {...props} className={cls("calOpsField", props.className)} />;
-}
-
-function FieldTextarea(props) {
-  return <textarea {...props} className={cls("calOpsField", "calOpsTextarea", props.className)} />;
-}
-
-function FieldSelect({ children, value, onChange, style }) {
-  return (
-    <div style={{ position: "relative" }}>
-      <select value={value} onChange={onChange} className="calOpsField calOpsSelect" style={style}>
-        {children}
-      </select>
-      <ChevronDown
-        size={16}
-        style={{
-          position: "absolute",
-          right: 12,
-          top: "50%",
-          transform: "translateY(-50%)",
-          color: "rgba(255,255,255,0.54)",
-          pointerEvents: "none",
-        }}
-      />
-    </div>
-  );
-}
-
-function SearchBox({ value, onChange, placeholder = "Search events..." }) {
-  return (
-    <div style={{ position: "relative" }}>
-      <Search
-        size={16}
-        style={{
-          position: "absolute",
-          left: 12,
-          top: "50%",
-          transform: "translateY(-50%)",
-          color: "rgba(255,255,255,0.45)",
-          pointerEvents: "none",
-        }}
-      />
-      <FieldInput
-        value={value}
-        onChange={onChange}
-        placeholder={placeholder}
-        style={{ paddingLeft: 38 }}
-      />
-    </div>
-  );
-}
-
-function PanelHeader({ title, subcopy, right, dense = false }) {
-  return (
-    <div className={cls("calOpsPanelHead", dense && "dense")}>
-      <div style={{ minWidth: 0 }}>
-        <div className="calOpsPanelTitle">{title}</div>
-        {subcopy ? <div style={{ ...mutedStyle(), marginTop: 6 }}>{subcopy}</div> : null}
-      </div>
-      {right || null}
-    </div>
-  );
-}
-
-function FilterChip({ children, active = false, onClick }) {
-  return (
-    <button type="button" onClick={onClick} className={cls("calOpsFilterChip", active && "active")}>
-      {children}
-    </button>
-  );
-}
-
-function MetricBlock({ label, value, subcopy, tone = "neutral" }) {
-  const meta = toneMeta(tone);
-  return (
-    <div
-      className="calOpsMetricBlock"
-      style={{
-        borderColor: meta.softBorder,
-      }}
-    >
-      <div style={eyebrowStyle()}>{label}</div>
+    <div className={styles.summaryCard}>
+      <div className={styles.summaryLabel}>{label}</div>
       <div
-        style={{
-          marginTop: 8,
-          fontSize: 18,
-          lineHeight: 1,
-          fontWeight: 950,
-          letterSpacing: "-0.04em",
-          color: tone === "neutral" ? "#fff" : meta.text,
-        }}
+        className={`${styles.summaryValue} ${
+          tone === "positive"
+            ? styles.valuePositive
+            : tone === "negative"
+            ? styles.valueNegative
+            : tone === "warning"
+            ? styles.valueWarning
+            : ""
+        }`}
       >
         {value}
       </div>
-      {subcopy ? <div style={{ ...mutedStyle(), marginTop: 8 }}>{subcopy}</div> : null}
+      <div className={styles.summarySub}>{sub}</div>
     </div>
   );
 }
 
-function ActionMenu({ children }) {
-  const [open, setOpen] = React.useState(false);
-
-  React.useEffect(() => {
-    function close() {
-      setOpen(false);
-    }
-    if (!open) return undefined;
-    window.addEventListener("click", close);
-    return () => window.removeEventListener("click", close);
-  }, [open]);
-
-  return (
-    <div style={{ position: "relative" }} onClick={(e) => e.stopPropagation()}>
-      <button type="button" onClick={() => setOpen((v) => !v)} className="calOpsIconBtn">
-        …
-      </button>
-
-      {open ? <div className="calOpsMenu">{children}</div> : null}
-    </div>
-  );
-}
-
-function MenuButton({ children, onClick, tone = "default", icon }) {
+function EventRow({ event, selected = false, onClick }) {
   return (
     <button
       type="button"
+      className={`${styles.eventRow} ${selected ? styles.eventRowSelected : ""}`}
       onClick={onClick}
-      className={cls("calOpsMenuBtn", tone !== "default" && `tone-${tone}`)}
     >
-      {icon || null}
-      {children}
+      <div className={styles.eventLeft}>
+        <div className={`${styles.eventMarker} ${eventDotClass(styles, event.tone)}`} />
+        <div className={styles.eventMain}>
+          <div className={styles.eventTitle}>{event.title}</div>
+          <div className={styles.eventMeta}>
+            <span>{event.timeLabel || "All day"}</span>
+            <span>•</span>
+            <span>{event.note}</span>
+          </div>
+        </div>
+      </div>
+
+      <div className={styles.eventRight}>
+        {event.amountLabel ? (
+          <div className={`${styles.eventAmount} ${toneAmountClass(styles, event.tone)}`}>
+            {event.amountLabel}
+          </div>
+        ) : null}
+        <div className={styles.eventSource}>{event.sourceLabel}</div>
+      </div>
     </button>
   );
 }
 
-function HeaderBar({
-  monthLabelText,
-  profileName,
-  focusTitle,
-  focusTone,
-  view,
-  visibleMonthCount,
-  onSwitchView,
-  onManage,
-  onToday,
-  onAdd,
+function MonthBoard({
+  anchorMonthDate,
+  selectedISO,
+  onSelectDay,
+  monthEventsMap,
+  todayISO,
 }) {
-  return (
-    <section className="calOpsHero">
-      <div className="calOpsHeroMain">
-        <div style={eyebrowStyle()}>Finance calendar</div>
-        <div className="calOpsHeroTitle">Calendar Command</div>
-        <div className="calOpsHeroSub">
-          <StatusDot tone={focusTone} />
-          <span>{focusTitle}</span>
-        </div>
-      </div>
+  const cells = useMemo(() => buildMonthGrid(anchorMonthDate), [anchorMonthDate]);
+  const currentMonthKey = monthKey(anchorMonthDate);
 
-      <div className="calOpsHeroStats">
-        <div className="calOpsHeroStat">
-          <span>Month</span>
-          <strong>{monthLabelText}</strong>
-        </div>
-        <div className="calOpsHeroStat">
-          <span>Profile</span>
-          <strong>{profileName || "Default"}</strong>
-        </div>
-        <div className="calOpsHeroStat">
-          <span>Visible</span>
-          <strong>{visibleMonthCount}</strong>
-        </div>
-      </div>
+  const weekdayRow = useMemo(() => {
+    const start = startOfWeekSunday(startOfToday());
+    return Array.from({ length: 7 }, (_, i) =>
+      addDays(start, i).toLocaleDateString(undefined, { weekday: "short" })
+    );
+  }, []);
 
-      <div className="calOpsHeroActions">
-        <div className="calOpsRouteToggle">
-          <button
-            type="button"
-            className={cls("calOpsRouteBtn", view === "agenda" && "active")}
-            onClick={() => onSwitchView("agenda")}
-          >
-            Agenda
-          </button>
-          <button
-            type="button"
-            className={cls("calOpsRouteBtn", view === "month" && "active")}
-            onClick={() => onSwitchView("month")}
-          >
-            Month
-          </button>
-        </div>
-        <SurfaceButton onClick={onManage}>Manage</SurfaceButton>
-        <SurfaceButton onClick={onToday}>Today</SurfaceButton>
-        <PrimaryButton onClick={onAdd} icon={<Plus size={15} />}>
-          Add Event
-        </PrimaryButton>
-      </div>
-    </section>
-  );
-}
+  const currentMonthDays = useMemo(() => {
+    const start = startOfMonth(anchorMonthDate);
+    const end = endOfMonth(anchorMonthDate);
+    const out = [];
+    let cursor = new Date(start.getTime());
 
-function QueueRow({ ev, onOpen }) {
-  const t = toneForEvent(ev);
-  return (
-    <button type="button" onClick={() => onOpen(ev)} className="calOpsQueueRow">
-      <div className="calOpsQueueRowLeft">
-        <StatusDot tone={t.tone} size={9} />
-        <div style={{ minWidth: 0 }}>
-          <div className="calOpsQueueTitle">{ev.title}</div>
-          <div className="calOpsQueueMeta">
-            {fmtShortDate(ev.event_date)}
-            {ev.event_time ? ` · ${fmtTime(ev.event_time)}` : " · All day"}
-          </div>
-        </div>
-      </div>
-      {ev.amount ? <Tag tone={t.tone}>{money(ev.amount)}</Tag> : null}
-    </button>
-  );
-}
+    while (cursor <= end) {
+      out.push(new Date(cursor.getTime()));
+      cursor = addDays(cursor, 1);
+    }
 
-function NavigatorRail({
-  monthStart,
-  shiftMonth,
-  goToday,
-  profileId,
-  setProfileId,
-  profiles,
-  setDraftProfile,
-  search,
-  setSearch,
-  filter,
-  setFilter,
-  selectedDate,
-  selectedDayIn,
-  selectedDayOut,
-  selectedDayPlanned,
-  selectedDayEvents,
-  upcomingEvents,
-  onOpenQueueEvent,
-}) {
-  return (
-    <div className="calOpsLeftRail">
-      <Panel className="calOpsRailMain">
-        <PanelHeader
-          title="Navigator"
-          subcopy="Lock the month, pick the profile, then move fast."
-          right={<Tag>{monthLabel(monthStart)}</Tag>}
-        />
-
-        <div className="calOpsRailSection">
-          <div className="calOpsMonthButtons">
-            <SurfaceButton onClick={() => shiftMonth(-1)} icon={<ChevronLeft size={15} />}>
-              Prev
-            </SurfaceButton>
-            <SurfaceButton onClick={goToday} icon={<CalendarDays size={15} />}>
-              Today
-            </SurfaceButton>
-            <SurfaceButton onClick={() => shiftMonth(1)} icon={<ChevronRight size={15} />}>
-              Next
-            </SurfaceButton>
-          </div>
-        </div>
-
-        <div className="calOpsRailSection">
-          <FieldLabel>Profile</FieldLabel>
-          <FieldSelect
-            value={profileId}
-            onChange={(e) => {
-              setProfileId(e.target.value);
-              setDraftProfile(e.target.value);
-            }}
-          >
-            {profiles.map((profile) => (
-              <option key={profile.id} value={profile.id}>
-                {profile.name}
-              </option>
-            ))}
-          </FieldSelect>
-        </div>
-
-        <div className="calOpsRailSection">
-          <FieldLabel>Search</FieldLabel>
-          <SearchBox
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search visible events..."
-          />
-        </div>
-
-        <div className="calOpsRailSection">
-          <FieldLabel>Filters</FieldLabel>
-          <div className="calOpsFilterWrap">
-            {["All", "Paydays", "Expenses", "Planned", "Manual"].map((chip) => (
-              <FilterChip key={chip} active={filter === chip} onClick={() => setFilter(chip)}>
-                {chip}
-              </FilterChip>
-            ))}
-          </div>
-        </div>
-
-        <div className="calOpsRailSection calOpsFocusInline">
-          <div style={eyebrowStyle()}>Selected focus</div>
-          <div className="calOpsFocusTitle">{fmtLongDate(selectedDate)}</div>
-          <div className="calOpsFocusTags">
-            <Tag tone="green">In {money(selectedDayIn)}</Tag>
-            <Tag tone="red">Out {money(selectedDayOut)}</Tag>
-            <Tag tone="amber">Planned {money(selectedDayPlanned)}</Tag>
-            <Tag>{selectedDayEvents.length} events</Tag>
-          </div>
-        </div>
-      </Panel>
-
-      <Panel className="calOpsQueuePanel">
-        <PanelHeader title="Upcoming queue" subcopy="Next visible items in the current feed." dense />
-        {upcomingEvents.length === 0 ? (
-          <div style={mutedStyle()}>No upcoming items match the current filter.</div>
-        ) : (
-          <div className="calOpsQueueList">
-            {upcomingEvents.map((ev) => (
-              <QueueRow key={ev.id} ev={ev} onOpen={onOpenQueueEvent} />
-            ))}
-          </div>
-        )}
-      </Panel>
-    </div>
-  );
-}
-
-function TimelineItem({ ev, onEdit, onDelete, onDuplicate }) {
-  const t = toneForEvent(ev);
-  const sourceOwned = isSourceOwnedEvent(ev);
+    return out;
+  }, [anchorMonthDate]);
 
   return (
-    <div className="calAgendaItem">
-      <div className="calAgendaItemLine" style={{ background: t.line }} />
-      <div className="calAgendaTimeCol">
-        <div className="calAgendaTimeMain">{ev.event_time ? fmtTime(ev.event_time) : "All day"}</div>
-        <div className="calAgendaTimeSub">
-          {ev.end_time ? `Ends ${fmtTime(ev.end_time)}` : sourceLabel(ev)}
-        </div>
+    <div className={styles.monthBoard}>
+      <div className={styles.weekdayRow}>
+        {weekdayRow.map((label) => (
+          <div key={label} className={styles.weekdayCell}>
+            {label}
+          </div>
+        ))}
       </div>
 
-      <div className="calAgendaItemCard">
-        <div className="calAgendaItemTop">
-          <div style={{ minWidth: 0, flex: 1 }}>
-            <div className="calAgendaItemTitleRow">
-              <div className="calAgendaItemTitle">{ev.title}</div>
-              <Tag tone={t.tone}>{t.label}</Tag>
-              <Tag tone={sourceOwned ? "neutral" : "blue"}>
-                {sourceOwned ? "Synced" : "Manual"}
-              </Tag>
-              {ev.category ? <Tag>{ev.category}</Tag> : null}
-            </div>
+      <div className={styles.monthGrid}>
+        {cells.map((cellDate) => {
+          const iso = toISODateLocal(cellDate);
+          const events = monthEventsMap.get(iso) || [];
+          const isOutside = monthKey(cellDate) !== currentMonthKey;
+          const isSelected = iso === selectedISO;
+          const isToday = iso === todayISO;
 
-            <div className="calAgendaItemMetaRow">
-              {ev.amount ? <Tag tone={t.tone}>{money(ev.amount)}</Tag> : null}
-              <Tag>{ev.status || "Scheduled"}</Tag>
-            </div>
+          return (
+            <button
+              type="button"
+              key={iso}
+              className={`${styles.monthCell} ${isOutside ? styles.monthCellMuted : ""} ${
+                isSelected ? styles.monthCellSelected : ""
+              } ${isToday ? styles.monthCellToday : ""}`}
+              onClick={() => onSelectDay(iso)}
+            >
+              <div className={styles.monthCellTop}>
+                <span className={styles.monthDayNumber}>{cellDate.getDate()}</span>
+                {events.length ? <span className={styles.monthCount}>{events.length}</span> : null}
+              </div>
 
-            {ev.note ? <div className="calAgendaItemNote">{ev.note}</div> : null}
-          </div>
+              <div className={styles.monthCellItems}>
+                {events.slice(0, 4).map((event) => (
+                  <div key={event.id} className={styles.monthItem}>
+                    <span className={`${styles.monthItemDot} ${eventDotClass(styles, event.tone)}`} />
+                    <span className={styles.monthItemText}>
+                      {event.timeLabel ? `${event.timeLabel} ` : ""}
+                      {event.title}
+                    </span>
+                  </div>
+                ))}
 
-          <ActionMenu>
-            {sourceOwned ? (
-              <>
-                <MenuButton onClick={() => onDuplicate(ev)} tone="success" icon={<Copy size={15} />}>
-                  Copy as manual event
-                </MenuButton>
-                <div className="calOpsMenuHint">
-                  Change synced items from the source module so calendar stays clean.
+                {events.length > 4 ? (
+                  <div className={styles.monthMore}>+{events.length - 4} more</div>
+                ) : null}
+              </div>
+            </button>
+          );
+        })}
+      </div>
+
+      <div className={styles.mobileMonthList}>
+        {currentMonthDays.map((day) => {
+          const iso = toISODateLocal(day);
+          const events = monthEventsMap.get(iso) || [];
+          const isSelected = iso === selectedISO;
+          const isToday = iso === todayISO;
+
+          return (
+            <button
+              type="button"
+              key={iso}
+              className={`${styles.mobileDayCard} ${isSelected ? styles.mobileDayCardSelected : ""}`}
+              onClick={() => onSelectDay(iso)}
+            >
+              <div className={styles.mobileDayHead}>
+                <div>
+                  <div className={styles.mobileDayLabel}>
+                    {day.toLocaleDateString(undefined, { weekday: "short" })}
+                  </div>
+                  <div className={styles.mobileDayNumber}>
+                    {day.toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                  </div>
                 </div>
-              </>
-            ) : (
-              <>
-                <MenuButton onClick={() => onEdit(ev)} icon={<Pencil size={15} />}>
-                  Edit
-                </MenuButton>
-                <MenuButton onClick={() => onDelete(ev)} tone="danger" icon={<Trash2 size={15} />}>
-                  Delete
-                </MenuButton>
-              </>
-            )}
-          </ActionMenu>
-        </div>
+
+                <div className={styles.mobileDayBadges}>
+                  {isToday ? <span className={styles.todayBadge}>Today</span> : null}
+                  {events.length ? <span className={styles.countBadge}>{events.length}</span> : null}
+                </div>
+              </div>
+
+              <div className={styles.mobileDayItems}>
+                {events.length ? (
+                  events.slice(0, 4).map((event) => (
+                    <div key={event.id} className={styles.mobileDayItem}>
+                      <span className={`${styles.monthItemDot} ${eventDotClass(styles, event.tone)}`} />
+                      <span className={styles.mobileDayItemText}>
+                        {event.timeLabel ? `${event.timeLabel} ` : ""}
+                        {event.title}
+                      </span>
+                    </div>
+                  ))
+                ) : (
+                  <div className={styles.mobileDayEmpty}>No scheduled items</div>
+                )}
+              </div>
+            </button>
+          );
+        })}
       </div>
     </div>
   );
 }
 
-function AgendaEmptyTimeline() {
-  const rows = [
-    { label: "6 AM", text: "Morning window open" },
-    { label: "9 AM", text: "No scheduled hits" },
-    { label: "12 PM", text: "Open middle of day" },
-    { label: "3 PM", text: "No timed items" },
-    { label: "6 PM", text: "Evening window open" },
-    { label: "All day", text: "Add a manual event or let synced activity land here" },
-  ];
+function AgendaBoard({ groups, selectedISO, onSelectDay }) {
+  if (!groups.length) {
+    return (
+      <div className={styles.emptyState}>
+        <div className={styles.emptyTitle}>Nothing scheduled in this window</div>
+        <div className={styles.emptyText}>Try another view or a different search.</div>
+      </div>
+    );
+  }
 
   return (
-    <div className="calAgendaEmptyTimeline">
-      {rows.map((row) => (
-        <div key={row.label} className="calAgendaEmptyLane">
-          <div className="calAgendaEmptyTime">{row.label}</div>
-          <div className="calAgendaEmptyTrack">
-            <div className="calAgendaEmptyTrackLine" />
-            <div className="calAgendaEmptyCard">
-              <div className="calAgendaEmptyCardText">{row.text}</div>
+    <div className={styles.agendaBoard}>
+      {groups.map((group) => {
+        const totalIncome = group.items
+          .filter((item) => item.kind === "income")
+          .reduce((sum, item) => sum + safeNum(item.amount, 0), 0);
+
+        const totalOut = group.items
+          .filter((item) => item.kind === "expense" || item.kind === "bill")
+          .reduce((sum, item) => sum + safeNum(item.amount, 0), 0);
+
+        return (
+          <div key={group.dateISO} className={styles.agendaGroup}>
+            <button
+              type="button"
+              className={`${styles.agendaGroupHead} ${
+                group.dateISO === selectedISO ? styles.agendaGroupHeadSelected : ""
+              }`}
+              onClick={() => onSelectDay(group.dateISO)}
+            >
+              <div>
+                <div className={styles.agendaDate}>{fmtDayLong(group.dateISO)}</div>
+                <div className={styles.agendaDateSub}>
+                  {group.items.length} item{group.items.length === 1 ? "" : "s"}
+                </div>
+              </div>
+
+              <div className={styles.agendaTotals}>
+                {totalIncome > 0 ? (
+                  <span className={styles.agendaIncome}>
+                    <ArrowUpRight size={12} />
+                    {money(totalIncome)}
+                  </span>
+                ) : null}
+                {totalOut > 0 ? (
+                  <span className={styles.agendaOut}>
+                    <ArrowDownRight size={12} />
+                    {money(totalOut)}
+                  </span>
+                ) : null}
+              </div>
+            </button>
+
+            <div className={styles.timelineList}>
+              {group.items.map((event) => (
+                <EventRow
+                  key={event.id}
+                  event={event}
+                  selected={group.dateISO === selectedISO}
+                  onClick={() => onSelectDay(group.dateISO)}
+                />
+              ))}
             </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function UpcomingBoard({ buckets, onSelectDay }) {
+  if (!buckets.length) {
+    return (
+      <div className={styles.emptyState}>
+        <div className={styles.emptyTitle}>No upcoming scheduled events</div>
+        <div className={styles.emptyText}>Nothing is queued in the current window.</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className={styles.upcomingBoard}>
+      {buckets.map((bucket) => (
+        <div key={bucket.label} className={styles.bucketSection}>
+          <div className={styles.bucketHead}>
+            <div className={styles.bucketTitle}>{bucket.label}</div>
+            <div className={styles.bucketCount}>{bucket.items.length}</div>
+          </div>
+
+          <div className={styles.bucketList}>
+            {bucket.items.map((event) => (
+              <button
+                type="button"
+                key={event.id}
+                className={styles.upcomingRow}
+                onClick={() => onSelectDay(event.dateISO)}
+              >
+                <div className={styles.upcomingRowDate}>
+                  <div className={styles.upcomingRowDay}>{fmtDayShort(event.dateISO)}</div>
+                  <div className={styles.upcomingRowRelative}>{relativeDayLabel(event.daysAway)}</div>
+                </div>
+
+                <div className={styles.upcomingRowMain}>
+                  <div className={styles.upcomingRowTitleWrap}>
+                    <span className={`${styles.monthItemDot} ${eventDotClass(styles, event.tone)}`} />
+                    <span className={styles.upcomingRowTitle}>{event.title}</span>
+                    <span className={`${styles.kindPill} ${eventPillClass(styles, event.tone)}`}>
+                      {event.kind}
+                    </span>
+                  </div>
+                  <div className={styles.upcomingRowMeta}>
+                    {event.timeLabel || "All day"} • {event.note}
+                  </div>
+                </div>
+
+                <div className={styles.upcomingRowRight}>
+                  {event.amountLabel ? (
+                    <div className={`${styles.upcomingRowAmount} ${toneAmountClass(styles, event.tone)}`}>
+                      {event.amountLabel}
+                    </div>
+                  ) : null}
+                  <div className={styles.upcomingRowSource}>{event.sourceLabel}</div>
+                </div>
+              </button>
+            ))}
           </div>
         </div>
       ))}
@@ -944,596 +962,235 @@ function AgendaEmptyTimeline() {
   );
 }
 
-function AgendaBoard({
-  selectedDate,
-  selectedDayEvents,
-  selectedDayIn,
-  selectedDayOut,
-  selectedDayPlanned,
-  selectedDayManualCount,
-  selectedDaySyncedCount,
-  selectedDayTimedCount,
-  selectedDayAllDayCount,
-  selectedFirstTimed,
-  selectedLastTimed,
-  onAdd,
-  onPayday,
-  onExpense,
-  onEdit,
-  onDelete,
-  onDuplicate,
-}) {
-  const net = selectedDayIn - selectedDayOut;
+function DayInspector({ dateISO, events }) {
+  const incomeTotal = events
+    .filter((item) => item.kind === "income")
+    .reduce((sum, item) => sum + safeNum(item.amount, 0), 0);
+
+  const outflowTotal = events
+    .filter((item) => item.kind === "expense" || item.kind === "bill")
+    .reduce((sum, item) => sum + safeNum(item.amount, 0), 0);
 
   return (
-    <div className="calOpsCenter">
-      <Panel className="calAgendaShell">
-        <div className="calAgendaTopBar">
-          <div>
-            <div style={eyebrowStyle()}>Agenda workspace</div>
-            <div className="calAgendaDate">{fmtLongDate(selectedDate)}</div>
-            <div style={{ ...mutedStyle(), marginTop: 7 }}>
-              {selectedDayTimedCount > 0
-                ? `${fmtTime(selectedFirstTimed)} → ${fmtTime(selectedLastTimed)}`
-                : "All-day focus"}
+    <GlassPane className={styles.railCard}>
+      <div className={styles.railCardInner}>
+        <div className={styles.railEyebrow}>Selected day</div>
+        <div className={styles.railTitle}>{fmtDayLong(dateISO)}</div>
+
+        <div className={styles.dayStatGrid}>
+          <div className={styles.dayStat}>
+            <div className={styles.dayStatLabel}>Income</div>
+            <div className={`${styles.dayStatValue} ${styles.valuePositive}`}>
+              {incomeTotal > 0 ? money(incomeTotal) : "—"}
             </div>
           </div>
 
-          <div className="calAgendaActions">
-            <SurfaceButton onClick={() => onPayday(selectedDate)}>+ Payday</SurfaceButton>
-            <SurfaceButton onClick={() => onExpense(selectedDate)}>+ Expense</SurfaceButton>
-            <PrimaryButton onClick={() => onAdd(selectedDate)} icon={<Plus size={15} />}>
-              Add Event
-            </PrimaryButton>
-          </div>
-        </div>
-
-        <div className="calAgendaSummaryRow">
-          <MetricBlock label="Income" value={money(selectedDayIn)} subcopy="Money-in on this day." tone="green" />
-          <MetricBlock label="Outflow" value={money(selectedDayOut)} subcopy="Actual expense hits." tone="red" />
-          <MetricBlock
-            label="Planned"
-            value={money(selectedDayPlanned)}
-            subcopy="Scheduled planned items."
-            tone="amber"
-          />
-          <MetricBlock
-            label="Net"
-            value={money(net)}
-            subcopy={`${selectedDayManualCount} manual · ${selectedDaySyncedCount} synced`}
-            tone={net >= 0 ? "green" : "red"}
-          />
-        </div>
-
-        <div className="calAgendaBoard">
-          <div className="calAgendaBoardHead">
-            <div className="calAgendaBoardTitle">Selected day timeline</div>
-            <div className="calAgendaBoardTags">
-              <Tag>{selectedDayEvents.length} events</Tag>
-              <Tag>{selectedDayTimedCount} timed</Tag>
-              <Tag>{selectedDayAllDayCount} all day</Tag>
+          <div className={styles.dayStat}>
+            <div className={styles.dayStatLabel}>Outflow</div>
+            <div className={`${styles.dayStatValue} ${styles.valueNegative}`}>
+              {outflowTotal > 0 ? money(outflowTotal) : "—"}
             </div>
           </div>
 
-          {selectedDayEvents.length === 0 ? (
-            <AgendaEmptyTimeline />
+          <div className={styles.dayStat}>
+            <div className={styles.dayStatLabel}>Items</div>
+            <div className={styles.dayStatValue}>{events.length}</div>
+          </div>
+
+          <div className={styles.dayStat}>
+            <div className={styles.dayStatLabel}>Net</div>
+            <div
+              className={`${styles.dayStatValue} ${
+                incomeTotal - outflowTotal > 0
+                  ? styles.valuePositive
+                  : incomeTotal - outflowTotal < 0
+                  ? styles.valueNegative
+                  : ""
+              }`}
+            >
+              {events.length ? signedMoney(incomeTotal - outflowTotal) : "—"}
+            </div>
+          </div>
+        </div>
+
+        <div className={styles.inspectorList}>
+          {events.length ? (
+            events.map((event) => (
+              <Link key={event.id} href={event.href || "/calendar"} className={styles.inspectorItem}>
+                <div className={styles.inspectorItemLeft}>
+                  <span className={`${styles.monthItemDot} ${eventDotClass(styles, event.tone)}`} />
+                  <div>
+                    <div className={styles.inspectorItemTitle}>{event.title}</div>
+                    <div className={styles.inspectorItemMeta}>
+                      {event.timeLabel || "All day"} • {event.note}
+                    </div>
+                  </div>
+                </div>
+
+                {event.amountLabel ? (
+                  <div className={`${styles.inspectorItemValue} ${toneAmountClass(styles, event.tone)}`}>
+                    {event.amountLabel}
+                  </div>
+                ) : null}
+              </Link>
+            ))
           ) : (
-            <div className="calAgendaList">
-              {selectedDayEvents.map((ev) => (
-                <TimelineItem
-                  key={ev.id}
-                  ev={ev}
-                  onEdit={onEdit}
-                  onDelete={onDelete}
-                  onDuplicate={onDuplicate}
-                />
-              ))}
+            <div className={styles.emptyBlock}>
+              <div className={styles.emptyTitle}>No items on this day</div>
+              <div className={styles.emptyText}>Pick another day with activity.</div>
             </div>
           )}
         </div>
-      </Panel>
-    </div>
+      </div>
+    </GlassPane>
   );
 }
 
-function MonthDayCell({ dayISO, monthStart, events, selected, onOpen }) {
-  const sameMonth = inSameMonth(dayISO, monthStart);
-  const today = isTodayISO(dayISO);
-
-  const incomeCount = events.filter((ev) => String(ev.flow) === "income").length;
-  const expenseCount = events.filter(
-    (ev) => String(ev.flow) === "expense" && ev.source !== "planned_expense"
-  ).length;
-  const plannedCount = events.filter((ev) => ev.source === "planned_expense").length;
-
-  const dots = [
-    ...Array.from({ length: Math.min(incomeCount, 2) }, (_, i) => ({ key: `g${i}`, tone: "green" })),
-    ...Array.from({ length: Math.min(expenseCount, 2) }, (_, i) => ({ key: `r${i}`, tone: "red" })),
-    ...Array.from({ length: Math.min(plannedCount, 2) }, (_, i) => ({ key: `a${i}`, tone: "amber" })),
-  ].slice(0, 5);
-
+function QueueCard({ title, items }) {
   return (
-    <button
-      type="button"
-      onClick={() => onOpen(dayISO)}
-      className={cls("calMonthCell", selected && "selected", today && "today", !sameMonth && "muted")}
-    >
-      <div className="calMonthCellTop">
-        <div>
-          <div className="calMonthCellNumber">{parseISO(dayISO)?.getDate()}</div>
-          <div className="calMonthCellIso">{dayISO}</div>
-        </div>
-        {events.length > 0 ? <div className="calMonthCellCount">{events.length}</div> : null}
-      </div>
-
-      <div className="calMonthCellFoot">
-        {events.length > 0 ? (
-          <>
-            <div className="calMonthDotStrip">
-              {dots.map((dot) => (
-                <span
-                  key={dot.key}
-                  className="calMonthDot"
-                  style={{
-                    background: toneMeta(dot.tone).dot,
-                    boxShadow: `0 0 10px ${toneMeta(dot.tone).glow}`,
-                  }}
-                />
-              ))}
-            </div>
-
-            <div className="calMonthMiniList">
-              {events.slice(0, 2).map((ev) => {
-                const tone = toneForEvent(ev);
-                return (
-                  <div key={ev.id} className="calMonthMiniRow">
-                    <span
-                      className="calMonthMiniRowDot"
-                      style={{
-                        background: tone.line,
-                        boxShadow: `0 0 10px ${tone.line}66`,
-                      }}
-                    />
-                    <span className="calMonthMiniRowText">
-                      {ev.event_time ? `${fmtTime(ev.event_time)} · ` : ""}
-                      {ev.title}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-
-            {events.length > 2 ? <div className="calMonthPreviewMore">+{events.length - 2} more</div> : null}
-          </>
-        ) : (
-          <div className="calMonthCellEmpty">No events</div>
-        )}
-      </div>
-    </button>
-  );
-}
-
-function MonthBoard({
-  monthStart,
-  monthGridDays,
-  filteredEventsByDate,
-  selectedDate,
-  monthDaysActive,
-  visibleMonthCount,
-  onOpenDay,
-}) {
-  return (
-    <div className="calOpsCenter">
-      <Panel className="calMonthShell">
-        <div className="calMonthTopBar">
+    <GlassPane className={styles.railCard}>
+      <div className={styles.railCardInner}>
+        <div className={styles.railHeadRow}>
           <div>
-            <div style={eyebrowStyle()}>Month board</div>
-            <div className="calMonthTitle">{monthLabel(monthStart)}</div>
-            <div style={{ ...mutedStyle(), marginTop: 7 }}>
-              Scan the board, jump to the date, then flip into Agenda to work it.
-            </div>
+            <div className={styles.railEyebrow}>Upcoming queue</div>
+            <div className={styles.railTitleSmall}>{title}</div>
           </div>
-
-          <div className="calMonthTopStats">
-            <div className="calMonthTopStat">
-              <span>Active days</span>
-              <strong>{monthDaysActive}</strong>
-            </div>
-            <div className="calMonthTopStat">
-              <span>Total items</span>
-              <strong>{visibleMonthCount}</strong>
-            </div>
-          </div>
+          <span className={styles.miniBadge}>{items.length}</span>
         </div>
 
-        <div className="calMonthBoardFrame">
-          <div className="calMonthWeekdays">
-            {Array.from({ length: 7 }, (_, i) => (
-              <div key={i} className="calMonthWeekday">
-                {weekdayShort(i)}
-              </div>
-            ))}
-          </div>
-
-          <div className="calMonthGrid">
-            {monthGridDays.map((dayISO) => (
-              <MonthDayCell
-                key={dayISO}
-                dayISO={dayISO}
-                monthStart={monthStart}
-                events={filteredEventsByDate.get(dayISO) || []}
-                selected={selectedDate === dayISO}
-                onOpen={onOpenDay}
-              />
-            ))}
-          </div>
-        </div>
-      </Panel>
-    </div>
-  );
-}
-
-function AgendaRightRail({
-  selectedDate,
-  selectedDayEvents,
-  selectedDayIn,
-  selectedDayOut,
-  selectedDayPlanned,
-  selectedDayManualCount,
-  selectedDaySyncedCount,
-  upcomingEvents,
-  onAdd,
-  onPayday,
-  onExpense,
-  onManage,
-}) {
-  const net = selectedDayIn - selectedDayOut;
-
-  return (
-    <div className="calOpsRightRail">
-      <Panel>
-        <PanelHeader title="Command rail" subcopy="Actions and signal for the selected day." />
-
-        <div className="calOpsActionStack compact">
-          <SurfaceButton onClick={() => onAdd(selectedDate)}>Add Event</SurfaceButton>
-          <SurfaceButton onClick={() => onPayday(selectedDate)}>Add Payday</SurfaceButton>
-          <SurfaceButton onClick={() => onExpense(selectedDate)}>Add Expense</SurfaceButton>
-          <SurfaceButton onClick={onManage}>Manage Profiles</SurfaceButton>
-        </div>
-
-        <div className="calOpsDivider" />
-
-        <div className="calOpsSignalList">
-          <div className="calOpsSignalRow">
-            <span>Date</span>
-            <strong>{fmtShortDate(selectedDate)}</strong>
-          </div>
-          <div className="calOpsSignalRow">
-            <span>Income</span>
-            <strong style={{ color: toneMeta("green").text }}>{money(selectedDayIn)}</strong>
-          </div>
-          <div className="calOpsSignalRow">
-            <span>Outflow</span>
-            <strong style={{ color: toneMeta("red").text }}>{money(selectedDayOut)}</strong>
-          </div>
-          <div className="calOpsSignalRow">
-            <span>Planned</span>
-            <strong style={{ color: toneMeta("amber").text }}>{money(selectedDayPlanned)}</strong>
-          </div>
-          <div className="calOpsSignalRow">
-            <span>Net</span>
-            <strong style={{ color: net >= 0 ? toneMeta("green").text : toneMeta("red").text }}>
-              {money(net)}
-            </strong>
-          </div>
-          <div className="calOpsSignalRow">
-            <span>Manual / Synced</span>
-            <strong>
-              {selectedDayManualCount} / {selectedDaySyncedCount}
-            </strong>
-          </div>
-        </div>
-      </Panel>
-
-      <Panel>
-        <PanelHeader title="Linked flow" subcopy="What is on this day and what comes next." />
-
-        <div className="calOpsSubsectionTitle">Selected day pipeline</div>
-        {selectedDayEvents.length === 0 ? (
-          <div style={mutedStyle()}>Nothing linked to this day yet.</div>
-        ) : (
-          <div className="calOpsMiniList">
-            {selectedDayEvents.slice(0, 4).map((ev) => {
-              const t = toneForEvent(ev);
-              return (
-                <div key={ev.id} className="calOpsMiniRow">
-                  <div className="calOpsMiniRowLeft">
-                    <StatusDot tone={t.tone} size={8} />
-                    <div style={{ minWidth: 0 }}>
-                      <div className="calOpsMiniRowTitle">{ev.title}</div>
-                      <div className="calOpsMiniRowMeta">
-                        {fmtTime(ev.event_time)} • {sourceLabel(ev)}
-                      </div>
-                    </div>
-                  </div>
-                  {ev.amount ? <Tag tone={t.tone}>{money(ev.amount)}</Tag> : null}
-                </div>
-              );
-            })}
-          </div>
-        )}
-
-        <div className="calOpsDivider" />
-
-        <div className="calOpsSubsectionTitle">Next hits</div>
-        {upcomingEvents.length === 0 ? (
-          <div style={mutedStyle()}>No upcoming hits inside the visible range.</div>
-        ) : (
-          <div className="calOpsMiniList">
-            {upcomingEvents.slice(0, 4).map((ev) => {
-              const t = toneForEvent(ev);
-              return (
-                <div key={ev.id} className="calOpsMiniRow">
-                  <div className="calOpsMiniRowLeft">
-                    <StatusDot tone={t.tone} size={8} />
-                    <div style={{ minWidth: 0 }}>
-                      <div className="calOpsMiniRowTitle">{ev.title}</div>
-                      <div className="calOpsMiniRowMeta">
-                        {fmtShortDate(ev.event_date)} • {fmtTime(ev.event_time)}
-                      </div>
+        <div className={styles.queueList}>
+          {items.length ? (
+            items.map((event) => (
+              <Link key={event.id} href={event.href || "/calendar"} className={styles.queueItem}>
+                <div className={styles.queueItemMain}>
+                  <span className={`${styles.monthItemDot} ${eventDotClass(styles, event.tone)}`} />
+                  <div>
+                    <div className={styles.queueItemTitle}>{event.title}</div>
+                    <div className={styles.queueItemMeta}>
+                      {fmtDayShort(event.dateISO)}
+                      {event.timeLabel ? ` • ${event.timeLabel}` : ""}
                     </div>
                   </div>
                 </div>
-              );
-            })}
-          </div>
-        )}
-      </Panel>
-    </div>
-  );
-}
-
-function MonthRightRail({
-  monthIncome,
-  monthExpense,
-  monthPlanned,
-  monthManualCount,
-  selectedDate,
-  selectedDayEvents,
-  selectedDayManualCount,
-  selectedDaySyncedCount,
-  nextFocus,
-  monthDaysActive,
-  visibleMonthCount,
-  onOpenAgenda,
-}) {
-  const focusTone = nextFocus ? toneForEvent(nextFocus).tone : "neutral";
-
-  return (
-    <div className="calOpsRightRail">
-      <Panel>
-        <PanelHeader
-          title="Month intelligence"
-          subcopy="Totals plus selected-day readout."
-          right={<PrimaryButton onClick={onOpenAgenda}>Open Agenda</PrimaryButton>}
-        />
-
-        <div className="calOpsSignalList">
-          <div className="calOpsSignalRow">
-            <span>Month inflow</span>
-            <strong style={{ color: toneMeta("green").text }}>{money(monthIncome)}</strong>
-          </div>
-          <div className="calOpsSignalRow">
-            <span>Month outflow</span>
-            <strong style={{ color: toneMeta("red").text }}>{money(monthExpense)}</strong>
-          </div>
-          <div className="calOpsSignalRow">
-            <span>Planned</span>
-            <strong style={{ color: toneMeta("amber").text }}>{money(monthPlanned)}</strong>
-          </div>
-          <div className="calOpsSignalRow">
-            <span>Manual items</span>
-            <strong>{monthManualCount}</strong>
-          </div>
-          <div className="calOpsSignalRow">
-            <span>Active days</span>
-            <strong>{monthDaysActive}</strong>
-          </div>
-          <div className="calOpsSignalRow">
-            <span>Total items</span>
-            <strong>{visibleMonthCount}</strong>
-          </div>
-        </div>
-
-        <div className="calOpsDivider" />
-
-        <div className="calOpsSubsectionTitle">Selected day preview</div>
-        <div className="calOpsSignalList" style={{ marginBottom: 12 }}>
-          <div className="calOpsSignalRow">
-            <span>Selected date</span>
-            <strong>{fmtShortDate(selectedDate)}</strong>
-          </div>
-          <div className="calOpsSignalRow">
-            <span>Events</span>
-            <strong>{selectedDayEvents.length}</strong>
-          </div>
-          <div className="calOpsSignalRow">
-            <span>Manual / Synced</span>
-            <strong>
-              {selectedDayManualCount} / {selectedDaySyncedCount}
-            </strong>
-          </div>
-        </div>
-
-        {selectedDayEvents.length === 0 ? (
-          <div style={mutedStyle()}>No selected-day events yet.</div>
-        ) : (
-          <div className="calOpsMiniList">
-            {selectedDayEvents.slice(0, 4).map((ev) => {
-              const t = toneForEvent(ev);
-              return (
-                <div key={ev.id} className="calOpsMiniRow">
-                  <div className="calOpsMiniRowLeft">
-                    <StatusDot tone={t.tone} size={8} />
-                    <div style={{ minWidth: 0 }}>
-                      <div className="calOpsMiniRowTitle">{ev.title}</div>
-                      <div className="calOpsMiniRowMeta">
-                        {fmtTime(ev.event_time)} • {sourceLabel(ev)}
-                      </div>
-                    </div>
+                {event.amountLabel ? (
+                  <div className={`${styles.queueItemValue} ${toneAmountClass(styles, event.tone)}`}>
+                    {event.amountLabel}
                   </div>
-                  {ev.amount ? <Tag tone={t.tone}>{money(ev.amount)}</Tag> : null}
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </Panel>
-
-      <Panel>
-        <PanelHeader title="Next focus" subcopy="Next thing coming up inside the visible feed." />
-        {nextFocus ? (
-          <div className="calOpsFocusCard">
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <StatusDot tone={focusTone} size={10} />
-              <div className="calOpsFocusCardTitle">{nextFocus.title}</div>
+                ) : null}
+              </Link>
+            ))
+          ) : (
+            <div className={styles.emptyBlock}>
+              <div className={styles.emptyTitle}>Queue is clear</div>
+              <div className={styles.emptyText}>Nothing else is scheduled soon.</div>
             </div>
-
-            <div className="calOpsFocusCardTags">
-              <Tag tone={focusTone}>{toneForEvent(nextFocus).label}</Tag>
-              <Tag>{fmtShortDate(nextFocus.event_date)}</Tag>
-              <Tag>{fmtTime(nextFocus.event_time)}</Tag>
-              {nextFocus.amount ? <Tag tone={focusTone}>{money(nextFocus.amount)}</Tag> : null}
-            </div>
-
-            <div style={{ ...mutedStyle(), marginTop: 10 }}>{nextFocus.note || sourceLabel(nextFocus)}</div>
-          </div>
-        ) : (
-          <div style={mutedStyle()}>Nothing upcoming inside this visible range.</div>
-        )}
-      </Panel>
-    </div>
-  );
-}
-
-function ModalShell({ open, title, onClose, children, width = "min(920px, 100%)" }) {
-  React.useEffect(() => {
-    if (!open) return undefined;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = prev;
-    };
-  }, [open]);
-
-  if (!open) return null;
-
-  return (
-    <div
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose?.();
-      }}
-      className="calOpsModalBackdrop"
-    >
-      <div className="calOpsModalWrap" style={{ width }}>
-        <div className="calOpsModalCard">
-          <div className="calOpsModalHead">
-            <div className="calOpsModalTitle">{title}</div>
-            <SurfaceButton onClick={onClose} icon={<X size={15} />}>
-              Close
-            </SurfaceButton>
-          </div>
-          {children}
+          )}
         </div>
       </div>
-    </div>
+    </GlassPane>
   );
 }
 
-export default function CalendarCommandSubpage() {
+function SnapshotCard({ snapshot }) {
+  return (
+    <GlassPane className={styles.railCard}>
+      <div className={styles.railCardInner}>
+        <div className={styles.railEyebrow}>Window snapshot</div>
+        <div className={styles.railTitleSmall}>Next 60 days</div>
+
+        <div className={styles.snapshotGrid}>
+          <div className={styles.snapshotCell}>
+            <div className={styles.snapshotLabel}>Events</div>
+            <div className={styles.snapshotValue}>{snapshot.totalCount}</div>
+          </div>
+          <div className={styles.snapshotCell}>
+            <div className={styles.snapshotLabel}>Bills</div>
+            <div className={`${styles.snapshotValue} ${styles.valueWarning}`}>{snapshot.billCount}</div>
+          </div>
+          <div className={styles.snapshotCell}>
+            <div className={styles.snapshotLabel}>Income</div>
+            <div className={`${styles.snapshotValue} ${styles.valuePositive}`}>{money(snapshot.incomeTotal)}</div>
+          </div>
+          <div className={styles.snapshotCell}>
+            <div className={styles.snapshotLabel}>Outflow</div>
+            <div className={`${styles.snapshotValue} ${styles.valueNegative}`}>{money(snapshot.outflowTotal)}</div>
+          </div>
+        </div>
+
+        <div className={styles.snapshotFooter}>
+          <div className={styles.snapshotFooterLabel}>Next event</div>
+          <div className={styles.snapshotFooterValue}>
+            {snapshot.nextEvent
+              ? `${snapshot.nextEvent.title} • ${fmtDayShort(snapshot.nextEvent.dateISO)}`
+              : "Nothing upcoming"}
+          </div>
+        </div>
+      </div>
+    </GlassPane>
+  );
+}
+
+function LegendCard() {
+  return (
+    <GlassPane className={styles.railCard}>
+      <div className={styles.railCardInner}>
+        <div className={styles.railEyebrow}>Legend</div>
+        <div className={styles.legendList}>
+          <div className={styles.legendRow}>
+            <span className={`${styles.monthItemDot} ${styles.dotPositive}`} />
+            <span>Income / payday</span>
+          </div>
+          <div className={styles.legendRow}>
+            <span className={`${styles.monthItemDot} ${styles.dotNegative}`} />
+            <span>Expense / outflow</span>
+          </div>
+          <div className={styles.legendRow}>
+            <span className={`${styles.monthItemDot} ${styles.dotWarning}`} />
+            <span>Bill pressure</span>
+          </div>
+          <div className={styles.legendRow}>
+            <span className={`${styles.monthItemDot} ${styles.dotNeutral}`} />
+            <span>Manual event / transfer</span>
+          </div>
+        </div>
+      </div>
+    </GlassPane>
+  );
+}
+
+export default function CalendarViewPage() {
   const params = useParams();
-  const router = useRouter();
-  const searchParams = useSearchParams();
+  const rawView = String(params?.view || "agenda").toLowerCase();
+  const view = ALLOWED_VIEWS.has(rawView) ? rawView : "agenda";
 
-  const viewParam = Array.isArray(params?.view) ? params.view[0] : params?.view;
-  const view = viewParam === "month" ? "month" : "agenda";
+  const today = useMemo(() => startOfToday(), []);
+  const todayISO = useMemo(() => toISODateLocal(today), [today]);
 
-  const initialDateFromQuery = searchParams.get("date") || todayISO();
-  const initialMonthFromQuery =
-    searchParams.get("month") || startOfMonthISO(initialDateFromQuery);
-  const initialProfileFromQuery = searchParams.get("profile") || "";
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [pageError, setPageError] = useState("");
+  const [search, setSearch] = useState("");
 
-  const [loading, setLoading] = React.useState(true);
-  const [pageError, setPageError] = React.useState("");
-  const [status, setStatus] = React.useState("");
-  const [user, setUser] = React.useState(null);
+  const [manualEvents, setManualEvents] = useState([]);
+  const [bills, setBills] = useState([]);
+  const [plannedItems, setPlannedItems] = useState([]);
+  const [spendingTx, setSpendingTx] = useState([]);
+  const [incomeDeposits, setIncomeDeposits] = useState([]);
 
-  const [profiles, setProfiles] = React.useState([]);
-  const [profileId, setProfileId] = React.useState(initialProfileFromQuery);
-  const [monthStart, setMonthStart] = React.useState(initialMonthFromQuery);
-  const [selectedDate, setSelectedDate] = React.useState(initialDateFromQuery);
+  const [selectedISO, setSelectedISO] = useState(todayISO);
+  const [anchorMonthDate, setAnchorMonthDate] = useState(startOfMonth(today));
 
-  const [events, setEvents] = React.useState([]);
-  const [search, setSearch] = React.useState("");
-  const [filter, setFilter] = React.useState("All");
+  useEffect(() => {
+    let mounted = true;
 
-  const [manageOpen, setManageOpen] = React.useState(false);
-  const [editorOpen, setEditorOpen] = React.useState(false);
-
-  const [newProfileName, setNewProfileName] = React.useState("");
-  const [newProfileColor, setNewProfileColor] = React.useState("#8b5cf6");
-  const [draft, setDraft] = React.useState(emptyEvent(todayISO(), ""));
-
-  const fetchWindow = React.useMemo(() => buildFetchWindow(monthStart), [monthStart]);
-
-  React.useEffect(() => {
-    if (!status) return undefined;
-    const id = window.setTimeout(() => setStatus(""), 3200);
-    return () => window.clearTimeout(id);
-  }, [status]);
-
-  const refreshProfiles = React.useCallback(async (userId) => {
-    const { data, error } = await supabase
-      .from("calendar_profiles")
-      .select("*")
-      .eq("user_id", userId)
-      .order("is_default", { ascending: false })
-      .order("created_at", { ascending: true });
-
-    if (error) throw error;
-    return (data || []).map(mapProfileRow);
-  }, []);
-
-  const refreshEvents = React.useCallback(async () => {
-    if (!user || !profileId) return;
-
-    try {
+    async function loadPage() {
+      setLoading(true);
       setPageError("");
-      const { loadStart, loadEnd } = buildFetchWindow(monthStart);
-      const { data, error } = await supabase
-        .from("calendar_events")
-        .select("*")
-        .eq("user_id", user.id)
-        .eq("profile_id", profileId)
-        .gte("event_date", loadStart)
-        .lte("event_date", loadEnd)
-        .order("event_date", { ascending: true })
-        .order("event_time", { ascending: true });
 
-      if (error) throw error;
-      setEvents((data || []).map(mapEventRow));
-    } catch (err) {
-      setPageError(err?.message || "Failed to load events.");
-    }
-  }, [user, profileId, monthStart]);
-
-  React.useEffect(() => {
-    let alive = true;
-
-    async function boot() {
       try {
-        setLoading(true);
-        setPageError("");
+        if (!supabase) {
+          throw new Error("Missing Supabase environment variables.");
+        }
 
         const {
           data: { user: currentUser },
@@ -1541,2198 +1198,438 @@ export default function CalendarCommandSubpage() {
         } = await supabase.auth.getUser();
 
         if (userErr) throw userErr;
-        if (!alive) return;
-
-        setUser(currentUser || null);
 
         if (!currentUser) {
+          if (!mounted) return;
+          setUser(null);
           setLoading(false);
           return;
         }
 
-        let loadedProfiles = await refreshProfiles(currentUser.id);
+        if (!mounted) return;
+        setUser(currentUser);
 
-        if (loadedProfiles.length === 0) {
-          const fallback = {
-            id: uid(),
-            user_id: currentUser.id,
-            name: "Default",
-            is_default: true,
-            color: "#94a3b8",
-          };
+        const rangeStart = toISODateLocal(addDays(today, -120));
+        const rangeEnd = toISODateLocal(addDays(today, 180));
 
-          const { data: inserted, error: createErr } = await supabase
-            .from("calendar_profiles")
-            .insert([fallback])
-            .select()
-            .single();
+        const [calendarRes, billsRes, plannedRes, spendingRes, incomeRes] = await Promise.all([
+          supabase.from("calendar_events").select("*").eq("user_id", currentUser.id),
+          supabase.from("bills").select("*").eq("user_id", currentUser.id),
+          supabase
+            .from("spending_planned_items")
+            .select("*")
+            .eq("user_id", currentUser.id)
+            .gte("planned_date", rangeStart)
+            .lte("planned_date", rangeEnd),
+          supabase
+            .from("spending_transactions")
+            .select("*")
+            .eq("user_id", currentUser.id)
+            .gte("tx_date", rangeStart)
+            .lte("tx_date", rangeEnd),
+          supabase
+            .from("income_deposits")
+            .select("*")
+            .eq("user_id", currentUser.id)
+            .gte("deposit_date", rangeStart)
+            .lte("deposit_date", rangeEnd),
+        ]);
 
-          if (createErr) throw createErr;
-          loadedProfiles = [mapProfileRow(inserted)];
-        }
+        if (calendarRes.error) throw calendarRes.error;
+        if (billsRes.error) throw billsRes.error;
+        if (plannedRes.error) throw plannedRes.error;
+        if (spendingRes.error) throw spendingRes.error;
+        if (incomeRes.error) throw incomeRes.error;
 
-        if (!alive) return;
+        if (!mounted) return;
 
-        setProfiles(loadedProfiles);
-
-        const chosen =
-          (initialProfileFromQuery &&
-            loadedProfiles.find((p) => p.id === initialProfileFromQuery)?.id) ||
-          loadedProfiles.find((p) => p.is_default)?.id ||
-          loadedProfiles[0]?.id ||
-          "";
-
-        setProfileId(chosen);
-        setDraft((prev) => ({ ...prev, profile_id: chosen }));
+        setManualEvents((calendarRes.data || []).map(mapManualEventRow).filter(Boolean));
+        setBills((billsRes.data || []).map(mapBillRow));
+        setPlannedItems((plannedRes.data || []).map(mapPlannedSpendingRow).filter(Boolean));
+        setSpendingTx((spendingRes.data || []).map(mapSpendingTransactionRow).filter(Boolean));
+        setIncomeDeposits((incomeRes.data || []).map(mapIncomeDepositRow).filter(Boolean));
       } catch (err) {
-        if (!alive) return;
+        if (!mounted) return;
         setPageError(err?.message || "Failed to load calendar.");
       } finally {
-        if (alive) setLoading(false);
+        if (mounted) setLoading(false);
       }
     }
 
-    boot();
+    loadPage();
+
     return () => {
-      alive = false;
+      mounted = false;
     };
-  }, [refreshProfiles, initialProfileFromQuery]);
+  }, [today]);
 
-  React.useEffect(() => {
-    refreshEvents();
-  }, [refreshEvents]);
+  const computed = useMemo(() => {
+    const rangeStart = addDays(today, -120);
+    const rangeEnd = addDays(today, 180);
 
-  React.useEffect(() => {
-    const next = new URLSearchParams();
-    if (selectedDate) next.set("date", selectedDate);
-    if (monthStart) next.set("month", monthStart);
-    if (profileId) next.set("profile", profileId);
-
-    const nextQuery = next.toString();
-    const currentQuery = searchParams.toString();
-
-    if (nextQuery !== currentQuery) {
-      router.replace(`/calendar/${view}?${nextQuery}`, { scroll: false });
-    }
-  }, [selectedDate, monthStart, profileId, view, router, searchParams]);
-
-  const activeProfile = React.useMemo(
-    () => profiles.find((p) => p.id === profileId) || profiles[0] || null,
-    [profiles, profileId]
-  );
-
-  const monthGridDays = React.useMemo(
-    () => Array.from({ length: 42 }, (_, i) => addDaysISO(fetchWindow.gridStart, i)),
-    [fetchWindow.gridStart]
-  );
-
-  const filteredEvents = React.useMemo(() => {
-    const q = search.trim().toLowerCase();
-
-    return events.filter((ev) => {
-      const category = String(ev.category || "").toLowerCase();
-      const flow = String(ev.flow || "").toLowerCase();
-      const source = String(ev.source || "").toLowerCase();
-      const title = String(ev.title || "").toLowerCase();
-
-      if (filter === "Paydays" && !isIncomeEvent(ev)) return false;
-      if (filter === "Expenses" && !isExpenseEvent(ev)) return false;
-      if (filter === "Planned" && !isPlannedExpenseEvent(ev)) return false;
-      if (filter === "Manual" && !isManualEvent(ev)) return false;
-
-      if (!q) return true;
-
-      const hay = [
-        ev.title,
-        ev.note,
-        ev.category,
-        ev.flow,
-        ev.source,
-        ev.event_date,
-        ev.event_time,
-        money(ev.amount),
-      ]
-        .join(" ")
-        .toLowerCase();
-
-      return hay.includes(q);
-    });
-  }, [events, search, filter]);
-
-  const filteredEventsByDate = React.useMemo(() => {
-    const map = new Map();
-
-    for (const ev of filteredEvents) {
-      const key = ev.event_date;
-      const arr = map.get(key) || [];
-      arr.push(ev);
-      map.set(key, arr);
-    }
-
-    for (const [key, arr] of map.entries()) {
-      map.set(
-        key,
-        [...arr].sort((a, b) => {
-          const aTime = timeSortValue(a.event_time);
-          const bTime = timeSortValue(b.event_time);
-          if (aTime !== bTime) return aTime - bTime;
-          return String(a.title).localeCompare(String(b.title));
-        })
-      );
-    }
-
-    return map;
-  }, [filteredEvents]);
-
-  const selectedDayEvents = React.useMemo(
-    () =>
-      [...(filteredEventsByDate.get(selectedDate) || [])].sort((a, b) => {
-        const aTime = timeSortValue(a.event_time);
-        const bTime = timeSortValue(b.event_time);
-        if (aTime !== bTime) return aTime - bTime;
-        return String(a.title).localeCompare(String(b.title));
-      }),
-    [filteredEventsByDate, selectedDate]
-  );
-
-  const visibleMonthEvents = React.useMemo(
-    () => filteredEvents.filter((ev) => inSameMonth(ev.event_date, monthStart)),
-    [filteredEvents, monthStart]
-  );
-
-  const visibleMonthCount = visibleMonthEvents.length;
-
-  const monthDaysActive = React.useMemo(
-    () => new Set(visibleMonthEvents.map((ev) => ev.event_date)).size,
-    [visibleMonthEvents]
-  );
-
-  const monthIncome = React.useMemo(
-    () =>
-      visibleMonthEvents
-        .filter((ev) => isIncomeEvent(ev))
-        .reduce((sum, ev) => sum + safeNum(ev.amount, 0), 0),
-    [visibleMonthEvents]
-  );
-
-  const monthExpense = React.useMemo(
-    () =>
-      visibleMonthEvents
-        .filter((ev) => isExpenseEvent(ev))
-        .reduce((sum, ev) => sum + safeNum(ev.amount, 0), 0),
-    [visibleMonthEvents]
-  );
-
-  const monthPlanned = React.useMemo(
-    () =>
-      visibleMonthEvents
-        .filter((ev) => isPlannedExpenseEvent(ev))
-        .reduce((sum, ev) => sum + safeNum(ev.amount, 0), 0),
-    [visibleMonthEvents]
-  );
-
-  const monthManualCount = React.useMemo(
-    () => visibleMonthEvents.filter((ev) => isManualEvent(ev)).length,
-    [visibleMonthEvents]
-  );
-
-  const selectedDayIn = React.useMemo(
-    () =>
-      selectedDayEvents
-        .filter((ev) => isIncomeEvent(ev))
-        .reduce((sum, ev) => sum + safeNum(ev.amount, 0), 0),
-    [selectedDayEvents]
-  );
-
-  const selectedDayOut = React.useMemo(
-    () =>
-      selectedDayEvents
-        .filter((ev) => isExpenseEvent(ev))
-        .reduce((sum, ev) => sum + safeNum(ev.amount, 0), 0),
-    [selectedDayEvents]
-  );
-
-  const selectedDayPlanned = React.useMemo(
-    () =>
-      selectedDayEvents
-        .filter((ev) => isPlannedExpenseEvent(ev))
-        .reduce((sum, ev) => sum + safeNum(ev.amount, 0), 0),
-    [selectedDayEvents]
-  );
-
-  const selectedDayManualCount = React.useMemo(
-    () => selectedDayEvents.filter((ev) => isManualEvent(ev)).length,
-    [selectedDayEvents]
-  );
-
-  const selectedDaySyncedCount = selectedDayEvents.length - selectedDayManualCount;
-
-  const selectedDayTimedCount = React.useMemo(
-    () => selectedDayEvents.filter((ev) => !!ev.event_time).length,
-    [selectedDayEvents]
-  );
-
-  const selectedDayAllDayCount = selectedDayEvents.length - selectedDayTimedCount;
-
-  const selectedFirstTimed = React.useMemo(() => {
-    const first = selectedDayEvents.find((ev) => !!ev.event_time);
-    return first?.event_time || "";
-  }, [selectedDayEvents]);
-
-  const selectedLastTimed = React.useMemo(() => {
-    const timed = [...selectedDayEvents].filter((ev) => !!ev.event_time);
-    const last = timed[timed.length - 1];
-    return last?.end_time || last?.event_time || "";
-  }, [selectedDayEvents]);
-
-  const nextFocus = React.useMemo(() => {
-    const nowDate = todayISO();
-    const nowMinutes = (() => {
-      const d = new Date();
-      return d.getHours() * 60 + d.getMinutes();
-    })();
-
-    const sorted = [...filteredEvents].sort((a, b) => {
-      if (a.event_date !== b.event_date) return String(a.event_date).localeCompare(String(b.event_date));
-      const aTime = timeSortValue(a.event_time);
-      const bTime = timeSortValue(b.event_time);
-      if (aTime !== bTime) return aTime - bTime;
-      return String(a.title).localeCompare(String(b.title));
-    });
-
-    return (
-      sorted.find((ev) => {
-        if (ev.event_date > nowDate) return true;
-        if (ev.event_date < nowDate) return false;
-        if (!ev.event_time) return true;
-        return timeSortValue(ev.event_time) >= nowMinutes;
-      }) || null
+    const billEvents = bills.flatMap((bill) =>
+      buildBillOccurrences(bill, rangeStart, rangeEnd, today)
     );
-  }, [filteredEvents]);
 
-  const focusTitle = nextFocus
-    ? `${fmtShortDate(nextFocus.event_date)}${
-        nextFocus.event_time ? ` · ${fmtTime(nextFocus.event_time)}` : ""
-      } · ${nextFocus.title}`
-    : "Nothing upcoming inside this visible calendar range";
+    const allEventsRaw = [
+      ...manualEvents,
+      ...billEvents,
+      ...plannedItems,
+      ...spendingTx,
+      ...incomeDeposits,
+    ].filter(Boolean);
 
-  const focusTone = nextFocus ? toneForEvent(nextFocus).tone : "neutral";
+    const q = normalizeText(search);
 
-  const upcomingEvents = React.useMemo(() => {
-    const nowDate = todayISO();
-    const nowMinutes = (() => {
-      const d = new Date();
-      return d.getHours() * 60 + d.getMinutes();
-    })();
+    const filteredEvents = allEventsRaw
+      .filter((event) => (q ? buildSearchHaystack(event).includes(q) : true))
+      .sort(sortEvents);
 
-    return [...filteredEvents]
-      .filter((ev) => {
-        if (ev.event_date > nowDate) return true;
-        if (ev.event_date < nowDate) return false;
-        if (!ev.event_time) return true;
-        return timeSortValue(ev.event_time) >= nowMinutes;
-      })
-      .sort((a, b) => {
-        if (a.event_date !== b.event_date) return String(a.event_date).localeCompare(String(b.event_date));
-        const aTime = timeSortValue(a.event_time);
-        const bTime = timeSortValue(b.event_time);
-        if (aTime !== bTime) return aTime - bTime;
-        return String(a.title).localeCompare(String(b.title));
-      })
-      .slice(0, 8);
-  }, [filteredEvents]);
+    const allEventsMap = new Map();
+    filteredEvents.forEach((event) => {
+      if (!allEventsMap.has(event.dateISO)) allEventsMap.set(event.dateISO, []);
+      allEventsMap.get(event.dateISO).push(event);
+    });
 
-  const openEditorForNew = React.useCallback(
-    (dateISO = selectedDate) => {
-      setDraft(emptyEvent(dateISO, profileId));
-      setEditorOpen(true);
-    },
-    [profileId, selectedDate]
-  );
+    const monthEvents = filteredEvents.filter(
+      (event) => monthKey(event.dateISO) === monthKey(anchorMonthDate)
+    );
 
-  const openEditorForPayday = React.useCallback(
-    (dateISO = selectedDate) => {
-      setDraft(paydayTemplate(dateISO, profileId));
-      setEditorOpen(true);
-    },
-    [profileId, selectedDate]
-  );
+    const monthEventsMap = new Map();
+    monthEvents.forEach((event) => {
+      if (!monthEventsMap.has(event.dateISO)) monthEventsMap.set(event.dateISO, []);
+      monthEventsMap.get(event.dateISO).push(event);
+    });
 
-  const openEditorForExpense = React.useCallback(
-    (dateISO = selectedDate) => {
-      setDraft(expenseTemplate(dateISO, profileId));
-      setEditorOpen(true);
-    },
-    [profileId, selectedDate]
-  );
+    const agendaStart = addDays(today, -14);
+    const agendaEnd = addDays(today, 45);
 
-  const openEditorForEdit = React.useCallback((ev) => {
-    if (isSourceOwnedEvent(ev)) {
-      setPageError("Source-owned events should be changed from Bills, Income, or Spending. Copy it as manual if you want a calendar-only version.");
-      return;
-    }
-    setDraft({ ...ev, amount: ev.amount ? String(ev.amount) : "" });
-    setEditorOpen(true);
-  }, []);
+    const agendaEvents = filteredEvents.filter((event) => {
+      const date = parseDateLike(event.dateISO);
+      return date && date >= agendaStart && date <= agendaEnd;
+    });
 
-  const openDuplicate = React.useCallback(
-    (ev) => {
-      setDraft({
-        ...ev,
-        id: "",
-        profile_id: profileId || ev.profile_id || "",
-        amount: ev.amount ? String(ev.amount) : "",
-        source: "manual",
-        source_id: "",
-        source_table: "",
-        auto_created: false,
-      });
-      setEditorOpen(true);
-    },
-    [profileId]
-  );
+    const groupedAgenda = groupedByDay(agendaEvents);
 
-  async function handleSaveEvent(e) {
-    e?.preventDefault?.();
-    if (!user) return;
-    if (!draft.profile_id) return setPageError("Pick a calendar profile first.");
-    if (!draft.title.trim()) return setPageError("Event title is required.");
-    if (!draft.event_date) return setPageError("Event date is required.");
-    if (draft.end_time && draft.event_time && draft.end_time < draft.event_time) {
-      return setPageError("End time cannot be earlier than start time.");
-    }
-    if (draft.id && isSourceOwnedEvent(draft)) {
-      return setPageError("Source-owned events must be changed from Bills, Income, or Spending. Copy it as manual first if needed.");
-    }
+    const upcomingEventsWindow = filteredEvents.filter((event) => {
+      const date = parseDateLike(event.dateISO);
+      return date && date >= today && date <= addDays(today, 60);
+    });
 
-    try {
-      setPageError("");
-      const parsedAmount = parseMoneyInput(draft.amount);
-      const payload = {
-        user_id: user.id,
-        profile_id: draft.profile_id,
-        title: draft.title.trim(),
-        event_date: draft.event_date,
-        event_time: draft.event_time || null,
-        end_time: draft.end_time || null,
-        category: draft.category || "General",
-        flow: draft.flow || "none",
-        amount: Number.isFinite(parsedAmount) ? parsedAmount : 0,
-        note: draft.note?.trim() || "",
-        status: draft.status || "scheduled",
-        color: draft.color || "#94a3b8",
-        source: "manual",
-        source_id: "",
-        source_table: "",
-        auto_created: false,
-        transaction_type:
-          draft.flow === "income"
-            ? "income"
-            : draft.flow === "expense"
-            ? "expense"
-            : null,
-      };
+    const upcomingBuckets = buildUpcomingBuckets(upcomingEventsWindow, today);
 
-      if (draft.id) {
-        const { error } = await supabase
-          .from("calendar_events")
-          .update(payload)
-          .eq("id", draft.id)
-          .eq("user_id", user.id);
-        if (error) throw error;
-        setStatus("Event updated.");
-      } else {
-        const { error } = await supabase
-          .from("calendar_events")
-          .insert([{ id: uid(), ...payload }]);
-        if (error) throw error;
-        setStatus("Event created.");
+    const currentMonthEventDates = [...new Set(monthEvents.map((event) => event.dateISO))].sort();
+    const agendaDates = groupedAgenda.map((group) => group.dateISO);
+    const upcomingDates = [...new Set(upcomingEventsWindow.map((event) => event.dateISO))].sort();
+
+    let preferredSelectedISO = selectedISO;
+
+    if (view === "month") {
+      const selectedHasItems =
+        monthKey(selectedISO) === monthKey(anchorMonthDate) &&
+        safeNum(monthEventsMap.get(selectedISO)?.length, 0) > 0;
+
+      if (!selectedHasItems) {
+        if (monthKey(todayISO) === monthKey(anchorMonthDate) && safeNum(monthEventsMap.get(todayISO)?.length, 0) > 0) {
+          preferredSelectedISO = todayISO;
+        } else if (currentMonthEventDates.length) {
+          preferredSelectedISO = currentMonthEventDates[0];
+        } else if (monthKey(todayISO) === monthKey(anchorMonthDate)) {
+          preferredSelectedISO = todayISO;
+        } else {
+          preferredSelectedISO = toISODateLocal(startOfMonth(anchorMonthDate));
+        }
       }
+    } else if (view === "agenda") {
+      preferredSelectedISO = agendaDates.includes(selectedISO)
+        ? selectedISO
+        : agendaDates[0] || todayISO;
+    } else {
+      preferredSelectedISO = upcomingDates.includes(selectedISO)
+        ? selectedISO
+        : upcomingDates[0] || todayISO;
+    }
 
-      setEditorOpen(false);
-      setMonthStart(startOfMonthISO(draft.event_date));
-      setSelectedDate(draft.event_date);
-      await refreshEvents();
-    } catch (err) {
-      setPageError(err?.message || "Failed to save event.");
+    const selectedDayEvents = (allEventsMap.get(preferredSelectedISO) || []).slice().sort(sortEvents);
+
+    const todayCount = filteredEvents.filter((event) => event.dateISO === todayISO).length;
+
+    const dueSoonCount = filteredEvents.filter((event) => {
+      const date = parseDateLike(event.dateISO);
+      const days = diffDays(date, today);
+      return event.kind === "bill" && days != null && days >= 0 && days <= 7;
+    }).length;
+
+    const monthIncome = monthEvents
+      .filter((event) => event.kind === "income")
+      .reduce((sum, event) => sum + safeNum(event.amount, 0), 0);
+
+    const monthOutflow = monthEvents
+      .filter((event) => event.kind === "expense" || event.kind === "bill")
+      .reduce((sum, event) => sum + safeNum(event.amount, 0), 0);
+
+    const manualCount = filteredEvents.filter((event) => event.kind === "event").length;
+
+    const queueItems = upcomingEventsWindow.slice(0, 8);
+
+    const upcomingSnapshot = {
+      totalCount: upcomingEventsWindow.length,
+      billCount: upcomingEventsWindow.filter((event) => event.kind === "bill").length,
+      incomeTotal: upcomingEventsWindow
+        .filter((event) => event.kind === "income")
+        .reduce((sum, event) => sum + safeNum(event.amount, 0), 0),
+      outflowTotal: upcomingEventsWindow
+        .filter((event) => event.kind === "expense" || event.kind === "bill")
+        .reduce((sum, event) => sum + safeNum(event.amount, 0), 0),
+      nextEvent: upcomingEventsWindow[0] || null,
+    };
+
+    return {
+      filteredEvents,
+      monthEventsMap,
+      groupedAgenda,
+      upcomingBuckets,
+      selectedDayEvents,
+      preferredSelectedISO,
+      todayCount,
+      dueSoonCount,
+      monthIncome,
+      monthOutflow,
+      manualCount,
+      queueItems,
+      upcomingSnapshot,
+    };
+  }, [
+    anchorMonthDate,
+    bills,
+    incomeDeposits,
+    manualEvents,
+    plannedItems,
+    search,
+    selectedISO,
+    spendingTx,
+    today,
+    todayISO,
+    view,
+  ]);
+
+  useEffect(() => {
+    if (computed.preferredSelectedISO && computed.preferredSelectedISO !== selectedISO) {
+      setSelectedISO(computed.preferredSelectedISO);
+    }
+  }, [computed.preferredSelectedISO, selectedISO]);
+
+  function handleSelectDay(iso) {
+    setSelectedISO(iso);
+    const date = parseDateLike(iso);
+    if (date) {
+      setAnchorMonthDate(startOfMonth(date));
     }
   }
 
-  async function handleDeleteEvent(ev) {
-    if (!user || !ev?.id) return;
-    if (isSourceOwnedEvent(ev)) {
-      return setPageError("Source-owned events should be changed from Bills, Income, or Spending.");
-    }
-    if (!window.confirm(`Delete "${ev.title}"?`)) return;
-
-    try {
-      setPageError("");
-      const { error } = await supabase
-        .from("calendar_events")
-        .delete()
-        .eq("id", ev.id)
-        .eq("user_id", user.id);
-      if (error) throw error;
-      setStatus("Event deleted.");
-      await refreshEvents();
-    } catch (err) {
-      setPageError(err?.message || "Failed to delete event.");
-    }
+  function goPrevMonth() {
+    const next = startOfMonth(addMonthsClamped(anchorMonthDate, -1));
+    setAnchorMonthDate(next);
   }
 
-  async function handleCreateProfile() {
-    if (!user) return;
-    const name = newProfileName.trim();
-    if (!name) return setPageError("Profile name is required.");
-
-    try {
-      setPageError("");
-      const isFirst = profiles.length === 0;
-      const payload = {
-        id: uid(),
-        user_id: user.id,
-        name,
-        color: newProfileColor || "#8b5cf6",
-        is_default: isFirst,
-      };
-
-      const { data, error } = await supabase
-        .from("calendar_profiles")
-        .insert([payload])
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      const mapped = mapProfileRow(data);
-      const nextProfiles = [...profiles, mapped];
-      setProfiles(nextProfiles);
-      setNewProfileName("");
-      setNewProfileColor("#8b5cf6");
-
-      if (isFirst || !profileId) {
-        setProfileId(mapped.id);
-        setDraft((prev) => ({ ...prev, profile_id: mapped.id }));
-      }
-
-      setStatus("Profile created.");
-    } catch (err) {
-      setPageError(err?.message || "Failed to create profile.");
-    }
-  }
-
-  async function handleSetDefaultProfile(id) {
-    if (!user) return;
-
-    try {
-      setPageError("");
-      const { error: clearErr } = await supabase
-        .from("calendar_profiles")
-        .update({ is_default: false })
-        .eq("user_id", user.id);
-      if (clearErr) throw clearErr;
-
-      const { error: setErr } = await supabase
-        .from("calendar_profiles")
-        .update({ is_default: true })
-        .eq("user_id", user.id)
-        .eq("id", id);
-      if (setErr) throw setErr;
-
-      const loaded = await refreshProfiles(user.id);
-      setProfiles(loaded);
-      setProfileId(id);
-      setDraft((prev) => ({ ...prev, profile_id: id }));
-      setStatus("Default profile updated.");
-    } catch (err) {
-      setPageError(err?.message || "Failed to update default profile.");
-    }
-  }
-
-  async function handleDeleteProfile(id) {
-    if (!user) return;
-    if (profiles.length <= 1) return setPageError("Keep at least one calendar profile.");
-
-    const target = profiles.find((p) => p.id === id);
-    if (!window.confirm(`Delete profile "${target?.name || "this profile"}"?`)) return;
-
-    try {
-      setPageError("");
-
-      const { error: eventsErr } = await supabase
-        .from("calendar_events")
-        .delete()
-        .eq("user_id", user.id)
-        .eq("profile_id", id);
-      if (eventsErr) throw eventsErr;
-
-      const { error: profileErr } = await supabase
-        .from("calendar_profiles")
-        .delete()
-        .eq("user_id", user.id)
-        .eq("id", id);
-      if (profileErr) throw profileErr;
-
-      let loaded = await refreshProfiles(user.id);
-      if (!loaded.some((p) => p.is_default) && loaded[0]) {
-        const replacement = loaded[0];
-        const { error: repairErr } = await supabase
-          .from("calendar_profiles")
-          .update({ is_default: true })
-          .eq("user_id", user.id)
-          .eq("id", replacement.id);
-        if (repairErr) throw repairErr;
-        loaded = await refreshProfiles(user.id);
-      }
-
-      setProfiles(loaded);
-      const nextId = loaded.find((p) => p.is_default)?.id || loaded[0]?.id || "";
-      setProfileId(nextId);
-      setDraft((prev) => ({ ...prev, profile_id: nextId }));
-      setStatus("Profile deleted.");
-    } catch (err) {
-      setPageError(err?.message || "Failed to delete profile.");
-    }
+  function goNextMonth() {
+    const next = startOfMonth(addMonthsClamped(anchorMonthDate, 1));
+    setAnchorMonthDate(next);
   }
 
   function goToday() {
-    const t = todayISO();
-    setMonthStart(startOfMonthISO(t));
-    setSelectedDate(t);
-  }
-
-  function shiftMonth(delta) {
-    const nextMonth = addMonthsISO(monthStart, delta);
-    setMonthStart(nextMonth);
-    if (!inSameMonth(selectedDate, nextMonth)) {
-      setSelectedDate(nextMonth);
-    }
-  }
-
-  function openDay(dayISO) {
-    setSelectedDate(dayISO);
-  }
-
-  function openFromQueue(ev) {
-    const nextMonth = startOfMonthISO(ev.event_date);
-    setMonthStart(nextMonth);
-    setSelectedDate(ev.event_date);
-    router.push(buildRoute("agenda", ev.event_date, nextMonth, profileId || ev.profile_id));
-  }
-
-  function switchView(nextView) {
-    router.push(buildRoute(nextView, selectedDate, monthStart, profileId));
-  }
-
-  function openAgendaFromMonth() {
-    router.push(buildRoute("agenda", selectedDate, monthStart, profileId));
+    setAnchorMonthDate(startOfMonth(today));
+    setSelectedISO(todayISO);
   }
 
   if (loading) {
     return (
-      <>
-        <main className="calOpsRoot">
-          <div className="calOpsInner">
-            <Panel>
-              <div style={{ color: "#fff", fontWeight: 900, fontSize: 20 }}>Loading calendar…</div>
-            </Panel>
-          </div>
-        </main>
-        <style jsx global>{globalStyles}</style>
-      </>
+      <main className={styles.page}>
+        <GlassPane size="hero" className={styles.shell}>
+          <div className={styles.loading}>Loading calendar.</div>
+        </GlassPane>
+      </main>
     );
   }
 
   if (!user) {
     return (
-      <>
-        <main className="calOpsRoot">
-          <div className="calOpsInner">
-            <Panel accent="danger">
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 10,
-                  color: "#fff",
-                  fontWeight: 900,
-                  fontSize: 20,
-                }}
-              >
-                <AlertTriangle size={18} />
-                Sign in to use your calendar
-              </div>
-            </Panel>
-          </div>
-        </main>
-        <style jsx global>{globalStyles}</style>
-      </>
+      <main className={styles.page}>
+        <GlassPane size="hero" className={styles.shell}>
+          <div className={styles.loading}>Please log in.</div>
+        </GlassPane>
+      </main>
     );
   }
 
   return (
-    <>
-      <main className="calOpsRoot">
-        <div className="calOpsInner">
-          <HeaderBar
-            monthLabelText={monthLabel(monthStart)}
-            profileName={activeProfile?.name || "Default"}
-            focusTitle={focusTitle}
-            focusTone={focusTone}
-            view={view}
-            visibleMonthCount={visibleMonthCount}
-            onSwitchView={switchView}
-            onManage={() => setManageOpen(true)}
-            onToday={goToday}
-            onAdd={() => openEditorForNew(selectedDate)}
-          />
-
+    <main className={styles.page}>
+      <GlassPane size="hero" className={styles.shell}>
+        <div className={styles.content}>
           {pageError ? (
-            <Panel accent="danger">
-              <div className="calOpsBanner">
-                <AlertTriangle size={16} />
-                {pageError}
-              </div>
-            </Panel>
+            <div className={styles.errorBox}>
+              <div className={styles.errorTitle}>Calendar error</div>
+              <div className={styles.errorText}>{pageError}</div>
+            </div>
           ) : null}
 
-          {status ? (
-            <Panel accent="success">
-              <div className="calOpsBanner">
-                <StatusDot tone="green" size={9} />
-                {status}
+          <div className={styles.header}>
+            <div className={styles.headerLeft}>
+              <div className={styles.eyebrow}>Calendar / Command Board</div>
+              <div className={styles.titleRow}>
+                <h1 className={styles.title}>Financial calendar</h1>
+                <div className={styles.titlePills}>
+                  <span className={styles.livePill}>
+                    <Sparkles size={12} />
+                    <span>Live</span>
+                  </span>
+                  <span className={styles.monthLabel}>{fmtMonthTitle(anchorMonthDate)}</span>
+                </div>
               </div>
-            </Panel>
-          ) : null}
+            </div>
 
-          <section className="calOpsWorkspace">
-            <NavigatorRail
-              monthStart={monthStart}
-              shiftMonth={shiftMonth}
-              goToday={goToday}
-              profileId={profileId}
-              setProfileId={setProfileId}
-              profiles={profiles}
-              setDraftProfile={(id) => setDraft((prev) => ({ ...prev, profile_id: id }))}
-              search={search}
-              setSearch={setSearch}
-              filter={filter}
-              setFilter={setFilter}
-              selectedDate={selectedDate}
-              selectedDayIn={selectedDayIn}
-              selectedDayOut={selectedDayOut}
-              selectedDayPlanned={selectedDayPlanned}
-              selectedDayEvents={selectedDayEvents}
-              upcomingEvents={upcomingEvents}
-              onOpenQueueEvent={openFromQueue}
+            <div className={styles.headerRight}>
+              <label className={styles.search}>
+                <Search size={14} />
+                <input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search scheduled money..."
+                />
+              </label>
+
+              <div className={styles.viewTabs}>
+                <ViewTab
+                  href="/calendar/agenda"
+                  active={view === "agenda"}
+                  icon={ListTodo}
+                  label="Agenda"
+                />
+                <ViewTab
+                  href="/calendar/month"
+                  active={view === "month"}
+                  icon={CalendarDays}
+                  label="Month"
+                />
+                <ViewTab
+                  href="/calendar/upcoming"
+                  active={view === "upcoming"}
+                  icon={Layers3}
+                  label="Upcoming"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className={styles.summaryGrid}>
+            <SummaryCard
+              label="Today"
+              value={String(computed.todayCount)}
+              sub="items on the board"
             />
+            <SummaryCard
+              label="Bills due soon"
+              value={String(computed.dueSoonCount)}
+              sub="next 7 days"
+              tone={computed.dueSoonCount ? "warning" : "neutral"}
+            />
+            <SummaryCard
+              label="Income this month"
+              value={money(computed.monthIncome)}
+              sub="paydays and deposits"
+              tone="positive"
+            />
+            <SummaryCard
+              label="Outflow this month"
+              value={money(computed.monthOutflow)}
+              sub="bills and spending"
+              tone={computed.monthOutflow > computed.monthIncome ? "negative" : "warning"}
+            />
+            <SummaryCard
+              label="Manual events"
+              value={String(computed.manualCount)}
+              sub="calendar-only items"
+            />
+          </div>
 
-            {view === "agenda" ? (
-              <AgendaBoard
-                selectedDate={selectedDate}
-                selectedDayEvents={selectedDayEvents}
-                selectedDayIn={selectedDayIn}
-                selectedDayOut={selectedDayOut}
-                selectedDayPlanned={selectedDayPlanned}
-                selectedDayManualCount={selectedDayManualCount}
-                selectedDaySyncedCount={selectedDaySyncedCount}
-                selectedDayTimedCount={selectedDayTimedCount}
-                selectedDayAllDayCount={selectedDayAllDayCount}
-                selectedFirstTimed={selectedFirstTimed}
-                selectedLastTimed={selectedLastTimed}
-                onAdd={openEditorForNew}
-                onPayday={openEditorForPayday}
-                onExpense={openEditorForExpense}
-                onEdit={openEditorForEdit}
-                onDelete={handleDeleteEvent}
-                onDuplicate={openDuplicate}
-              />
-            ) : (
-              <MonthBoard
-                monthStart={monthStart}
-                monthGridDays={monthGridDays}
-                filteredEventsByDate={filteredEventsByDate}
-                selectedDate={selectedDate}
-                monthDaysActive={monthDaysActive}
-                visibleMonthCount={visibleMonthCount}
-                onOpenDay={openDay}
-              />
-            )}
-
-            {view === "agenda" ? (
-              <AgendaRightRail
-                selectedDate={selectedDate}
-                selectedDayEvents={selectedDayEvents}
-                selectedDayIn={selectedDayIn}
-                selectedDayOut={selectedDayOut}
-                selectedDayPlanned={selectedDayPlanned}
-                selectedDayManualCount={selectedDayManualCount}
-                selectedDaySyncedCount={selectedDaySyncedCount}
-                upcomingEvents={upcomingEvents}
-                onAdd={openEditorForNew}
-                onPayday={openEditorForPayday}
-                onExpense={openEditorForExpense}
-                onManage={() => setManageOpen(true)}
-              />
-            ) : (
-              <MonthRightRail
-                monthIncome={monthIncome}
-                monthExpense={monthExpense}
-                monthPlanned={monthPlanned}
-                monthManualCount={monthManualCount}
-                selectedDate={selectedDate}
-                selectedDayEvents={selectedDayEvents}
-                selectedDayManualCount={selectedDayManualCount}
-                selectedDaySyncedCount={selectedDaySyncedCount}
-                nextFocus={nextFocus}
-                monthDaysActive={monthDaysActive}
-                visibleMonthCount={visibleMonthCount}
-                onOpenAgenda={openAgendaFromMonth}
-              />
-            )}
-          </section>
-        </div>
-      </main>
-
-      <ModalShell
-        open={manageOpen}
-        onClose={() => setManageOpen(false)}
-        title="Manage calendar profiles"
-        width="min(920px, 100%)"
-      >
-        <div className="calOpsManageGrid">
-          <div>
-            <div style={{ ...eyebrowStyle(), marginBottom: 12 }}>Profiles</div>
-
-            <div style={{ display: "grid", gap: 12 }}>
-              {profiles.map((profile) => {
-                const active = profile.id === profileId;
-                return (
-                  <div key={profile.id} className={cls("calOpsProfileCard", active && "active")}>
-                    <div className="calOpsProfileCardTop">
-                      <div style={{ minWidth: 0 }}>
-                        <div className="calOpsProfileTitleRow">
-                          <span
-                            style={{
-                              width: 12,
-                              height: 12,
-                              borderRadius: 999,
-                              background: profile.color,
-                              boxShadow: `0 0 14px ${profile.color}66`,
-                              flexShrink: 0,
-                            }}
-                          />
-                          <div className="calOpsProfileTitle">{profile.name}</div>
-                          {profile.is_default ? <Tag tone="green">Default</Tag> : null}
-                          {active ? <Tag tone="blue">Active</Tag> : null}
-                        </div>
+          <div className={styles.board}>
+            <div className={styles.mainColumn}>
+              <GlassPane className={styles.mainCard}>
+                <div className={styles.cardInner}>
+                  <div className={styles.mainCardHead}>
+                    <div>
+                      <div className={styles.cardEyebrow}>
+                        {view === "month"
+                          ? "Month board"
+                          : view === "upcoming"
+                          ? "Upcoming queue"
+                          : "Agenda"}
                       </div>
-
-                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                        {!profile.is_default ? (
-                          <SurfaceButton onClick={() => handleSetDefaultProfile(profile.id)}>
-                            Make default
-                          </SurfaceButton>
-                        ) : null}
-                        {!active ? (
-                          <SurfaceButton
-                            onClick={() => {
-                              setProfileId(profile.id);
-                              setDraft((prev) => ({ ...prev, profile_id: profile.id }));
-                            }}
-                          >
-                            Use
-                          </SurfaceButton>
-                        ) : null}
-                        {profiles.length > 1 ? (
-                          <SurfaceButton onClick={() => handleDeleteProfile(profile.id)} tone="danger">
-                            Delete
-                          </SurfaceButton>
-                        ) : null}
+                      <div className={styles.cardTitle}>
+                        {view === "month"
+                          ? "Month overview"
+                          : view === "upcoming"
+                          ? "Next scheduled events"
+                          : "Timeline agenda"}
                       </div>
                     </div>
+
+                    <div className={styles.monthControls}>
+                      <button type="button" className={styles.navButton} onClick={goPrevMonth} aria-label="Previous month">
+                        <ChevronLeft size={15} />
+                      </button>
+                      <button type="button" className={styles.todayButton} onClick={goToday}>
+                        Today
+                      </button>
+                      <button type="button" className={styles.navButton} onClick={goNextMonth} aria-label="Next month">
+                        <ChevronRight size={15} />
+                      </button>
+                    </div>
                   </div>
-                );
-              })}
+
+                  {view === "month" ? (
+                    <MonthBoard
+                      anchorMonthDate={anchorMonthDate}
+                      selectedISO={computed.preferredSelectedISO}
+                      onSelectDay={handleSelectDay}
+                      monthEventsMap={computed.monthEventsMap}
+                      todayISO={todayISO}
+                    />
+                  ) : view === "upcoming" ? (
+                    <UpcomingBoard
+                      buckets={computed.upcomingBuckets}
+                      onSelectDay={handleSelectDay}
+                    />
+                  ) : (
+                    <AgendaBoard
+                      groups={computed.groupedAgenda}
+                      selectedISO={computed.preferredSelectedISO}
+                      onSelectDay={handleSelectDay}
+                    />
+                  )}
+                </div>
+              </GlassPane>
+            </div>
+
+            <div className={styles.railColumn}>
+              <div className={styles.railStack}>
+                <DayInspector
+                  dateISO={computed.preferredSelectedISO}
+                  events={computed.selectedDayEvents}
+                />
+
+                {view === "upcoming" ? (
+                  <SnapshotCard snapshot={computed.upcomingSnapshot} />
+                ) : (
+                  <QueueCard title="Next money events" items={computed.queueItems} />
+                )}
+
+                <LegendCard />
+              </div>
             </div>
           </div>
-
-          <Panel>
-            <div style={{ ...eyebrowStyle(), marginBottom: 12 }}>Create profile</div>
-
-            <div className="calOpsCreateProfileStack">
-              <div>
-                <FieldLabel>Name</FieldLabel>
-                <FieldInput
-                  value={newProfileName}
-                  onChange={(e) => setNewProfileName(e.target.value)}
-                  placeholder="Family budget, Work, Personal..."
-                />
-              </div>
-
-              <div>
-                <FieldLabel>Accent color</FieldLabel>
-                <FieldInput
-                  type="color"
-                  value={newProfileColor}
-                  onChange={(e) => setNewProfileColor(e.target.value)}
-                  style={{ padding: 6, minHeight: 52 }}
-                />
-              </div>
-
-              <PrimaryButton onClick={handleCreateProfile} icon={<Plus size={15} />}>
-                Add profile
-              </PrimaryButton>
-
-              <div style={mutedStyle()}>
-                Profiles split calendars cleanly instead of dumping everything into one feed.
-              </div>
-            </div>
-          </Panel>
         </div>
-      </ModalShell>
-
-      <ModalShell
-        open={editorOpen}
-        onClose={() => setEditorOpen(false)}
-        title={draft.id ? "Edit event" : "Create event"}
-        width="min(980px, 100%)"
-      >
-        <form onSubmit={handleSaveEvent}>
-          {isSourceOwnedEvent(draft) ? (
-            <Panel accent="warning" style={{ marginBottom: 16 }}>
-              <div style={{ color: "#ffd089", fontWeight: 800 }}>
-                This event came from a synced source. Saving here converts it into a manual calendar event.
-              </div>
-            </Panel>
-          ) : null}
-
-          <div className="calOpsEditorGrid">
-            <div style={{ gridColumn: "1 / -1" }}>
-              <FieldLabel>Title</FieldLabel>
-              <FieldInput
-                value={draft.title}
-                onChange={(e) => setDraft((prev) => ({ ...prev, title: e.target.value }))}
-                placeholder="Event title"
-              />
-            </div>
-
-            <div>
-              <FieldLabel>Date</FieldLabel>
-              <FieldInput
-                type="date"
-                value={draft.event_date}
-                onChange={(e) => setDraft((prev) => ({ ...prev, event_date: e.target.value }))}
-              />
-            </div>
-
-            <div>
-              <FieldLabel>Profile</FieldLabel>
-              <FieldSelect
-                value={draft.profile_id}
-                onChange={(e) => setDraft((prev) => ({ ...prev, profile_id: e.target.value }))}
-              >
-                {profiles.map((profile) => (
-                  <option key={profile.id} value={profile.id}>
-                    {profile.name}
-                  </option>
-                ))}
-              </FieldSelect>
-            </div>
-
-            <div>
-              <FieldLabel>Start time</FieldLabel>
-              <FieldInput
-                type="time"
-                value={draft.event_time}
-                onChange={(e) => setDraft((prev) => ({ ...prev, event_time: e.target.value }))}
-              />
-            </div>
-
-            <div>
-              <FieldLabel>End time</FieldLabel>
-              <FieldInput
-                type="time"
-                value={draft.end_time}
-                onChange={(e) => setDraft((prev) => ({ ...prev, end_time: e.target.value }))}
-              />
-            </div>
-
-            <div>
-              <FieldLabel>Category</FieldLabel>
-              <FieldSelect
-                value={draft.category}
-                onChange={(e) => setDraft((prev) => ({ ...prev, category: e.target.value }))}
-              >
-                {["General", "Payday", "Expense", "Bill", "Reminder", "Personal"].map((v) => (
-                  <option key={v} value={v}>
-                    {v}
-                  </option>
-                ))}
-              </FieldSelect>
-            </div>
-
-            <div>
-              <FieldLabel>Flow</FieldLabel>
-              <FieldSelect
-                value={draft.flow}
-                onChange={(e) => setDraft((prev) => ({ ...prev, flow: e.target.value }))}
-              >
-                <option value="none">None</option>
-                <option value="income">Income</option>
-                <option value="expense">Expense</option>
-              </FieldSelect>
-            </div>
-
-            <div>
-              <FieldLabel>Amount</FieldLabel>
-              <FieldInput
-                value={draft.amount}
-                onChange={(e) => setDraft((prev) => ({ ...prev, amount: e.target.value }))}
-                placeholder="$0.00"
-                inputMode="decimal"
-              />
-            </div>
-
-            <div>
-              <FieldLabel>Status</FieldLabel>
-              <FieldSelect
-                value={draft.status}
-                onChange={(e) => setDraft((prev) => ({ ...prev, status: e.target.value }))}
-              >
-                <option value="scheduled">Scheduled</option>
-                <option value="done">Done</option>
-                <option value="skipped">Skipped</option>
-              </FieldSelect>
-            </div>
-
-            <div>
-              <FieldLabel>Color</FieldLabel>
-              <FieldInput
-                type="color"
-                value={draft.color}
-                onChange={(e) => setDraft((prev) => ({ ...prev, color: e.target.value }))}
-                style={{ padding: 6, minHeight: 52 }}
-              />
-            </div>
-
-            <div style={{ gridColumn: "1 / -1" }}>
-              <FieldLabel>Notes</FieldLabel>
-              <FieldTextarea
-                value={draft.note}
-                onChange={(e) => setDraft((prev) => ({ ...prev, note: e.target.value }))}
-                placeholder="Context, reminder, details..."
-              />
-            </div>
-          </div>
-
-          <div className="calOpsEditorFoot">
-            <div style={mutedStyle()}>
-              Manual saves write into <span style={{ color: "#fff" }}>calendar_events</span>.
-            </div>
-
-            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-              <SurfaceButton onClick={() => setEditorOpen(false)}>Cancel</SurfaceButton>
-              <PrimaryButton type="submit" icon={<Plus size={15} />}>
-                {draft.id ? "Save Changes" : "Create Event"}
-              </PrimaryButton>
-            </div>
-          </div>
-        </form>
-      </ModalShell>
-
-      <style jsx global>{globalStyles}</style>
-    </>
+      </GlassPane>
+    </main>
   );
 }
-
-const globalStyles = `
-  .calOpsRoot {
-    width: 100%;
-    padding: 0 0 24px;
-    box-sizing: border-box;
-    font-family: var(--lcc-font-sans, Inter, ui-sans-serif, system-ui, sans-serif);
-  }
-
-  .calOpsInner {
-    width: 100%;
-    max-width: none;
-    margin: 0;
-    display: grid;
-    gap: 12px;
-    box-sizing: border-box;
-  }
-
-  .calOpsPanel {
-    position: relative;
-    min-width: 0;
-    border-radius: 22px;
-    border: 1px solid rgba(214, 226, 255, 0.08);
-    background:
-      linear-gradient(180deg, rgba(255,255,255,0.018), rgba(255,255,255,0)),
-      rgba(8, 12, 20, 0.95);
-    box-shadow:
-      inset 0 1px 0 rgba(255,255,255,0.025),
-      0 10px 26px rgba(0,0,0,0.16);
-    padding: 16px;
-  }
-
-  .calOpsPanel.accent-danger {
-    border-color: rgba(255,159,178,0.18);
-    background:
-      linear-gradient(180deg, rgba(255,255,255,0.018), rgba(255,255,255,0)),
-      rgba(22, 10, 14, 0.96);
-  }
-
-  .calOpsPanel.accent-success {
-    border-color: rgba(142,244,187,0.18);
-    background:
-      linear-gradient(180deg, rgba(255,255,255,0.018), rgba(255,255,255,0)),
-      rgba(10, 18, 14, 0.96);
-  }
-
-  .calOpsPanel.accent-warning {
-    border-color: rgba(255,208,137,0.18);
-    background:
-      linear-gradient(180deg, rgba(255,255,255,0.018), rgba(255,255,255,0)),
-      rgba(22, 16, 10, 0.96);
-  }
-
-  .calOpsHero {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto auto;
-    gap: 14px;
-    align-items: center;
-    min-height: 74px;
-    padding: 14px 16px;
-    border-radius: 22px;
-    border: 1px solid rgba(214,226,255,0.08);
-    background:
-      linear-gradient(180deg, rgba(255,255,255,0.018), rgba(255,255,255,0)),
-      rgba(9, 13, 22, 0.95);
-    box-shadow:
-      inset 0 1px 0 rgba(255,255,255,0.025),
-      0 10px 26px rgba(0,0,0,0.16);
-  }
-
-  .calOpsHeroMain {
-    min-width: 0;
-  }
-
-  .calOpsHeroTitle {
-    margin-top: 3px;
-    font-size: clamp(22px, 2.2vw, 30px);
-    line-height: 1;
-    font-weight: 900;
-    letter-spacing: -0.045em;
-    color: #fff;
-  }
-
-  .calOpsHeroSub {
-    margin-top: 7px;
-    display: flex;
-    align-items: center;
-    gap: 9px;
-    font-size: 12px;
-    color: rgba(255,255,255,0.62);
-    min-width: 0;
-  }
-
-  .calOpsHeroSub span {
-    min-width: 0;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .calOpsHeroStats {
-    display: flex;
-    gap: 8px;
-    align-items: stretch;
-    flex-wrap: wrap;
-  }
-
-  .calOpsHeroStat {
-    min-width: 106px;
-    padding: 9px 11px;
-    border-radius: 14px;
-    border: 1px solid rgba(214,226,255,0.07);
-    background: rgba(255,255,255,0.018);
-  }
-
-  .calOpsHeroStat span {
-    display: block;
-    font-size: 9.5px;
-    font-weight: 800;
-    letter-spacing: .12em;
-    text-transform: uppercase;
-    color: rgba(255,255,255,0.42);
-  }
-
-  .calOpsHeroStat strong {
-    display: block;
-    margin-top: 6px;
-    color: #fff;
-    font-size: 15px;
-    line-height: 1;
-    font-weight: 900;
-    letter-spacing: -0.03em;
-  }
-
-  .calOpsHeroActions {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    justify-content: flex-end;
-    flex-wrap: wrap;
-  }
-
-  .calOpsRouteToggle {
-    display: inline-flex;
-    gap: 4px;
-    padding: 4px;
-    border-radius: 14px;
-    border: 1px solid rgba(214,226,255,0.08);
-    background: rgba(255,255,255,0.018);
-  }
-
-  .calOpsRouteBtn {
-    min-height: 34px;
-    padding: 0 13px;
-    border-radius: 10px;
-    border: 0;
-    background: transparent;
-    color: rgba(255,255,255,0.62);
-    font-size: 12px;
-    font-weight: 900;
-    cursor: pointer;
-  }
-
-  .calOpsRouteBtn.active {
-    background: rgba(255,255,255,0.06);
-    color: #fff;
-  }
-
-  .calOpsBtn {
-    min-height: 38px;
-    padding: 9px 13px;
-    border-radius: 13px;
-    border: 1px solid rgba(214,226,255,0.07);
-    background: rgba(255,255,255,0.018);
-    color: #fff;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    font-size: 13px;
-    font-weight: 900;
-    letter-spacing: -0.01em;
-    cursor: pointer;
-    transition: border-color 120ms ease, background 120ms ease;
-  }
-
-  .calOpsBtn:hover {
-    border-color: rgba(214,226,255,0.14);
-    background: rgba(255,255,255,0.03);
-  }
-
-  .calOpsBtn.active {
-    border-color: rgba(214,226,255,0.16);
-    background: rgba(255,255,255,0.045);
-  }
-
-  .calOpsBtn.tone-danger {
-    color: #ff9fb2;
-    border-color: rgba(255,159,178,0.14);
-    background: rgba(255,159,178,0.05);
-  }
-
-  .calOpsBtn.tone-danger:hover {
-    border-color: rgba(255,159,178,0.22);
-  }
-
-  .calOpsBtnPrimary {
-    border-color: rgba(255,255,255,0.12);
-    background: #f7fbff;
-    color: #09111f;
-  }
-
-  .calOpsBtnPrimary:hover {
-    background: #ffffff;
-    border-color: rgba(255,255,255,0.16);
-  }
-
-  .calOpsField {
-    width: 100%;
-    min-height: 42px;
-    border-radius: 13px;
-    border: 1px solid rgba(214,226,255,0.07);
-    background: rgba(255,255,255,0.016);
-    color: #fff;
-    padding: 0 14px;
-    outline: none;
-    box-sizing: border-box;
-  }
-
-  .calOpsField:focus {
-    border-color: rgba(214,226,255,0.16);
-  }
-
-  .calOpsField::placeholder {
-    color: rgba(255,255,255,0.34);
-  }
-
-  .calOpsTextarea {
-    min-height: 120px;
-    padding: 12px 14px;
-    resize: vertical;
-  }
-
-  .calOpsSelect {
-    appearance: none;
-    padding-right: 40px;
-  }
-
-  .calOpsBanner {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    color: #fff;
-    font-weight: 900;
-  }
-
-  .calOpsWorkspace {
-    display: grid;
-    grid-template-columns: 286px minmax(0, 1fr) 286px;
-    gap: 12px;
-    align-items: start;
-  }
-
-  .calOpsLeftRail,
-  .calOpsCenter,
-  .calOpsRightRail {
-    min-width: 0;
-  }
-
-  .calOpsLeftRail,
-  .calOpsRightRail {
-    display: grid;
-    gap: 12px;
-    align-content: start;
-  }
-
-  .calOpsPanelHead {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    gap: 12px;
-    flex-wrap: wrap;
-    margin-bottom: 14px;
-  }
-
-  .calOpsPanelHead.dense {
-    margin-bottom: 10px;
-  }
-
-  .calOpsPanelTitle {
-    font-size: 18px;
-    line-height: 1;
-    font-weight: 900;
-    letter-spacing: -0.03em;
-    color: #fff;
-  }
-
-  .calOpsRailMain {
-    display: grid;
-    gap: 14px;
-  }
-
-  .calOpsRailSection {
-    display: grid;
-    gap: 8px;
-    padding-top: 2px;
-  }
-
-  .calOpsRailSection + .calOpsRailSection {
-    border-top: 1px solid rgba(214,226,255,0.05);
-    padding-top: 14px;
-  }
-
-  .calOpsMonthButtons {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 8px;
-  }
-
-  .calOpsFilterWrap {
-    display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
-  }
-
-  .calOpsFilterChip {
-    min-height: 32px;
-    padding: 7px 11px;
-    border-radius: 12px;
-    border: 1px solid rgba(214,226,255,0.07);
-    background: rgba(255,255,255,0.016);
-    color: rgba(255,255,255,0.66);
-    font-weight: 800;
-    font-size: 12px;
-    cursor: pointer;
-  }
-
-  .calOpsFilterChip.active {
-    border-color: rgba(214,226,255,0.14);
-    background: rgba(255,255,255,0.042);
-    color: #fff;
-  }
-
-  .calOpsFocusInline {
-    gap: 0;
-  }
-
-  .calOpsFocusTitle {
-    margin-top: 10px;
-    font-size: 18px;
-    line-height: 1.14;
-    font-weight: 900;
-    color: #fff;
-    letter-spacing: -0.03em;
-  }
-
-  .calOpsFocusTags {
-    margin-top: 12px;
-    display: flex;
-    gap: 6px;
-    flex-wrap: wrap;
-  }
-
-  .calOpsQueuePanel {
-    min-height: 0;
-  }
-
-  .calOpsQueueList {
-    display: grid;
-    gap: 10px;
-  }
-
-  .calOpsQueueRow {
-    width: 100%;
-    text-align: left;
-    padding: 11px;
-    border-radius: 14px;
-    border: 1px solid rgba(214,226,255,0.06);
-    background: rgba(255,255,255,0.018);
-    color: #fff;
-    cursor: pointer;
-    display: flex;
-    justify-content: space-between;
-    gap: 10px;
-    align-items: center;
-  }
-
-  .calOpsQueueRowLeft {
-    min-width: 0;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-  }
-
-  .calOpsQueueTitle {
-    font-size: 13px;
-    font-weight: 900;
-    color: #fff;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .calOpsQueueMeta {
-    margin-top: 4px;
-    font-size: 11.5px;
-    color: rgba(255,255,255,0.52);
-  }
-
-  .calAgendaShell,
-  .calMonthShell {
-    display: grid;
-    gap: 14px;
-  }
-
-  .calAgendaTopBar,
-  .calMonthTopBar {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    gap: 14px;
-    flex-wrap: wrap;
-  }
-
-  .calAgendaDate,
-  .calMonthTitle {
-    margin-top: 6px;
-    font-size: 28px;
-    line-height: 1;
-    font-weight: 950;
-    color: #fff;
-    letter-spacing: -0.05em;
-  }
-
-  .calAgendaActions {
-    display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
-  }
-
-  .calAgendaSummaryRow {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 10px;
-  }
-
-  .calOpsMetricBlock {
-    border-radius: 16px;
-    border: 1px solid rgba(214,226,255,0.07);
-    background: rgba(255,255,255,0.016);
-    padding: 13px;
-  }
-
-  .calAgendaBoard {
-    border-radius: 18px;
-    border: 1px solid rgba(214,226,255,0.07);
-    background: rgba(255,255,255,0.012);
-    padding: 14px;
-  }
-
-  .calAgendaBoardHead {
-    display: flex;
-    justify-content: space-between;
-    gap: 12px;
-    align-items: flex-start;
-    flex-wrap: wrap;
-    margin-bottom: 14px;
-  }
-
-  .calAgendaBoardTitle {
-    font-size: 18px;
-    line-height: 1;
-    font-weight: 900;
-    letter-spacing: -0.03em;
-    color: #fff;
-  }
-
-  .calAgendaBoardTags {
-    display: flex;
-    gap: 6px;
-    flex-wrap: wrap;
-  }
-
-  .calAgendaList {
-    display: grid;
-    gap: 12px;
-    max-height: 940px;
-    overflow-y: auto;
-    padding-right: 4px;
-  }
-
-  .calAgendaItem {
-    position: relative;
-    display: grid;
-    grid-template-columns: 112px minmax(0, 1fr);
-    gap: 12px;
-    align-items: stretch;
-  }
-
-  .calAgendaItemLine {
-    position: absolute;
-    left: 113px;
-    top: 12px;
-    width: 3px;
-    height: calc(100% - 24px);
-    border-radius: 999px;
-    opacity: 0.9;
-  }
-
-  .calAgendaTimeCol {
-    padding: 14px 12px;
-    border-radius: 16px;
-    border: 1px solid rgba(214,226,255,0.06);
-    background: rgba(255,255,255,0.016);
-  }
-
-  .calAgendaTimeMain {
-    font-size: 14px;
-    line-height: 1;
-    font-weight: 900;
-    color: #fff;
-  }
-
-  .calAgendaTimeSub {
-    margin-top: 8px;
-    font-size: 11px;
-    color: rgba(255,255,255,0.5);
-    line-height: 1.4;
-  }
-
-  .calAgendaItemCard {
-    position: relative;
-    padding: 15px;
-    border-radius: 18px;
-    border: 1px solid rgba(214,226,255,0.07);
-    background: rgba(255,255,255,0.018);
-  }
-
-  .calAgendaItemTop {
-    display: flex;
-    justify-content: space-between;
-    gap: 12px;
-    align-items: flex-start;
-  }
-
-  .calAgendaItemTitleRow {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    flex-wrap: wrap;
-  }
-
-  .calAgendaItemTitle {
-    font-size: 17px;
-    line-height: 1.05;
-    font-weight: 900;
-    letter-spacing: -0.03em;
-    color: #fff;
-    min-width: 0;
-  }
-
-  .calAgendaItemMetaRow {
-    margin-top: 10px;
-    display: flex;
-    gap: 6px;
-    flex-wrap: wrap;
-  }
-
-  .calAgendaItemNote {
-    margin-top: 12px;
-    font-size: 13px;
-    line-height: 1.58;
-    color: rgba(255,255,255,0.66);
-  }
-
-  .calAgendaEmptyTimeline {
-    display: grid;
-    gap: 12px;
-    padding-top: 4px;
-  }
-
-  .calAgendaEmptyLane {
-    display: grid;
-    grid-template-columns: 76px minmax(0, 1fr);
-    gap: 12px;
-    align-items: center;
-  }
-
-  .calAgendaEmptyTime {
-    font-size: 11px;
-    font-weight: 900;
-    letter-spacing: .14em;
-    text-transform: uppercase;
-    color: rgba(255,255,255,0.36);
-  }
-
-  .calAgendaEmptyTrack {
-    position: relative;
-    min-height: 54px;
-    display: flex;
-    align-items: center;
-  }
-
-  .calAgendaEmptyTrackLine {
-    position: absolute;
-    left: 0;
-    top: 50%;
-    right: 0;
-    height: 1px;
-    background: rgba(214,226,255,0.06);
-  }
-
-  .calAgendaEmptyCard {
-    position: relative;
-    width: 100%;
-    min-height: 54px;
-    border-radius: 14px;
-    border: 1px dashed rgba(214,226,255,0.08);
-    background: rgba(255,255,255,0.014);
-    display: flex;
-    align-items: center;
-    padding: 0 14px;
-  }
-
-  .calAgendaEmptyCardText {
-    font-size: 12px;
-    color: rgba(255,255,255,0.54);
-    font-weight: 700;
-  }
-
-  .calMonthTopStats {
-    display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
-  }
-
-  .calMonthTopStat {
-    min-width: 110px;
-    padding: 10px 12px;
-    border-radius: 14px;
-    border: 1px solid rgba(214,226,255,0.07);
-    background: rgba(255,255,255,0.016);
-  }
-
-  .calMonthTopStat span {
-    display: block;
-    font-size: 9.5px;
-    font-weight: 800;
-    letter-spacing: .12em;
-    text-transform: uppercase;
-    color: rgba(255,255,255,0.42);
-  }
-
-  .calMonthTopStat strong {
-    display: block;
-    margin-top: 6px;
-    color: #fff;
-    font-size: 17px;
-    line-height: 1;
-    font-weight: 900;
-    letter-spacing: -0.03em;
-  }
-
-  .calMonthBoardFrame {
-    border-radius: 18px;
-    border: 1px solid rgba(214,226,255,0.06);
-    background: rgba(255,255,255,0.01);
-    padding: 12px;
-  }
-
-  .calMonthWeekdays {
-    display: grid;
-    grid-template-columns: repeat(7, minmax(0, 1fr));
-    gap: 8px;
-    margin-bottom: 8px;
-  }
-
-  .calMonthWeekday {
-    padding: 0 4px;
-    font-size: 10px;
-    font-weight: 900;
-    text-transform: uppercase;
-    letter-spacing: .16em;
-    color: rgba(255,255,255,0.34);
-  }
-
-  .calMonthGrid {
-    display: grid;
-    grid-template-columns: repeat(7, minmax(0, 1fr));
-    gap: 8px;
-  }
-
-  .calMonthCell {
-    min-height: 138px;
-    padding: 10px;
-    border-radius: 16px;
-    text-align: left;
-    border: 1px solid rgba(214,226,255,0.06);
-    background: rgba(255,255,255,0.012);
-    cursor: pointer;
-    display: grid;
-    align-content: space-between;
-    gap: 10px;
-    position: relative;
-    transition: border-color 120ms ease, background 120ms ease;
-  }
-
-  .calMonthCell:hover {
-    border-color: rgba(214,226,255,0.12);
-    background: rgba(255,255,255,0.022);
-  }
-
-  .calMonthCell::before {
-    content: "";
-    position: absolute;
-    left: 0;
-    top: 10px;
-    bottom: 10px;
-    width: 3px;
-    border-radius: 999px;
-    background: transparent;
-  }
-
-  .calMonthCell.selected {
-    border-color: rgba(214,226,255,0.14);
-    background: rgba(255,255,255,0.028);
-  }
-
-  .calMonthCell.selected::before {
-    background: rgba(247,251,255,0.82);
-  }
-
-  .calMonthCell.today {
-    border-color: rgba(142,244,187,0.18);
-  }
-
-  .calMonthCell.today::before {
-    background: rgba(142,244,187,0.9);
-  }
-
-  .calMonthCell.muted {
-    opacity: 0.42;
-  }
-
-  .calMonthCellTop {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 10px;
-  }
-
-  .calMonthCellNumber {
-    font-size: 28px;
-    font-weight: 950;
-    line-height: 1;
-    color: #fff;
-    letter-spacing: -0.04em;
-  }
-
-  .calMonthCellIso {
-    margin-top: 4px;
-    font-size: 10px;
-    color: rgba(255,255,255,0.32);
-  }
-
-  .calMonthCellCount {
-    min-width: 26px;
-    height: 26px;
-    border-radius: 999px;
-    display: grid;
-    place-items: center;
-    padding: 0 7px;
-    border: 1px solid rgba(214,226,255,0.08);
-    background: rgba(255,255,255,0.03);
-    font-size: 10px;
-    font-weight: 900;
-    color: #fff;
-  }
-
-  .calMonthCellFoot {
-    display: grid;
-    gap: 8px;
-    min-height: 0;
-  }
-
-  .calMonthDotStrip {
-    display: flex;
-    gap: 5px;
-    flex-wrap: wrap;
-    min-height: 10px;
-  }
-
-  .calMonthDot {
-    width: 7px;
-    height: 7px;
-    border-radius: 999px;
-    flex-shrink: 0;
-  }
-
-  .calMonthMiniList {
-    display: grid;
-    gap: 4px;
-  }
-
-  .calMonthMiniRow {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    min-width: 0;
-  }
-
-  .calMonthMiniRowDot {
-    width: 7px;
-    height: 7px;
-    border-radius: 999px;
-    flex-shrink: 0;
-  }
-
-  .calMonthMiniRowText {
-    font-size: 11px;
-    font-weight: 700;
-    color: rgba(255,255,255,0.64);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .calMonthPreviewMore {
-    font-size: 10px;
-    font-weight: 800;
-    color: rgba(255,255,255,0.36);
-  }
-
-  .calMonthCellEmpty {
-    font-size: 11px;
-    font-weight: 700;
-    color: rgba(255,255,255,0.26);
-  }
-
-  .calOpsActionStack {
-    display: grid;
-    gap: 10px;
-  }
-
-  .calOpsActionStack.compact {
-    gap: 8px;
-  }
-
-  .calOpsSignalList {
-    display: grid;
-    gap: 9px;
-  }
-
-  .calOpsSignalRow {
-    display: flex;
-    justify-content: space-between;
-    gap: 10px;
-    align-items: flex-start;
-    padding-bottom: 9px;
-    border-bottom: 1px solid rgba(214,226,255,0.06);
-    font-size: 12px;
-    color: rgba(255,255,255,0.68);
-  }
-
-  .calOpsSignalRow:last-child {
-    border-bottom: 0;
-    padding-bottom: 0;
-  }
-
-  .calOpsSignalRow strong {
-    color: #fff;
-    text-align: right;
-    font-weight: 900;
-    line-height: 1.4;
-  }
-
-  .calOpsMiniList {
-    display: grid;
-    gap: 10px;
-  }
-
-  .calOpsMiniRow {
-    display: flex;
-    justify-content: space-between;
-    gap: 10px;
-    align-items: center;
-    padding: 11px;
-    border-radius: 14px;
-    border: 1px solid rgba(214,226,255,0.06);
-    background: rgba(255,255,255,0.016);
-  }
-
-  .calOpsMiniRowLeft {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    min-width: 0;
-  }
-
-  .calOpsMiniRowTitle {
-    font-size: 13px;
-    font-weight: 900;
-    color: #fff;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .calOpsMiniRowMeta {
-    margin-top: 4px;
-    font-size: 11px;
-    color: rgba(255,255,255,0.5);
-  }
-
-  .calOpsFocusCard {
-    border-radius: 16px;
-    border: 1px solid rgba(214,226,255,0.06);
-    background: rgba(255,255,255,0.016);
-    padding: 13px;
-  }
-
-  .calOpsFocusCardTitle {
-    font-size: 16px;
-    font-weight: 900;
-    color: #fff;
-    letter-spacing: -0.03em;
-  }
-
-  .calOpsFocusCardTags {
-    margin-top: 10px;
-    display: flex;
-    gap: 6px;
-    flex-wrap: wrap;
-  }
-
-  .calOpsSubsectionTitle {
-    font-size: 11px;
-    font-weight: 900;
-    letter-spacing: .16em;
-    text-transform: uppercase;
-    color: rgba(255,255,255,0.4);
-    margin-bottom: 10px;
-  }
-
-  .calOpsDivider {
-    height: 1px;
-    background: rgba(214,226,255,0.06);
-    margin: 14px 0;
-  }
-
-  .calOpsIconBtn {
-    width: 34px;
-    height: 34px;
-    border-radius: 11px;
-    border: 1px solid rgba(214,226,255,0.08);
-    background: rgba(255,255,255,0.03);
-    color: rgba(255,255,255,0.84);
-    display: grid;
-    place-items: center;
-    cursor: pointer;
-  }
-
-  .calOpsMenu {
-    position: absolute;
-    right: 0;
-    top: 40px;
-    z-index: 10;
-    width: 228px;
-    border-radius: 18px;
-    border: 1px solid rgba(214,226,255,0.08);
-    background: rgba(10,16,28,0.98);
-    padding: 8px;
-    box-shadow: 0 20px 50px rgba(0,0,0,0.45);
-  }
-
-  .calOpsMenuBtn {
-    width: 100%;
-    min-height: 38px;
-    border-radius: 12px;
-    border: none;
-    background: transparent;
-    color: rgba(255,255,255,0.88);
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 0 10px;
-    font-size: 13px;
-    font-weight: 800;
-    cursor: pointer;
-    text-align: left;
-  }
-
-  .calOpsMenuBtn.tone-danger {
-    color: #ff9fb2;
-  }
-
-  .calOpsMenuBtn.tone-success {
-    color: #8ef4bb;
-  }
-
-  .calOpsMenuHint {
-    padding: 8px 10px;
-    font-size: 11px;
-    line-height: 1.5;
-    color: rgba(255,255,255,0.45);
-  }
-
-  .calOpsModalBackdrop {
-    position: fixed;
-    inset: 0;
-    z-index: 80;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: rgba(0,0,0,0.72);
-    backdrop-filter: blur(8px);
-    padding: 20px;
-  }
-
-  .calOpsModalWrap {
-    max-height: 100%;
-    overflow: auto;
-  }
-
-  .calOpsModalCard {
-    border-radius: 24px;
-    border: 1px solid rgba(214,226,255,0.08);
-    background:
-      linear-gradient(180deg, rgba(255,255,255,0.018), rgba(255,255,255,0)),
-      rgba(8, 12, 20, 0.98);
-    box-shadow:
-      inset 0 1px 0 rgba(255,255,255,0.03),
-      0 20px 60px rgba(0,0,0,0.4);
-    padding: 18px;
-  }
-
-  .calOpsModalHead {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    margin-bottom: 18px;
-  }
-
-  .calOpsModalTitle {
-    font-size: 22px;
-    font-weight: 950;
-    color: #fff;
-    letter-spacing: -0.03em;
-  }
-
-  .calOpsManageGrid {
-    display: grid;
-    grid-template-columns: minmax(0, 1.15fr) minmax(280px, 0.85fr);
-    gap: 18px;
-  }
-
-  .calOpsProfileCard {
-    padding: 15px;
-    border-radius: 18px;
-    border: 1px solid rgba(214,226,255,0.07);
-    background: rgba(255,255,255,0.016);
-  }
-
-  .calOpsProfileCard.active {
-    border-color: rgba(214,226,255,0.16);
-  }
-
-  .calOpsProfileCardTop {
-    display: flex;
-    justify-content: space-between;
-    gap: 12px;
-    align-items: center;
-    flex-wrap: wrap;
-  }
-
-  .calOpsProfileTitleRow {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    flex-wrap: wrap;
-  }
-
-  .calOpsProfileTitle {
-    font-size: 16px;
-    font-weight: 900;
-    color: #fff;
-  }
-
-  .calOpsCreateProfileStack {
-    display: grid;
-    gap: 14px;
-  }
-
-  .calOpsEditorGrid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 14px;
-  }
-
-  .calOpsEditorFoot {
-    margin-top: 18px;
-    display: flex;
-    gap: 10px;
-    flex-wrap: wrap;
-    justify-content: space-between;
-  }
-
-  @media (max-width: 1360px) {
-    .calOpsWorkspace {
-      grid-template-columns: 280px minmax(0, 1fr);
-    }
-
-    .calOpsRightRail {
-      grid-column: 1 / -1;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-
-    .calAgendaSummaryRow {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-  }
-
-  @media (max-width: 1080px) {
-    .calOpsHero {
-      grid-template-columns: 1fr;
-      align-items: start;
-    }
-
-    .calOpsHeroActions {
-      justify-content: flex-start;
-    }
-
-    .calOpsManageGrid,
-    .calOpsEditorGrid,
-    .calOpsWorkspace,
-    .calOpsRightRail,
-    .calAgendaSummaryRow {
-      grid-template-columns: 1fr;
-    }
-
-    .calMonthGrid {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-  }
-
-  @media (max-width: 760px) {
-    .calOpsRoot {
-      padding: 0 0 18px;
-    }
-
-    .calAgendaItem {
-      grid-template-columns: 1fr;
-    }
-
-    .calAgendaItemLine {
-      display: none;
-    }
-
-    .calAgendaEmptyLane {
-      grid-template-columns: 1fr;
-      gap: 8px;
-    }
-
-    .calMonthGrid {
-      grid-template-columns: 1fr;
-    }
-
-    .calMonthWeekdays {
-      display: none;
-    }
-
-    .calMonthCell {
-      min-height: 124px;
-    }
-
-    .calMonthCellNumber {
-      font-size: 24px;
-    }
-
-    .calMonthCellIso {
-      display: none;
-    }
-
-    .calOpsHeroStats,
-    .calOpsHeroActions,
-    .calAgendaActions {
-      width: 100%;
-    }
-  }
-`;
