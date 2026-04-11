@@ -23,6 +23,11 @@ import {
   mapPlannedRowToClient,
   mapTransactionClientToRow,
   mapTransactionRowToClient,
+  money,
+  autoClassifyReceiptItem,
+  autoCoachFlag,
+  autoPriceSignal,
+  shouldIgnoreReceiptItemName,
   parseMoneyInput,
   periodBounds,
   roundMoneyValue,
@@ -84,6 +89,12 @@ function emptyReceiptLine() {
   };
 }
 
+function toSignedNumber(value, fallback = 0) {
+  const raw = parseMoneyInput(value);
+  if (!Number.isFinite(raw)) return fallback;
+  return raw;
+}
+
 function toPositiveNumber(value, fallback = 0) {
   const raw = parseMoneyInput(value);
   if (!Number.isFinite(raw) || raw < 0) return fallback;
@@ -97,19 +108,48 @@ function toQuantity(value) {
 }
 
 function computeLineTotal(item) {
-  return roundMoneyValue(toQuantity(item?.quantity) * toPositiveNumber(item?.unitPrice, 0));
+  const explicit = parseMoneyInput(item?.lineTotal);
+  if (Number.isFinite(explicit)) return roundMoneyValue(explicit);
+  return roundMoneyValue(toQuantity(item?.quantity) * toSignedNumber(item?.unitPrice, 0));
 }
 
 function normalizeReceiptLine(line = {}) {
+  const itemName = String(line.itemName || "");
+  const quantity = String(line.quantity ?? "1");
+  const unitPrice = String(line.unitPrice ?? "");
+  const lineTotal = computeLineTotal({ ...line, itemName, quantity, unitPrice });
+  const classification =
+    ["need", "want", "waste", "review"].includes(line.classification)
+      ? line.classification
+      : autoClassifyReceiptItem({
+          itemName,
+          merchantName: line.merchantName || "",
+          lineTotal,
+        });
+  const priceSignal =
+    ["good", "fair", "high", "neutral"].includes(line.priceSignal)
+      ? line.priceSignal
+      : autoPriceSignal({
+          itemName,
+          merchantName: line.merchantName || "",
+          unitPrice,
+          lineTotal,
+        });
+  const coachFlag =
+    ["good-price", "watch", "overspent", "stop", "normal"].includes(line.coachFlag)
+      ? line.coachFlag
+      : autoCoachFlag({ classification, priceSignal, lineTotal });
+
   return {
     id: line.id || uid(),
-    itemName: String(line.itemName || ""),
-    quantity: String(line.quantity ?? "1"),
-    unitPrice: String(line.unitPrice ?? ""),
-    lineTotal: computeLineTotal(line),
-    classification: ["need", "want", "waste", "review"].includes(line.classification)
-      ? line.classification
-      : "review",
+    itemName,
+    quantity,
+    unitPrice,
+    lineTotal,
+    classification,
+    priceSignal,
+    coachFlag,
+    includeInMath: line.includeInMath !== false,
     note: String(line.note || ""),
   };
 }
@@ -128,30 +168,47 @@ function buildReceiptDraft(seed = null, categories = [], accounts = []) {
     paymentMethod: seed?.paymentMethod || "Card",
     note: seed?.note || "",
     tax: "",
+    ocrSubtotal: null,
+    ocrTotal: null,
+    ocrDiscount: null,
     items: [emptyReceiptLine()],
   };
 }
 
 function computeReceiptDraftSummary(draft) {
   const items = Array.isArray(draft?.items) ? draft.items.map(normalizeReceiptLine) : [];
-  const subtotal = roundMoneyValue(
-    items.reduce((sum, line) => sum + (Number(line.lineTotal) || 0), 0)
+  const mathItems = items.filter((line) => line.includeInMath !== false);
+  const subtotalFromItems = roundMoneyValue(
+    mathItems.reduce((sum, line) => sum + (Number(line.lineTotal) || 0), 0)
   );
-  const tax = roundMoneyValue(toPositiveNumber(draft?.tax, 0));
-  const buckets = { need: 0, want: 0, waste: 0, review: 0 };
+  const subtotal =
+    Number.isFinite(Number(draft?.ocrSubtotal)) ? roundMoneyValue(Number(draft.ocrSubtotal)) : subtotalFromItems;
+  const tax =
+    Number.isFinite(Number(draft?.tax)) ? roundMoneyValue(Number(draft.tax)) : 0;
+  const total =
+    Number.isFinite(Number(draft?.ocrTotal)) ? roundMoneyValue(Number(draft.ocrTotal)) : roundMoneyValue(subtotal + tax);
+  const buckets = { need: 0, want: 0, waste: 0, review: 0, overspent: 0, goodPrice: 0 };
 
-  items.forEach((line) => {
+  mathItems.forEach((line) => {
     const key = ["need", "want", "waste", "review"].includes(line.classification)
       ? line.classification
       : "review";
-    buckets[key] = roundMoneyValue(buckets[key] + (Number(line.lineTotal) || 0));
+    const amount = Math.max(0, Number(line.lineTotal) || 0);
+    buckets[key] = roundMoneyValue(buckets[key] + amount);
+    if (line.coachFlag === "overspent") {
+      buckets.overspent = roundMoneyValue(buckets.overspent + amount);
+    }
+    if (line.coachFlag === "good-price") {
+      buckets.goodPrice = roundMoneyValue(buckets.goodPrice + amount);
+    }
   });
 
   return {
-    count: items.filter((line) => line.itemName.trim() || Number(line.lineTotal) > 0).length,
+    count: items.filter((line) => line.itemName.trim() || Number(line.lineTotal) !== 0).length,
     subtotal,
     tax,
-    total: roundMoneyValue(subtotal + tax),
+    total,
+    discount: Number.isFinite(Number(draft?.ocrDiscount)) ? roundMoneyValue(Number(draft.ocrDiscount)) : 0,
     ...buckets,
   };
 }
@@ -168,6 +225,8 @@ function mapReceiptItemRowToClient(row) {
     unitPrice: row.unit_price != null ? Number(row.unit_price) : 0,
     lineTotal: Number(row.line_total) || 0,
     classification: row.classification || "review",
+    priceSignal: row.price_signal || "neutral",
+    coachFlag: row.coach_flag || "normal",
     classificationConfidence:
       row.classification_confidence != null ? Number(row.classification_confidence) : null,
     categoryHint: row.category_hint || "",
@@ -548,6 +607,16 @@ export default function SpendingCommand() {
       });
   }, [transactions, range, typeFilter, categoryFilter, groupFilter, search, categoriesById]);
 
+
+  const enrichedTransactions = React.useMemo(
+    () =>
+      filteredTransactions.map((tx) => ({
+        ...tx,
+        categoryName: categoriesById.get(tx.categoryId)?.name || "",
+      })),
+    [filteredTransactions, categoriesById]
+  );
+
   const filteredPlanned = React.useMemo(() => {
     const q = search.trim().toLowerCase();
 
@@ -720,6 +789,57 @@ export default function SpendingCommand() {
   const selectedForecast = roundMoneyValue(selectedSpent + selectedPlannedTotal);
   const selectedLoadPct = selectedBudget > 0 ? (selectedForecast / selectedBudget) * 100 : 0;
 
+  const notifications = React.useMemo(() => {
+    const items = [];
+
+    totalsByCategory
+      .filter((row) => row.budget > 0 && row.forecast > row.budget)
+      .slice(0, 4)
+      .forEach((row) => {
+        const overBy = roundMoneyValue(row.forecast - row.budget);
+        items.push({
+          id: `over-${row.categoryId}`,
+          tone: "red",
+          target: "dashboard",
+          title: `${row.category.name} is over budget`,
+          body: overBy > 0 ? `${money(overBy)} over in the current ${range.label.toLowerCase()} view.` : "Category pressure is above target.",
+        });
+      });
+
+    if (selectedTx && !selectedReceipts.length) {
+      items.push({
+        id: `receipt-${selectedTx.id}`,
+        tone: "amber",
+        target: "receipt",
+        title: "Selected transaction has no receipt",
+        body: `${selectedTx.merchant || selectedTx.note || "This transaction"} is missing receipt detail.`,
+      });
+    }
+
+    if (totals.plannedExpense > 0) {
+      items.push({
+        id: "planned-pressure",
+        tone: "blue",
+        target: "dashboard",
+        title: "Planned spending is active",
+        body: `${money(totals.plannedExpense)} in planned pressure is still sitting ahead.`,
+      });
+    }
+
+    if (!items.length) {
+      items.push({
+        id: "all-clear",
+        tone: "green",
+        target: "dashboard",
+        title: "No hard alerts right now",
+        body: "Visible spending is stable in the current view.",
+      });
+    }
+
+    return items.slice(0, 6);
+  }, [totalsByCategory, selectedTx, selectedReceipts, totals.plannedExpense, range.label]);
+
+
   function resetOcrState() {
     setOcrRunning(false);
     setOcrError("");
@@ -731,28 +851,55 @@ export default function SpendingCommand() {
 
     const normalizedItems = Array.isArray(ocrPayload.items)
       ? ocrPayload.items
-          .map((item) =>
-            normalizeReceiptLine({
+          .map((item) => {
+            const rawName = item.itemName || item.rawText || "";
+            if (shouldIgnoreReceiptItemName(rawName)) return null;
+            const parsed = normalizeReceiptLine({
               id: uid(),
-              itemName: item.itemName || "",
+              itemName: rawName,
               quantity: item.quantity != null ? String(item.quantity) : "1",
               unitPrice: item.unitPrice != null ? String(item.unitPrice) : "",
-              lineTotal: item.lineTotal || 0,
-              classification: "review",
+              lineTotal: item.lineTotal != null ? String(item.lineTotal) : "",
+              merchantName: ocrPayload.merchant || baseDraft.merchant,
+              classification: item.classification,
+              priceSignal: item.priceSignal,
+              coachFlag: item.coachFlag,
               note: item.note || "",
-            })
-          )
-          .filter((item) => item.itemName.trim() || Number(item.lineTotal) > 0)
+              includeInMath: item.includeInMath !== false,
+            });
+            return parsed;
+          })
+          .filter(Boolean)
       : [];
+
+    const ocrTax =
+      ocrPayload.tax != null && Number.isFinite(Number(ocrPayload.tax))
+        ? roundMoneyValue(Number(ocrPayload.tax))
+        : baseDraft.tax;
+
+    const explicitSubtotal =
+      ocrPayload.subtotal != null && Number.isFinite(Number(ocrPayload.subtotal))
+        ? roundMoneyValue(Number(ocrPayload.subtotal))
+        : null;
+
+    const explicitTotal =
+      ocrPayload.total != null && Number.isFinite(Number(ocrPayload.total))
+        ? roundMoneyValue(Number(ocrPayload.total))
+        : null;
+
+    const explicitDiscount =
+      ocrPayload.discount != null && Number.isFinite(Number(ocrPayload.discount))
+        ? roundMoneyValue(Number(ocrPayload.discount))
+        : null;
 
     return {
       ...baseDraft,
       merchant: ocrPayload.merchant || baseDraft.merchant,
       date: ocrPayload.date || baseDraft.date,
-      tax:
-        ocrPayload.tax != null && Number.isFinite(Number(ocrPayload.tax))
-          ? String(roundMoneyValue(Number(ocrPayload.tax)))
-          : baseDraft.tax,
+      tax: ocrTax != null ? String(ocrTax) : baseDraft.tax,
+      ocrSubtotal: explicitSubtotal,
+      ocrTotal: explicitTotal,
+      ocrDiscount: explicitDiscount,
       items: normalizedItems.length ? normalizedItems : baseDraft.items,
     };
   }
@@ -853,7 +1000,7 @@ export default function SpendingCommand() {
       return {
         ...prev,
         items: prev.items.map((line) =>
-          line.id === lineId ? normalizeReceiptLine({ ...line, ...patch }) : line
+          line.id === lineId ? normalizeReceiptLine({ ...line, ...patch, merchantName: receiptDraft?.merchant || "" }) : line
         ),
       };
     });
@@ -1377,6 +1524,8 @@ export default function SpendingCommand() {
           unit_price: roundMoneyValue(toPositiveNumber(item.unitPrice, 0)),
           line_total: roundMoneyValue(item.lineTotal || 0),
           classification: item.classification || "review",
+          price_signal: item.priceSignal || "neutral",
+          coach_flag: item.coachFlag || "normal",
           classification_confidence: null,
           category_hint: categoriesById.get(receiptDraft.categoryId || "")?.name || null,
           merchant_rule_hit: null,
@@ -1432,13 +1581,16 @@ export default function SpendingCommand() {
         period={period}
         setPeriod={setPeriod}
         onOpenComposer={openComposerBlank}
+        search={search}
+        setSearch={setSearch}
+        activePage={workspaceMode}
+        setActivePage={setWorkspaceMode}
+        notifications={notifications}
       />
 
       <div className={styles.workspace}>
         <section className={styles.workspaceFeed}>
           <FeedPane
-            search={search}
-            setSearch={setSearch}
             typeFilter={typeFilter}
             setTypeFilter={setTypeFilter}
             categoryFilter={categoryFilter}
@@ -1447,7 +1599,7 @@ export default function SpendingCommand() {
             setGroupFilter={setGroupFilter}
             categories={categories}
             groups={groups}
-            transactions={filteredTransactions.slice(0, 80)}
+            transactions={enrichedTransactions.slice(0, 80)}
             plannedItems={filteredPlanned.slice(0, 40)}
             receiptCountsByTransaction={receiptCountsByTransaction}
             selectedRecord={selectedRecord}
@@ -1465,7 +1617,7 @@ export default function SpendingCommand() {
             selectedTx={selectedTx}
             selectedPlanned={selectedPlanned}
             categoriesById={categoriesById}
-            visibleTransactions={filteredTransactions}
+            visibleTransactions={enrichedTransactions}
             selectedCategory={selectedCategory}
             selectedBudget={selectedBudget}
             selectedSpent={selectedSpent}
@@ -1475,6 +1627,10 @@ export default function SpendingCommand() {
             selectedReceipts={selectedReceipts}
             selectedReceiptItemsByReceiptId={selectedReceiptItemsByReceiptId}
             topMerchants={topMerchants}
+            totals={totals}
+            expenseTrend={expenseTrend}
+            forecastRemaining={forecastRemaining}
+            totalsByCategory={totalsByCategory}
             onStartReceiptDraft={startReceiptDraft}
             onOpenReceiptViewer={() => setReceiptViewerOpen(true)}
             onDuplicateTransaction={() => selectedTx && duplicateTransaction(selectedTx)}

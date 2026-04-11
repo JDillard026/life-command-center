@@ -90,8 +90,13 @@ export function roundMoneyValue(n) {
 }
 
 export function parseMoneyInput(v) {
-  const cleaned = String(v ?? "").replace(/[^0-9.-]/g, "");
-  const num = Number(cleaned);
+  const raw = String(v ?? "").trim();
+  const negativeByParens = /^\(.*\)$/.test(raw);
+  const cleaned = raw.replace(/[^0-9.-]/g, "");
+  let num = Number(cleaned);
+  if (negativeByParens && Number.isFinite(num)) {
+    num = -Math.abs(num);
+  }
   return Number.isFinite(num) ? num : NaN;
 }
 
@@ -799,4 +804,80 @@ export async function hydrateReceiptUrls(rows = []) {
       isPdf: mimeType === "application/pdf",
     };
   });
+}
+
+
+const RECEIPT_IGNORE_PATTERNS = [
+  /order confirmed/i,
+  /\bdoc\b/i,
+  /approval/i,
+  /\baid\b/i,
+  /register/i,
+  /cashier/i,
+  /guest copy/i,
+  /drive thru/i,
+  /order number/i,
+  /tran seq/i,
+  /card number/i,
+  /card type/i,
+  /operator/i,
+  /welcome to/i,
+  /subtotal/i,
+  /^tax$/i,
+  /^total$/i,
+  /discount total/i,
+  /^change$/i,
+  /^visa$/i,
+  /^mastercard$/i,
+];
+
+export function shouldIgnoreReceiptItemName(name) {
+  const value = String(name || "").trim();
+  if (!value) return true;
+  return RECEIPT_IGNORE_PATTERNS.some((pattern) => pattern.test(value));
+}
+
+export function autoClassifyReceiptItem({ itemName = "", merchantName = "", lineTotal = 0 }) {
+  const text = `${itemName} ${merchantName}`.toLowerCase();
+  const total = Math.abs(Number(lineTotal) || 0);
+
+  const wasteWords = [
+    "cigarette","beer","liquor","alcohol","vape","lottery","candy","cookie","dessert","ice cream","energy drink"
+  ];
+  const wantWords = [
+    "chick-fil-a","mcdonald","starbucks","coffee","latte","fries","burger","nugget","pizza","parfait","shake","snack","chips","soda"
+  ];
+  const needWords = [
+    "milk","egg","bread","rice","water","gas","fuel","medicine","pharmacy","toilet paper","diaper","soap","detergent","baby formula","produce","fruit","vegetable","chicken","beef"
+  ];
+
+  if (wasteWords.some((word) => text.includes(word))) return "waste";
+  if (needWords.some((word) => text.includes(word))) return "need";
+  if (wantWords.some((word) => text.includes(word))) return "want";
+  if (total <= 0) return "review";
+  return text.includes("grocery") || text.includes("publix") || text.includes("walmart") ? "need" : "want";
+}
+
+export function autoPriceSignal({ itemName = "", merchantName = "", unitPrice = 0, lineTotal = 0 }) {
+  const text = `${itemName} ${merchantName}`.toLowerCase();
+  const unit = Math.abs(Number(unitPrice) || Number(lineTotal) || 0);
+  if (unit <= 0) return "neutral";
+  const fastFood = ["chick-fil-a","mcdonald","burger","fries","nugget","parfait","coffee","starbucks","pizza"].some((word) => text.includes(word));
+  if (fastFood) {
+    if (unit <= 4.5) return "good";
+    if (unit <= 8.5) return "fair";
+    return "high";
+  }
+  if (unit <= 5) return "good";
+  if (unit <= 12) return "fair";
+  return "high";
+}
+
+export function autoCoachFlag({ classification = "review", priceSignal = "neutral", lineTotal = 0 }) {
+  const total = Math.abs(Number(lineTotal) || 0);
+  if (classification === "waste") return "stop";
+  if (priceSignal === "high" && total >= 8) return "overspent";
+  if (classification === "want" && total >= 10) return "watch";
+  if (priceSignal === "good") return "good-price";
+  return "normal";
 }

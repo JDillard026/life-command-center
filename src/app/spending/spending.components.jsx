@@ -296,9 +296,22 @@ function ReceiptItemList({ selectedReceipts, selectedReceiptItemsByReceiptId, co
             <div className={styles.receiptReviewMeta}>
               Qty {item.quantity} · {item.unitPrice != null ? money(item.unitPrice) : "—"} each
             </div>
+            {!compact ? (
+              <div className={styles.receiptReviewTags}>
+                <Pill tone={classificationTone(item.classification)}>{item.classification}</Pill>
+                <Pill tone={item.priceSignal === "good" ? "green" : item.priceSignal === "high" ? "red" : item.priceSignal === "fair" ? "amber" : "blue"}>
+                  {item.priceSignal === "high" ? "high price" : item.priceSignal === "good" ? "good price" : item.priceSignal || "neutral"}
+                </Pill>
+                {item.coachFlag && item.coachFlag !== "normal" ? (
+                  <Pill tone={item.coachFlag === "overspent" || item.coachFlag === "stop" ? "red" : item.coachFlag === "good-price" ? "green" : "amber"}>
+                    {item.coachFlag.replace("-", " ")}
+                  </Pill>
+                ) : null}
+              </div>
+            ) : null}
           </div>
           <div className={styles.receiptReviewRight}>
-            <Pill tone={classificationTone(item.classification)}>{item.classification}</Pill>
+            {compact ? <Pill tone={classificationTone(item.classification)}>{item.classification}</Pill> : null}
             <strong>{money(item.lineTotal)}</strong>
           </div>
         </div>
@@ -310,10 +323,10 @@ function ReceiptItemList({ selectedReceipts, selectedReceiptItemsByReceiptId, co
 function ModeTabs({ mode, setMode }) {
   const tabs = [
     { id: "dashboard", label: "Dashboard", icon: Wallet },
+    { id: "breakdown", label: "Transaction Breakdown", icon: ArrowLeftRight },
     { id: "receipt", label: "Receipt Lab", icon: Camera },
-    { id: "coach", label: "Spend Coach", icon: PiggyBank },
+    { id: "coach", label: "Coach", icon: PiggyBank },
   ];
-
   return (
     <div className={styles.modeTabs}>
       {tabs.map((tab) => {
@@ -464,6 +477,7 @@ function SpendCoachPane({
   selectedBudget,
   selectedForecast,
   selectedReceipts,
+  selectedReceiptItemsByReceiptId,
   visibleTransactions,
   categoriesById,
 }) {
@@ -476,6 +490,10 @@ function SpendCoachPane({
     .reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0);
   const accountShare = totalVisibleExpense > 0 ? accountSpend / totalVisibleExpense : 0;
   const categoryName = categoriesById.get(selectedTx?.categoryId)?.name || "Uncategorized";
+  const receiptItems = selectedReceipts.flatMap((receipt) => selectedReceiptItemsByReceiptId.get(receipt.id) || []);
+  const hotItems = receiptItems.filter((item) => item.coachFlag === "overspent" || item.coachFlag === "stop" || item.classification === "waste");
+  const goodItems = receiptItems.filter((item) => item.coachFlag === "good-price");
+  const wantItems = receiptItems.filter((item) => item.classification === "want");
 
   const warnings = [];
   if (selectedBudget <= 0) warnings.push("No budget guardrail on this category yet.");
@@ -490,86 +508,63 @@ function SpendCoachPane({
   if (isBillManagedTransaction(selectedTx)) {
     warnings.push("This purchase came from the bills lane. Do not casually stack optional spend around it.");
   }
+  if (hotItems.length) {
+    warnings.push(`${hotItems.length} receipt item${hotItems.length > 1 ? "s look" : " looks"} overpriced or wasteful.`);
+  }
 
   return (
     <div className={styles.workspaceBody}>
       <div className={styles.workspaceGridCoach}>
         <div className={styles.storyCard}>
-          <SectionHeader title="Spend coach" subcopy="Blunt guidance from the current visible behavior." />
+          <SectionHeader title="Stop bleeding" subcopy="This is the blunt lane. What needs attention first." />
           <div className={styles.coachLead}>
-            <div className={styles.coachLeadTitle}>What the page would tell you right now</div>
+            <div className={styles.coachLeadTitle}>
+              {warnings[0] || "No immediate damage signal in the current view."}
+            </div>
             <div className={styles.coachLeadCopy}>
-              {warnings.length
-                ? warnings[0]
-                : "This purchase is not throwing a hard red flag yet, but keep watching the lane."}
+              {hotItems.length
+                ? `${hotItems.length} receipt item${hotItems.length > 1 ? "s are" : " is"} marked as overspent / waste automatically.`
+                : "This page is looking for over-budget lanes, overpriced items, waste flags, and account concentration."}
             </div>
           </div>
           <div className={styles.helperList}>
-            {warnings.length ? (
-              warnings.map((warning) => (
-                <div key={warning} className={styles.helperListItem}>
-                  {warning}
-                </div>
-              ))
-            ) : (
-              <div className={styles.helperListItem}>No hard coach warning in the current view.</div>
-            )}
+            {warnings.length ? warnings.map((warning) => (
+              <div key={warning} className={styles.helperListItem}>{warning}</div>
+            )) : <div className={styles.helperListItem}>Nothing is screaming red in this view.</div>}
           </div>
         </div>
 
         <div className={styles.storyCard}>
           <SectionHeader title="Pressure read" subcopy="Current lane and account strain." />
           <div className={styles.coachStatsGrid}>
-            <InsightStat
-              label="Category"
-              value={categoryName}
-              subcopy="Active lane"
-              tone="blue"
-            />
-            <InsightStat
-              label="Forecast"
-              value={money(selectedForecast)}
-              subcopy={selectedBudget > 0 ? `Budget ${money(selectedBudget)}` : "No budget"}
-              tone={selectedBudget > 0 && selectedForecast > selectedBudget ? "red" : "green"}
-            />
-            <InsightStat
-              label="Account share"
-              value={`${Math.round(accountShare * 100)}%`}
-              subcopy="Of visible expense"
-              tone={accountShare >= 0.45 ? "amber" : "blue"}
-            />
-            <InsightStat
-              label="Receipt"
-              value={selectedReceipts.length ? "Attached" : "Missing"}
-              subcopy="Product-level detail"
-              tone={selectedReceipts.length ? "green" : "amber"}
-            />
+            <InsightStat label="Category" value={categoryName} subcopy="Active lane" tone="blue" />
+            <InsightStat label="Forecast" value={money(selectedForecast)} subcopy={selectedBudget > 0 ? `Budget ${money(selectedBudget)}` : "No budget"} tone={selectedBudget > 0 && selectedForecast > selectedBudget ? "red" : "green"} />
+            <InsightStat label="Account share" value={`${Math.round(accountShare * 100)}%`} subcopy="Of visible expense" tone={accountShare >= 0.45 ? "amber" : "blue"} />
+            <InsightStat label="Receipt" value={selectedReceipts.length ? "Attached" : "Missing"} subcopy="Product-level detail" tone={selectedReceipts.length ? "green" : "amber"} />
           </div>
         </div>
       </div>
 
       <div className={styles.storyGridWide}>
         <div className={styles.storyCard}>
-          <SectionHeader title="Don’t do this again engine" subcopy="Rules that will get meaner as item memory comes online." />
+          <SectionHeader title="Auto item coach" subcopy="This is what the receipt itself is saying." />
           <div className={styles.helperList}>
-            <div className={styles.helperListItem}>
-              Repeated merchant hits will become blunt warnings here.
-            </div>
-            <div className={styles.helperListItem}>
-              Overpaid detection will land here once receipt item memory is online.
-            </div>
-            <div className={styles.helperListItem}>
-              Low-balance and overused-account alerts will also live here.
-            </div>
+            {hotItems.length ? hotItems.slice(0, 4).map((item) => (
+              <div key={item.id} className={styles.helperListItem}>
+                {item.itemName} · {money(item.lineTotal)} · {item.coachFlag === "stop" ? "waste" : "overspent"}
+              </div>
+            )) : <div className={styles.helperListItem}>No auto-flagged overspent / waste items in the selected receipt.</div>}
+            {goodItems.length ? <div className={styles.helperListItem}>{goodItems.length} item{goodItems.length > 1 ? "s look" : " looks"} like a good price.</div> : null}
+            {wantItems.length ? <div className={styles.helperListItem}>{wantItems.length} item{wantItems.length > 1 ? "s are" : " is"} tagged as wants.</div> : null}
           </div>
         </div>
 
         <div className={styles.storyCard}>
-          <SectionHeader title="What this means now" subcopy="Current-state honest read." />
-          <div className={styles.helperBlock}>
-            Right now this tab can honestly judge category pressure, receipt presence, merchant repetition,
-            and account concentration in the visible view. The harsher product-level coaching gets stronger
-            once OCR and item memory are wired in.
+          <SectionHeader title="What to do next" subcopy="Actual action queue." />
+          <div className={styles.helperList}>
+            <div className={styles.helperListItem}>Cut the next optional purchase in this lane if the forecast stays over budget.</div>
+            <div className={styles.helperListItem}>Use Receipt Lab to verify the OCR if any item looks wrong.</div>
+            <div className={styles.helperListItem}>Let the coach auto-tags do the first pass, then only override what is clearly wrong.</div>
           </div>
         </div>
       </div>
@@ -577,16 +572,201 @@ function SpendCoachPane({
   );
 }
 
-export function TopStrip({ totals, expenseTrend, forecastRemaining, period, setPeriod, onOpenComposer }) {
+
+function formatRailAccountLine(tx) {
+  if (!tx) return "Account";
+  if (tx.type === "transfer") {
+    const from = tx.accountName || tx.account || "From account";
+    const to = tx.transferAccountName || "To account";
+    return `${from} → ${to}`;
+  }
+  const account = tx.accountName || tx.account || "Account";
+  const category = tx.categoryName || "";
+  return category ? `${account} · ${category}` : account;
+}
+
+function NotificationBell({ notifications = [], onOpenTarget }) {
+  const [open, setOpen] = React.useState(false);
+  const unreadCount = notifications.filter((item) => item.tone !== "green").length;
+
+  React.useEffect(() => {
+    function handleClick(event) {
+      if (!event.target.closest?.(`.${styles.notificationWrap}`)) {
+        setOpen(false);
+      }
+    }
+    if (open) window.addEventListener("click", handleClick);
+    return () => window.removeEventListener("click", handleClick);
+  }, [open]);
+
   return (
-    <div className={styles.topStrip}>
-      <div className={styles.topIdentity}>
-        <div className={styles.eyebrow}>Money / Spending</div>
-        <h1 className={styles.pageTitle}>Spending Intelligence</h1>
-        <p className={styles.pageSub}>
-          Keep the landing page premium. Click a row, work the selected transaction,
-          and push the deep logic into focused windows instead of clutter.
-        </p>
+    <div className={styles.notificationWrap}>
+      <button type="button" className={styles.notificationButton} onClick={() => setOpen((v) => !v)}>
+        <Wallet size={15} />
+        {unreadCount > 0 ? <span className={styles.notificationBadge}>{unreadCount}</span> : null}
+      </button>
+
+      {open ? (
+        <div className={styles.notificationMenu}>
+          <div className={styles.notificationMenuHeader}>Alerts</div>
+          <div className={styles.notificationMenuList}>
+            {notifications.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                className={styles.notificationItem}
+                onClick={() => {
+                  setOpen(false);
+                  onOpenTarget?.(item.target || "dashboard");
+                }}
+              >
+                <span className={cx(styles.notificationTone, styles[`pill_${item.tone || "neutral"}`])} />
+                <div className={styles.notificationCopy}>
+                  <strong>{item.title}</strong>
+                  <span>{item.body}</span>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function CategoryMixCard({ rows = [] }) {
+  const positiveRows = rows.filter((row) => Number(row.forecast) > 0).slice(0, 5);
+  const total = positiveRows.reduce((sum, row) => sum + Number(row.forecast || 0), 0);
+  const fallback = "conic-gradient(from 220deg, rgba(106,138,255,0.7) 0 100%)";
+  let cursor = 0;
+  const colors = [
+    'rgba(122, 150, 255, 0.95)',
+    'rgba(104, 214, 180, 0.92)',
+    'rgba(255, 180, 116, 0.92)',
+    'rgba(255, 125, 125, 0.92)',
+    'rgba(188, 146, 255, 0.92)',
+  ];
+  const stops = positiveRows.map((row, index) => {
+    const pct = total > 0 ? (Number(row.forecast || 0) / total) * 100 : 0;
+    const start = cursor;
+    cursor += pct;
+    return `${colors[index % colors.length]} ${start}% ${cursor}%`;
+  });
+  const gradient = stops.length ? `conic-gradient(from 220deg, ${stops.join(', ')})` : fallback;
+
+  return (
+    <div className={styles.mixWrap}>
+      <div className={styles.mixDonut} style={{ background: gradient }}>
+        <div className={styles.mixDonutInner}>
+          <strong>{positiveRows.length || 0}</strong>
+          <span>lanes</span>
+        </div>
+      </div>
+      <div className={styles.mixLegend}>
+        {positiveRows.length ? positiveRows.map((row, index) => (
+          <div key={row.categoryId} className={styles.mixLegendRow}>
+            <span className={styles.mixDot} style={{ background: colors[index % colors.length] }} />
+            <span>{row.category.name}</span>
+            <strong>{money(row.forecast)}</strong>
+          </div>
+        )) : <div className={styles.helperListItem}>No visible category pressure yet.</div>}
+      </div>
+    </div>
+  );
+}
+
+function DashboardOverviewPane({ totals, expenseTrend, forecastRemaining, totalsByCategory, topMerchants, selectedTx, selectedReceipts, onStartReceiptDraft, onOpenReceiptViewer, onOpenComposer }) {
+  const overCount = totalsByCategory.filter((row) => row.budget > 0 && row.forecast > row.budget).length;
+  const receiptMissing = selectedTx ? !selectedReceipts.length : true;
+  const receiptAction = selectedTx
+    ? selectedReceipts.length
+      ? onOpenReceiptViewer
+      : () => onStartReceiptDraft(selectedTx)
+    : onOpenComposer;
+
+  return (
+    <div className={styles.workspaceBody}>
+      <div className={styles.workspaceHeaderCompact}>
+        <div>
+          <div className={styles.workspaceTitle}>Dashboard</div>
+          <div className={styles.workspaceSub}>This is the command view. It should feel alive, not like one transaction took over the page.</div>
+        </div>
+        <div className={styles.inlineActions}>
+          <ActionBtn onClick={receiptAction}><Camera size={14} />{selectedTx ? (selectedReceipts.length ? 'Open receipt' : 'Add receipt') : 'Add receipt'}</ActionBtn>
+          <ActionBtn variant="primary" onClick={onOpenComposer}><Plus size={14} />Add spend</ActionBtn>
+        </div>
+      </div>
+
+      <div className={styles.dashboardGrid}>
+        <div className={styles.boardCard}>
+          <SectionHeader title="Category mix" subcopy="Where the visible money is going right now." />
+          <CategoryMixCard rows={totalsByCategory} />
+        </div>
+
+        <div className={styles.boardCard}>
+          <SectionHeader title="Pressure board" subcopy="High-level status instead of one selected purchase." />
+          <div className={styles.coachStatsGrid}>
+            <InsightStat label="Spent" value={money(totals.expense)} subcopy={`${expenseTrend.value} vs prior`} tone="red" />
+            <InsightStat label="Forecast left" value={money(forecastRemaining)} subcopy="Budget room left" tone={forecastRemaining < 0 ? 'red' : 'green'} />
+            <InsightStat label="Over lanes" value={String(overCount)} subcopy="Categories over budget" tone={overCount ? 'amber' : 'green'} />
+            <InsightStat label="Receipt focus" value={receiptMissing ? 'Missing' : 'Attached'} subcopy="Selected row receipt state" tone={receiptMissing ? 'amber' : 'green'} />
+          </div>
+        </div>
+
+        <div className={styles.boardCard}>
+          <SectionHeader title="Merchant pressure" subcopy="Top places draining the period." />
+          <MerchantRadar rows={topMerchants.slice(0, 5)} />
+        </div>
+
+        <div className={styles.boardCard}>
+          <SectionHeader title="Command notes" subcopy="What this page is for." />
+          <div className={styles.helperList}>
+            <div className={styles.helperListItem}>Dashboard is overview first.</div>
+            <div className={styles.helperListItem}>Transaction Breakdown is where a clicked row becomes the main subject.</div>
+            <div className={styles.helperListItem}>Receipt Lab is where AWS OCR lives.</div>
+            <div className={styles.helperListItem}>Coach is where the blunt warnings live.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function TopStrip({ totals, expenseTrend, forecastRemaining, period, setPeriod, onOpenComposer, onOpenControls, search, setSearch, activePage, setActivePage, notifications }) {
+  const [menuOpen, setMenuOpen] = React.useState(false);
+  const pages = [
+    { id: "dashboard", label: "Dashboard" },
+    { id: "breakdown", label: "Transaction Breakdown" },
+    { id: "receipt", label: "Receipt Lab" },
+    { id: "coach", label: "Coach" },
+  ];
+
+  return (
+    <div className={styles.topShell}>
+      <div className={styles.topBar}>
+        <div className={styles.topBrandWrap}>
+          <div className={styles.eyebrow}>Money / Spending</div>
+          <h1 className={styles.pageTitle}>Spending</h1>
+        </div>
+
+        <div className={styles.topSearchBox}>
+          <Search size={16} />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search merchants, notes, categories, accounts, amounts, dates, receipts, tags..."
+          />
+          {search ? (
+            <button type="button" className={styles.iconButton} onClick={() => setSearch("")}>
+              <X size={12} />
+            </button>
+          ) : null}
+        </div>
+
+        <div className={styles.topActions}>
+          <NotificationBell notifications={notifications} onOpenTarget={setActivePage} />
+          <ActionBtn variant="primary" onClick={onOpenComposer}><Plus size={14} />New</ActionBtn>
+        </div>
       </div>
 
       <div className={styles.kpiRow}>
@@ -598,41 +778,60 @@ export function TopStrip({ totals, expenseTrend, forecastRemaining, period, setP
         <div className={styles.kpiCard}>
           <span>Income</span>
           <strong>{money(totals.income)}</strong>
-          <small>Money landed this period</small>
+          <small>Money landed</small>
         </div>
         <div className={styles.kpiCard}>
           <span>Planned</span>
           <strong>{money(totals.plannedExpense)}</strong>
-          <small>Future pressure ahead</small>
+          <small>Pending pressure</small>
         </div>
         <div className={styles.kpiCard}>
           <span>Forecast</span>
-          <strong className={totals.forecastNet < 0 ? styles.textRed : styles.textGreen}>
-            {money(totals.forecastNet)}
-          </strong>
-          <small>{money(forecastRemaining)} remaining</small>
+          <strong className={totals.forecastNet < 0 ? styles.textRed : styles.textGreen}>{money(totals.forecastNet)}</strong>
+          <small>{money(forecastRemaining)} left</small>
         </div>
       </div>
 
-      <div className={styles.topTools}>
-        <select value={period} onChange={(e) => setPeriod(e.target.value)} className={styles.topSelect}>
-          <option value="week">This Week</option>
-          <option value="month">This Month</option>
-          <option value="year">This Year</option>
-        </select>
+      <div className={styles.pageNavRow}>
+        <div className={styles.modeTabs}>
+          {pages.map((page) => (
+            <button key={page.id} type="button" className={cx(styles.modeTab, activePage === page.id ? styles.modeTabActive : "")} onClick={() => setActivePage(page.id)}>
+              {page.label}
+            </button>
+          ))}
+        </div>
 
-        <ActionBtn variant="primary" onClick={onOpenComposer}>
-          <Plus size={14} />
-          New
-        </ActionBtn>
+        <div className={styles.topTools}>
+          <select value={period} onChange={(e) => setPeriod(e.target.value)} className={styles.topSelect}>
+            <option value="week">This Week</option>
+            <option value="month">This Month</option>
+            <option value="year">This Year</option>
+          </select>
+          <div className={styles.actionMenuWrap}>
+            <button type="button" className={styles.iconButton} onClick={() => setMenuOpen((v) => !v)}>
+              <MoreHorizontal size={14} />
+            </button>
+            {menuOpen ? (
+              <div className={styles.actionMenu}>
+                <button type="button" className={styles.actionMenuItem} onClick={() => { setMenuOpen(false); onOpenComposer?.(); }}>
+                  <Plus size={14} /> New transaction
+                </button>
+                <button type="button" className={styles.actionMenuItem} onClick={() => { setMenuOpen(false); onOpenControls?.(); }}>
+                  <PiggyBank size={14} /> Controls
+                </button>
+                <button type="button" className={styles.actionMenuItem} onClick={() => { setMenuOpen(false); setSearch?.(""); }}>
+                  <X size={14} /> Clear search
+                </button>
+              </div>
+            ) : null}
+          </div>
+        </div>
       </div>
     </div>
   );
 }
 
 export function FeedPane({
-  search,
-  setSearch,
   typeFilter,
   setTypeFilter,
   categoryFilter,
@@ -652,26 +851,12 @@ export function FeedPane({
   return (
     <GlassPane tone="neutral" size="card" className={styles.feedPane}>
       <SectionHeader
-        title="Transaction track"
-        subcopy="Keep the list persistent. Work the selected row in the big lane."
-        right={<Pill tone="blue">{transactions.length + plannedItems.length} rows</Pill>}
+        title="Transaction rail"
+        subcopy="Fast scan list with compact rows."
+        right={<Pill tone="blue">{transactions.length + plannedItems.length}</Pill>}
       />
 
-      <div className={styles.searchRow}>
-        <div className={styles.searchBox}>
-          <Search size={14} />
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search merchant, note, account..."
-          />
-          {search ? (
-            <button type="button" className={styles.iconButton} onClick={() => setSearch("")}> 
-              <X size={12} />
-            </button>
-          ) : null}
-        </div>
-
+      <div className={styles.inlineActions}>
         <ActionBtn onClick={() => setFiltersOpen((prev) => !prev)}>
           <SlidersHorizontal size={14} />
           Filters
@@ -690,27 +875,17 @@ export function FeedPane({
                 <option value="transfer">Transfer</option>
               </select>
             </div>
-
             <div className={styles.fieldBlock}>
               <label className={styles.fieldLabel}>Category</label>
               <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} className={styles.field}>
                 <option value="all">All categories</option>
-                {categories.map((category) => (
-                  <option key={category.id} value={category.id}>
-                    {category.name}
-                  </option>
-                ))}
+                {categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
               </select>
             </div>
-
             <div className={styles.fieldBlock}>
               <label className={styles.fieldLabel}>Group</label>
               <select value={groupFilter} onChange={(e) => setGroupFilter(e.target.value)} className={styles.field}>
-                {groups.map((group) => (
-                  <option key={group} value={group}>
-                    {group}
-                  </option>
-                ))}
+                {groups.map((group) => <option key={group} value={group}>{group}</option>)}
               </select>
             </div>
           </div>
@@ -725,38 +900,23 @@ export function FeedPane({
           const receiptCount = receiptCountsByTransaction?.get(String(tx.id)) || 0;
 
           return (
-            <button
-              key={tx.id}
-              type="button"
-              className={cx(styles.feedRow, selected ? styles.feedRowActive : "")}
-              onClick={() => onSelect({ kind: "tx", id: tx.id })}
-            >
+            <button key={tx.id} type="button" className={cx(styles.feedRow, selected ? styles.feedRowActive : "")} onClick={() => onSelect({ kind: "tx", id: tx.id })}>
               <MerchantMark merchant={tx.merchant || tx.note || tx.type} />
               <div className={styles.feedMain}>
                 <div className={styles.feedTop}>
                   <div className={styles.feedTitle}>
                     <span className={styles.feedName}>{tx.merchant || tx.note || tx.type}</span>
-                    <span className={styles.feedMicro}>
-                      {tx.type === "transfer"
-                        ? `${tx.accountName} → ${tx.transferAccountName || "Account"}`
-                        : tx.accountName || tx.account || "Account"}
-                    </span>
+                    <span className={styles.feedMicro}>{formatRailAccountLine(tx)}</span>
                   </div>
-
                   <div className={styles.feedRight}>
-                    {receiptCount > 0 ? (
-                      <span className={styles.feedBadge}>
-                        <Receipt size={11} />
-                        {receiptCount}
-                      </span>
-                    ) : null}
+                    {receiptCount > 0 ? <span className={styles.feedBadge}><Receipt size={11} />{receiptCount}</span> : null}
                     <div className={cx(styles.feedAmount, styles[`feedAmount_${tone}`])}>{money(tx.amount)}</div>
                   </div>
                 </div>
-
                 <div className={styles.feedMeta}>
                   <Icon size={12} />
                   {shortDate(tx.date)} · {fmtTime(tx.time)} · {tx.type}
+                  {tx.paymentMethod ? ` · ${tx.paymentMethod}` : ""}
                   {isBillManagedTransaction(tx) ? " · bills-owned" : ""}
                 </div>
               </div>
@@ -768,17 +928,9 @@ export function FeedPane({
 
         {plannedItems.map((item) => {
           const selected = selectedRecord.kind === "planned" && selectedRecord.id === item.id;
-
           return (
-            <button
-              key={item.id}
-              type="button"
-              className={cx(styles.feedRow, selected ? styles.feedRowActive : "")}
-              onClick={() => onSelect({ kind: "planned", id: item.id })}
-            >
-              <div className={cx(styles.merchantMark, styles.merchantMark_amber)}>
-                <Receipt size={15} />
-              </div>
+            <button key={item.id} type="button" className={cx(styles.feedRow, selected ? styles.feedRowActive : "")} onClick={() => onSelect({ kind: "planned", id: item.id })}>
+              <div className={cx(styles.merchantMark, styles.merchantMark_amber)}><Receipt size={15} /></div>
               <div className={styles.feedMain}>
                 <div className={styles.feedTop}>
                   <div className={styles.feedTitle}>
@@ -787,19 +939,13 @@ export function FeedPane({
                   </div>
                   <div className={cx(styles.feedAmount, styles.feedAmount_amber)}>{money(item.amount)}</div>
                 </div>
-
-                <div className={styles.feedMeta}>
-                  <Receipt size={12} />
-                  {shortDate(item.date)} · {fmtTime(item.time)}
-                </div>
+                <div className={styles.feedMeta}><Receipt size={12} />{shortDate(item.date)} · {fmtTime(item.time)}</div>
               </div>
             </button>
           );
         })}
 
-        {!transactions.length && !plannedItems.length ? (
-          <EmptyCard title="Nothing here" body="No rows match the current filters." />
-        ) : null}
+        {!transactions.length && !plannedItems.length ? <EmptyCard title="Nothing here" body="No rows match the current filters." /> : null}
       </div>
     </GlassPane>
   );
@@ -855,6 +1001,10 @@ export function MainWorkspacePane({
   selectedReceipts,
   selectedReceiptItemsByReceiptId,
   topMerchants,
+  totals,
+  expenseTrend,
+  forecastRemaining,
+  totalsByCategory,
   onStartReceiptDraft,
   onOpenReceiptViewer,
   onDuplicateTransaction,
@@ -869,100 +1019,45 @@ export function MainWorkspacePane({
 }) {
   const [actionOpen, setActionOpen] = React.useState(false);
 
-  if (!selectedTx && !selectedPlanned) {
-    return (
-      <GlassPane tone="neutral" size="card" className={styles.workspacePane}>
-        <div className={styles.workspaceHeader}>
-          <div>
-            <div className={styles.workspaceTitle}>Spending workspace</div>
-            <div className={styles.workspaceSub}>Select a row from the transaction track to begin.</div>
-          </div>
-          <ActionBtn variant="primary" onClick={onOpenComposer}>
-            <Plus size={14} />
-            New
-          </ActionBtn>
-        </div>
-
-        <ModeTabs mode={mode} setMode={setMode} />
-
-        <div className={styles.storyGridWide}>
-          <div className={styles.storyCard}>
-            <SectionHeader title="Merchant radar" subcopy="Where most of the visible money is going." />
-            <MerchantRadar rows={topMerchants.slice(0, 5)} />
-          </div>
-          <div className={styles.storyCard}>
-            <SectionHeader title="How this page works" subcopy="Keep the landing page clean and push detail into focused views." />
-            <div className={styles.helperList}>
-              <div className={styles.helperListItem}>Lane 1 stays the transaction list.</div>
-              <div className={styles.helperListItem}>Lane 2 is the big active workspace.</div>
-              <div className={styles.helperListItem}>Receipt detail stays small until you click it.</div>
-            </div>
-          </div>
-        </div>
-      </GlassPane>
-    );
-  }
-
   if (selectedPlanned) {
     const category = categoriesById.get(selectedPlanned.categoryId) || null;
-
     return (
       <GlassPane tone="neutral" size="card" className={styles.workspacePane}>
-        <div className={styles.workspaceHeader}>
+        <div className={styles.workspaceHeaderCompact}>
           <div>
-            <div className={styles.workspaceTitle}>Spending workspace</div>
-            <div className={styles.workspaceSub}>Planned item selected.</div>
+            <div className={styles.workspaceTitle}>Planned item</div>
+            <div className={styles.workspaceSub}>Convert or delete future pressure here.</div>
           </div>
-          <ModeTabs mode={mode} setMode={setMode} />
         </div>
-
         <div className={styles.heroCard}>
           <div className={styles.heroTop}>
             <div className={styles.heroIdentity}>
-              <div className={cx(styles.merchantMark, styles.merchantMark_amber, styles.merchantMarkLg)}>
-                <Receipt size={18} />
-              </div>
+              <div className={cx(styles.merchantMark, styles.merchantMark_amber, styles.merchantMarkLg)}><Receipt size={18} /></div>
               <div className={styles.heroText}>
                 <div className={styles.heroName}>{selectedPlanned.merchant || selectedPlanned.note || "Planned item"}</div>
-                <div className={styles.heroMeta}>
-                  {shortDate(selectedPlanned.date)} · {fmtTime(selectedPlanned.time)} · {category?.name || "Uncategorized"}
-                </div>
+                <div className={styles.heroMeta}>{shortDate(selectedPlanned.date)} · {fmtTime(selectedPlanned.time)} · {category?.name || "Uncategorized"}</div>
               </div>
             </div>
             <div className={styles.heroAmount}>{money(selectedPlanned.amount)}</div>
           </div>
         </div>
-
         <div className={styles.storyGrid}>
           <div className={styles.storyCard}>
             <SectionHeader title="Convert to real spend" subcopy="Choose the account that should absorb this purchase." />
             <div className={styles.fieldBlock}>
               <label className={styles.fieldLabel}>To account</label>
               <select className={styles.field} value={convertAccountId} onChange={(e) => setConvertAccountId(e.target.value)}>
-                {accounts.map((account) => (
-                  <option key={account.id} value={account.id}>
-                    {account.name}
-                  </option>
-                ))}
+                {accounts.map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}
               </select>
             </div>
             <div className={styles.inlineActions}>
-              <ActionBtn variant="primary" onClick={onConvertPlanned}>
-                <Wallet size={14} />
-                Convert
-              </ActionBtn>
-              <ActionBtn variant="danger" onClick={onDeletePlanned}>
-                <Trash2 size={14} />
-                Delete
-              </ActionBtn>
+              <ActionBtn variant="primary" onClick={onConvertPlanned}><Wallet size={14} />Convert</ActionBtn>
+              <ActionBtn variant="danger" onClick={onDeletePlanned}><Trash2 size={14} />Delete</ActionBtn>
             </div>
           </div>
-
           <div className={styles.storyCard}>
             <SectionHeader title="Why it matters" subcopy="Planned items still count as future pressure." />
-            <div className={styles.helperBlock}>
-              Keep planned pressure visible until it becomes real spend or gets deleted.
-            </div>
+            <div className={styles.helperBlock}>Keep planned pressure visible until it becomes real spend or gets deleted.</div>
           </div>
         </div>
       </GlassPane>
@@ -978,118 +1073,84 @@ export function MainWorkspacePane({
 
   return (
     <GlassPane tone="neutral" size="card" className={styles.workspacePane}>
-      <div className={styles.workspaceHeader}>
-        <div>
-          <div className={styles.workspaceTitle}>Spending workspace</div>
-          <div className={styles.workspaceSub}>Keep one big working lane. Hide the heavy tools behind windows.</div>
-        </div>
-
-        <div className={styles.workspaceHeaderRight}>
-          <ModeTabs mode={mode} setMode={setMode} />
-
-          <div className={styles.actionMenuWrap}>
-            <button type="button" className={styles.iconButton} onClick={() => setActionOpen((prev) => !prev)}>
-              <MoreHorizontal size={14} />
-            </button>
-
-            {actionOpen ? (
-              <div className={styles.actionMenu}>
-                <button type="button" className={styles.actionMenuItem} onClick={() => { setActionOpen(false); onDuplicateTransaction(); }}>
-                  <Copy size={14} /> Duplicate
-                </button>
-                <button type="button" className={styles.actionMenuItem} onClick={() => { setActionOpen(false); hasReceipt ? onOpenReceiptViewer() : onStartReceiptDraft(selectedTx); }}>
-                  <Camera size={14} /> {hasReceipt ? "Open receipt" : "Add receipt"}
-                </button>
-                <button type="button" className={styles.actionMenuItem} onClick={() => { setActionOpen(false); onOpenControls(); }}>
-                  <PiggyBank size={14} /> Controls
-                </button>
-                <button type="button" className={styles.actionMenuItemDanger} onClick={() => { setActionOpen(false); onDeleteTransaction(); }}>
-                  <Trash2 size={14} /> Delete
-                </button>
-              </div>
-            ) : null}
-          </div>
-        </div>
-      </div>
-
-      <SelectedTransactionHero selectedTx={selectedTx} verdict={verdict} />
-
       {mode === "dashboard" ? (
-        <div className={styles.workspaceBody}>
-          <div className={styles.storyGrid}>
-            <div className={styles.storyCard}>
-              <SectionHeader title="Purchase read" subcopy="What this row says about the purchase." />
-              <div className={styles.insightGrid}>
-                <InsightStat label="Category" value={selectedCategory?.name || "Uncategorized"} subcopy="Where the purchase landed" tone="blue" />
-                <InsightStat label="Lane status" value={laneTone.label} subcopy={selectedBudget > 0 ? `${money(categoryRemaining)} left` : "No budget yet"} tone={laneTone.tone} />
-                <InsightStat label="Merchant repeat" value={String(insight?.visits || 1)} subcopy={insight ? `avg ${money(insight.avg)}` : "First visible row"} tone={insight?.visits >= 4 ? "red" : insight?.visits >= 2 ? "amber" : "green"} />
-              </div>
-            </div>
-
-            <div className={styles.storyCard}>
-              <SectionHeader title="Category pressure" subcopy="How this purchase affects the lane." />
-              <div className={styles.metricStripCompact}>
-                <div className={styles.metricCompact}><span>Spent</span><strong>{money(selectedSpent)}</strong></div>
-                <div className={styles.metricCompact}><span>Planned</span><strong>{money(selectedPlannedTotal)}</strong></div>
-                <div className={styles.metricCompact}><span>Budget</span><strong>{money(selectedBudget)}</strong></div>
-                <div className={styles.metricCompact}><span>Forecast</span><strong>{money(selectedForecast)}</strong></div>
-              </div>
-              <div className={styles.progressTrack}>
-                <div className={cx(styles.progressFill, toneClass(laneTone.tone))} style={{ width: `${clamp(selectedLoadPct || 0, 0, 100)}%` }} />
-              </div>
-              <div className={styles.helperText}>
-                {selectedBudget > 0
-                  ? `${money(selectedForecast)} forecast against ${money(selectedBudget)} in this category.`
-                  : "This category has no budget guardrail yet."}
-              </div>
-            </div>
-          </div>
-
-          <div className={styles.storyGridWide}>
-            <div className={styles.storyCard}>
-              <SectionHeader title="Receipt tile" subcopy="Keep it small and premium unless clicked." />
-              <CompactReceiptTile
-                hasReceipt={hasReceipt}
-                receipts={selectedReceipts}
-                selectedReceiptItemsByReceiptId={selectedReceiptItemsByReceiptId}
-                onOpen={hasReceipt ? onOpenReceiptViewer : () => onStartReceiptDraft(selectedTx)}
-              />
-            </div>
-
-            <div className={styles.storyCard}>
-              <SectionHeader title="Merchant behavior" subcopy="What this brand is doing in the current visible history." />
-              <div className={styles.helperList}>
-                <div className={styles.helperListItem}>
-                  {insight ? `${insight.visits} visible visits · avg ${money(insight.avg)}` : "No repeat pattern yet."}
-                </div>
-                <div className={styles.helperListItem}>
-                  {insight ? `${money(insight.total)} visible in ${insight.topCategory}.` : "Waiting for more history."}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      ) : null}
-
-      {mode === "receipt" ? (
-        <ReceiptLabPane
+        <DashboardOverviewPane
+          totals={totals}
+          expenseTrend={expenseTrend}
+          forecastRemaining={forecastRemaining}
+          totalsByCategory={totalsByCategory}
+          topMerchants={topMerchants}
           selectedTx={selectedTx}
           selectedReceipts={selectedReceipts}
-          selectedReceiptItemsByReceiptId={selectedReceiptItemsByReceiptId}
-          onOpenReceipt={hasReceipt ? onOpenReceiptViewer : () => onStartReceiptDraft(selectedTx)}
+          onStartReceiptDraft={onStartReceiptDraft}
+          onOpenReceiptViewer={onOpenReceiptViewer}
+          onOpenComposer={onOpenComposer}
         />
       ) : null}
 
-      {mode === "coach" ? (
-        <SpendCoachPane
-          selectedTx={selectedTx}
-          selectedBudget={selectedBudget}
-          selectedForecast={selectedForecast}
-          selectedReceipts={selectedReceipts}
-          visibleTransactions={visibleTransactions}
-          categoriesById={categoriesById}
-        />
+      {mode === "breakdown" ? (
+        <>
+          <div className={styles.workspaceHeader}>
+            <div>
+              <div className={styles.workspaceTitle}>Transaction Breakdown</div>
+              <div className={styles.workspaceSub}>This is where a clicked row becomes the main subject.</div>
+            </div>
+            <div className={styles.actionMenuWrap}>
+              <button type="button" className={styles.iconButton} onClick={() => setActionOpen((prev) => !prev)}><MoreHorizontal size={14} /></button>
+              {actionOpen ? (
+                <div className={styles.actionMenu}>
+                  <button type="button" className={styles.actionMenuItem} onClick={() => { setActionOpen(false); onDuplicateTransaction(); }}><Copy size={14} /> Duplicate</button>
+                  <button type="button" className={styles.actionMenuItem} onClick={() => { setActionOpen(false); hasReceipt ? onOpenReceiptViewer() : onStartReceiptDraft(selectedTx); }}><Camera size={14} /> {hasReceipt ? "Open receipt" : "Add receipt"}</button>
+                  <button type="button" className={styles.actionMenuItem} onClick={() => { setActionOpen(false); onOpenControls(); }}><PiggyBank size={14} /> Controls</button>
+                  <button type="button" className={styles.actionMenuItemDanger} onClick={() => { setActionOpen(false); onDeleteTransaction(); }}><Trash2 size={14} /> Delete</button>
+                </div>
+              ) : null}
+            </div>
+          </div>
+
+          {selectedTx ? <SelectedTransactionHero selectedTx={selectedTx} verdict={verdict} /> : <EmptyCard title="No transaction selected" body="Choose a transaction from the rail." />}
+
+          {selectedTx ? (
+            <div className={styles.workspaceBody}>
+              <div className={styles.breakdownGrid}>
+                <div className={styles.storyCard}>
+                  <SectionHeader title="Purchase read" subcopy="What this row says about the purchase." />
+                  <div className={styles.breakdownStatGrid}>
+                    <InsightStat label="Category" value={selectedCategory?.name || "Uncategorized"} subcopy="Where the purchase landed" tone="blue" />
+                    <InsightStat label="Lane status" value={laneTone.label} subcopy={selectedBudget > 0 ? `${money(categoryRemaining)} left` : "No budget yet"} tone={laneTone.tone} />
+                    <InsightStat label="Merchant repeat" value={String(insight?.visits || 1)} subcopy={insight ? `avg ${money(insight.avg)}` : "First visible row"} tone={insight?.visits >= 4 ? "red" : insight?.visits >= 2 ? "amber" : "green"} />
+                  </div>
+                </div>
+                <div className={styles.storyCard}>
+                  <SectionHeader title="Category pressure" subcopy="How this purchase affects the lane." />
+                  <div className={styles.breakdownMetricGrid}>
+                    <div className={styles.metricCompact}><span>Spent</span><strong>{money(selectedSpent)}</strong></div>
+                    <div className={styles.metricCompact}><span>Planned</span><strong>{money(selectedPlannedTotal)}</strong></div>
+                    <div className={styles.metricCompact}><span>Budget</span><strong>{money(selectedBudget)}</strong></div>
+                    <div className={styles.metricCompact}><span>Forecast</span><strong>{money(selectedForecast)}</strong></div>
+                  </div>
+                  <div className={styles.progressTrack}><div className={cx(styles.progressFill, toneClass(laneTone.tone))} style={{ width: `${clamp(selectedLoadPct || 0, 0, 100)}%` }} /></div>
+                  <div className={styles.helperText}>{selectedBudget > 0 ? `${money(selectedForecast)} forecast against ${money(selectedBudget)} in this category.` : "This category has no budget guardrail yet."}</div>
+                </div>
+                <div className={styles.storyCard}>
+                  <SectionHeader title="Receipt tile" subcopy="Keep it small and premium unless clicked." />
+                  <CompactReceiptTile hasReceipt={hasReceipt} receipts={selectedReceipts} selectedReceiptItemsByReceiptId={selectedReceiptItemsByReceiptId} onOpen={hasReceipt ? onOpenReceiptViewer : () => onStartReceiptDraft(selectedTx)} />
+                </div>
+                <div className={styles.storyCard}>
+                  <SectionHeader title="Merchant behavior" subcopy="What this brand is doing in the current visible history." />
+                  <div className={styles.helperList}>
+                    <div className={styles.helperListItem}>{insight ? `${insight.visits} visible visits · avg ${money(insight.avg)}` : "No repeat pattern yet."}</div>
+                    <div className={styles.helperListItem}>{insight ? `${money(insight.total)} visible in ${insight.topCategory}.` : "Waiting for more history."}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : null}
+        </>
       ) : null}
+
+      {mode === "receipt" ? <ReceiptLabPane selectedTx={selectedTx} selectedReceipts={selectedReceipts} selectedReceiptItemsByReceiptId={selectedReceiptItemsByReceiptId} onOpenReceipt={hasReceipt ? onOpenReceiptViewer : () => onStartReceiptDraft(selectedTx)} /> : null}
+      {mode === "coach" ? <SpendCoachPane selectedTx={selectedTx} selectedBudget={selectedBudget} selectedForecast={selectedForecast} selectedReceipts={selectedReceipts} selectedReceiptItemsByReceiptId={selectedReceiptItemsByReceiptId} visibleTransactions={visibleTransactions} categoriesById={categoriesById} /> : null}
     </GlassPane>
   );
 }
@@ -1142,63 +1203,152 @@ function ReceiptDraftEditor({
 }) {
   return (
     <div className={styles.sheetSections}>
-      <div className={styles.receiptModalGrid}>
-        <div className={styles.receiptModalMain}>
-          <div className={styles.sheetSection}>
-            <SectionHeader title="Receipt source" subcopy="Small on the page. Full only when clicked." />
+      <div className={styles.receiptWorkbench}>
+        <div className={styles.sheetSection}>
+          <SectionHeader
+            title="Receipt items"
+            subcopy="Left side is the actual extracted purchase lines. The system auto-tags need / want / waste and price signals first."
+            right={<ActionBtn onClick={onReceiptDraftAddLine}><Plus size={13} />Add line</ActionBtn>}
+          />
 
-            <div className={styles.inlineActions}>
-              <label className={styles.cameraAction}>
-                <input
-                  className={styles.hiddenInput}
-                  type="file"
-                  accept="image/*,.pdf"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) onReceiptFileChosen(file);
-                    e.target.value = "";
-                  }}
-                />
-                <Camera size={14} />
-                {receiptDraft.file ? "Replace receipt" : "Scan / upload receipt"}
-              </label>
+          <div className={styles.inlineActions}>
+            <label className={styles.cameraAction}>
+              <input
+                className={styles.hiddenInput}
+                type="file"
+                accept="image/*,.pdf"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) onReceiptFileChosen(file);
+                  e.target.value = "";
+                }}
+              />
+              <Camera size={14} />
+              {receiptDraft.file ? "Replace receipt" : "Scan / upload receipt"}
+            </label>
 
-              <ActionBtn onClick={onClearReceiptDraft}>
-                <X size={13} />
-                Clear draft
-              </ActionBtn>
+            <ActionBtn onClick={onClearReceiptDraft}>
+              <X size={13} />
+              Clear draft
+            </ActionBtn>
+          </div>
+
+          {receiptDraft.file || ocrRunning || ocrError || ocrMeta ? (
+            <div className={styles.ocrBanner}>
+              <div>
+                <div className={styles.ocrBannerTitle}>
+                  {ocrRunning
+                    ? "Scanning receipt with OCR…"
+                    : ocrError
+                    ? "OCR needs attention"
+                    : "OCR scan complete"}
+                </div>
+                <div className={styles.ocrBannerMeta}>
+                  {ocrRunning
+                    ? "AWS Textract is reading merchant, totals, and line items now."
+                    : ocrError
+                    ? ocrError
+                    : ocrMeta
+                    ? `${ocrMeta.providerLabel || "AWS Textract"} · ${ocrMeta.itemCount || 0} items · ${ocrMeta.summaryFieldCount || 0} summary fields`
+                    : "Upload a receipt to start OCR."}
+                </div>
+              </div>
+
+              {receiptDraft.file && !ocrRunning ? (
+                <ActionBtn onClick={onRetryOcr}>
+                  <Camera size={13} />
+                  Rescan
+                </ActionBtn>
+              ) : null}
+            </div>
+          ) : null}
+
+          <div className={styles.formGrid2}>
+            <div className={styles.fieldBlock}>
+              <label className={styles.fieldLabel}>Merchant</label>
+              <input className={styles.field} value={receiptDraft.merchant} onChange={(e) => onReceiptDraftChange("merchant", e.target.value)} placeholder="Walmart, Publix, Shell…" />
             </div>
 
-            {receiptDraft.file || ocrRunning || ocrError || ocrMeta ? (
-              <div className={styles.ocrBanner}>
-                <div>
-                  <div className={styles.ocrBannerTitle}>
-                    {ocrRunning
-                      ? "Scanning receipt with OCR…"
-                      : ocrError
-                      ? "OCR needs attention"
-                      : "OCR scan complete"}
+            <div className={styles.fieldBlock}>
+              <label className={styles.fieldLabel}>Date</label>
+              <input className={styles.field} type="date" value={receiptDraft.date} onChange={(e) => onReceiptDraftChange("date", e.target.value)} />
+            </div>
+          </div>
+
+          <div className={styles.formGrid3}>
+            <div className={styles.fieldBlock}>
+              <label className={styles.fieldLabel}>Account</label>
+              <select className={styles.field} value={receiptDraft.accountId} onChange={(e) => onReceiptDraftChange("accountId", e.target.value)}>
+                {accounts.map((account) => (
+                  <option key={account.id} value={account.id}>{account.name}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className={styles.fieldBlock}>
+              <label className={styles.fieldLabel}>Category</label>
+              <select className={styles.field} value={receiptDraft.categoryId} onChange={(e) => onReceiptDraftChange("categoryId", e.target.value)}>
+                {categories.map((category) => (
+                  <option key={category.id} value={category.id}>{category.name}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className={styles.fieldBlock}>
+              <label className={styles.fieldLabel}>Method</label>
+              <input className={styles.field} value={receiptDraft.paymentMethod} onChange={(e) => onReceiptDraftChange("paymentMethod", e.target.value)} placeholder="Card" />
+            </div>
+          </div>
+
+          <div className={styles.receiptLineList}>
+            {receiptDraft.items.map((item, index) => (
+              <div key={item.id} className={styles.receiptLineRow}>
+                <div className={styles.receiptLineHeader}>
+                  <div className={styles.receiptLineIndex}>Item {index + 1}</div>
+                  <button type="button" className={styles.iconButton} onClick={() => onReceiptDraftRemoveLine(item.id)}>
+                    <Trash2 size={13} />
+                  </button>
+                </div>
+
+                <div className={styles.receiptLineGrid}>
+                  <div className={styles.fieldBlock}>
+                    <label className={styles.fieldLabel}>Item name</label>
+                    <input className={styles.field} value={item.itemName} onChange={(e) => onReceiptDraftUpdateLine(item.id, { itemName: e.target.value })} placeholder="Milk, chips, shampoo…" />
                   </div>
-                  <div className={styles.ocrBannerMeta}>
-                    {ocrRunning
-                      ? "Textract is reading merchant, totals, and line items now."
-                      : ocrError
-                      ? ocrError
-                      : ocrMeta
-                      ? `${ocrMeta.providerLabel || "AWS Textract"} · ${ocrMeta.itemCount || 0} items · ${ocrMeta.summaryFieldCount || 0} summary fields`
-                      : "Upload a receipt to start OCR."}
+                  <div className={styles.fieldBlock}>
+                    <label className={styles.fieldLabel}>Qty</label>
+                    <input className={styles.field} value={item.quantity} onChange={(e) => onReceiptDraftUpdateLine(item.id, { quantity: e.target.value })} />
+                  </div>
+                  <div className={styles.fieldBlock}>
+                    <label className={styles.fieldLabel}>Unit / line price</label>
+                    <input className={styles.field} value={item.unitPrice} onChange={(e) => onReceiptDraftUpdateLine(item.id, { unitPrice: e.target.value })} placeholder="0.00" />
                   </div>
                 </div>
 
-                {receiptDraft.file && !ocrRunning ? (
-                  <ActionBtn onClick={onRetryOcr}>
-                    <Camera size={13} />
-                    Rescan
-                  </ActionBtn>
-                ) : null}
-              </div>
-            ) : null}
+                <div className={styles.receiptReviewTags}>
+                  <Pill tone={classificationTone(item.classification)}>{item.classification}</Pill>
+                  <Pill tone={item.priceSignal === "good" ? "green" : item.priceSignal === "high" ? "red" : item.priceSignal === "fair" ? "amber" : "blue"}>
+                    {item.priceSignal === "high" ? "high price" : item.priceSignal === "good" ? "good price" : item.priceSignal || "neutral"}
+                  </Pill>
+                  {item.coachFlag && item.coachFlag !== "normal" ? (
+                    <Pill tone={item.coachFlag === "overspent" || item.coachFlag === "stop" ? "red" : item.coachFlag === "good-price" ? "green" : "amber"}>
+                      {item.coachFlag.replace("-", " ")}
+                    </Pill>
+                  ) : null}
+                </div>
 
+                <div className={styles.fieldBlock}>
+                  <label className={styles.fieldLabel}>Line note</label>
+                  <input className={styles.field} value={item.note || ""} onChange={(e) => onReceiptDraftUpdateLine(item.id, { note: e.target.value })} placeholder="Optional note" />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className={styles.receiptWorkbenchPreview}>
+          <div className={styles.sheetSection}>
+            <SectionHeader title="Receipt image" subcopy="Right side is the actual receipt so you can compare the OCR against the source." />
             <div className={styles.receiptPreviewBox}>
               {receiptDraft.previewUrl ? (
                 receiptDraft.file?.type?.startsWith("image/") ? (
@@ -1217,70 +1367,6 @@ function ReceiptDraftEditor({
               )}
             </div>
 
-            <div className={styles.formGrid2}>
-              <div className={styles.fieldBlock}>
-                <label className={styles.fieldLabel}>Merchant</label>
-                <input className={styles.field} value={receiptDraft.merchant} onChange={(e) => onReceiptDraftChange("merchant", e.target.value)} placeholder="Walmart, Publix, Shell…" />
-              </div>
-
-              <div className={styles.fieldBlock}>
-                <label className={styles.fieldLabel}>Date</label>
-                <input className={styles.field} type="date" value={receiptDraft.date} onChange={(e) => onReceiptDraftChange("date", e.target.value)} />
-              </div>
-            </div>
-
-            <div className={styles.formGrid3}>
-              <div className={styles.fieldBlock}>
-                <label className={styles.fieldLabel}>Account</label>
-                <select className={styles.field} value={receiptDraft.accountId} onChange={(e) => onReceiptDraftChange("accountId", e.target.value)}>
-                  {accounts.map((account) => (
-                    <option key={account.id} value={account.id}>
-                      {account.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className={styles.fieldBlock}>
-                <label className={styles.fieldLabel}>Category</label>
-                <select className={styles.field} value={receiptDraft.categoryId} onChange={(e) => onReceiptDraftChange("categoryId", e.target.value)}>
-                  {categories.map((category) => (
-                    <option key={category.id} value={category.id}>
-                      {category.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className={styles.fieldBlock}>
-                <label className={styles.fieldLabel}>Method</label>
-                <input className={styles.field} value={receiptDraft.paymentMethod} onChange={(e) => onReceiptDraftChange("paymentMethod", e.target.value)} placeholder="Card" />
-              </div>
-            </div>
-
-            <div className={styles.formGrid2}>
-              <div className={styles.fieldBlock}>
-                <label className={styles.fieldLabel}>Time</label>
-                <input className={styles.field} type="time" value={receiptDraft.time} onChange={(e) => onReceiptDraftChange("time", e.target.value)} />
-              </div>
-
-              <div className={styles.fieldBlock}>
-                <label className={styles.fieldLabel}>Tax</label>
-                <input className={styles.field} value={receiptDraft.tax} onChange={(e) => onReceiptDraftChange("tax", e.target.value)} placeholder="0.00" inputMode="decimal" />
-              </div>
-            </div>
-
-            <div className={styles.fieldBlock}>
-              <label className={styles.fieldLabel}>Note</label>
-              <textarea className={styles.fieldArea} rows={3} value={receiptDraft.note} onChange={(e) => onReceiptDraftChange("note", e.target.value)} placeholder="Anything about this purchase that matters later." />
-            </div>
-          </div>
-        </div>
-
-        <div className={styles.receiptModalRail}>
-          <div className={styles.sheetSection}>
-            <SectionHeader title="Receipt totals" subcopy="This becomes the expense when saved." />
-
             <div className={styles.receiptTotalsGrid}>
               <div className={styles.receiptTotalCard}><span>Subtotal</span><strong>{money(receiptDraftSummary.subtotal)}</strong></div>
               <div className={styles.receiptTotalCard}><span>Tax</span><strong>{money(receiptDraftSummary.tax)}</strong></div>
@@ -1292,7 +1378,8 @@ function ReceiptDraftEditor({
               <div className={styles.breakdownRow}><span>Needed spend</span><strong>{money(receiptDraftSummary.need)}</strong></div>
               <div className={styles.breakdownRow}><span>Wanted spend</span><strong>{money(receiptDraftSummary.want)}</strong></div>
               <div className={styles.breakdownRow}><span>Waste spend</span><strong>{money(receiptDraftSummary.waste)}</strong></div>
-              <div className={styles.breakdownRow}><span>Review spend</span><strong>{money(receiptDraftSummary.review)}</strong></div>
+              <div className={styles.breakdownRow}><span>Overspent items</span><strong>{money(receiptDraftSummary.overspent)}</strong></div>
+              <div className={styles.breakdownRow}><span>Good-price items</span><strong>{money(receiptDraftSummary.goodPrice)}</strong></div>
             </div>
 
             <ActionBtn variant="primary" full onClick={onSaveReceiptDraft} disabled={saving}>
@@ -1300,45 +1387,6 @@ function ReceiptDraftEditor({
               {saving ? "Saving receipt…" : "Save receipt as transaction"}
             </ActionBtn>
           </div>
-        </div>
-      </div>
-
-      <div className={styles.sheetSection}>
-        <SectionHeader title="Line items" subcopy="Every item gets a real classification." right={<ActionBtn onClick={onReceiptDraftAddLine}><Plus size={13} />Add line</ActionBtn>} />
-
-        <div className={styles.receiptLineList}>
-          {receiptDraft.items.map((item, index) => (
-            <div key={item.id} className={styles.receiptLineRow}>
-              <div className={styles.receiptLineHeader}>
-                <div className={styles.receiptLineIndex}>Item {index + 1}</div>
-                <button type="button" className={styles.iconButton} onClick={() => onReceiptDraftRemoveLine(item.id)}>
-                  <Trash2 size={13} />
-                </button>
-              </div>
-
-              <div className={styles.receiptLineGrid}>
-                <div className={styles.fieldBlock}>
-                  <label className={styles.fieldLabel}>Item name</label>
-                  <input className={styles.field} value={item.itemName} onChange={(e) => onReceiptDraftUpdateLine(item.id, { itemName: e.target.value })} placeholder="Milk, chips, shampoo…" />
-                </div>
-                <div className={styles.fieldBlock}>
-                  <label className={styles.fieldLabel}>Qty</label>
-                  <input className={styles.field} value={item.quantity} onChange={(e) => onReceiptDraftUpdateLine(item.id, { quantity: e.target.value })} />
-                </div>
-                <div className={styles.fieldBlock}>
-                  <label className={styles.fieldLabel}>Unit price</label>
-                  <input className={styles.field} value={item.unitPrice} onChange={(e) => onReceiptDraftUpdateLine(item.id, { unitPrice: e.target.value })} placeholder="0.00" />
-                </div>
-              </div>
-
-              <ReceiptClassificationToggle value={item.classification} onChange={(value) => onReceiptDraftUpdateLine(item.id, { classification: value })} />
-
-              <div className={styles.fieldBlock}>
-                <label className={styles.fieldLabel}>Line note</label>
-                <input className={styles.field} value={item.note || ""} onChange={(e) => onReceiptDraftUpdateLine(item.id, { note: e.target.value })} placeholder="Optional note" />
-              </div>
-            </div>
-          ))}
         </div>
       </div>
     </div>
@@ -1614,36 +1662,36 @@ export function ReceiptViewerModal({
         </div>
 
         <div className={styles.modalBody}>
-          <div className={styles.receiptModalGrid}>
-            <div className={styles.receiptModalMain}>
-              <div className={styles.sheetSection}>
-                <SectionHeader title="Attached receipt" subcopy="Small on the page. Full when opened." />
-                <div className={styles.stackRows}>
-                  {selectedReceipts.map((receipt) => (
-                    <ReceiptAttachmentCard
-                      key={receipt.id}
-                      receipt={receipt}
-                      itemCount={(selectedReceiptItemsByReceiptId.get(receipt.id) || []).length}
-                    />
-                  ))}
-                </div>
-              </div>
+          <div className={styles.receiptWorkbench}>
+            <div className={styles.sheetSection}>
+              <SectionHeader title="Extracted items" subcopy="Left side is the actual line-item read from the receipt." />
+              <ReceiptItemList
+                selectedReceipts={selectedReceipts}
+                selectedReceiptItemsByReceiptId={selectedReceiptItemsByReceiptId}
+              />
             </div>
 
-            <div className={styles.receiptModalRail}>
+            <div className={styles.receiptWorkbenchPreview}>
               <div className={styles.sheetSection}>
-                <SectionHeader title="Receipt item preview" subcopy="Line-by-line breakdown." />
+                <SectionHeader title="Receipt image" subcopy="Right side is the source receipt so you can compare it fast." />
+                <div className={styles.stackRows}>
+                  {selectedReceipts.map((receipt) => (
+                    <div key={receipt.id} className={styles.receiptSourceCard}>
+                      <ReceiptAttachmentCard
+                        receipt={receipt}
+                        itemCount={(selectedReceiptItemsByReceiptId.get(receipt.id) || []).length}
+                      />
+                      {receipt.previewUrl && receipt.isImage ? (
+                        <div className={styles.receiptPreviewBox}>
+                          <img src={receipt.previewUrl} alt={receipt.fileName || "Receipt"} className={styles.receiptPreviewImage} />
+                        </div>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
                 <div className={styles.helperListItem}>{allItems.length} stored line items</div>
               </div>
             </div>
-          </div>
-
-          <div className={styles.sheetSection}>
-            <SectionHeader title="Line items" subcopy="Extracted or manually entered item detail." />
-            <ReceiptItemList
-              selectedReceipts={selectedReceipts}
-              selectedReceiptItemsByReceiptId={selectedReceiptItemsByReceiptId}
-            />
           </div>
         </div>
       </div>
