@@ -1,10 +1,9 @@
-
 .page {
   min-width: 0;
   display: grid;
-  gap: 14px;
+  gap: 16px;
   color: rgba(247, 250, 255, 0.98);
-  padding-bottom: 32px;
+  padding-bottom: 40px;
 }
 
 .loadingState {
@@ -16,37 +15,158 @@
 
 .topStrip {
   display: grid;
-  grid-template-columns: minmax(300px, 1.15fr) minmax(420px, 1fr) auto;
+  grid-template-columns: minmax(300px, 1fr) minmax(420px, 0.96fr) auto;
   gap: 16px;
   align-items: center;
   padding: 18px 20px;
-  border-radius: 26px;
-  border: 1px solid rgba(205, 220, 255, 0.08);
+  border-radius: 28px;
+  border: 1px solid rgba(210, 223, 255, 0.08);
   background:
-    radial-gradient(circle at top right, rgba(68, 93, 163, 0.18), transparent 30%),
-    linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.012)),
-    rgba(8, 12, 20, 0.92);
+    radial-gradient(circle at top right, rgba(55, 86, 166, 0.14), transparent 28%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.01)),
+    rgba(8, 12, 20, 0.94);
   box-shadow:
-    0 24px 54px rgba(0, 0, 0, 0.34),
-    inset 0 1px 0 rgba(255,255,255,0.04);
+    0 24px 56px rgba(0, 0, 0, 0.32),
+    inset 0 1px 0 rgba(255, 255, 255, 0.035);
 }
 
-.topIdentity { min-width: 0; display: grid; gap: 7px; }
-.eyebrow { font-size: 10px; text-transform: uppercase; letter-spacing: 0.16em; font-weight: 800; color: rgba(255, 255, 255, 0.36); }
-.pageTitle { margin: 0; font-size: clamp(30px, 3vw, 42px); line-height: 0.95; font-weight: 900; letter-spacing: -0.065em; }
-.pageSub { margin: 0; max-width: 760px; font-size: 12px; line-height: 1.6; color: rgba(255, 255, 255, 0.58); }
+.topIdentity {
+  display: grid;
+  gap: 8px;
+}
 
-.kpiRow { display: grid; grid-template-columns: repeat(4, minmax(120px, 1fr)); gap: 10px; }
+.eyebrow,
+.fieldLabel,
+.receiptLineIndex,
+.receiptTotalCard span,
+.metricCompact span,
+.modalEyebrow,
+.insightStat span,
+.receiptStatusCard span {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-weight: 800;
+  color: rgba(255, 255, 255, 0.42);
+}
+
+.pageTitle {
+  margin: 0;
+  font-size: clamp(30px, 3vw, 42px);
+  line-height: 0.95;
+  font-weight: 900;
+  letter-spacing: -0.065em;
+}
+
+.pageSub,
+.sectionSub,
+.feedMicro,
+.feedMeta,
+.categoryMeta,
+.radarMeta,
+.receiptAttachmentMeta,
+.receiptReviewMeta,
+.helperText,
+.insightStatSub,
+.receiptPromptCopy,
+.workspaceSub,
+.coachLeadCopy,
+.heroMeta,
+.heroReason,
+.emptyCardBody,
+.helperBlock {
+  font-size: 12px;
+  line-height: 1.58;
+  color: rgba(255, 255, 255, 0.58);
+  overflow-wrap: anywhere;
+}
+
+.pageSub {
+  margin: 0;
+  max-width: 760px;
+}
+
+.kpiRow {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.kpiCard,
+.storyCard,
+.heroCard,
+.receiptAttachmentCard,
+.receiptLineRow,
+.receiptTotalCard,
+.metricCompact,
+.insightStat,
+.categoryRow,
+.radarRow,
+.receiptReviewRow,
+.emptyCard,
+.receiptPromptCard,
+.compactReceiptTile,
+.sheetSection,
+.coachLead,
+.modalCard,
+.modalCardWide,
+.workspacePane {
+  min-width: 0;
+  overflow: hidden;
+  border-radius: 22px;
+  border: 1px solid rgba(216, 228, 255, 0.08);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.026), rgba(255, 255, 255, 0.008)),
+    rgba(10, 14, 22, 0.92);
+}
+
 .kpiCard {
-  min-width: 0; padding: 12px 14px; border-radius: 18px;
-  border: 1px solid rgba(215, 227, 255, 0.08);
-  background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.014)), rgba(255,255,255,0.016);
-  display: grid; gap: 6px;
+  padding: 13px 14px;
+  display: grid;
+  gap: 6px;
 }
-.kpiCard span { font-size: 10px; text-transform: uppercase; letter-spacing: 0.15em; font-weight: 800; color: rgba(255,255,255,0.4); }
-.kpiCard strong { font-size: 18px; line-height: 1; font-weight: 850; letter-spacing: -0.04em; }
 
-.topControls { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
+.kpiCard strong,
+.heroAmount,
+.feedAmount,
+.insightStat strong,
+.receiptTotalCard strong,
+.metricCompact strong,
+.radarTop strong,
+.receiptReviewRow strong,
+.categoryRow strong,
+.receiptStatusCard strong,
+.coachLeadTitle,
+.compactReceiptTitle {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kpiCard strong {
+  font-size: clamp(16px, 1.35vw, 20px);
+  line-height: 1;
+  font-weight: 860;
+  letter-spacing: -0.045em;
+}
+
+.kpiCard small {
+  font-size: 11px;
+  line-height: 1.4;
+  color: rgba(255, 255, 255, 0.52);
+  overflow-wrap: anywhere;
+}
+
+.topTools {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
 
 .topSelect,
 .field,
@@ -54,12 +174,10 @@
 .searchBox,
 .tab,
 .actionBtn,
-.chip,
-.mobileTab,
 .iconButton,
 .cameraAction,
-.actionTrayItem,
-.classificationChip {
+.classificationChip,
+.modeTab {
   -webkit-tap-highlight-color: transparent;
 }
 
@@ -70,36 +188,138 @@
   min-height: 42px;
   padding: 11px 12px;
   border-radius: 14px;
-  border: 1px solid rgba(215, 227, 255, 0.1);
-  background: linear-gradient(180deg, rgba(255,255,255,0.028), rgba(255,255,255,0.012)), rgba(14, 18, 28, 0.84);
+  border: 1px solid rgba(216, 228, 255, 0.1);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.008)),
+    rgba(13, 18, 28, 0.94);
   color: rgba(247, 250, 255, 0.98);
   font: inherit;
   outline: 0;
 }
 
-.topSelect { width: auto; min-width: 145px; }
-.fieldArea { resize: vertical; min-height: 100px; }
+.topSelect {
+  width: auto;
+  min-width: 146px;
+}
 
-.workspace { display: grid; grid-template-columns: minmax(320px, 0.78fr) minmax(0, 1.32fr); gap: 14px; align-items: start; }
-.workspaceSection { min-width: 0; }
-.mobileToolsWrap { display: none; }
-.sidePane, .stagePane { display: grid; gap: 14px; }
+.fieldArea {
+  min-height: 96px;
+  resize: vertical;
+}
 
-.sectionHeader { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
-.sectionTitle { font-size: 15px; line-height: 1.1; font-weight: 850; letter-spacing: -0.02em; }
-.sectionSub { margin-top: 5px; font-size: 12px; line-height: 1.55; color: rgba(255,255,255,0.56); }
-.sectionRight { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.topSelect:focus-visible,
+.field:focus-visible,
+.fieldArea:focus-visible,
+.actionBtn:focus-visible,
+.iconButton:focus-visible,
+.tab:focus-visible,
+.cameraAction:focus-visible,
+.classificationChip:focus-visible,
+.modeTab:focus-visible {
+  outline: none;
+  border-color: rgba(142, 172, 255, 0.3);
+  box-shadow: 0 0 0 1px rgba(142, 172, 255, 0.18);
+}
 
-.feedTools { display: grid; gap: 10px; }
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(320px, 0.8fr) minmax(0, 1.2fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.workspaceFeed,
+.workspaceMain,
+.feedPane,
+.workspacePane,
+.modalBody,
+.workspaceBody,
+.storyGrid,
+.storyGridWide,
+.insightGrid,
+.metricStripCompact,
+.receiptTotalsGrid,
+.receiptFlowGrid,
+.receiptModalGrid,
+.receiptModalMain,
+.receiptModalRail,
+.feedRow,
+.heroCard,
+.heroTop,
+.heroIdentity,
+.heroRight,
+.compactReceiptTile,
+.receiptSignalGrid,
+.coachStatsGrid,
+.receiptMiniGrid,
+.workspaceGridReceipt,
+.workspaceGridCoach {
+  min-width: 0;
+}
+
+.feedPane,
+.workspacePane {
+  display: grid;
+  gap: 14px;
+  min-height: calc(100svh - 210px);
+  padding: 16px;
+}
+
+.workspaceHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.workspaceHeaderRight {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.workspaceTitle,
+.sectionTitle,
+.heroName,
+.modalTitle,
+.coachLeadTitle,
+.receiptPromptTitle,
+.compactReceiptTitle {
+  font-size: 16px;
+  line-height: 1.1;
+  font-weight: 860;
+  letter-spacing: -0.02em;
+}
+
+.modalTitle {
+  font-size: 22px;
+}
+
+.searchRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+}
+
 .searchBox {
   min-height: 44px;
-  display: flex; align-items: center; gap: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   padding: 0 12px;
   border-radius: 15px;
-  border: 1px solid rgba(215, 227, 255, 0.09);
-  background: rgba(255,255,255,0.024);
-  color: rgba(255,255,255,0.48);
+  border: 1px solid rgba(216, 228, 255, 0.09);
+  background: rgba(255, 255, 255, 0.02);
+  color: rgba(255, 255, 255, 0.48);
 }
+
+.searchBox:focus-within {
+  border-color: rgba(142, 172, 255, 0.24);
+  box-shadow: 0 0 0 1px rgba(142, 172, 255, 0.14);
+}
+
 .searchBox input,
 .fieldBlock input,
 .fieldBlock textarea,
@@ -108,296 +328,894 @@
   border: 0;
   outline: 0;
   background: transparent;
-  color: rgba(247,250,255,0.98);
+  color: rgba(247, 250, 255, 0.98);
   font: inherit;
 }
-.filterGrid,.formGrid2,.formGrid3,.receiptTotalsGrid,.receiptLineGrid,.receiptLabMeta { display: grid; gap: 10px; }
-.filterGrid,.formGrid2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.formGrid3,.receiptLineGrid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-.chipRow,.tabRow,.studioActions,.inlineActions,.tagRow,.actionTray,.classificationToggle { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 
-.chip,.tab,.mobileTab,.actionBtn,.cameraAction,.actionTrayItem,.classificationChip {
-  min-height: 38px; padding: 0 14px; border-radius: 14px;
-  border: 1px solid rgba(215, 227, 255, 0.1);
-  background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.012)), rgba(14, 18, 28, 0.9);
-  color: rgba(255,255,255,0.78);
-  font: inherit; font-size: 12px; font-weight: 800;
-  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
-  cursor: pointer; transition: 140ms ease; text-decoration: none;
-}
-.chip:hover,.tab:hover,.mobileTab:hover,.actionBtn:hover,.cameraAction:hover,.actionTrayItem:hover,.classificationChip:hover {
-  border-color: rgba(215, 227, 255, 0.16);
-  color: rgba(255,255,255,0.98);
-}
-.chipActive,.tabActive,.mobileTabActive {
-  border-color: rgba(138, 170, 255, 0.26);
-  background: linear-gradient(180deg, rgba(138,170,255,0.16), rgba(138,170,255,0.05)), rgba(18, 24, 38, 0.92);
-  color: rgba(255,255,255,0.98);
-}
-.actionBtn_primary {
-  border-color: rgba(138,170,255,0.22);
-  background: linear-gradient(180deg, rgba(116,143,214,0.22), rgba(116,143,214,0.08)), rgba(23, 30, 47, 0.98);
-  color: rgba(255,255,255,0.98);
-}
-.actionBtn_danger {
-  border-color: rgba(230, 111, 111, 0.18);
-  background: linear-gradient(180deg, rgba(160, 52, 52, 0.18), rgba(160,52,52,0.07)), rgba(34, 16, 20, 0.96);
-  color: rgba(255,236,236,0.96);
-}
-.actionBtnFull { width: 100%; }
-
-.iconButton {
-  width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center;
-  border-radius: 12px; border: 1px solid rgba(215, 227, 255, 0.1);
-  background: rgba(255,255,255,0.03); color: rgba(255,255,255,0.7); cursor: pointer;
+.filterPanel {
+  padding: 12px;
+  border-radius: 18px;
+  border: 1px solid rgba(216, 228, 255, 0.08);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.024), rgba(255, 255, 255, 0.008)),
+    rgba(255, 255, 255, 0.014);
 }
 
-.feedList { display: grid; gap: 10px; max-height: 74svh; overflow: auto; padding-right: 4px; }
-.feedList::-webkit-scrollbar,.stageScroll::-webkit-scrollbar,.detailSheet::-webkit-scrollbar { width: 10px; height: 10px; }
-.feedList::-webkit-scrollbar-thumb,.stageScroll::-webkit-scrollbar-thumb,.detailSheet::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 999px; }
-.feedList::-webkit-scrollbar-track,.stageScroll::-webkit-scrollbar-track,.detailSheet::-webkit-scrollbar-track { background: transparent; }
-
-.feedDivider { margin-top: 4px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.16em; font-weight: 800; color: rgba(255,255,255,0.34); }
-.feedRow {
-  width: 100%; display: grid; grid-template-columns: 46px minmax(0, 1fr); gap: 12px; align-items: center;
-  padding: 12px; border-radius: 18px; border: 1px solid rgba(215,227,255,0.09);
-  background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.012)), rgba(11, 15, 24, 0.84);
-  color: inherit; text-align: left; cursor: pointer;
-}
-.feedRowActive { border-color: rgba(136, 170, 255, 0.24); box-shadow: inset 0 0 0 1px rgba(136, 170, 255, 0.12); }
-
-.merchantMark {
-  width: 42px; height: 42px; border-radius: 14px; display: inline-flex; align-items: center; justify-content: center;
-  font-size: 15px; font-weight: 900; letter-spacing: -0.04em; color: rgba(255,255,255,0.95);
-  border: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.06);
-}
-.merchantMarkLg { width: 58px; height: 58px; border-radius: 18px; font-size: 20px; }
-.merchantMark_neutral { background: linear-gradient(180deg, rgba(82, 98, 130, 0.28), rgba(82,98,130,0.08)), rgba(255,255,255,0.04); }
-.merchantMark_blue { background: linear-gradient(180deg, rgba(72, 106, 188, 0.34), rgba(72,106,188,0.09)), rgba(255,255,255,0.04); }
-.merchantMark_green { background: linear-gradient(180deg, rgba(54, 122, 95, 0.34), rgba(54,122,95,0.09)), rgba(255,255,255,0.04); }
-.merchantMark_red { background: linear-gradient(180deg, rgba(130, 63, 63, 0.34), rgba(130,63,63,0.09)), rgba(255,255,255,0.04); }
-.merchantMark_amber { background: linear-gradient(180deg, rgba(139, 108, 53, 0.34), rgba(139,108,53,0.09)), rgba(255,255,255,0.04); }
-
-.feedMain { min-width: 0; display: grid; gap: 6px; }
-.feedTop { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
-.feedNameRow { min-width: 0; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-.feedName { font-size: 13px; font-weight: 850; }
-.feedMicro,.feedMeta,.radarMeta,.plannedMeta,.categoryMeta,.miniMetricSub,.receiptAttachmentMeta,.receiptReviewMeta {
-  font-size: 12px; line-height: 1.45; color: rgba(255,255,255,0.55);
-}
-.feedMeta { display: flex; align-items: center; gap: 6px; }
-.feedBadge {
-  display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px;
-  background: rgba(134, 166, 244, 0.16); color: rgba(226, 236, 255, 0.92); font-size: 11px; font-weight: 700;
-}
-.feedAmount { font-size: 15px; font-weight: 850; letter-spacing: -0.03em; }
-
-.feedAmount_red,.textRed,.toneRed { color: #ff9797; }
-.feedAmount_green,.textGreen,.toneGreen { color: #8ee0b7; }
-.feedAmount_amber,.textAmber,.toneAmber { color: #ffd18b; }
-.textBlue,.toneBlue { color: #9cb7ff; }
-.toneNeutral { color: rgba(255,255,255,0.85); }
-
-.stagePane { padding-bottom: 2px; min-height: 74svh; }
-.stageScroll { display: grid; gap: 14px; min-width: 0; }
-.summaryGrid,.cardGrid2,.cardGrid3,.cardGrid4,.stageGridWide,.commandGrid,.metricStrip,.receiptLabGrid {
-  display: grid; gap: 12px;
-}
-.summaryGrid,.cardGrid4,.metricStrip { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-.cardGrid2,.receiptLabGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.cardGrid3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-.stageGridWide,.commandGrid { grid-template-columns: minmax(0, 1.12fr) minmax(340px, 0.88fr); }
-
-.contentCard,.miniMetric,.metricCard,.emptyCard,.receiptAttachmentCard,.receiptLineRow,.receiptTotalCard,.metricCompact {
-  border-radius: 22px; border: 1px solid rgba(215, 227, 255, 0.08);
-  background: linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.012)), rgba(10, 14, 22, 0.9);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.02);
-}
-.contentCard,.emptyCard,.receiptAttachmentCard,.receiptLineRow { padding: 16px; }
-.miniMetric,.metricCard,.receiptTotalCard,.metricCompact { padding: 14px; }
-
-.miniMetricTop { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
-.miniMetricLabel,.metricCard span,.fieldLabel,.verdictLabel,.receiptLineIndex,.receiptTotalCard span,.metricCompact span,.detailSheetEyebrow {
-  font-size: 10px; text-transform: uppercase; letter-spacing: 0.14em; font-weight: 800; color: rgba(255,255,255,0.42);
-}
-.miniMetricIcon { color: rgba(255,255,255,0.52); }
-.miniMetricValue,.metricCard strong,.verdictValue,.receiptTotalCard strong,.metricCompact strong,.detailSheetTitle {
-  font-size: 18px; line-height: 1.02; font-weight: 880; letter-spacing: -0.04em;
-}
-.detailSheetTitle { font-size: 22px; }
-.metricCard strong,.receiptTotalCard strong,.metricCompact strong { display: block; margin-top: 10px; }
-
-.stackRows,.plannedList,.radarList,.guidanceList,.receiptReviewList,.receiptLineList,.receiptBreakdownList,.sheetSections {
-  display: grid; gap: 10px;
-}
-.categoryRow,.plannedRow,.radarRow,.guidanceItem,.receiptReviewRow,.breakdownRow {
-  border-radius: 18px; border: 1px solid rgba(215,227,255,0.08); background: rgba(255,255,255,0.018); padding: 12px;
-}
-.categoryRowMain { display: grid; gap: 10px; }
-.categoryRowTop,.plannedRow,.radarTop,.verdictHead,.legendRow,.breakdownRow,.receiptAttachmentTop,.receiptLineHeader,.receiptReviewRow,.receiptReviewRight,.detailSheetHeader {
-  display: flex; align-items: center; justify-content: space-between; gap: 10px;
-}
-.categoryName,.plannedName,.legendName,.receiptAttachmentName,.receiptReviewName { font-size: 14px; font-weight: 800; }
-
-.progressTrack { height: 10px; border-radius: 999px; background: rgba(255,255,255,0.06); overflow: hidden; }
-.progressFill { height: 100%; border-radius: inherit; background: currentColor; }
-
-.verdictHero {
-  padding: 18px; border-radius: 24px; border: 1px solid rgba(215,227,255,0.1);
-  background: radial-gradient(circle at top right, rgba(90, 72, 42, 0.1), transparent 34%), linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.012)), rgba(11, 15, 24, 0.92);
-  display: grid; gap: 14px;
-}
-.verdictIdentity { display: flex; gap: 14px; align-items: center; min-width: 0; }
-.verdictMeta { font-size: 13px; line-height: 1.5; color: rgba(255,255,255,0.62); }
-.callout { padding: 14px; border-radius: 18px; border: 1px solid rgba(215,227,255,0.08); background: rgba(255,255,255,0.025); display: grid; gap: 6px; }
-.calloutTitle { font-size: 14px; font-weight: 850; }
-.calloutBody { font-size: 13px; line-height: 1.6; color: rgba(255,255,255,0.72); }
-
-.softTag,.pill {
-  display: inline-flex; align-items: center; min-height: 28px; padding: 0 10px; border-radius: 999px;
-  border: 1px solid rgba(215,227,255,0.08); background: rgba(255,255,255,0.03);
-  font-size: 11px; font-weight: 800; letter-spacing: 0.01em;
-}
-.pill_neutral { color: rgba(255,255,255,0.82); background: rgba(255,255,255,0.05); }
-.pill_blue { color: #dce7ff; background: rgba(110, 139, 214, 0.18); }
-.pill_green { color: #d5f6e6; background: rgba(59, 123, 93, 0.24); }
-.pill_amber { color: #ffe8bf; background: rgba(132, 102, 51, 0.24); }
-.pill_red { color: #ffd2d2; background: rgba(143, 62, 62, 0.24); }
-
-.noteBox {
-  padding: 14px; border-radius: 18px; border: 1px solid rgba(215,227,255,0.08);
-  background: rgba(255,255,255,0.02); font-size: 13px; line-height: 1.6; color: rgba(255,255,255,0.74);
-}
-
-.hiddenInput { display: none; }
-.radarRow { padding: 10px 12px; display: grid; grid-template-columns: 42px minmax(0, 1fr); gap: 10px; }
-.radarMain { min-width: 0; display: grid; gap: 4px; }
-.radarTop span { min-width: 0; font-size: 13px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.guidanceItem { display: grid; gap: 5px; }
-.guidanceItem strong { font-size: 12px; font-weight: 850; }
-.guidanceItem span { font-size: 12px; line-height: 1.55; color: rgba(255,255,255,0.65); }
-
-.trendBars { height: 260px; display: flex; align-items: end; gap: 12px; padding: 10px 4px 6px; }
-.trendBarCol { flex: 1 1 0; min-width: 0; display: grid; gap: 10px; align-items: end; }
-.trendBarTrack { height: 200px; display: flex; align-items: end; border-radius: 16px; background: linear-gradient(180deg, rgba(255,255,255,0.016), rgba(255,255,255,0.04)); overflow: hidden; }
-.trendBarFill { width: 100%; border-radius: 16px 16px 8px 8px; background: linear-gradient(180deg, rgba(140, 166, 231, 0.95), rgba(87, 106, 166, 0.55)); }
-.trendBarLabel { text-align: center; font-size: 11px; color: rgba(255,255,255,0.52); }
-
-.donutShell { display: grid; grid-template-columns: minmax(220px, 250px) minmax(0, 1fr); gap: 18px; align-items: center; }
-.donutChart {
-  width: 240px; height: 240px; border-radius: 50%; display: grid; place-items: center; position: relative;
-  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.04);
-}
-.donutChart::after {
-  content: ""; position: absolute; inset: 26px; border-radius: 50%;
-  background: rgba(8, 11, 18, 0.96); border: 1px solid rgba(255,255,255,0.06);
-}
-.donutCenter { position: relative; z-index: 1; display: grid; gap: 6px; text-align: center; }
-.donutCenter strong { font-size: 28px; font-weight: 900; letter-spacing: -0.05em; }
-.donutCenter span { font-size: 12px; color: rgba(255,255,255,0.56); }
-.donutLegend { display: grid; gap: 10px; }
-.legendSwatch { width: 10px; height: 10px; border-radius: 999px; margin-right: 8px; flex: 0 0 auto; }
-.legendRow { padding: 10px 12px; border-radius: 16px; border: 1px solid rgba(215,227,255,0.07); background: rgba(255,255,255,0.018); }
-.legendName { flex: 1 1 auto; font-size: 13px; font-weight: 700; }
-
-.fieldBlock { display: grid; gap: 7px; }
-.sectionDivider { height: 1px; background: rgba(255,255,255,0.07); margin: 2px 0; }
-.emptyCard { min-height: 110px; display: grid; align-content: center; gap: 6px; }
-.emptyCardTitle { font-size: 14px; font-weight: 800; }
-.emptyCardBody { font-size: 12px; line-height: 1.55; color: rgba(255,255,255,0.6); }
-.emptyAction { margin-top: 8px; }
-
-.receiptPreviewBox {
-  min-height: 220px; border-radius: 20px; border: 1px dashed rgba(215, 227, 255, 0.16);
-  background: rgba(255,255,255,0.018); overflow: hidden; display: grid; place-items: center; margin-bottom: 12px;
-}
-.receiptPreviewImage { width: 100%; height: 100%; object-fit: contain; background: rgba(255,255,255,0.01); }
-.receiptPreviewFallback { display: grid; gap: 8px; place-items: center; color: rgba(255,255,255,0.66); text-align: center; padding: 20px; }
-.receiptAttachmentCard,.receiptReviewRow { display: grid; gap: 10px; }
-.receiptReviewRight { justify-content: flex-end; }
-.metricStripCompact { display: grid; gap: 10px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
-.metricCompact strong { font-size: 15px; }
-.textLink { color: #bdd0ff; font-size: 12px; font-weight: 700; text-decoration: none; }
-
-.detailOverlay {
-  position: fixed;
-  inset: 0;
-  z-index: 120;
-  pointer-events: none;
-}
-.detailOverlay::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: rgba(3, 6, 12, 0.56);
-  backdrop-filter: blur(4px);
-  pointer-events: auto;
-}
-.detailSheet {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  bottom: 12px;
-  width: min(580px, calc(100vw - 24px));
-  border-radius: 28px;
-  border: 1px solid rgba(215,227,255,0.1);
-  background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.012)), rgba(8, 12, 20, 0.96);
-  box-shadow: 0 30px 80px rgba(0,0,0,0.46);
-  padding: 16px;
-  overflow: auto;
-  pointer-events: auto;
-}
-.detailSheetHeader {
-  margin-bottom: 12px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid rgba(255,255,255,0.07);
-}
-.sheetSections { display: grid; gap: 12px; }
-.sheetSection {
-  border-radius: 22px;
-  border: 1px solid rgba(215,227,255,0.08);
-  background: rgba(255,255,255,0.018);
-  padding: 14px;
+.filterGrid,
+.formGrid2,
+.formGrid3,
+.receiptTotalsGrid,
+.receiptLineGrid,
+.metricStripCompact,
+.insightGrid,
+.storyGrid,
+.storyGridWide,
+.receiptModalGrid,
+.receiptSignalGrid,
+.coachStatsGrid,
+.workspaceGridReceipt,
+.workspaceGridCoach {
   display: grid;
   gap: 12px;
 }
-.classificationChipActive { box-shadow: inset 0 0 0 1px rgba(255,255,255,0.08); }
-.classificationChip_need { border-color: rgba(83, 153, 118, 0.18); }
-.classificationChip_want { border-color: rgba(165, 126, 63, 0.18); }
-.classificationChip_waste { border-color: rgba(160, 75, 75, 0.18); }
-.classificationChip_review { border-color: rgba(87, 111, 164, 0.18); }
 
-.toastStack { position: fixed; right: 20px; bottom: 20px; z-index: 150; display: grid; gap: 8px; }
-.toast {
-  min-height: 42px; padding: 0 14px; border-radius: 14px; border: 1px solid rgba(255,255,255,0.08);
-  display: inline-flex; align-items: center; gap: 8px; background: rgba(10, 14, 22, 0.96); color: rgba(255,255,255,0.92);
-  box-shadow: 0 12px 28px rgba(0,0,0,0.28);
+.filterGrid,
+.formGrid2,
+.storyGrid,
+.workspaceGridCoach {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
-.toastOk { border-color: rgba(103, 178, 140, 0.24); }
-.toastError { border-color: rgba(192, 95, 95, 0.24); }
-.mobileTabs { display: none; }
 
-@media (max-width: 1280px) {
-  .topStrip { grid-template-columns: 1fr; }
-  .workspace { grid-template-columns: minmax(280px, 0.9fr) minmax(0, 1.1fr); }
-  .summaryGrid,.cardGrid4,.metricStrip,.receiptTotalsGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .cardGrid3,.stageGridWide,.commandGrid,.receiptLabGrid { grid-template-columns: 1fr; }
+.formGrid3,
+.receiptLineGrid,
+.insightGrid,
+.receiptSignalGrid,
+.coachStatsGrid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.storyGridWide,
+.receiptModalGrid,
+.workspaceGridReceipt {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.metricStripCompact,
+.receiptTotalsGrid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.modeTabs,
+.tabRow,
+.inlineActions,
+.classificationToggle,
+.heroTagRow,
+.sectionRight {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.modeTab,
+.actionBtn,
+.tab,
+.cameraAction,
+.classificationChip {
+  min-height: 38px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(216, 228, 255, 0.1);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.026), rgba(255, 255, 255, 0.008)),
+    rgba(14, 18, 28, 0.96);
+  color: rgba(255, 255, 255, 0.84);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  cursor: pointer;
+  text-decoration: none;
+  transition:
+    border-color 140ms ease,
+    background 140ms ease,
+    color 140ms ease,
+    transform 140ms ease;
+}
+
+.modeTab:hover,
+.actionBtn:hover,
+.tab:hover,
+.cameraAction:hover,
+.classificationChip:hover {
+  border-color: rgba(216, 228, 255, 0.18);
+  color: rgba(255, 255, 255, 0.98);
+  transform: translateY(-1px);
+}
+
+.modeTabActive,
+.tabActive {
+  border-color: rgba(138, 170, 255, 0.3);
+  background:
+    linear-gradient(180deg, rgba(138, 170, 255, 0.16), rgba(138, 170, 255, 0.05)),
+    rgba(18, 24, 38, 0.98);
+  color: rgba(255, 255, 255, 0.98);
+}
+
+.actionBtn_subtle {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.024), rgba(255, 255, 255, 0.008)),
+    rgba(14, 18, 28, 0.96);
+}
+
+.actionBtn_primary {
+  border-color: rgba(138, 170, 255, 0.24);
+  background:
+    linear-gradient(180deg, rgba(122, 150, 222, 0.24), rgba(88, 114, 183, 0.09)),
+    rgba(22, 29, 46, 0.98);
+  color: rgba(255, 255, 255, 0.98);
+}
+
+.actionBtn_danger {
+  border-color: rgba(214, 100, 100, 0.22);
+  background:
+    linear-gradient(180deg, rgba(166, 61, 61, 0.22), rgba(132, 46, 46, 0.08)),
+    rgba(31, 15, 18, 0.97);
+  color: rgba(255, 236, 236, 0.98);
+}
+
+.actionBtnFull {
+  width: 100%;
+}
+
+.iconButton {
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  border: 1px solid rgba(216, 228, 255, 0.1);
+  background: rgba(255, 255, 255, 0.03);
+  color: rgba(255, 255, 255, 0.74);
+  cursor: pointer;
+  transition:
+    border-color 140ms ease,
+    color 140ms ease,
+    transform 140ms ease;
+}
+
+.iconButton:hover {
+  border-color: rgba(216, 228, 255, 0.18);
+  color: rgba(255, 255, 255, 0.98);
+  transform: translateY(-1px);
+}
+
+.feedList {
+  display: grid;
+  gap: 10px;
+  max-height: calc(100svh - 320px);
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.feedList::-webkit-scrollbar,
+.modalBody::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.feedList::-webkit-scrollbar-thumb,
+.modalBody::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+}
+
+.feedDivider {
+  margin-top: 2px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  font-weight: 800;
+  color: rgba(255, 255, 255, 0.34);
+}
+
+.feedRow {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  padding: 12px;
+  border-radius: 18px;
+  border: 1px solid rgba(216, 228, 255, 0.09);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.026), rgba(255, 255, 255, 0.008)),
+    rgba(10, 14, 22, 0.92);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 140ms ease,
+    background 140ms ease,
+    transform 140ms ease;
+}
+
+.feedRow:hover {
+  border-color: rgba(182, 199, 242, 0.16);
+  transform: translateY(-1px);
+}
+
+.feedRowActive {
+  border-color: rgba(136, 170, 255, 0.28);
+  background:
+    linear-gradient(180deg, rgba(74, 102, 174, 0.12), rgba(255, 255, 255, 0.012)),
+    rgba(12, 16, 26, 0.96);
+  box-shadow: inset 0 0 0 1px rgba(136, 170, 255, 0.14);
+}
+
+.merchantMark {
+  width: 42px;
+  height: 42px;
+  border-radius: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  font-weight: 900;
+  letter-spacing: -0.04em;
+  color: rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.merchantMarkLg {
+  width: 58px;
+  height: 58px;
+  border-radius: 18px;
+  font-size: 20px;
+}
+
+.merchantMark_neutral {
+  background: linear-gradient(180deg, rgba(82, 98, 130, 0.34), rgba(82, 98, 130, 0.08));
+}
+
+.merchantMark_blue {
+  background: linear-gradient(180deg, rgba(72, 106, 188, 0.38), rgba(72, 106, 188, 0.1));
+}
+
+.merchantMark_green {
+  background: linear-gradient(180deg, rgba(54, 122, 95, 0.36), rgba(54, 122, 95, 0.1));
+}
+
+.merchantMark_red {
+  background: linear-gradient(180deg, rgba(136, 63, 63, 0.36), rgba(136, 63, 63, 0.1));
+}
+
+.merchantMark_amber {
+  background: linear-gradient(180deg, rgba(139, 108, 53, 0.38), rgba(139, 108, 53, 0.1));
+}
+
+.feedMain {
+  display: grid;
+  gap: 6px;
+}
+
+.feedTop,
+.heroTop,
+.heroIdentity,
+.heroRight,
+.radarTop,
+.receiptAttachmentTop,
+.receiptLineHeader,
+.receiptReviewRight,
+.breakdownRow,
+.categoryRowTop,
+.compactReceiptTile,
+.receiptPromptCard {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.feedTitle,
+.heroText,
+.radarMain,
+.receiptModalMain,
+.receiptModalRail,
+.workspaceBody {
+  display: grid;
+  gap: 6px;
+}
+
+.feedName,
+.categoryName,
+.receiptAttachmentName,
+.receiptReviewName,
+.workspaceTitle {
+  font-size: 14px;
+  font-weight: 850;
+}
+
+.feedRight {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.feedBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(123, 149, 224, 0.16);
+  color: rgba(231, 239, 255, 0.95);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.feedAmount {
+  font-size: clamp(14px, 1.1vw, 16px);
+  font-weight: 860;
+  letter-spacing: -0.03em;
+}
+
+.feedAmount_red,
+.textRed,
+.toneRed {
+  color: #ff9c9c;
+}
+
+.feedAmount_green,
+.textGreen,
+.toneGreen {
+  color: #93e8b9;
+}
+
+.feedAmount_amber,
+.textAmber,
+.toneAmber {
+  color: #ffd08a;
+}
+
+.textBlue,
+.toneBlue {
+  color: #a8c0ff;
+}
+
+.toneNeutral {
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.heroCard,
+.storyCard,
+.emptyCard,
+.receiptAttachmentCard,
+.receiptLineRow,
+.receiptPromptCard,
+.compactReceiptTile,
+.coachLead,
+.sheetSection {
+  padding: 16px;
+}
+
+.receiptTotalCard,
+.metricCompact,
+.insightStat {
+  padding: 14px;
+}
+
+.heroCard {
+  display: grid;
+  gap: 14px;
+  border-radius: 26px;
+  background:
+    radial-gradient(circle at top right, rgba(68, 98, 176, 0.1), transparent 30%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.01)),
+    rgba(10, 14, 22, 0.94);
+}
+
+.heroTop {
+  align-items: flex-start;
+}
+
+.heroIdentity {
+  flex: 1 1 auto;
+  justify-content: flex-start;
+}
+
+.heroRight {
+  flex: 0 0 auto;
+  max-width: 100%;
+}
+
+.heroAmount {
+  font-size: clamp(22px, 1.8vw, 30px);
+  line-height: 0.95;
+  font-weight: 900;
+  letter-spacing: -0.05em;
+}
+
+.softTag,
+.pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(216, 228, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+}
+
+.pill_neutral {
+  color: rgba(255, 255, 255, 0.84);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.pill_blue {
+  color: #dce7ff;
+  background: rgba(110, 139, 214, 0.2);
+}
+
+.pill_green {
+  color: #dbf8ea;
+  background: rgba(59, 123, 93, 0.26);
+}
+
+.pill_amber {
+  color: #ffe8bf;
+  background: rgba(132, 102, 51, 0.26);
+}
+
+.pill_red {
+  color: #ffd8d8;
+  background: rgba(143, 62, 62, 0.26);
+}
+
+.insightStat {
+  display: grid;
+  gap: 6px;
+}
+
+.insightStat strong,
+.receiptTotalCard strong,
+.metricCompact strong,
+.receiptStatusCard strong,
+.coachLeadTitle,
+.compactReceiptTitle {
+  font-size: clamp(15px, 1.2vw, 18px);
+  line-height: 1.02;
+  font-weight: 880;
+  letter-spacing: -0.04em;
+}
+
+.progressTrack {
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  overflow: hidden;
+}
+
+.progressFill {
+  height: 100%;
+  border-radius: inherit;
+  background: currentColor;
+}
+
+.categoryRow,
+.radarRow,
+.receiptReviewRow,
+.receiptStatusCard {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  align-items: start;
+}
+
+.radarRow {
+  grid-template-columns: 42px minmax(0, 1fr);
+  gap: 10px;
+}
+
+.radarTop span {
+  min-width: 0;
+  max-width: 100%;
+  font-size: 13px;
+  font-weight: 820;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.helperList,
+.stackRows,
+.radarList,
+.receiptReviewList,
+.receiptLineList,
+.receiptBreakdownList,
+.sheetSections,
+.receiptMiniGrid,
+.receiptEmptyHint {
+  display: grid;
+  gap: 10px;
+}
+
+.helperListItem {
+  padding: 11px 12px;
+  border-radius: 16px;
+  border: 1px solid rgba(216, 228, 255, 0.07);
+  background: rgba(255, 255, 255, 0.016);
+  font-size: 12px;
+  line-height: 1.55;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.emptyCard {
+  min-height: 120px;
+  display: grid;
+  align-content: center;
+  gap: 6px;
+}
+
+.emptyCardTitle {
+  font-size: 14px;
+  font-weight: 840;
+}
+
+.emptyAction {
+  margin-top: 8px;
+}
+
+.compactReceiptTile {
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  align-items: center;
+  transition: border-color 140ms ease, transform 140ms ease;
+}
+
+.compactReceiptTile:hover {
+  border-color: rgba(182, 199, 242, 0.16);
+  transform: translateY(-1px);
+}
+
+.compactReceiptIcon,
+.receiptPromptIcon {
+  width: 42px;
+  height: 42px;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 14px;
+  border: 1px solid rgba(216, 228, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.compactReceiptBody,
+.receiptPromptBody {
+  flex: 1 1 auto;
+  display: grid;
+  gap: 4px;
+}
+
+.compactReceiptCopy {
+  font-size: 12px;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.62);
+}
+
+.compactReceiptMeta {
+  flex: 0 0 auto;
+}
+
+.receiptAttachmentCardCompact .metricStripCompact {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.receiptReviewRowCompact {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.actionMenuWrap {
+  position: relative;
+}
+
+.actionMenu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 30;
+  min-width: 190px;
+  padding: 8px;
+  border-radius: 18px;
+  border: 1px solid rgba(216, 228, 255, 0.1);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.01)),
+    rgba(9, 13, 21, 0.98);
+  box-shadow: 0 22px 44px rgba(0, 0, 0, 0.28);
+  display: grid;
+  gap: 6px;
+}
+
+.actionMenuItem,
+.actionMenuItemDanger {
+  min-height: 38px;
+  padding: 0 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(216, 228, 255, 0.06);
+  background: rgba(255, 255, 255, 0.02);
+  color: rgba(255, 255, 255, 0.86);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 760;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.actionMenuItemDanger {
+  color: rgba(255, 223, 223, 0.94);
+}
+
+.hiddenInput {
+  display: none;
+}
+
+.receiptPreviewBox {
+  min-height: 180px;
+  border-radius: 20px;
+  border: 1px dashed rgba(216, 228, 255, 0.16);
+  background: rgba(255, 255, 255, 0.016);
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  margin-bottom: 12px;
+}
+
+.receiptPreviewImage {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: rgba(255, 255, 255, 0.01);
+}
+
+.receiptPreviewFallback {
+  display: grid;
+  gap: 8px;
+  place-items: center;
+  color: rgba(255, 255, 255, 0.66);
+  text-align: center;
+  padding: 20px;
+}
+
+.textLink {
+  color: #c8d7ff;
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.classificationChipActive {
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.classificationChip_need {
+  border-color: rgba(83, 153, 118, 0.18);
+}
+
+.classificationChip_want {
+  border-color: rgba(165, 126, 63, 0.18);
+}
+
+.classificationChip_waste {
+  border-color: rgba(160, 75, 75, 0.18);
+}
+
+.classificationChip_review {
+  border-color: rgba(87, 111, 164, 0.18);
+}
+
+.modalBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 140;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(3, 6, 12, 0.62);
+  backdrop-filter: blur(4px);
+}
+
+.modalCard,
+.modalCardWide {
+  width: min(760px, 100%);
+  max-height: calc(100svh - 36px);
+  border-radius: 28px;
+  border: 1px solid rgba(216, 228, 255, 0.1);
+  background:
+    radial-gradient(circle at top right, rgba(55, 86, 166, 0.1), transparent 30%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.01)),
+    rgba(8, 12, 20, 0.98);
+  box-shadow: 0 34px 84px rgba(0, 0, 0, 0.46);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+
+.modalCardWide {
+  width: min(980px, 100%);
+}
+
+.modalHeader,
+.modalFooter {
+  padding: 16px 18px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.modalFooter {
+  border-bottom: 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  justify-content: flex-end;
+}
+
+.modalBody {
+  min-height: 0;
+  overflow: auto;
+  padding: 16px 18px 18px;
+  display: grid;
+  gap: 14px;
+  align-content: start;
+}
+
+.toastStack {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 150;
+  display: grid;
+  gap: 8px;
+}
+
+.toast {
+  min-height: 42px;
+  padding: 0 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(10, 14, 22, 0.97);
+  color: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.28);
+}
+
+.toastOk {
+  border-color: rgba(103, 178, 140, 0.24);
+}
+
+.toastError {
+  border-color: rgba(192, 95, 95, 0.24);
+}
+
+@media (max-width: 1540px) {
+  .topStrip {
+    grid-template-columns: 1fr;
+  }
+
+  .kpiRow {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1320px) {
+  .workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .feedPane,
+  .workspacePane {
+    min-height: auto;
+  }
+
+  .feedList {
+    max-height: none;
+  }
+
+  .storyGridWide,
+  .receiptModalGrid,
+  .workspaceGridReceipt,
+  .workspaceGridCoach {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 980px) {
-  .mobileTabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
-  .workspace { grid-template-columns: 1fr; }
-  .mobileToolsWrap { display: block; }
-  .mobileHidden { display: none; }
-  .feedList { max-height: none; overflow: visible; }
-  .cardGrid2,.cardGrid3,.cardGrid4,.summaryGrid,.metricStrip,.filterGrid,.formGrid2,.formGrid3,.donutShell,.kpiRow,.receiptLineGrid,.receiptTotalsGrid,.metricStripCompact { grid-template-columns: 1fr; }
-  .detailSheet {
-    top: auto;
-    left: 8px;
-    right: 8px;
-    bottom: 8px;
-    width: auto;
-    max-height: 82svh;
-    border-radius: 24px 24px 18px 18px;
+  .kpiRow,
+  .filterGrid,
+  .formGrid2,
+  .formGrid3,
+  .receiptTotalsGrid,
+  .receiptLineGrid,
+  .metricStripCompact,
+  .insightGrid,
+  .storyGrid,
+  .storyGridWide,
+  .receiptModalGrid,
+  .receiptSignalGrid,
+  .coachStatsGrid,
+  .workspaceGridReceipt,
+  .workspaceGridCoach {
+    grid-template-columns: 1fr;
+  }
+
+  .searchRow {
+    grid-template-columns: 1fr;
+  }
+
+  .heroTop {
+    flex-direction: column;
+  }
+
+  .heroRight {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .modalBackdrop {
+    padding: 8px;
+  }
+
+  .modalCard,
+  .modalCardWide {
+    width: 100%;
+    max-height: calc(100svh - 16px);
+    border-radius: 24px;
+  }
+}
+
+
+.ocrBanner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(216, 228, 255, 0.09);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.ocrBannerTitle {
+  font-size: 13px;
+  font-weight: 800;
+  color: rgba(247, 250, 255, 0.96);
+}
+
+.ocrBannerMeta {
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.62);
+}
+
+@media (max-width: 980px) {
+  .ocrBanner {
+    flex-direction: column;
+    align-items: flex-start;
   }
 }

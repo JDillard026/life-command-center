@@ -3,18 +3,12 @@ import { supabase } from "@/lib/supabaseClient";
 /**
  * STEP 1 MONEY ENGINE
  *
- * This is the single shared client-side balance / ledger writer.
+ * Shared balance / ledger writer.
  *
  * Important honesty:
- * - This is stronger than the old helper because every page can route through one file.
- * - It still is NOT a true SQL transaction.
- * - True database-atomic money posting should become an RPC / server-side transaction later.
- *
- * For now this file gives us:
- * - one balance mutation path
- * - one ledger write path
- * - shared rollback behavior on failure
- * - shared source_type / source_id tracing
+ * - This is still not a real SQL transaction.
+ * - True atomic money posting should eventually move into an RPC / server-side transaction.
+ * - For now this gives one shared mutation path, one shared ledger path, and best-effort rollback.
  */
 
 function round2(n) {
@@ -59,6 +53,38 @@ function normalizeLedgerAmount(amount, delta) {
   const explicit = Number(amount);
   if (Number.isFinite(explicit)) return round2(explicit);
   return round2(Math.abs(safeNum(delta, 0)));
+}
+
+/**
+ * Constraint-safe ledger kind normalizer.
+ *
+ * Spending helpers currently pass semantic kinds like:
+ * - spending_expense
+ * - spending_income
+ * - spending_expense_delete
+ * - spending_income_delete
+ *
+ * The account ledger table wants actual ledger movement kinds.
+ * So we collapse aliases to the final allowed movement:
+ * - negative money => withdraw
+ * - positive money => deposit
+ * - transfers stay transfer_in / transfer_out
+ */
+function normalizeLedgerKind(kind, delta = 0) {
+  const raw = String(kind || "").trim().toLowerCase();
+  const cleanDelta = round2(safeNum(delta, 0));
+
+  if (raw === "transfer_in" || raw === "transfer_out") return raw;
+  if (raw === "deposit" || raw === "withdraw") return raw;
+  if (raw === "credit") return "deposit";
+  if (raw === "debit") return "withdraw";
+
+  if (raw.includes("transfer")) {
+    return cleanDelta < 0 ? "transfer_out" : "transfer_in";
+  }
+
+  if (cleanDelta < 0) return "withdraw";
+  return "deposit";
 }
 
 async function getOwnedAccount(userId, accountId) {
@@ -158,15 +184,17 @@ function buildLedgerRow({
   sourceId = null,
   createdAt,
 }) {
+  const normalizedKind = normalizeLedgerKind(kind, delta);
+
   return {
     id: uid(),
     user_id: userId,
     account_id: accountId,
-    kind: kind || "entry",
+    kind: normalizedKind,
     amount: normalizeLedgerAmount(amount, delta),
     delta: round2(delta),
     resulting_balance: round2(resultingBalance),
-    note: note || kind || "",
+    note: note || normalizedKind,
     related_account_id: relatedAccountId,
     related_account_name: relatedAccountName,
     source_type: sourceType || "manual_entry",
@@ -472,7 +500,7 @@ export async function writeIncomeDepositSplits({
     entries: cleanSplits.map((split) => ({
       accountId: split.accountId,
       delta: round2(split.amount),
-      kind: "income",
+      kind: "deposit",
       amount: round2(split.amount),
       note: `${source || "Income"}${note ? ` • ${note}` : ""}`,
       relatedAccountId: null,
@@ -496,7 +524,7 @@ export async function writeIncomeDepositSplits({
 }
 
 /**
- * Backward-friendly aliases so page rewrites can move over cleanly.
+ * Backward-friendly aliases
  */
 export const applyAccountDelta = writeAccountDelta;
 export const applyAccountTransfer = writeAccountTransfer;
