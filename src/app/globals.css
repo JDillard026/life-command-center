@@ -533,22 +533,28 @@ textarea {
    Permanent shared page language seed
    ═══════════════════════════════════════════════════════════════════ */
 
+/* ═══════════════════════════════════════════════════════════════════
+   DASHBOARD SYSTEM CLASSES
+   Permanent shared page language seed
+   ═══════════════════════════════════════════════════════════════════ */
+
 .opsDashRoot {
   width: 100%;
   padding: 0 0 16px;
 }
 
 .opsShell {
-  border-radius: 22px !important;
+  border-radius: 24px !important;
   padding: 0 !important;
   overflow: hidden !important;
-  border: 1px solid rgba(255, 255, 255, 0.06) !important;
+  border: 1px solid rgba(255, 255, 255, 0.07) !important;
   background:
-    linear-gradient(180deg, rgba(255,255,255,0.014), rgba(255,255,255,0.004)),
-    rgba(7, 10, 16, 0.92) !important;
+    radial-gradient(circle at top right, rgba(83, 114, 182, 0.08), transparent 24%),
+    linear-gradient(180deg, rgba(255,255,255,0.016), rgba(255,255,255,0.005)),
+    rgba(9, 13, 21, 0.9) !important;
   box-shadow:
-    inset 0 1px 0 rgba(255,255,255,0.028),
-    0 20px 50px rgba(0,0,0,0.34) !important;
+    inset 0 1px 0 rgba(255,255,255,0.03),
+    0 24px 60px rgba(0,0,0,0.3) !important;
 }
 
 .opsLoading {
@@ -568,11 +574,11 @@ textarea {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  min-height: 38px;
+  min-height: 40px;
   padding: 0 14px;
-  border-radius: 10px;
+  border-radius: 12px;
   border: 1px solid rgba(255,255,255,0.08);
-  background: rgba(255,255,255,0.03);
+  background: rgba(255,255,255,0.035);
   color: #fff;
   font-size: 13px;
   font-weight: 700;
@@ -581,9 +587,9 @@ textarea {
 .opsErrorBox {
   margin: 18px 18px 0;
   padding: 12px 14px;
-  border-radius: 12px;
+  border-radius: 14px;
   border: 1px solid rgba(255, 90, 95, 0.16);
-  background: rgba(58, 18, 21, 0.32);
+  background: rgba(58, 18, 21, 0.26);
 }
 
 .opsErrorTitle {
@@ -604,12 +610,12 @@ textarea {
   align-items: center;
   justify-content: space-between;
   gap: 14px;
-  min-height: 56px;
-  padding: 0 18px;
+  min-height: 62px;
+  padding: 0 20px;
   border-bottom: 1px solid rgba(255,255,255,0.06);
   background:
     linear-gradient(180deg, rgba(255,255,255,0.018), rgba(255,255,255,0)),
-    rgba(10, 14, 22, 0.92);
+    rgba(11, 16, 26, 0.9);
 }
 
 .opsTopbarLeft,
@@ -632,8 +638,8 @@ textarea {
 }
 
 .opsBreadcrumb span {
-  color: rgba(255,255,255,0.9);
-  font-weight: 700;
+  color: rgba(255,255,255,0.92);
+  font-weight: 800;
 }
 
 .opsStatusPill {
@@ -667,18 +673,18 @@ textarea {
 }
 
 .opsSearch {
-  flex: 0 1 320px;
-  min-width: 190px;
-  height: 38px;
+  flex: 0 1 360px;
+  min-width: 210px;
+  height: 40px;
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 0 11px;
-  border-radius: 10px;
+  padding: 0 12px;
+  border-radius: 12px;
   border: 1px solid rgba(255,255,255,0.07);
   background:
     linear-gradient(180deg, rgba(255,255,255,0.018), rgba(255,255,255,0)),
-    rgba(255,255,255,0.024);
+    rgba(255,255,255,0.03);
   color: rgba(255,255,255,0.4);
 }
 
@@ -708,10 +714,10 @@ textarea {
 .opsGhostBtn {
   border: 1px solid rgba(255,255,255,0.07);
   background:
-    linear-gradient(180deg, rgba(255,255,255,0.016), rgba(255,255,255,0)),
-    rgba(255,255,255,0.025);
+    linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0)),
+    rgba(255,255,255,0.03);
   color: rgba(255,255,255,0.88);
-  border-radius: 10px;
+  border-radius: 12px;
   cursor: pointer;
   transition:
     background 140ms ease,
@@ -722,14 +728,14 @@ textarea {
 .opsTopButton:hover,
 .opsMenuClose:hover,
 .opsGhostBtn:hover {
-  background: rgba(255,255,255,0.05);
-  border-color: rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.06);
+  border-color: rgba(255,255,255,0.13);
   transform: translateY(-1px);
 }
 
 .opsTopButton {
-  height: 38px;
-  min-width: 38px;
+  height: 40px;
+  min-width: 40px;
   padding: 0 12px;
   display: inline-flex;
   align-items: center;
@@ -741,7 +747,7 @@ textarea {
 }
 
 .opsTopButtonWide {
-  min-width: 94px;
+  min-width: 96px;
 }
 
 .opsTopButtonPrimary {
@@ -769,6 +775,51 @@ textarea {
   border: 2px solid rgba(10,14,22,0.96);
 }
 
+/* mobile zone bar */
+.opsMobileStateBar {
+  display: none;
+  padding: 10px 12px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+
+.opsMobileStateTabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.opsMobileStateTab {
+  min-height: 38px;
+  padding: 0 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.07);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.018), rgba(255,255,255,0)),
+    rgba(255,255,255,0.025);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 11px;
+  font-weight: 800;
+  color: rgba(255,255,255,0.74);
+}
+
+.opsMobileStateTab em {
+  font-style: normal;
+  font-size: 10px;
+  color: rgba(255,255,255,0.38);
+}
+
+.opsMobileStateTabActive {
+  color: #fff;
+  border-color: rgba(123,166,247,0.22);
+  background:
+    linear-gradient(180deg, rgba(123,166,247,0.14), rgba(123,166,247,0.04)),
+    rgba(255,255,255,0.03);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
+}
+
 /* KPI strip */
 .opsKpiStrip {
   display: grid;
@@ -777,9 +828,9 @@ textarea {
 }
 
 .opsKpiCell {
-  padding: 13px 16px;
+  padding: 14px 16px;
   border-right: 1px solid rgba(255,255,255,0.06);
-  background: rgba(255,255,255,0.004);
+  background: rgba(255,255,255,0.005);
 }
 
 .opsKpiCell:last-child {
@@ -788,7 +839,7 @@ textarea {
 
 .opsKpiCellActive {
   background: rgba(255,255,255,0.018);
-  box-shadow: inset 0 -2px 0 rgba(123,166,247,0.76);
+  box-shadow: inset 0 -2px 0 rgba(123,166,247,0.74);
 }
 
 .opsKpiLabel {
@@ -800,7 +851,7 @@ textarea {
 
 .opsKpiValue {
   margin-top: 6px;
-  font-size: 18px;
+  font-size: 20px;
   line-height: 1;
   font-weight: 900;
   letter-spacing: -0.05em;
@@ -815,14 +866,23 @@ textarea {
 
 /* content grids */
 .opsContent {
-  padding: 18px;
+  padding: 16px;
   display: grid;
   gap: 14px;
 }
 
+.opsMobileContent {
+  padding-top: 12px;
+}
+
+.opsMobileStack {
+  display: grid;
+  gap: 12px;
+}
+
 .opsGrid2to1 {
   display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(300px, 1fr);
+  grid-template-columns: minmax(0, 1.95fr) minmax(320px, 1fr);
   gap: 14px;
 }
 
@@ -837,11 +897,12 @@ textarea {
   border-radius: 18px;
   border: 1px solid rgba(255,255,255,0.06);
   background:
+    radial-gradient(circle at top right, rgba(96, 128, 196, 0.05), transparent 28%),
     linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.006) 34%, rgba(255,255,255,0.012)),
-    rgba(8, 12, 19, 0.76);
+    rgba(12, 17, 28, 0.82);
   box-shadow:
-    inset 0 1px 0 rgba(255,255,255,0.022),
-    0 14px 30px rgba(0,0,0,0.2);
+    inset 0 1px 0 rgba(255,255,255,0.024),
+    0 16px 34px rgba(0,0,0,0.22);
   overflow: hidden;
 }
 
@@ -850,7 +911,7 @@ textarea {
 }
 
 .opsCardHead {
-  min-height: 50px;
+  min-height: 52px;
   padding: 0 14px;
   border-bottom: 1px solid rgba(255,255,255,0.06);
   display: flex;
@@ -860,9 +921,9 @@ textarea {
 }
 
 .opsCardTitle {
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.08em;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
   color: rgba(255,255,255,0.34);
 }
@@ -877,7 +938,7 @@ textarea {
 .opsChip {
   min-height: 22px;
   padding: 0 8px;
-  border-radius: 7px;
+  border-radius: 999px;
   font-size: 10px;
   font-weight: 800;
   letter-spacing: 0.04em;
@@ -920,7 +981,7 @@ textarea {
 .opsMiniAction {
   min-height: 24px;
   padding: 0 8px;
-  border-radius: 7px;
+  border-radius: 8px;
   border: 1px solid rgba(255,255,255,0.07);
   display: inline-flex;
   align-items: center;
@@ -944,9 +1005,9 @@ textarea {
 }
 
 .opsHeroSub {
-  margin-top: 7px;
+  margin-top: 8px;
   font-size: 12px;
-  color: rgba(255,255,255,0.44);
+  color: rgba(255,255,255,0.46);
 }
 
 .opsChartWrap {
@@ -957,7 +1018,7 @@ textarea {
 
 .opsChartSvg {
   width: 100%;
-  height: 96px;
+  height: 104px;
 }
 
 .opsChartLabels {
@@ -1012,7 +1073,7 @@ textarea {
 .opsMetricSub {
   margin-top: 4px;
   font-size: 10px;
-  color: rgba(255,255,255,0.38);
+  color: rgba(255,255,255,0.4);
 }
 
 /* side summary cards */
@@ -1053,7 +1114,7 @@ textarea {
 .opsGaugeSub {
   padding: 10px 16px 14px;
   font-size: 11px;
-  color: rgba(255,255,255,0.42);
+  color: rgba(255,255,255,0.44);
 }
 
 .opsStatList {
@@ -1061,7 +1122,7 @@ textarea {
 }
 
 .opsStatRow {
-  min-height: 42px;
+  min-height: 44px;
   padding: 0 16px;
   border-bottom: 1px solid rgba(255,255,255,0.06);
   display: flex;
@@ -1076,7 +1137,7 @@ textarea {
 
 .opsStatRowLabel {
   font-size: 12px;
-  color: rgba(255,255,255,0.56);
+  color: rgba(255,255,255,0.58);
 }
 
 .opsStatRowValue {
@@ -1110,7 +1171,7 @@ textarea {
 }
 
 .opsTableRow {
-  min-height: 56px;
+  min-height: 58px;
   border-bottom: 1px solid rgba(255,255,255,0.06);
   font-size: 12px;
   color: rgba(255,255,255,0.74);
@@ -1136,7 +1197,7 @@ textarea {
 .opsTableMeta {
   margin-top: 2px;
   font-size: 10px;
-  color: rgba(255,255,255,0.36);
+  color: rgba(255,255,255,0.38);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1149,7 +1210,7 @@ textarea {
 }
 
 .opsTableDate {
-  color: rgba(255,255,255,0.34);
+  color: rgba(255,255,255,0.36);
   text-align: right;
   white-space: nowrap;
 }
@@ -1181,7 +1242,7 @@ textarea {
   display: grid;
   place-items: center;
   border: 1px solid rgba(255,255,255,0.06);
-  color: rgba(255,255,255,0.86);
+  color: rgba(255,255,255,0.88);
 }
 
 .opsBillCopy {
@@ -1197,7 +1258,7 @@ textarea {
 .opsBillMeta {
   margin-top: 2px;
   font-size: 10px;
-  color: rgba(255,255,255,0.38);
+  color: rgba(255,255,255,0.4);
 }
 
 .opsBillRight {
@@ -1283,7 +1344,7 @@ textarea {
 .opsWealthSub {
   margin-top: 10px;
   font-size: 11px;
-  color: rgba(255,255,255,0.42);
+  color: rgba(255,255,255,0.44);
 }
 
 .opsCategoryRow {
@@ -1337,7 +1398,7 @@ textarea {
 .opsCategoryPct {
   margin-top: 2px;
   font-size: 10px;
-  color: rgba(255,255,255,0.38);
+  color: rgba(255,255,255,0.4);
 }
 
 /* menus */
@@ -1347,11 +1408,11 @@ textarea {
   right: 0;
   width: min(320px, calc(100vw - 32px));
   padding: 12px;
-  border-radius: 14px;
+  border-radius: 16px;
   border: 1px solid rgba(255,255,255,0.08);
   background:
-    linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.006)),
-    rgba(8, 12, 19, 0.98);
+    linear-gradient(180deg, rgba(255,255,255,0.022), rgba(255,255,255,0.006)),
+    rgba(10, 14, 22, 0.98);
   box-shadow:
     inset 0 1px 0 rgba(255,255,255,0.03),
     0 20px 44px rgba(0,0,0,0.4);
@@ -1387,9 +1448,9 @@ textarea {
 
 .opsMenuLink {
   padding: 10px;
-  border-radius: 10px;
+  border-radius: 12px;
   border: 1px solid rgba(255,255,255,0.05);
-  background: rgba(255,255,255,0.01);
+  background: rgba(255,255,255,0.015);
 }
 
 .opsMenuLinkTitle {
@@ -1401,7 +1462,35 @@ textarea {
 .opsMenuLinkNote {
   margin-top: 3px;
   font-size: 10px;
-  color: rgba(255,255,255,0.4);
+  color: rgba(255,255,255,0.42);
+}
+
+.opsMenuSectionLabel {
+  padding: 2px 2px 0;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.32);
+}
+
+.opsMenuRowTop {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.opsMenuRowMain {
+  min-width: 0;
+}
+
+.opsMenuMetaRow {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+  align-items: center;
+  flex-wrap: wrap;
 }
 
 .opsSignalRow {
@@ -1460,7 +1549,7 @@ textarea {
 .opsEmptyDetail {
   margin-top: 4px;
   font-size: 11px;
-  color: rgba(255,255,255,0.4);
+  color: rgba(255,255,255,0.42);
 }
 
 /* tones */
@@ -1542,6 +1631,10 @@ textarea {
 }
 
 @media (max-width: 860px) {
+  .opsMobileStateBar {
+    display: block;
+  }
+
   .opsKpiStrip {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -1559,7 +1652,7 @@ textarea {
 
   .opsTableCell:nth-child(2) {
     grid-column: 1;
-    color: rgba(255,255,255,0.4);
+    color: rgba(255,255,255,0.42);
   }
 
   .opsTableCell:nth-child(3) {
@@ -1614,7 +1707,11 @@ textarea {
   .opsHeroValue,
   .opsGaugeValue,
   .opsWealthValue {
-    font-size: 28px;
+    font-size: 29px;
+  }
+
+  .opsChartSvg {
+    height: 88px;
   }
 
   .opsChartLabels {
@@ -1633,5 +1730,13 @@ textarea {
   .opsChartLabels span:nth-child(5),
   .opsChartLabels span:nth-child(6) {
     display: none;
+  }
+
+  .opsTopbarRight {
+    gap: 8px;
+  }
+
+  .opsTopButtonWide {
+    min-width: 0;
   }
 }

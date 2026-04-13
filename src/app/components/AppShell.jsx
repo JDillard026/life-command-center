@@ -188,14 +188,14 @@ export default function AppShell({ children }) {
 
         <aside
           id="lcc-mobile-drawer"
-          className={`${styles.mobileDrawer} ${mobileNavOpen ? styles.mobileDrawerOpen : ""}`}
+          className={`${styles.mobileDrawer} ${mobileNavOpen ? styles.mobileDrawerOpen : ""} ${collapsed ? styles.mobileDrawerCompact : ""}`}
           aria-hidden={!mobileNavOpen}
           role="dialog"
           aria-label="Navigation"
         >
           <div className={styles.mobileDrawerInner}>
             <SideNav
-              collapsed={false}
+              collapsed={collapsed}
               mobile
               onToggle={handleToggleCollapse}
               onCloseMobile={closeMobileNav}

@@ -3,21 +3,17 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
-  CalendarDays,
   CheckCircle2,
   ChevronRight,
   Copy,
   Link2,
   PencilLine,
   Plus,
-  Receipt,
   Save,
   Search,
   ShieldAlert,
   SlidersHorizontal,
   Trash2,
-  TrendingDown,
-  Wallet,
   X,
   Zap,
 } from "lucide-react";
@@ -26,8 +22,6 @@ import styles from "./BillsPage.module.css";
 import {
   FREQS,
   billStatus,
-  cycleEnd,
-  cycleStart,
   dueText,
   formatFrequencyLabel,
   isInvestment,
@@ -175,7 +169,8 @@ export function ModalShell({
 }
 
 export function SummaryStrip({ metrics, selectedBill, selectedSummary }) {
-  const selectedStatus = selectedSummary?.status || (selectedBill ? billStatus(selectedBill) : null);
+  const selectedStatus =
+    selectedSummary?.status || (selectedBill ? billStatus(selectedBill) : null);
 
   return (
     <GlassPane className={styles.summaryStrip}>
@@ -189,7 +184,8 @@ export function SummaryStrip({ metrics, selectedBill, selectedSummary }) {
           </div>
 
           <div className={styles.workspaceCopy}>
-            One bill workspace for pressure, due control, payments, debt linkage, and account impact.
+            One bill workspace for pressure, due control, payments, debt linkage,
+            and account impact.
           </div>
         </div>
 
@@ -207,34 +203,54 @@ export function SummaryStrip({ metrics, selectedBill, selectedSummary }) {
           </div>
 
           <div className={styles.summaryStat}>
-            <div className={styles.summaryLabel}>Paid This Month</div>
             <div className={`${styles.summaryValue} ${styles.valuePositive}`}>
               {money(metrics.paidThisMonth)}
             </div>
+            <div className={styles.summaryLabel}>Paid This Month</div>
             <div className={styles.summaryHint}>payments logged</div>
           </div>
 
           <div className={styles.summaryStat}>
-            <div className={styles.summaryLabel}>Due Soon</div>
-            <div className={`${styles.summaryValue} ${metrics.dueSoonCount ? styles.valueWarning : ""}`}>
+            <div
+              className={`${styles.summaryValue} ${
+                metrics.dueSoonCount ? styles.valueWarning : ""
+              }`}
+            >
               {metrics.dueSoonCount}
             </div>
+            <div className={styles.summaryLabel}>Due Soon</div>
             <div className={styles.summaryHint}>within 7 days</div>
           </div>
 
           <div className={styles.summaryStat}>
-            <div className={styles.summaryLabel}>Overdue</div>
-            <div className={`${styles.summaryValue} ${metrics.overdueCount ? styles.valueNegative : ""}`}>
+            <div
+              className={`${styles.summaryValue} ${
+                metrics.overdueCount ? styles.valueNegative : ""
+              }`}
+            >
               {metrics.overdueCount}
             </div>
+            <div className={styles.summaryLabel}>Overdue</div>
             <div className={styles.summaryHint}>needs attention</div>
           </div>
         </div>
 
         <div className={styles.summaryRight}>
-          {selectedBill ? <MiniPill tone={selectedStatus?.tone || "blue"}>{selectedBill.name}</MiniPill> : null}
-          {selectedStatus ? <MiniPill tone={selectedStatus.tone}>{selectedStatus.label}</MiniPill> : null}
-          <MiniPill tone={metrics.overdueCount > 0 ? "red" : metrics.dueSoonCount > 0 ? "amber" : "green"}>
+          {selectedBill ? (
+            <MiniPill tone={selectedStatus?.tone || "blue"}>{selectedBill.name}</MiniPill>
+          ) : null}
+          {selectedStatus ? (
+            <MiniPill tone={selectedStatus.tone}>{selectedStatus.label}</MiniPill>
+          ) : null}
+          <MiniPill
+            tone={
+              metrics.overdueCount > 0
+                ? "red"
+                : metrics.dueSoonCount > 0
+                ? "amber"
+                : "green"
+            }
+          >
             {metrics.nextBill ? `Next ${metrics.nextBill.name}` : "Queue clear"}
           </MiniPill>
         </div>
@@ -265,7 +281,10 @@ function BillQueueRow({ bill, summary, selected, onSelect }) {
       className={cx(styles.queueRow, selected && styles.queueRowActive)}
       onClick={onSelect}
     >
-      <div className={styles.queueAccent} style={{ background: selected ? meta.text : "transparent" }} />
+      <div
+        className={styles.queueAccent}
+        style={{ background: selected ? meta.text : "transparent" }}
+      />
 
       <div className={styles.queueMain}>
         <div className={styles.queueTop}>
@@ -323,7 +342,7 @@ export function QueuePane({
             className={styles.searchInput}
             value={search}
             onChange={(event) => setSearch(event.target.value)}
-            placeholder="Search bills…"
+            placeholder="Search bills..."
           />
           {search ? (
             <button
@@ -340,7 +359,11 @@ export function QueuePane({
         <div className={styles.scopeTabs}>
           <ScopeTab label="Active" active={scope === "active"} onClick={() => setScope("active")} />
           <ScopeTab label="All" active={scope === "all"} onClick={() => setScope("all")} />
-          <ScopeTab label="Inactive" active={scope === "inactive"} onClick={() => setScope("inactive")} />
+          <ScopeTab
+            label="Inactive"
+            active={scope === "inactive"}
+            onClick={() => setScope("inactive")}
+          />
         </div>
 
         <div className={styles.queueMetaRow}>
@@ -451,7 +474,7 @@ function PaymentHistoryList({ payments, deletingId, onDeletePayment }) {
               disabled={deletingId === payment.id}
             >
               <Trash2 size={13} />
-              {deletingId === payment.id ? "Deleting…" : "Delete"}
+              {deletingId === payment.id ? "Deleting..." : "Delete"}
             </Button>
           </div>
         </div>
@@ -485,7 +508,7 @@ function ScheduleList({ items }) {
   );
 }
 
-function DebtPanel({ selectedBill, selectedSummary, onOpenEdit }) {
+function DebtPanel({ selectedSummary, onOpenEdit }) {
   const linkedDebt = selectedSummary?.linkedDebt || null;
 
   if (!linkedDebt) {
@@ -524,8 +547,16 @@ function DebtPanel({ selectedBill, selectedSummary, onOpenEdit }) {
         <InfoRow label="Debt" value={linkedDebt.name} tone="blue" />
         <InfoRow label="Balance" value={money(linkedDebt.balance)} tone="red" />
         <InfoRow label="APR" value={`${safeNum(linkedDebt.aprPct)}%`} />
-        <InfoRow label="Interest / mo" value={moneyTight(selectedSummary?.monthlyInterest)} tone="amber" />
-        <InfoRow label="Plan" value={`${moneyTight(selectedSummary?.debtPlan)}/mo`} tone="green" />
+        <InfoRow
+          label="Interest / mo"
+          value={moneyTight(selectedSummary?.monthlyInterest)}
+          tone="amber"
+        />
+        <InfoRow
+          label="Plan"
+          value={`${moneyTight(selectedSummary?.debtPlan)}/mo`}
+          tone="green"
+        />
         <InfoRow label="Payoff est." value={selectedSummary?.payoff || "—"} tone="green" />
       </div>
 
@@ -534,6 +565,47 @@ function DebtPanel({ selectedBill, selectedSummary, onOpenEdit }) {
           <PencilLine size={14} />
           Manage link
         </Button>
+      </div>
+    </div>
+  );
+}
+
+function PayPreviewCard({ label, value, sub, tone = "neutral" }) {
+  const toneClass =
+    tone === "green"
+      ? styles.valuePositive
+      : tone === "amber"
+      ? styles.valueWarning
+      : tone === "red"
+      ? styles.valueNegative
+      : "";
+
+  return (
+    <div className={styles.previewCard}>
+      <div className={styles.previewLabel}>{label}</div>
+      <div className={cx(styles.previewValue, toneClass)}>{value}</div>
+      <div className={styles.previewText}>{sub}</div>
+    </div>
+  );
+}
+
+function SignalCard({ signals }) {
+  return (
+    <div className={styles.panel}>
+      <div className={styles.panelHeader}>
+        <div>
+          <div className={styles.panelTitle}>Signals</div>
+          <div className={styles.panelSub}>What matters right now on this bill.</div>
+        </div>
+        <MiniPill tone={signals.some((x) => x.tone === "red") ? "red" : "blue"}>
+          {signals.length} active
+        </MiniPill>
+      </div>
+
+      <div className={styles.infoList}>
+        {signals.map((item) => (
+          <InfoRow key={item.label} label={item.label} value={item.value} tone={item.tone} />
+        ))}
       </div>
     </div>
   );
@@ -556,13 +628,18 @@ export function FocusPane({
   deletingPaymentId,
   busy,
 }) {
-  const [tab, setTab] = useState("pay");
+  const [tab, setTab] = useState("command");
   const [toolsOpen, setToolsOpen] = useState(false);
 
   useEffect(() => {
-    setTab("pay");
+    setTab("command");
     setToolsOpen(false);
   }, [selectedBill?.id]);
+
+  const payFromAccount = useMemo(
+    () => payAccounts.find((account) => account.id === draft.accountId) || null,
+    [payAccounts, draft.accountId]
+  );
 
   if (!selectedBill || !selectedSummary) {
     return (
@@ -573,8 +650,39 @@ export function FocusPane({
   }
 
   const status = selectedSummary.status;
-  const statusMeta = toneMeta(status.tone);
   const linkedDebt = selectedSummary.linkedDebt || null;
+  const previewAmount = Math.max(0, safeNum(draft.amount || selectedBill.amount, 0));
+  const afterDebtBalance = linkedDebt
+    ? Math.max(0, safeNum(linkedDebt.balance, 0) - previewAmount)
+    : null;
+
+  const signals = [
+    {
+      label: "Status",
+      value: status.label,
+      tone: status.tone,
+    },
+    {
+      label: "Due",
+      value: shortDate(selectedBill.dueDate),
+      tone: status.tone,
+    },
+    {
+      label: "Autopay Flag",
+      value: selectedBill.autopay ? "On" : "Off",
+      tone: selectedBill.autopay ? "green" : "neutral",
+    },
+    {
+      label: "Debt Link",
+      value: linkedDebt ? "Connected" : "Not linked",
+      tone: linkedDebt ? "blue" : "neutral",
+    },
+    {
+      label: "Payment History",
+      value: `${selectedSummary.paymentsCount} logged`,
+      tone: selectedSummary.paymentsCount ? "green" : "amber",
+    },
+  ];
 
   return (
     <GlassPane className={styles.focusPane}>
@@ -584,7 +692,8 @@ export function FocusPane({
             <div className={styles.eyebrow}>Bill command</div>
             <div className={styles.focusTitle}>{selectedBill.name || "Bill"}</div>
             <div className={styles.focusMeta}>
-              {selectedSummary.accountName || "No account"} • Updated {selectedBill.updatedAt ? shortDate(selectedBill.updatedAt) : "—"}
+              {selectedSummary.accountName || "No account"} • {selectedBill.category || "Uncategorized"} • Due{" "}
+              {shortDate(selectedBill.dueDate)}
             </div>
           </div>
 
@@ -612,59 +721,26 @@ export function FocusPane({
           </div>
         </div>
 
-        <div className={styles.hero}>
-          <div className={styles.heroMain}>
-            <div className={styles.heroLabel}>Current amount</div>
-            <div className={styles.heroValue}>{money(selectedBill.amount)}</div>
-            <div className={styles.focusBadges}>
-              <MiniPill tone={status.tone}>{dueText(selectedSummary.daysUntil)}</MiniPill>
-              <MiniPill tone={safeNum(selectedSummary.monthlyImpact) >= 0 ? "amber" : "green"}>
-                {money(selectedSummary.monthlyImpact)} / mo
-              </MiniPill>
-            </div>
-            <div className={styles.heroCopy}>
-              This bill view answers what is due, what got paid, what happens next, and how it affects debt and accounts.
-            </div>
-          </div>
-
-          <div className={styles.heroAside}>
-            <div className={styles.panelHeader}>
-              <div>
-                <div className={styles.panelTitle}>Cycle pulse</div>
-                <div className={styles.panelSub}>Current payment cycle status.</div>
-              </div>
-              <MiniPill tone={status.tone}>{status.label}</MiniPill>
-            </div>
-
-            <div className={styles.infoList}>
-              <InfoRow label="Due" value={shortDate(selectedBill.dueDate)} tone={status.tone} />
-              <InfoRow label="Cycle start" value={shortDate(selectedSummary.cycleStart)} />
-              <InfoRow label="Cycle end" value={shortDate(selectedSummary.cycleEnd)} />
-              <InfoRow label="Last paid" value={shortDate(selectedBill.lastPaidDate)} tone="green" />
-            </div>
-          </div>
-        </div>
-
-        <div className={styles.metricGrid}>
+        <div className={styles.commandMetricGrid}>
           <TopMetric
-            label="Monthly Load"
-            value={money(selectedSummary.monthlyImpact)}
-            sub="Normalized monthly pressure"
-            tone={status.tone === "red" ? "red" : "amber"}
+            label="Current Amount"
+            value={money(selectedBill.amount)}
+            sub="Amount due on this bill"
+          />
+          <TopMetric
+            label="Status"
+            value={status.label}
+            sub={dueText(selectedSummary.daysUntil)}
+            tone={status.tone}
           />
           <TopMetric
             label="Paid This Month"
             value={money(selectedSummary.paidThisMonth)}
-            sub="Logged this month"
+            sub="Month-to-date bill payments"
             tone="green"
           />
           <TopMetric
-            label="Payments Logged"
-            value={String(selectedSummary.paymentsCount)}
-            sub={selectedSummary.lastPayment ? `Last ${shortDate(selectedSummary.lastPayment.paymentDate)}` : "No history yet"}
-          />
-          <TopMetric
-            label={linkedDebt ? "Debt Balance" : "Linked Account"}
+            label={linkedDebt ? "Linked Debt" : "Pay From"}
             value={linkedDebt ? money(selectedSummary.linkedDebtBalance) : selectedSummary.accountName || "None"}
             sub={linkedDebt ? selectedSummary.payoff : "Payment source account"}
             tone={linkedDebt ? "red" : "blue"}
@@ -672,20 +748,22 @@ export function FocusPane({
         </div>
 
         <div className={styles.tabsRow}>
-          <TabBtn label="Pay" active={tab === "pay"} onClick={() => setTab("pay")} />
-          <TabBtn label="Story" active={tab === "story"} onClick={() => setTab("story")} />
+          <TabBtn label="Command" active={tab === "command"} onClick={() => setTab("command")} />
           <TabBtn label="Schedule" active={tab === "schedule"} onClick={() => setTab("schedule")} />
           <TabBtn label="History" active={tab === "history"} onClick={() => setTab("history")} />
+          <TabBtn label="Debt" active={tab === "debt"} onClick={() => setTab("debt")} />
         </div>
 
         <div className={styles.tabStage}>
-          {tab === "pay" ? (
+          {tab === "command" ? (
             <div className={styles.splitLayoutFill}>
               <div className={`${styles.panel} ${styles.panelFill}`}>
                 <div className={styles.panelHeader}>
                   <div>
-                    <div className={styles.panelTitle}>Log payment</div>
-                    <div className={styles.panelSub}>Post the payment and push the shared ledger.</div>
+                    <div className={styles.panelTitle}>Payment command</div>
+                    <div className={styles.panelSub}>
+                      Main action first. Log the payment and push the write through the system.
+                    </div>
                   </div>
                   <MiniPill tone="green">live write</MiniPill>
                 </div>
@@ -696,7 +774,9 @@ export function FocusPane({
                     <input
                       className={styles.field}
                       value={draft.amount}
-                      onChange={(event) => setDraft((prev) => ({ ...prev, amount: event.target.value }))}
+                      onChange={(event) =>
+                        setDraft((prev) => ({ ...prev, amount: event.target.value }))
+                      }
                       placeholder="0.00"
                       inputMode="decimal"
                     />
@@ -719,7 +799,9 @@ export function FocusPane({
                     <select
                       className={styles.field}
                       value={draft.accountId}
-                      onChange={(event) => setDraft((prev) => ({ ...prev, accountId: event.target.value }))}
+                      onChange={(event) =>
+                        setDraft((prev) => ({ ...prev, accountId: event.target.value }))
+                      }
                     >
                       <option value="">No account</option>
                       {payAccounts.map((account) => (
@@ -736,8 +818,10 @@ export function FocusPane({
                   <input
                     className={styles.field}
                     value={draft.note}
-                    onChange={(event) => setDraft((prev) => ({ ...prev, note: event.target.value }))}
-                    placeholder="Optional note…"
+                    onChange={(event) =>
+                      setDraft((prev) => ({ ...prev, note: event.target.value }))
+                    }
+                    placeholder="Optional note..."
                   />
                 </label>
 
@@ -752,60 +836,61 @@ export function FocusPane({
                   <span>Advance next due date after payment</span>
                 </label>
 
+                <div className={styles.previewGrid}>
+                  <PayPreviewCard
+                    label="Ledger write"
+                    value={`-${money(previewAmount)}`}
+                    sub={
+                      payFromAccount
+                        ? `${payFromAccount.name} gets hit`
+                        : "No account selected"
+                    }
+                    tone={payFromAccount ? "red" : "neutral"}
+                  />
+                  <PayPreviewCard
+                    label="Bill status"
+                    value={selectedSummary.status.isPaid ? "Already paid" : "Will update"}
+                    sub="Bill history and month totals refresh"
+                    tone="green"
+                  />
+                  <PayPreviewCard
+                    label="Debt after pay"
+                    value={linkedDebt ? money(afterDebtBalance) : "No debt"}
+                    sub={
+                      linkedDebt
+                        ? `${money(previewAmount)} applied toward linked debt`
+                        : "No linked debt profile"
+                    }
+                    tone={linkedDebt ? "amber" : "neutral"}
+                  />
+                </div>
+
                 <div className={styles.detailActions}>
                   <Button variant="primary" onClick={onPay} disabled={payBusy}>
                     <Save size={14} />
-                    {payBusy ? "Saving…" : "Mark Paid"}
+                    {payBusy ? "Saving..." : "Mark Paid"}
                   </Button>
                 </div>
               </div>
 
-              <DebtPanel selectedBill={selectedBill} selectedSummary={selectedSummary} onOpenEdit={onOpenEdit} />
-            </div>
-          ) : null}
-
-          {tab === "story" ? (
-            <div className={styles.splitLayoutFill}>
-              <div className={`${styles.panel} ${styles.panelFill}`}>
-                <div className={styles.panelHeader}>
-                  <div>
-                    <div className={styles.panelTitle}>Bill story</div>
-                    <div className={styles.panelSub}>The facts behind this payment stream.</div>
-                  </div>
-                  <MiniPill tone={status.tone}>{status.label}</MiniPill>
-                </div>
-
-                <div className={styles.infoList}>
-                  <InfoRow label="Category" value={selectedBill.category || "Uncategorized"} />
-                  <InfoRow label="Frequency" value={formatFrequencyLabel(selectedBill.frequency)} />
-                  <InfoRow label="Linked account" value={selectedSummary.accountName || "None"} tone="blue" />
-                  <InfoRow label="Autopay" value={selectedBill.autopay ? "Enabled" : "Off"} tone={selectedBill.autopay ? "green" : "neutral"} />
-                  <InfoRow label="Current balance field" value={money(selectedBill.balance)} tone={selectedBill.linkedDebtId ? "red" : "blue"} />
-                  <InfoRow label="Total paid" value={money(selectedSummary.totalPaid)} tone="green" />
-                  <InfoRow label="Cycle start" value={shortDate(selectedSummary.cycleStart)} />
-                  <InfoRow label="Cycle end" value={shortDate(selectedSummary.cycleEnd)} />
-                </div>
-              </div>
-
               <div className={styles.asideStackFill}>
+                <SignalCard signals={signals} />
+
                 <div className={styles.panel}>
                   <div className={styles.panelHeader}>
                     <div>
-                      <div className={styles.panelTitle}>Payment pressure</div>
-                      <div className={styles.panelSub}>What this bill means to the month.</div>
+                      <div className={styles.panelTitle}>Write-through path</div>
+                      <div className={styles.panelSub}>What this action touches.</div>
                     </div>
+                    <MiniPill tone="blue">system</MiniPill>
                   </div>
-                  <div className={styles.infoList}>
-                    <InfoRow label="Monthly impact" value={money(selectedSummary.monthlyImpact)} tone="amber" />
-                    <InfoRow label="Paid this month" value={money(selectedSummary.paidThisMonth)} tone="green" />
-                    <InfoRow label="Payments logged" value={String(selectedSummary.paymentsCount)} />
-                    <InfoRow label="Last payment" value={shortDate(selectedSummary.lastPayment?.paymentDate)} tone="green" />
-                  </div>
-                </div>
 
-                <div className={styles.noteCard}>
-                  <div className={styles.panelTitle}>Notes</div>
-                  <div className={styles.noteText}>{selectedBill.notes || "No notes attached."}</div>
+                  <div className={styles.infoList}>
+                    <InfoRow label="Bill payment row" value="logged" tone="green" />
+                    <InfoRow label="Account ledger" value="written" tone="red" />
+                    <InfoRow label="Spending mirror" value="expense row" tone="amber" />
+                    <InfoRow label="Calendar mirror" value="done event" tone="blue" />
+                  </div>
                 </div>
               </div>
             </div>
@@ -813,7 +898,7 @@ export function FocusPane({
 
           {tab === "schedule" ? (
             <div className={styles.splitLayoutFill}>
-              <div className={`${styles.panel} ${styles.panelFill}`}>
+              <div className={styles.panel}>
                 <div className={styles.panelHeader}>
                   <div>
                     <div className={styles.panelTitle}>Upcoming schedule</div>
@@ -836,22 +921,30 @@ export function FocusPane({
                   <div className={styles.infoList}>
                     <InfoRow label="Status" value={status.label} tone={status.tone} />
                     <InfoRow label="Due date" value={shortDate(selectedBill.dueDate)} tone={status.tone} />
-                    <InfoRow label="Advance due on pay" value={draft.advanceDue ? "On" : "Off"} tone={draft.advanceDue ? "green" : "neutral"} />
-                    <InfoRow label="One-time" value={selectedBill.frequency === "one_time" ? "Yes" : "No"} />
+                    <InfoRow
+                      label="Advance due on pay"
+                      value={draft.advanceDue ? "On" : "Off"}
+                      tone={draft.advanceDue ? "green" : "neutral"}
+                    />
+                    <InfoRow
+                      label="One-time"
+                      value={selectedBill.frequency === "one_time" ? "Yes" : "No"}
+                    />
                   </div>
                 </div>
 
                 <div className={styles.panel}>
                   <div className={styles.panelHeader}>
                     <div>
-                      <div className={styles.panelTitle}>Debt signal</div>
-                      <div className={styles.panelSub}>Only matters when linked to debt.</div>
+                      <div className={styles.panelTitle}>Cycle pulse</div>
+                      <div className={styles.panelSub}>Current cycle boundaries.</div>
                     </div>
                   </div>
                   <div className={styles.infoList}>
-                    <InfoRow label="Debt linked" value={linkedDebt ? "Yes" : "No"} tone={linkedDebt ? "blue" : "neutral"} />
-                    <InfoRow label="Debt balance" value={linkedDebt ? money(linkedDebt.balance) : "—"} tone="red" />
-                    <InfoRow label="Payoff est." value={linkedDebt ? selectedSummary.payoff : "—"} tone="green" />
+                    <InfoRow label="Cycle start" value={shortDate(selectedSummary.cycleStart)} />
+                    <InfoRow label="Cycle end" value={shortDate(selectedSummary.cycleEnd)} />
+                    <InfoRow label="Frequency" value={formatFrequencyLabel(selectedBill.frequency)} />
+                    <InfoRow label="Last paid" value={shortDate(selectedBill.lastPaidDate)} tone="green" />
                   </div>
                 </div>
               </div>
@@ -860,11 +953,13 @@ export function FocusPane({
 
           {tab === "history" ? (
             <div className={styles.splitLayoutFill}>
-              <div className={`${styles.panel} ${styles.panelFill}`}>
+              <div className={styles.panel}>
                 <div className={styles.panelHeader}>
                   <div>
                     <div className={styles.panelTitle}>Payment history</div>
-                    <div className={styles.panelSub}>Every logged payment for this bill.</div>
+                    <div className={styles.panelSub}>
+                      Every logged payment for this bill.
+                    </div>
                   </div>
                   <MiniPill tone="green">{selectedSummary.paymentsCount} rows</MiniPill>
                 </div>
@@ -885,10 +980,86 @@ export function FocusPane({
                     </div>
                   </div>
                   <div className={styles.infoList}>
-                    <InfoRow label="Payments logged" value={String(selectedSummary.paymentsCount)} />
-                    <InfoRow label="Total paid" value={money(selectedSummary.totalPaid)} tone="green" />
-                    <InfoRow label="Paid this month" value={money(selectedSummary.paidThisMonth)} tone="green" />
-                    <InfoRow label="Most recent" value={shortDate(selectedSummary.lastPayment?.paymentDate)} tone="blue" />
+                    <InfoRow
+                      label="Payments logged"
+                      value={String(selectedSummary.paymentsCount)}
+                    />
+                    <InfoRow
+                      label="Total paid"
+                      value={money(selectedSummary.totalPaid)}
+                      tone="green"
+                    />
+                    <InfoRow
+                      label="Paid this month"
+                      value={money(selectedSummary.paidThisMonth)}
+                      tone="green"
+                    />
+                    <InfoRow
+                      label="Most recent"
+                      value={shortDate(selectedSummary.lastPayment?.paymentDate)}
+                      tone="blue"
+                    />
+                  </div>
+                </div>
+
+                <div className={styles.noteCard}>
+                  <div className={styles.panelTitle}>Notes</div>
+                  <div className={styles.noteText}>
+                    {selectedBill.notes || "No notes attached."}
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          {tab === "debt" ? (
+            <div className={styles.splitLayoutFill}>
+              <DebtPanel selectedSummary={selectedSummary} onOpenEdit={onOpenEdit} />
+
+              <div className={styles.asideStackFill}>
+                <div className={styles.panel}>
+                  <div className={styles.panelHeader}>
+                    <div>
+                      <div className={styles.panelTitle}>Debt signal</div>
+                      <div className={styles.panelSub}>Only matters when linked to debt.</div>
+                    </div>
+                  </div>
+                  <div className={styles.infoList}>
+                    <InfoRow
+                      label="Debt linked"
+                      value={linkedDebt ? "Yes" : "No"}
+                      tone={linkedDebt ? "blue" : "neutral"}
+                    />
+                    <InfoRow
+                      label="Debt balance"
+                      value={linkedDebt ? money(linkedDebt.balance) : "—"}
+                      tone="red"
+                    />
+                    <InfoRow
+                      label="Payoff est."
+                      value={linkedDebt ? selectedSummary.payoff : "—"}
+                      tone="green"
+                    />
+                    <InfoRow
+                      label="Plan"
+                      value={linkedDebt ? `${moneyTight(selectedSummary.debtPlan)}/mo` : "—"}
+                      tone="amber"
+                    />
+                  </div>
+                </div>
+
+                <div className={styles.panel}>
+                  <div className={styles.panelHeader}>
+                    <div>
+                      <div className={styles.panelTitle}>Bill story</div>
+                      <div className={styles.panelSub}>Base facts tied to the debt link.</div>
+                    </div>
+                  </div>
+                  <div className={styles.infoList}>
+                    <InfoRow label="Bill amount" value={money(selectedBill.amount)} />
+                    <InfoRow label="Monthly impact" value={money(selectedSummary.monthlyImpact)} tone="amber" />
+                    <InfoRow label="Frequency" value={formatFrequencyLabel(selectedBill.frequency)} />
+                    <InfoRow label="Linked account" value={selectedSummary.accountName || "None"} tone="blue" />
                   </div>
                 </div>
               </div>
@@ -909,7 +1080,9 @@ export function FocusPane({
             <div className={styles.drawerHeader}>
               <div>
                 <div className={styles.panelTitle}>Bill tools</div>
-                <div className={styles.panelSub}>Secondary controls tucked off the main surface.</div>
+                <div className={styles.panelSub}>
+                  Secondary controls tucked off the main surface.
+                </div>
               </div>
 
               <button
@@ -934,10 +1107,25 @@ export function FocusPane({
 
                 <div className={styles.infoList}>
                   <InfoRow label="Amount" value={money(selectedBill.amount)} />
-                  <InfoRow label="Due" value={shortDate(selectedBill.dueDate)} tone={status.tone} />
-                  <InfoRow label="Frequency" value={formatFrequencyLabel(selectedBill.frequency)} />
-                  <InfoRow label="Monthly impact" value={money(selectedSummary.monthlyImpact)} tone="amber" />
-                  <InfoRow label="Account" value={selectedSummary.accountName || "None"} tone="blue" />
+                  <InfoRow
+                    label="Due"
+                    value={shortDate(selectedBill.dueDate)}
+                    tone={status.tone}
+                  />
+                  <InfoRow
+                    label="Frequency"
+                    value={formatFrequencyLabel(selectedBill.frequency)}
+                  />
+                  <InfoRow
+                    label="Monthly impact"
+                    value={money(selectedSummary.monthlyImpact)}
+                    tone="amber"
+                  />
+                  <InfoRow
+                    label="Account"
+                    value={selectedSummary.accountName || "None"}
+                    tone="blue"
+                  />
                 </div>
               </div>
 
@@ -945,7 +1133,9 @@ export function FocusPane({
                 <div className={styles.panelHeader}>
                   <div>
                     <div className={styles.panelTitle}>Quick actions</div>
-                    <div className={styles.panelSub}>Important actions that do not need to stay visible all the time.</div>
+                    <div className={styles.panelSub}>
+                      Important actions that do not need to stay visible all the time.
+                    </div>
                   </div>
                 </div>
 
@@ -969,7 +1159,9 @@ export function FocusPane({
                 <div className={styles.panelHeader}>
                   <div>
                     <div className={styles.panelTitle}>Readiness notes</div>
-                    <div className={styles.panelSub}>What the page already supports and what the flags mean.</div>
+                    <div className={styles.panelSub}>
+                      What the page already supports and what the flags mean.
+                    </div>
                   </div>
                   <MiniPill tone="blue">system</MiniPill>
                 </div>
@@ -1218,7 +1410,7 @@ function DebtSection({ form, setForm, debtProfiles, accounts }) {
                   onChange={(event) =>
                     setForm((prev) => ({ ...prev, newDebtNotes: event.target.value }))
                   }
-                  placeholder="Optional…"
+                  placeholder="Optional..."
                   rows={3}
                 />
               </label>
@@ -1258,7 +1450,7 @@ export function BillEditorModal({
         <>
           <Button onClick={onClose}>Cancel</Button>
           <Button variant="primary" onClick={onSave} disabled={saving}>
-            {saving ? "Saving…" : mode === "create" ? "Create bill" : "Save changes"}
+            {saving ? "Saving..." : mode === "create" ? "Create bill" : "Save changes"}
           </Button>
         </>
       }
@@ -1272,7 +1464,7 @@ export function BillEditorModal({
             className={styles.field}
             value={form.name}
             onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))}
-            placeholder="Rent, insurance, phone…"
+            placeholder="Rent, insurance, phone..."
           />
         </label>
 
@@ -1321,7 +1513,7 @@ export function BillEditorModal({
               className={styles.field}
               value={form.category}
               onChange={(event) => setForm((prev) => ({ ...prev, category: event.target.value }))}
-              placeholder="Housing, utility, subscriptions…"
+              placeholder="Housing, utility, subscriptions..."
             />
           </label>
 
@@ -1365,7 +1557,7 @@ export function BillEditorModal({
             className={`${styles.field} ${styles.textarea}`}
             value={form.notes}
             onChange={(event) => setForm((prev) => ({ ...prev, notes: event.target.value }))}
-            placeholder="Optional notes…"
+            placeholder="Optional notes..."
             rows={3}
           />
         </label>

@@ -320,6 +320,17 @@ function makeAmountKey(amount) {
   return safeNum(amount, 0).toFixed(2);
 }
 
+function startCase(value) {
+  return String(value || "")
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .split(" ")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+    .join(" ");
+}
+
 function buildCanonicalIncomeRows(spendingTx, incomeDeposits) {
   const strictDepositCounts = new Map();
   const looseDepositCounts = new Map();
@@ -618,7 +629,7 @@ function buildSpendingBuckets(expenseRows) {
   const map = new Map();
 
   expenseRows.forEach((row) => {
-    const label = String(row.category || "Other").replace(/_/g, " ").trim() || "Other";
+    const label = startCase(row.category || "Other") || "Other";
     map.set(label, safeNum(map.get(label), 0) + safeNum(row.amount, 0));
   });
 
@@ -673,15 +684,13 @@ function sampleSeriesLabels(series, count = 6) {
   if (!series.length) return [];
   if (series.length <= count) return series;
 
-  const indices = new Set([0, series.length - 1]);
-  while (indices.size < count) {
-    const ratio = (indices.size - 1) / (count - 1);
-    indices.add(Math.round(ratio * (series.length - 1)));
+  const out = [];
+  for (let i = 0; i < count; i += 1) {
+    const index = Math.round((i / (count - 1)) * (series.length - 1));
+    out.push({ index, ...series[index] });
   }
 
-  return [...indices]
-    .sort((a, b) => a - b)
-    .map((index) => ({ index, ...series[index] }));
+  return out.filter((item, idx, arr) => arr.findIndex((x) => x.index === item.index) === idx);
 }
 
 function toneClass(value, inverse = false) {
@@ -784,18 +793,7 @@ function CalendarQuickPanel({ open, onClose, items, todayCount, upcomingCount })
       {items.length ? (
         <div className="opsMenuList">
           {todayItems.length ? (
-            <div
-              style={{
-                padding: "2px 2px 0",
-                fontSize: 10,
-                fontWeight: 800,
-                letterSpacing: "0.1em",
-                textTransform: "uppercase",
-                color: "rgba(255,255,255,0.32)",
-              }}
-            >
-              Today
-            </div>
+            <div className="opsMenuSectionLabel">Today</div>
           ) : null}
 
           {todayItems.map((item) => (
@@ -805,15 +803,15 @@ function CalendarQuickPanel({ open, onClose, items, todayCount, upcomingCount })
               className="opsMenuLink"
               onClick={onClose}
             >
-              <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start" }}>
-                <div style={{ minWidth: 0 }}>
+              <div className="opsMenuRowTop">
+                <div className="opsMenuRowMain">
                   <div className="opsMenuLinkTitle">{item.title}</div>
                   <div className="opsMenuLinkNote">{item.note}</div>
                 </div>
                 <div className={`opsSignalValue opsTone-${item.tone}`}>{item.amount}</div>
               </div>
 
-              <div style={{ display: "flex", gap: 8, marginTop: 8, alignItems: "center", flexWrap: "wrap" }}>
+              <div className="opsMenuMetaRow">
                 <span className={`opsChip ${item.kind === "income" ? "opsChipBlue" : item.tone === "warning" ? "opsChipWarning" : "opsChipNeutral"}`}>
                   {item.kindLabel}
                 </span>
@@ -823,18 +821,7 @@ function CalendarQuickPanel({ open, onClose, items, todayCount, upcomingCount })
           ))}
 
           {upcomingItems.length ? (
-            <div
-              style={{
-                padding: "6px 2px 0",
-                fontSize: 10,
-                fontWeight: 800,
-                letterSpacing: "0.1em",
-                textTransform: "uppercase",
-                color: "rgba(255,255,255,0.32)",
-              }}
-            >
-              Upcoming
-            </div>
+            <div className="opsMenuSectionLabel">Upcoming</div>
           ) : null}
 
           {upcomingItems.map((item) => (
@@ -844,15 +831,15 @@ function CalendarQuickPanel({ open, onClose, items, todayCount, upcomingCount })
               className="opsMenuLink"
               onClick={onClose}
             >
-              <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start" }}>
-                <div style={{ minWidth: 0 }}>
+              <div className="opsMenuRowTop">
+                <div className="opsMenuRowMain">
                   <div className="opsMenuLinkTitle">{item.title}</div>
                   <div className="opsMenuLinkNote">{item.note}</div>
                 </div>
                 <div className={`opsSignalValue opsTone-${item.tone}`}>{item.amount}</div>
               </div>
 
-              <div style={{ display: "flex", gap: 8, marginTop: 8, alignItems: "center", flexWrap: "wrap" }}>
+              <div className="opsMenuMetaRow">
                 <span className={`opsChip ${item.kind === "income" ? "opsChipBlue" : item.tone === "warning" ? "opsChipWarning" : "opsChipNeutral"}`}>
                   {item.kindLabel}
                 </span>
@@ -880,6 +867,32 @@ function CalendarQuickPanel({ open, onClose, items, todayCount, upcomingCount })
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function MobileStateBar({ value, onChange, activityCount, signalCount }) {
+  const tabs = [
+    { key: "overview", label: "Overview", count: null },
+    { key: "activity", label: "Activity", count: activityCount },
+    { key: "signals", label: "Signals", count: signalCount },
+  ];
+
+  return (
+    <div className="opsMobileStateBar">
+      <div className="opsMobileStateTabs">
+        {tabs.map((tab) => (
+          <button
+            key={tab.key}
+            type="button"
+            className={`opsMobileStateTab ${value === tab.key ? "opsMobileStateTabActive" : ""}`}
+            onClick={() => onChange(tab.key)}
+          >
+            <span>{tab.label}</span>
+            {tab.count != null ? <em>{tab.count}</em> : null}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
@@ -935,9 +948,9 @@ function LineChart({ series, compareSeries = [] }) {
       <svg viewBox="0 0 100 36" className="opsChartSvg" preserveAspectRatio="none">
         <defs>
           <linearGradient id="opsAreaFade" x1="0" x2="0" y1="0" y2="1">
-            <stop offset="0%" stopColor="rgba(164, 186, 232, 0.22)" />
-            <stop offset="70%" stopColor="rgba(164, 186, 232, 0.05)" />
-            <stop offset="100%" stopColor="rgba(164, 186, 232, 0)" />
+            <stop offset="0%" stopColor="rgba(176, 199, 245, 0.22)" />
+            <stop offset="70%" stopColor="rgba(176, 199, 245, 0.06)" />
+            <stop offset="100%" stopColor="rgba(176, 199, 245, 0)" />
           </linearGradient>
         </defs>
 
@@ -945,7 +958,7 @@ function LineChart({ series, compareSeries = [] }) {
           <path
             d={comparePath}
             fill="none"
-            stroke="rgba(108, 126, 166, 0.34)"
+            stroke="rgba(131, 148, 180, 0.34)"
             strokeWidth="0.62"
             strokeDasharray="1.6 1.8"
             strokeLinecap="round"
@@ -958,7 +971,7 @@ function LineChart({ series, compareSeries = [] }) {
           <path
             d={linePath}
             fill="none"
-            stroke="rgba(235, 240, 250, 0.98)"
+            stroke="rgba(242, 246, 252, 0.98)"
             strokeWidth="0.9"
             strokeLinecap="round"
             strokeLinejoin="round"
@@ -968,8 +981,8 @@ function LineChart({ series, compareSeries = [] }) {
 
       {labels.length ? (
         <div className="opsChartLabels">
-          {labels.map((item) => (
-            <span key={`${item.iso}-${item.index}`}>{item.label}</span>
+          {labels.map((item, idx) => (
+            <span key={`${item.iso}-${idx}`}>{item.label}</span>
           ))}
         </div>
       ) : null}
@@ -1002,7 +1015,7 @@ function TransactionTable({ items }) {
             <div className="opsTableName">{item.title}</div>
             <div className="opsTableMeta">{item.accountName || item.source || item.note || "Recorded item"}</div>
           </div>
-          <div className="opsTableCell">{item.category || "General"}</div>
+          <div className="opsTableCell">{startCase(item.category || "General")}</div>
           <div className={`opsTableCell opsTableAmount opsTone-${item.tone}`}>{item.value}</div>
           <div className="opsTableCell opsTableDate">{item.dateLabel}</div>
         </div>
@@ -1113,6 +1126,9 @@ export default function DashboardPage() {
   const [helpOpen, setHelpOpen] = useState(false);
   const [calendarOpen, setCalendarOpen] = useState(false);
 
+  const [isMobileViewport, setIsMobileViewport] = useState(false);
+  const [mobileZone, setMobileZone] = useState("overview");
+
   const [accounts, setAccounts] = useState([]);
   const [bills, setBills] = useState([]);
   const [spendingTx, setSpendingTx] = useState([]);
@@ -1121,6 +1137,23 @@ export default function DashboardPage() {
   const [investmentTxns, setInvestmentTxns] = useState([]);
   const [savingsGoals, setSavingsGoals] = useState([]);
   const [quoteMap, setQuoteMap] = useState({});
+
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+
+    const media = window.matchMedia("(max-width: 860px)");
+    const sync = () => setIsMobileViewport(media.matches);
+
+    sync();
+
+    if (media.addEventListener) {
+      media.addEventListener("change", sync);
+      return () => media.removeEventListener("change", sync);
+    }
+
+    media.addListener(sync);
+    return () => media.removeListener(sync);
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -1325,7 +1358,6 @@ export default function DashboardPage() {
     const investmentTotal = portfolioMarketValue || portfolioCostBasis;
 
     const netWorth = cashTotal + investmentTotal - creditDebt;
-
     const goalRows = [...savingsGoals].sort((a, b) => b.priority - a.priority);
 
     const cashFlowSeries = buildDailyCumulativeSeries(
@@ -1372,7 +1404,7 @@ export default function DashboardPage() {
         if (a.rawDate === b.rawDate) return String(b.id).localeCompare(String(a.id));
         return String(b.rawDate).localeCompare(String(a.rawDate));
       })
-      .slice(0, 6);
+      .slice(0, 8);
 
     const notifications = [];
 
@@ -1386,7 +1418,7 @@ export default function DashboardPage() {
       });
     });
 
-    dueSoonBills.slice(0, 3).forEach((bill) => {
+    dueSoonBills.slice(0, 4).forEach((bill) => {
       notifications.push({
         id: `due-${bill.id}`,
         title: `${bill.name} due soon`,
@@ -1512,6 +1544,18 @@ export default function DashboardPage() {
     const todayCalendarCount = calendarItems.filter((item) => item.bucket === "today").length;
     const upcomingCalendarCount = calendarItems.filter((item) => item.bucket === "upcoming").length;
 
+    const primaryHeadline = overdueBills.length
+      ? `${overdueBills.length} overdue item${overdueBills.length === 1 ? "" : "s"} need attention`
+      : monthlyCapacity < 0
+      ? "This month is running tight"
+      : "Board looks stable right now";
+
+    const primaryHeadlineTone = overdueBills.length
+      ? "negative"
+      : monthlyCapacity < 0
+      ? "warning"
+      : "positive";
+
     return {
       dateLabel: new Date().toLocaleDateString(undefined, {
         month: "long",
@@ -1545,6 +1589,10 @@ export default function DashboardPage() {
       todayCalendarCount,
       upcomingCalendarCount,
       totalCalendarCount: todayCalendarCount + upcomingCalendarCount,
+      primaryHeadline,
+      primaryHeadlineTone,
+      activeGoalsCount: goalRows.length,
+      biggestCategoryAmount: largestCategory?.amount || 0,
     };
   }, [
     accounts,
@@ -1557,13 +1605,6 @@ export default function DashboardPage() {
     quoteMap,
     search,
   ]);
-
-  function closeAllPanels() {
-    setNotificationsOpen(false);
-    setAddMenuOpen(false);
-    setHelpOpen(false);
-    setCalendarOpen(false);
-  }
 
   function toggleNotifications() {
     setNotificationsOpen((prev) => {
@@ -1646,7 +1687,7 @@ export default function DashboardPage() {
   }
 
   return (
-    <main className="opsDashRoot" onClick={() => {}}>
+    <main className="opsDashRoot">
       <GlassPane size="hero" className="opsShell">
         {pageError ? (
           <div className="opsErrorBox">
@@ -1657,7 +1698,7 @@ export default function DashboardPage() {
 
         <div className="opsTopbar">
           <div className="opsTopbarLeft">
-            <div className="opsBreadcrumb">Dashboard <span>/ Overview</span></div>
+            <div className="opsBreadcrumb">Dashboard <span>/ Mission Control</span></div>
             <div className="opsStatusPill">
               <div className="opsStatusDot" />
               <span>Live</span>
@@ -1671,7 +1712,7 @@ export default function DashboardPage() {
               <input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search workspace..."
+                placeholder="Search transactions, bills, accounts..."
               />
               <span>⌘K</span>
             </label>
@@ -1768,13 +1809,13 @@ export default function DashboardPage() {
           <KpiCell
             label="Cash Available"
             value={money(computed.cashTotal)}
-            sub="liquid"
+            sub="live balance"
             tone="neutral"
           />
           <KpiCell
-            label="Month Movement"
+            label="Month Flow"
             value={signedMoney(computed.monthMovement)}
-            sub={computed.monthMovement < 0 ? "spending > income" : "positive month flow"}
+            sub={computed.monthMovement < 0 ? "outflow > inflow" : "positive month flow"}
             tone={toneClass(computed.monthMovement)}
           />
           <KpiCell
@@ -1790,203 +1831,388 @@ export default function DashboardPage() {
             tone={computed.monthlySpending > computed.monthlyIncome ? "warning" : "neutral"}
           />
           <KpiCell
-            label="Scheduled Debits"
+            label="Bill Load"
             value={money(computed.monthlyBillPressure)}
             sub={`${computed.overdueCount} overdue`}
             tone={computed.overdueCount ? "negative" : computed.dueSoonCount ? "warning" : "neutral"}
           />
         </div>
 
-        <div className="opsContent">
-          <div className="opsGrid2to1">
-            <section className="opsCard opsCardLarge">
-              <CardHeader
-                title="Cash Position"
-                right={
-                  <div className="opsCardHeadRight">
-                    <span className="opsChip opsChipBlue">Watch</span>
-                    <span className="opsChip opsChipNeutral">{computed.notificationCount} signals</span>
+        {isMobileViewport ? (
+          <>
+            <MobileStateBar
+              value={mobileZone}
+              onChange={setMobileZone}
+              activityCount={computed.filteredTransactions.length}
+              signalCount={computed.notificationCount}
+            />
+
+            <div className="opsContent opsMobileContent">
+              {mobileZone === "overview" ? (
+                <div className="opsMobileStack">
+                  <section className="opsCard opsCardLarge">
+                    <CardHeader
+                      title="Cash Position"
+                      right={
+                        <div className="opsCardHeadRight">
+                          <span className={`opsChip ${computed.primaryHeadlineTone === "negative" ? "opsChipNegative" : computed.primaryHeadlineTone === "warning" ? "opsChipWarning" : "opsChipBlue"}`}>
+                            {computed.primaryHeadline}
+                          </span>
+                        </div>
+                      }
+                    />
+
+                    <div className="opsHeroBlock">
+                      <div className="opsHeroValue">{money(computed.cashTotal)}</div>
+                      <div className="opsHeroSub">
+                        Month movement{" "}
+                        <span className={`opsTone-${toneClass(computed.monthMovement)}`}>
+                          {signedMoney(computed.monthMovement)}
+                        </span>
+                      </div>
+                    </div>
+
+                    <LineChart
+                      series={computed.cashFlowSeries}
+                      compareSeries={computed.previousCashFlowSeries}
+                    />
+
+                    <div className="opsMetricRow">
+                      <MetricCell label="Income" value={money(computed.monthlyIncome)} sub="This month" tone="positive" />
+                      <MetricCell label="Spending" value={money(computed.monthlySpending)} sub="This month" tone="negative" />
+                      <MetricCell label="Liquid" value={money(computed.liquidTotal)} sub="Available now" />
+                      <MetricCell
+                        label="Capacity"
+                        value={signedMoney(computed.monthlyCapacity)}
+                        sub="After bills"
+                        tone={toneClass(computed.monthlyCapacity)}
+                      />
+                    </div>
+                  </section>
+
+                  <section className="opsCard">
+                    <CardHeader
+                      title="Month Runway"
+                      right={<span className="opsChip opsChipNeutral">{computed.dueSoonCount} due soon</span>}
+                    />
+
+                    <div className="opsGaugeTop">
+                      <div className="opsGaugeLabel">Income − spending − scheduled debits</div>
+                      <div className={`opsGaugeValue opsTone-${toneClass(computed.monthlyCapacity)}`}>
+                        {signedMoney(computed.monthlyCapacity)}
+                      </div>
+                    </div>
+
+                    <div className="opsGaugeTrack">
+                      <div
+                        className="opsGaugeFill"
+                        style={{
+                          width: `${Math.max(
+                            8,
+                            Math.min(
+                              100,
+                              computed.monthlyIncome > 0
+                                ? (Math.abs(computed.monthlyCapacity) / Math.max(computed.monthlyIncome, 1)) * 100
+                                : 14
+                            )
+                          )}%`,
+                        }}
+                      />
+                    </div>
+
+                    <div className="opsGaugeSub">
+                      {computed.monthlyCapacity < 0
+                        ? "Current pressure is consuming the month."
+                        : "You still have room left to allocate."}
+                    </div>
+
+                    <div className="opsStatList">
+                      <StatRow label="Income" value={money(computed.monthlyIncome)} tone="positive" />
+                      <StatRow label="Spending" value={signedMoney(-computed.monthlySpending)} tone="negative" />
+                      <StatRow
+                        label="Bill load"
+                        value={signedMoney(-computed.monthlyBillPressure)}
+                        tone={computed.overdueCount ? "negative" : "warning"}
+                      />
+                      <StatRow label="Due soon" value={money(computed.dueSoonTotal)} tone={computed.dueSoonCount ? "warning" : "neutral"} />
+                    </div>
+                  </section>
+
+                  <section className="opsCard">
+                    <CardHeader
+                      title="Net Worth"
+                      right={<span className="opsChip opsChipBlue">{computed.accountsCount} accounts</span>}
+                    />
+
+                    <div className="opsWealthBlock">
+                      <div className="opsWealthValue">{money(computed.netWorth)}</div>
+                      <div className="opsWealthTrack">
+                        <div
+                          className="opsWealthFill"
+                          style={{
+                            width: `${Math.max(
+                              8,
+                              Math.min(
+                                100,
+                                computed.netWorth > 0 && computed.cashTotal > 0
+                                  ? (computed.netWorth / Math.max(computed.cashTotal + Math.max(computed.investmentTotal, 0), 1)) * 100
+                                  : 12
+                              )
+                            )}%`,
+                          }}
+                        />
+                      </div>
+                      <div className="opsWealthSub">
+                        {computed.investmentTotal > 0
+                          ? `${money(computed.investmentTotal)} invested`
+                          : "No active investments yet"}
+                      </div>
+                    </div>
+
+                    <div className="opsStatList">
+                      <StatRow label="Assets" value={money(computed.cashTotal + computed.investmentTotal)} tone="positive" />
+                      <StatRow label="Cash" value={money(computed.cashTotal)} />
+                      <StatRow label="Investments" value={money(computed.investmentTotal)} tone={computed.positionsCount ? "positive" : "neutral"} />
+                      <StatRow label="Portfolio P/L" value={signedMoney(computed.portfolioPnL)} tone={toneClass(computed.portfolioPnL)} />
+                    </div>
+                  </section>
+                </div>
+              ) : null}
+
+              {mobileZone === "activity" ? (
+                <div className="opsMobileStack">
+                  <section className="opsCard opsCardLarge">
+                    <CardHeader
+                      title="Recent Activity"
+                      right={<span className="opsChip opsChipBlue">Latest</span>}
+                    />
+                    <TransactionTable items={computed.filteredTransactions.slice(0, 6)} />
+                  </section>
+
+                  <section className="opsCard">
+                    <CardHeader
+                      title="Bill Queue"
+                      right={<span className="opsChip opsChipWarning">{computed.overdueCount} overdue</span>}
+                    />
+                    <BillList items={computed.billCards} />
+                  </section>
+
+                  <section className="opsCard">
+                    <CardHeader
+                      title="Spending Mix"
+                      right={
+                        computed.largestCategory ? (
+                          <span className="opsChip opsChipNeutral">{computed.largestCategory.label}</span>
+                        ) : null
+                      }
+                    />
+                    <CategoryList items={computed.spendingBuckets.items.slice(0, 5)} total={computed.spendingBuckets.total} />
+                  </section>
+                </div>
+              ) : null}
+
+              {mobileZone === "signals" ? (
+                <div className="opsMobileStack">
+                  <section className="opsCard">
+                    <CardHeader
+                      title="System Signals"
+                      right={<span className="opsChip opsChipNegative">{computed.notificationCount} active</span>}
+                    />
+                    <SignalCard items={computed.notifications} />
+                  </section>
+                </div>
+              ) : null}
+            </div>
+          </>
+        ) : (
+          <div className="opsContent">
+            <div className="opsGrid2to1">
+              <section className="opsCard opsCardLarge">
+                <CardHeader
+                  title="Cash Position"
+                  right={
+                    <div className="opsCardHeadRight">
+                      <span className={`opsChip ${computed.primaryHeadlineTone === "negative" ? "opsChipNegative" : computed.primaryHeadlineTone === "warning" ? "opsChipWarning" : "opsChipBlue"}`}>
+                        {computed.primaryHeadline}
+                      </span>
+                      <button type="button" className="opsGhostBtn" aria-label="More options">
+                        <MoreHorizontal size={14} />
+                      </button>
+                    </div>
+                  }
+                />
+
+                <div className="opsHeroBlock">
+                  <div className="opsHeroValue">{money(computed.cashTotal)}</div>
+                  <div className="opsHeroSub">
+                    Month movement{" "}
+                    <span className={`opsTone-${toneClass(computed.monthMovement)}`}>
+                      {signedMoney(computed.monthMovement)}
+                    </span>
+                  </div>
+                </div>
+
+                <LineChart
+                  series={computed.cashFlowSeries}
+                  compareSeries={computed.previousCashFlowSeries}
+                />
+
+                <div className="opsMetricRow">
+                  <MetricCell label="Income" value={money(computed.monthlyIncome)} sub="This month" tone="positive" />
+                  <MetricCell label="Spending" value={money(computed.monthlySpending)} sub="This month" tone="negative" />
+                  <MetricCell label="Liquid" value={money(computed.liquidTotal)} sub="Available now" />
+                  <MetricCell
+                    label="Capacity"
+                    value={signedMoney(computed.monthlyCapacity)}
+                    sub="After spending & bills"
+                    tone={toneClass(computed.monthlyCapacity)}
+                  />
+                </div>
+              </section>
+
+              <section className="opsCard">
+                <CardHeader
+                  title="Month Runway"
+                  right={
                     <button type="button" className="opsGhostBtn" aria-label="More options">
                       <MoreHorizontal size={14} />
                     </button>
-                  </div>
-                }
-              />
+                  }
+                />
 
-              <div className="opsHeroBlock">
-                <div className="opsHeroValue">{money(computed.cashTotal)}</div>
-                <div className="opsHeroSub">
-                  Month-to-date movement{" "}
-                  <span className={`opsTone-${toneClass(computed.monthMovement)}`}>
-                    {signedMoney(computed.monthMovement)}
-                  </span>
+                <div className="opsGaugeTop">
+                  <div className="opsGaugeLabel">Income − spending − scheduled debits</div>
+                  <div className={`opsGaugeValue opsTone-${toneClass(computed.monthlyCapacity)}`}>
+                    {signedMoney(computed.monthlyCapacity)}
+                  </div>
                 </div>
-              </div>
 
-              <LineChart
-                series={computed.cashFlowSeries}
-                compareSeries={computed.previousCashFlowSeries}
-              />
-
-              <div className="opsMetricRow">
-                <MetricCell label="Income" value={money(computed.monthlyIncome)} sub="This month" tone="positive" />
-                <MetricCell label="Spending" value={money(computed.monthlySpending)} sub="This month" tone="negative" />
-                <MetricCell label="Liquid" value={money(computed.liquidTotal)} sub="Available now" />
-                <MetricCell
-                  label="Capacity"
-                  value={signedMoney(computed.monthlyCapacity)}
-                  sub="After spending & bills"
-                  tone={toneClass(computed.monthlyCapacity)}
-                />
-              </div>
-            </section>
-
-            <section className="opsCard">
-              <CardHeader
-                title="Cash Runway"
-                right={
-                  <button type="button" className="opsGhostBtn" aria-label="More options">
-                    <MoreHorizontal size={14} />
-                  </button>
-                }
-              />
-
-              <div className="opsGaugeTop">
-                <div className="opsGaugeLabel">Income − Spending − Scheduled debits</div>
-                <div className={`opsGaugeValue opsTone-${toneClass(computed.monthlyCapacity)}`}>
-                  {signedMoney(computed.monthlyCapacity)}
-                </div>
-              </div>
-
-              <div className="opsGaugeTrack">
-                <div
-                  className="opsGaugeFill"
-                  style={{
-                    width: `${Math.max(
-                      6,
-                      Math.min(
-                        100,
-                        computed.monthlyIncome > 0
-                          ? (Math.abs(computed.monthlyCapacity) / Math.max(computed.monthlyIncome, 1)) * 100
-                          : 14
-                      )
-                    )}%`,
-                  }}
-                />
-              </div>
-
-              <div className="opsGaugeSub">
-                {computed.monthlyCapacity < 0
-                  ? "Current pressure is consuming the month."
-                  : "You still have room left to allocate."}
-              </div>
-
-              <div className="opsStatList">
-                <StatRow label="Income" value={money(computed.monthlyIncome)} tone="positive" />
-                <StatRow label="Spending" value={signedMoney(-computed.monthlySpending)} tone="negative" />
-                <StatRow
-                  label="Scheduled Debits"
-                  value={signedMoney(-computed.monthlyBillPressure)}
-                  tone={computed.overdueCount ? "negative" : "warning"}
-                />
-                <StatRow label="Due Soon" value={money(computed.dueSoonTotal)} tone={computed.dueSoonCount ? "warning" : "neutral"} />
-              </div>
-            </section>
-          </div>
-
-          <div className="opsGrid2to1">
-            <section className="opsCard opsCardLarge">
-              <CardHeader
-                title="Recent Transactions"
-                right={
-                  <div className="opsCardHeadRight">
-                    <span className="opsChip opsChipBlue">Latest</span>
-                    <Link href="/spending" className="opsMiniAction">Open</Link>
-                  </div>
-                }
-              />
-              <TransactionTable items={computed.filteredTransactions} />
-            </section>
-
-            <section className="opsCard">
-              <CardHeader
-                title="Signals"
-                right={<span className="opsChip opsChipNegative">{computed.notificationCount} active</span>}
-              />
-              <SignalCard items={computed.notifications.slice(0, 4)} />
-            </section>
-          </div>
-
-          <div className="opsGrid3">
-            <section className="opsCard">
-              <CardHeader
-                title="Scheduled Debits"
-                right={
-                  <div className="opsCardHeadRight">
-                    <span className="opsChip opsChipWarning">{computed.overdueCount} overdue</span>
-                    <Link href="/bills" className="opsMiniAction">Open</Link>
-                  </div>
-                }
-              />
-              <BillList items={computed.billCards} />
-            </section>
-
-            <section className="opsCard">
-              <CardHeader
-                title="Net Worth"
-                right={
-                  <div className="opsCardHeadRight">
-                    <span className="opsChip opsChipBlue">{computed.accountsCount} accounts</span>
-                  </div>
-                }
-              />
-
-              <div className="opsWealthBlock">
-                <div className="opsWealthValue">{money(computed.netWorth)}</div>
-                <div className="opsWealthTrack">
+                <div className="opsGaugeTrack">
                   <div
-                    className="opsWealthFill"
+                    className="opsGaugeFill"
                     style={{
                       width: `${Math.max(
                         8,
                         Math.min(
                           100,
-                          computed.netWorth > 0 && computed.cashTotal > 0
-                            ? (computed.netWorth / Math.max(computed.cashTotal + Math.max(computed.investmentTotal, 0), 1)) * 100
-                            : 12
+                          computed.monthlyIncome > 0
+                            ? (Math.abs(computed.monthlyCapacity) / Math.max(computed.monthlyIncome, 1)) * 100
+                            : 14
                         )
                       )}%`,
                     }}
                   />
                 </div>
-                <div className="opsWealthSub">
-                  {computed.investmentTotal > 0
-                    ? `${money(computed.investmentTotal)} invested`
-                    : "No active investments yet"}
+
+                <div className="opsGaugeSub">
+                  {computed.monthlyCapacity < 0
+                    ? "Current pressure is consuming the month."
+                    : "You still have room left to allocate."}
                 </div>
-              </div>
 
-              <div className="opsStatList">
-                <StatRow label="Assets" value={money(computed.cashTotal + computed.investmentTotal)} tone="positive" />
-                <StatRow label="Cash" value={money(computed.cashTotal)} />
-                <StatRow label="Investments" value={money(computed.investmentTotal)} tone={computed.positionsCount ? "positive" : "neutral"} />
-                <StatRow label="Portfolio P/L" value={signedMoney(computed.portfolioPnL)} tone={toneClass(computed.portfolioPnL)} />
-              </div>
-            </section>
+                <div className="opsStatList">
+                  <StatRow label="Income" value={money(computed.monthlyIncome)} tone="positive" />
+                  <StatRow label="Spending" value={signedMoney(-computed.monthlySpending)} tone="negative" />
+                  <StatRow
+                    label="Bill load"
+                    value={signedMoney(-computed.monthlyBillPressure)}
+                    tone={computed.overdueCount ? "negative" : "warning"}
+                  />
+                  <StatRow label="Due soon" value={money(computed.dueSoonTotal)} tone={computed.dueSoonCount ? "warning" : "neutral"} />
+                </div>
+              </section>
+            </div>
 
-            <section className="opsCard">
-              <CardHeader
-                title="Spending Mix"
-                right={
-                  computed.largestCategory ? (
-                    <span className="opsChip opsChipNeutral">{computed.largestCategory.label}</span>
-                  ) : null
-                }
-              />
-              <CategoryList items={computed.spendingBuckets.items.slice(0, 5)} total={computed.spendingBuckets.total} />
-            </section>
+            <div className="opsGrid2to1">
+              <section className="opsCard opsCardLarge">
+                <CardHeader
+                  title="Recent Activity"
+                  right={
+                    <div className="opsCardHeadRight">
+                      <span className="opsChip opsChipBlue">Latest</span>
+                      <Link href="/spending" className="opsMiniAction">Open</Link>
+                    </div>
+                  }
+                />
+                <TransactionTable items={computed.filteredTransactions} />
+              </section>
+
+              <section className="opsCard">
+                <CardHeader
+                  title="System Signals"
+                  right={<span className="opsChip opsChipNegative">{computed.notificationCount} active</span>}
+                />
+                <SignalCard items={computed.notifications.slice(0, 5)} />
+              </section>
+            </div>
+
+            <div className="opsGrid3">
+              <section className="opsCard">
+                <CardHeader
+                  title="Bill Queue"
+                  right={
+                    <div className="opsCardHeadRight">
+                      <span className="opsChip opsChipWarning">{computed.overdueCount} overdue</span>
+                      <Link href="/bills" className="opsMiniAction">Open</Link>
+                    </div>
+                  }
+                />
+                <BillList items={computed.billCards} />
+              </section>
+
+              <section className="opsCard">
+                <CardHeader
+                  title="Net Worth"
+                  right={<span className="opsChip opsChipBlue">{computed.accountsCount} accounts</span>}
+                />
+
+                <div className="opsWealthBlock">
+                  <div className="opsWealthValue">{money(computed.netWorth)}</div>
+                  <div className="opsWealthTrack">
+                    <div
+                      className="opsWealthFill"
+                      style={{
+                        width: `${Math.max(
+                          8,
+                          Math.min(
+                            100,
+                            computed.netWorth > 0 && computed.cashTotal > 0
+                              ? (computed.netWorth / Math.max(computed.cashTotal + Math.max(computed.investmentTotal, 0), 1)) * 100
+                              : 12
+                          )
+                        )}%`,
+                      }}
+                    />
+                  </div>
+                  <div className="opsWealthSub">
+                    {computed.investmentTotal > 0
+                      ? `${money(computed.investmentTotal)} invested`
+                      : "No active investments yet"}
+                  </div>
+                </div>
+
+                <div className="opsStatList">
+                  <StatRow label="Assets" value={money(computed.cashTotal + computed.investmentTotal)} tone="positive" />
+                  <StatRow label="Cash" value={money(computed.cashTotal)} />
+                  <StatRow label="Investments" value={money(computed.investmentTotal)} tone={computed.positionsCount ? "positive" : "neutral"} />
+                  <StatRow label="Portfolio P/L" value={signedMoney(computed.portfolioPnL)} tone={toneClass(computed.portfolioPnL)} />
+                </div>
+              </section>
+
+              <section className="opsCard">
+                <CardHeader
+                  title="Spending Mix"
+                  right={
+                    computed.largestCategory ? (
+                      <span className="opsChip opsChipNeutral">{computed.largestCategory.label}</span>
+                    ) : null
+                  }
+                />
+                <CategoryList items={computed.spendingBuckets.items.slice(0, 5)} total={computed.spendingBuckets.total} />
+              </section>
+            </div>
           </div>
-        </div>
+        )}
       </GlassPane>
     </main>
   );

@@ -7,6 +7,7 @@ import {
   ArrowLeft,
   ArrowRight,
   BadgeDollarSign,
+  BookOpenText,
   ExternalLink,
   Layers3,
   Newspaper,
@@ -17,183 +18,20 @@ import {
 } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import GlassPane from "../../components/GlassPane";
+import styles from "../InvestmentsPage.module.css";
+import {
+  fullDateTime,
+  money,
+  pct,
+  shortDate,
+  signedMoney,
+  toneByValue,
+  toneMeta,
+  toNum,
+} from "../investments.helpers";
 
-export const dynamic = "force-dynamic";
-
-const FONT_STACK =
-  'Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-
-function toNum(v, fallback = 0) {
-  const n = Number(v);
-  return Number.isFinite(n) ? n : fallback;
-}
-
-function money(n) {
-  const num = Number(n);
-  if (!Number.isFinite(num)) return "—";
-  return num.toLocaleString(undefined, {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 2,
-  });
-}
-
-function signedMoney(n) {
-  const num = Number(n);
-  if (!Number.isFinite(num)) return "—";
-  const abs = Math.abs(num).toLocaleString(undefined, {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 2,
-  });
-  if (num > 0) return `+${abs}`;
-  if (num < 0) return `-${abs}`;
-  return abs;
-}
-
-function fmtNumber(n, digits = 4) {
-  const num = Number(n);
-  if (!Number.isFinite(num)) return "—";
-  return num.toLocaleString(undefined, {
-    maximumFractionDigits: digits,
-  });
-}
-
-function pct(n) {
-  const num = Number(n);
-  if (!Number.isFinite(num)) return "—";
-  return `${num >= 0 ? "+" : ""}${num.toFixed(2)}%`;
-}
-
-function shortDate(value) {
-  if (!value) return "—";
-  const d = new Date(value);
-  if (!Number.isFinite(d.getTime())) return String(value);
-  return d.toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
-
-function fullDateTime(value) {
-  if (!value) return "—";
-  const d = new Date(value);
-  if (!Number.isFinite(d.getTime())) return String(value);
-  return d.toLocaleString(undefined, {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
-
-function toneMeta(tone = "neutral") {
-  if (tone === "green") {
-    return {
-      text: "#97efc7",
-      border: "rgba(143,240,191,0.16)",
-      glow: "rgba(110,229,173,0.10)",
-      dot: "#8ef4bb",
-      pillBg: "rgba(8,18,12,0.42)",
-      iconBg: "rgba(12,22,17,0.72)",
-    };
-  }
-
-  if (tone === "red") {
-    return {
-      text: "#ffb4c5",
-      border: "rgba(255,132,163,0.16)",
-      glow: "rgba(255,108,145,0.10)",
-      dot: "#ff96ae",
-      pillBg: "rgba(18,8,11,0.42)",
-      iconBg: "rgba(24,11,15,0.72)",
-    };
-  }
-
-  if (tone === "amber") {
-    return {
-      text: "#f5cf88",
-      border: "rgba(255,204,112,0.16)",
-      glow: "rgba(255,194,92,0.10)",
-      dot: "#ffd089",
-      pillBg: "rgba(18,14,8,0.42)",
-      iconBg: "rgba(24,18,11,0.72)",
-    };
-  }
-
-  return {
-    text: "#f7fbff",
-    border: "rgba(214,226,255,0.13)",
-    glow: "rgba(140,170,255,0.08)",
-    dot: "#f7fbff",
-    pillBg: "rgba(10,14,21,0.40)",
-    iconBg: "rgba(12,16,24,0.72)",
-  };
-}
-
-function toneByValue(value) {
-  const n = Number(value);
-  if (!Number.isFinite(n) || n === 0) return "neutral";
-  return n > 0 ? "green" : "red";
-}
-
-function overlineStyle() {
-  return {
-    fontSize: 10,
-    textTransform: "uppercase",
-    letterSpacing: ".22em",
-    fontWeight: 800,
-    color: "rgba(255,255,255,0.42)",
-  };
-}
-
-function mutedStyle() {
-  return {
-    fontSize: 13,
-    lineHeight: 1.5,
-    color: "rgba(255,255,255,0.64)",
-  };
-}
-
-function inputStyle() {
-  return {
-    height: 46,
-    borderRadius: 14,
-    border: "1px solid rgba(214,226,255,0.10)",
-    background:
-      "linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.012)), rgba(8,12,20,0.76)",
-    color: "#f7fbff",
-    padding: "0 12px",
-    outline: "none",
-    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.035)",
-    width: "100%",
-  };
-}
-
-function buttonStyle({ primary = false, disabled = false } = {}) {
-  return {
-    minHeight: 46,
-    padding: "0 14px",
-    borderRadius: 14,
-    border: primary
-      ? "1px solid rgba(255,255,255,0.18)"
-      : "1px solid rgba(214,226,255,0.10)",
-    background: disabled
-      ? "rgba(255,255,255,0.04)"
-      : primary
-      ? "linear-gradient(180deg, rgba(255,255,255,0.95), rgba(233,239,248,0.88))"
-      : "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.012))",
-    color: disabled ? "rgba(255,255,255,0.42)" : primary ? "#0b1220" : "#f7fbff",
-    display: "inline-flex",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    fontWeight: 800,
-    fontSize: 13,
-    cursor: disabled ? "not-allowed" : "pointer",
-    textDecoration: "none",
-  };
+function cx(...parts) {
+  return parts.filter(Boolean).join(" ");
 }
 
 function MiniPill({ children, tone = "neutral" }) {
@@ -201,21 +39,11 @@ function MiniPill({ children, tone = "neutral" }) {
 
   return (
     <div
+      className={styles.miniPill}
       style={{
-        minHeight: 32,
-        display: "inline-flex",
-        alignItems: "center",
-        gap: 8,
-        padding: "0 11px",
-        borderRadius: 999,
-        border: `1px solid ${meta.border}`,
-        background:
-          "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01))",
-        boxShadow: `inset 0 1px 0 rgba(255,255,255,0.035), 0 0 10px ${meta.glow}`,
-        color: tone === "neutral" ? "rgba(255,255,255,0.88)" : meta.text,
-        fontSize: 11,
-        fontWeight: 800,
-        whiteSpace: "nowrap",
+        borderColor: meta.border,
+        color: tone === "neutral" ? "rgba(255,255,255,0.9)" : meta.text,
+        boxShadow: `0 0 12px ${meta.glow}`,
       }}
     >
       {children}
@@ -225,221 +53,66 @@ function MiniPill({ children, tone = "neutral" }) {
 
 function ActionLink({ href, children }) {
   return (
-    <Link
-      href={href}
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        justifyContent: "center",
-        gap: 8,
-        minHeight: 40,
-        padding: "10px 13px",
-        borderRadius: 14,
-        border: "1px solid rgba(214,226,255,0.10)",
-        background:
-          "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.012))",
-        color: "#f7fbff",
-        textDecoration: "none",
-        fontWeight: 800,
-        fontSize: 13,
-        boxShadow:
-          "inset 0 1px 0 rgba(255,255,255,0.04), 0 10px 18px rgba(0,0,0,0.12)",
-      }}
-    >
+    <Link href={href} className={styles.actionLink}>
       {children}
     </Link>
   );
 }
 
+function ActionBtn({
+  children,
+  onClick,
+  variant = "ghost",
+  disabled = false,
+  type = "button",
+  full = false,
+}) {
+  return (
+    <button
+      type={type}
+      onClick={onClick}
+      disabled={disabled}
+      className={cx(
+        styles.actionBtn,
+        variant === "primary" && styles.actionBtnPrimary,
+        variant === "danger" && styles.actionBtnDanger,
+        full && styles.actionBtnFull
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
 function PaneHeader({ title, subcopy, right }) {
   return (
-    <div
-      style={{
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "flex-start",
-        gap: 12,
-        flexWrap: "wrap",
-        marginBottom: 12,
-      }}
-    >
+    <div className={styles.paneHeader}>
       <div style={{ minWidth: 0 }}>
-        <div
-          style={{
-            fontSize: 18,
-            lineHeight: 1.1,
-            fontWeight: 800,
-            letterSpacing: "-0.03em",
-            color: "#fff",
-          }}
-        >
-          {title}
-        </div>
-        {subcopy ? <div style={{ ...mutedStyle(), marginTop: 4 }}>{subcopy}</div> : null}
+        <div className={styles.paneTitle}>{title}</div>
+        {subcopy ? <div className={styles.paneSub}>{subcopy}</div> : null}
       </div>
-
       {right || null}
-    </div>
-  );
-}
-
-function MetricCard({ icon: Icon, label, value, detail, tone = "neutral" }) {
-  const meta = toneMeta(tone);
-
-  return (
-    <GlassPane tone={tone} size="card" style={{ height: "100%" }}>
-      <div
-        style={{
-          minHeight: 132,
-          display: "grid",
-          gridTemplateRows: "auto auto 1fr",
-          gap: 8,
-        }}
-      >
-        <div
-          style={{
-            width: 38,
-            height: 38,
-            borderRadius: 13,
-            display: "grid",
-            placeItems: "center",
-            border: `1px solid ${meta.border}`,
-            background: meta.iconBg,
-            color: tone === "neutral" ? "#fff" : meta.text,
-            boxShadow: `0 0 12px ${meta.glow}`,
-          }}
-        >
-          <Icon size={16} />
-        </div>
-
-        <div style={{ minWidth: 0 }}>
-          <div style={overlineStyle()}>{label}</div>
-          <div
-            style={{
-              marginTop: 8,
-              fontSize: "clamp(20px, 2.7vw, 30px)",
-              lineHeight: 1,
-              fontWeight: 850,
-              letterSpacing: "-0.05em",
-              color: tone === "neutral" ? "#fff" : meta.text,
-              overflowWrap: "anywhere",
-            }}
-          >
-            {value}
-          </div>
-        </div>
-
-        <div style={mutedStyle()}>{detail}</div>
-      </div>
-    </GlassPane>
-  );
-}
-
-function MiniMetric({ title, value, tone = "neutral" }) {
-  const meta = toneMeta(tone);
-
-  return (
-    <div
-      style={{
-        minHeight: 78,
-        borderRadius: 16,
-        border: `1px solid ${meta.border}`,
-        background:
-          "linear-gradient(180deg, rgba(255,255,255,0.032), rgba(255,255,255,0.01))",
-        padding: 13,
-      }}
-    >
-      <div style={overlineStyle()}>{title}</div>
-      <div
-        style={{
-          marginTop: 7,
-          fontSize: 18,
-          fontWeight: 850,
-          letterSpacing: "-0.04em",
-          color: tone === "neutral" ? "#fff" : meta.text,
-          overflowWrap: "anywhere",
-        }}
-      >
-        {value}
-      </div>
-    </div>
-  );
-}
-
-function SnapshotRow({ label, value }) {
-  return (
-    <div
-      style={{
-        minHeight: 56,
-        display: "grid",
-        gridTemplateColumns: "minmax(0, 1fr) auto",
-        gap: 10,
-        alignItems: "center",
-        padding: "10px 12px",
-        borderRadius: 16,
-        border: "1px solid rgba(214,226,255,0.10)",
-        background:
-          "linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01))",
-      }}
-    >
-      <div style={{ ...overlineStyle(), color: "rgba(255,255,255,0.52)" }}>{label}</div>
-      <div
-        style={{
-          fontSize: 13,
-          fontWeight: 800,
-          color: "#fff",
-          textAlign: "right",
-          overflowWrap: "anywhere",
-        }}
-      >
-        {value}
-      </div>
-    </div>
-  );
-}
-
-function EmptyState({ title, detail }) {
-  return (
-    <div
-      style={{
-        minHeight: 140,
-        display: "grid",
-        placeItems: "center",
-      }}
-    >
-      <div style={{ width: "100%", maxWidth: 360 }}>
-        <div
-          style={{
-            fontSize: 17,
-            fontWeight: 800,
-            color: "#fff",
-            textAlign: "center",
-          }}
-        >
-          {title}
-        </div>
-        <div
-          style={{
-            marginTop: 8,
-            fontSize: 13,
-            lineHeight: 1.55,
-            color: "rgba(255,255,255,0.64)",
-            textAlign: "center",
-          }}
-        >
-          {detail}
-        </div>
-      </div>
     </div>
   );
 }
 
 function Field({ label, children }) {
   return (
-    <label style={{ display: "grid", gap: 6 }}>
-      <div style={overlineStyle()}>{label}</div>
+    <label className={styles.fieldWrap}>
+      <span>{label}</span>
       {children}
     </label>
+  );
+}
+
+function EmptyState({ title, detail }) {
+  return (
+    <div className={styles.emptyState}>
+      <div>
+        <div className={styles.emptyTitle}>{title}</div>
+        <div className={styles.emptyText}>{detail}</div>
+      </div>
+    </div>
   );
 }
 
@@ -449,154 +122,80 @@ function HeadlineRow({ item }) {
       href={item.url || "#"}
       target="_blank"
       rel="noreferrer"
-      style={{ textDecoration: "none" }}
+      className={styles.feedItem}
     >
-      <div
-        style={{
-          minHeight: 90,
-          display: "grid",
-          gridTemplateColumns: "40px minmax(0, 1fr) auto",
-          gap: 12,
-          alignItems: "start",
-          padding: "12px 13px",
-          borderRadius: 18,
-          border: "1px solid rgba(214,226,255,0.10)",
-          background:
-            "linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01))",
-        }}
-      >
-        <div
-          style={{
-            width: 40,
-            height: 40,
-            borderRadius: 12,
-            display: "grid",
-            placeItems: "center",
-            border: "1px solid rgba(214,226,255,0.10)",
-            background: "rgba(10,14,21,0.46)",
-            color: "#f7fbff",
-          }}
-        >
-          <Newspaper size={16} />
-        </div>
+      <div className={styles.feedIconWrap}>
+        <Newspaper size={16} />
+      </div>
 
-        <div style={{ minWidth: 0 }}>
-          <div
-            style={{
-              fontSize: 14,
-              fontWeight: 800,
-              color: "#fff",
-              lineHeight: 1.35,
-              overflowWrap: "anywhere",
-            }}
-          >
-            {item.title || "Untitled headline"}
-          </div>
-          <div style={{ marginTop: 5, ...mutedStyle() }}>
-            {item.text || item.site || "Market story"}
-          </div>
-          <div
-            style={{
-              marginTop: 6,
-              fontSize: 11,
-              fontWeight: 800,
-              color: "rgba(255,255,255,0.44)",
-              textTransform: "uppercase",
-              letterSpacing: ".14em",
-            }}
-          >
-            {(item.site || "Source") + " • " + fullDateTime(item.publishedDate)}
-          </div>
+      <div className={styles.feedMain}>
+        <div className={styles.feedTitle}>{item.title || "Untitled headline"}</div>
+        <div className={styles.feedSub}>{item.text || item.site || "Market story"}</div>
+        <div className={styles.feedMeta}>
+          {(item.site || "Source") + " • " + fullDateTime(item.publishedDate)}
         </div>
+      </div>
 
-        <div style={{ color: "rgba(255,255,255,0.52)" }}>
-          <ExternalLink size={14} />
-        </div>
+      <div className={styles.feedRight}>
+        <ExternalLink size={14} className={styles.feedLinkIcon} />
       </div>
     </a>
   );
 }
 
-function TradeRow({ txn, avgCostBefore, realizedOnTxn, basisRemoved }) {
-  const type = String(txn.txn_type || "").toUpperCase();
-  const tone = type === "SELL" ? toneByValue(realizedOnTxn) : "neutral";
+function TradeLedgerRow({ row, selected, onClick }) {
+  const type = String(row.txn_type || "").toUpperCase();
+  const tone = type === "SELL" ? toneByValue(row.realizedOnTxn) : "neutral";
   const meta = toneMeta(tone);
 
   return (
-    <div
+    <button
+      type="button"
+      onClick={onClick}
+      className={cx(styles.navigatorRow, selected && styles.navigatorRowActive)}
       style={{
-        minHeight: 84,
-        display: "grid",
-        gridTemplateColumns: "52px minmax(0, 1fr) auto",
-        gap: 12,
-        alignItems: "center",
-        padding: "12px 14px",
-        borderRadius: 18,
-        border: `1px solid ${meta.border}`,
-        background:
-          "linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01))",
+        borderColor: selected ? meta.border : undefined,
+        boxShadow: selected ? `0 0 18px ${meta.glow}` : undefined,
       }}
     >
       <div
-        style={{
-          width: 52,
-          height: 52,
-          borderRadius: 14,
-          display: "grid",
-          placeItems: "center",
-          border: `1px solid ${meta.border}`,
-          background:
-            "linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.012))",
-          color: type === "SELL" ? meta.text : "#fff",
-          fontWeight: 900,
-          fontSize: 13,
-        }}
-      >
-        {type}
-      </div>
-
-      <div style={{ minWidth: 0 }}>
-        <div
-          style={{
-            fontSize: 14,
-            fontWeight: 800,
-            color: "#fff",
-            lineHeight: 1.25,
-          }}
-        >
-          {fmtNumber(txn.qty)} shares @ {money(txn.price)}
-        </div>
-
-        <div style={{ marginTop: 4, ...mutedStyle() }}>
-          {shortDate(txn.txn_date)} • Avg cost before trade: {money(avgCostBefore)}
-        </div>
-
-        {type === "SELL" ? (
-          <div
-            style={{
-              marginTop: 4,
-              fontSize: 12,
-              fontWeight: 700,
-              color: tone === "neutral" ? "rgba(255,255,255,0.66)" : meta.text,
-              lineHeight: 1.35,
-            }}
-          >
-            Basis removed: {money(basisRemoved)} • Realized: {signedMoney(realizedOnTxn)}
-          </div>
-        ) : null}
-      </div>
+        className={styles.navigatorAccent}
+        style={{ background: selected ? meta.text : "transparent" }}
+      />
 
       <div
+        className={styles.navigatorAvatar}
         style={{
-          fontSize: 14,
-          fontWeight: 800,
+          borderColor: meta.border,
+          background: meta.iconBg,
           color: type === "SELL" ? meta.text : "#fff",
-          whiteSpace: "nowrap",
         }}
       >
-        {money(toNum(txn.qty) * toNum(txn.price))}
+        {type === "SELL" ? "S" : "B"}
       </div>
-    </div>
+
+      <div className={styles.navigatorMain}>
+        <div className={styles.navigatorTop}>
+          <div className={styles.navigatorName}>
+            {type} • {toNum(row.qty).toLocaleString(undefined, { maximumFractionDigits: 4 })}
+          </div>
+          <div className={styles.navigatorAmount}>{money(toNum(row.qty) * toNum(row.price))}</div>
+        </div>
+
+        <div className={styles.navigatorMeta}>
+          {money(row.price)} • {shortDate(row.txn_date)}
+        </div>
+
+        <div className={styles.navigatorBadges}>
+          <MiniPill tone={tone}>{type}</MiniPill>
+          {type === "SELL" ? (
+            <MiniPill tone={tone}>{signedMoney(row.realizedOnTxn)}</MiniPill>
+          ) : (
+            <MiniPill>basis build</MiniPill>
+          )}
+        </div>
+      </div>
+    </button>
   );
 }
 
@@ -612,6 +211,9 @@ export default function InvestmentAssetPage() {
   const [loadingPrice, setLoadingPrice] = useState(false);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
+
+  const [selectedTradeId, setSelectedTradeId] = useState("");
+  const [boardTab, setBoardTab] = useState("overview");
 
   const [tradeType, setTradeType] = useState("BUY");
   const [tradeQty, setTradeQty] = useState("");
@@ -663,6 +265,7 @@ export default function InvestmentAssetPage() {
 
       setAsset(assetRow);
       setTxns(txnRows || []);
+      setSelectedTradeId((txnRows || []).length ? txnRows[txnRows.length - 1].id : "");
       setLoading(false);
     }
 
@@ -672,7 +275,6 @@ export default function InvestmentAssetPage() {
   useEffect(() => {
     async function loadPrice() {
       const symbol = String(asset?.symbol || "").toUpperCase().trim();
-
       if (!symbol) {
         setLivePrice(null);
         return;
@@ -790,8 +392,7 @@ export default function InvestmentAssetPage() {
         ? remainingShares * Number(livePrice)
         : null;
 
-    const avgCostRemaining =
-      remainingShares > 0 ? remainingBasis / remainingShares : 0;
+    const avgCostRemaining = remainingShares > 0 ? remainingBasis / remainingShares : 0;
 
     const unrealizedPnl = currentValue != null ? currentValue - remainingBasis : null;
 
@@ -819,6 +420,11 @@ export default function InvestmentAssetPage() {
 
   const assetTone =
     breakdown.unrealizedPnl == null ? "neutral" : toneByValue(breakdown.unrealizedPnl);
+
+  const selectedTrade =
+    breakdown.rows.find((row) => row.id === selectedTradeId) ||
+    breakdown.rows[breakdown.rows.length - 1] ||
+    null;
 
   async function logTrade() {
     setStatus("");
@@ -867,8 +473,10 @@ export default function InvestmentAssetPage() {
       }
 
       setTxns((prev) => [...prev, data]);
+      setSelectedTradeId(data.id);
       setTradeQty("");
       setTradePrice("");
+      setBoardTab("ledger");
       setStatus(`${tradeType} saved to ledger.`);
     } catch (err) {
       console.error(err);
@@ -878,395 +486,655 @@ export default function InvestmentAssetPage() {
 
   if (loading) {
     return (
-      <main style={{ padding: "18px 0 28px", fontFamily: FONT_STACK }}>
-        <div style={{ width: "min(100%, 1380px)", margin: "0 auto" }}>
-          <GlassPane size="card">
-            <div style={{ fontWeight: 800, fontSize: 18, color: "#fff" }}>
-              Loading position.
-            </div>
-          </GlassPane>
-        </div>
+      <main className={styles.page}>
+        <GlassPane className={styles.gatePanel}>
+          <div className={styles.gateText}>Loading position.</div>
+        </GlassPane>
       </main>
     );
   }
 
   if (error || !asset) {
     return (
-      <main style={{ padding: "18px 0 28px", fontFamily: FONT_STACK }}>
-        <div style={{ width: "min(100%, 1380px)", margin: "0 auto" }}>
-          <GlassPane tone="red" size="card">
-            <div style={{ fontWeight: 800, fontSize: 18, color: "#fff" }}>
-              {error || "Could not load asset."}
-            </div>
-          </GlassPane>
-        </div>
+      <main className={styles.page}>
+        <GlassPane className={styles.statusStrip}>
+          <div className={styles.statusTitle}>Position error</div>
+          <div className={styles.statusText}>{error || "Could not load asset."}</div>
+        </GlassPane>
       </main>
     );
   }
 
   return (
-    <>
-      <main className="assetRoot">
-        <div className="assetInner">
-          <GlassPane size="card">
-            <div className="assetHeroGrid">
-              <div style={{ minWidth: 0 }}>
-                <div style={overlineStyle()}>Position Command</div>
+    <main className={styles.page}>
+      {(status || error) && (
+        <GlassPane className={styles.statusStrip}>
+          <div className={styles.statusTitle}>{error ? "Position error" : "Position update"}</div>
+          <div className={styles.statusText}>{error || status}</div>
+        </GlassPane>
+      )}
 
-                <div
-                  style={{
-                    marginTop: 8,
-                    fontSize: "clamp(28px, 3.4vw, 40px)",
-                    lineHeight: 0.98,
-                    fontWeight: 900,
-                    letterSpacing: "-0.06em",
-                    color: "#fff",
-                  }}
-                >
-                  {String(asset.symbol || "—").toUpperCase()} position view
+      <GlassPane className={styles.summaryStrip}>
+        <div className={styles.summaryInner}>
+          <div className={styles.titleBlock}>
+            <div className={styles.eyebrow}>Investments / Position</div>
+            <div className={styles.pageTitleRow}>
+              <div className={styles.pageTitle}>{String(asset.symbol || "—").toUpperCase()}</div>
+              <MiniPill tone={assetTone}>{asset.asset_type || "asset"}</MiniPill>
+            </div>
+            <div className={styles.workspaceCopy}>
+              One-symbol command page with live value, full ledger, research, and routing.
+            </div>
+          </div>
+
+          <div className={styles.summaryStats}>
+            <div className={styles.summaryStat}>
+              <div className={styles.summaryLabel}>Current Value</div>
+              <div className={styles.summaryValue}>
+                {breakdown.currentValue != null ? money(breakdown.currentValue) : "—"}
+              </div>
+              <div className={styles.summaryHint}>{asset.account || "Brokerage"}</div>
+            </div>
+
+            <div className={styles.summaryStat}>
+              <div className={styles.summaryLabel}>Unrealized P/L</div>
+              <div
+                className={styles.summaryValue}
+                style={{ color: toneMeta(assetTone).text }}
+              >
+                {breakdown.unrealizedPnl != null ? signedMoney(breakdown.unrealizedPnl) : "—"}
+              </div>
+              <div className={styles.summaryHint}>
+                {breakdown.unrealizedPct != null ? pct(breakdown.unrealizedPct) : "needs live quote"}
+              </div>
+            </div>
+
+            <div className={styles.summaryStat}>
+              <div className={styles.summaryLabel}>Remaining Shares</div>
+              <div className={styles.summaryValue}>
+                {breakdown.remainingShares.toLocaleString(undefined, {
+                  maximumFractionDigits: 4,
+                })}
+              </div>
+              <div className={styles.summaryHint}>avg cost {money(breakdown.avgCostRemaining)}</div>
+            </div>
+
+            <div className={styles.summaryStat}>
+              <div className={styles.summaryLabel}>Realized P/L</div>
+              <div
+                className={styles.summaryValue}
+                style={{ color: toneMeta(toneByValue(breakdown.realizedPnl)).text }}
+              >
+                {signedMoney(breakdown.realizedPnl)}
+              </div>
+              <div className={styles.summaryHint}>closed result</div>
+            </div>
+
+            <div className={styles.summaryStat}>
+              <div className={styles.summaryLabel}>Ledger Rows</div>
+              <div className={styles.summaryValue}>{breakdown.rows.length}</div>
+              <div className={styles.summaryHint}>
+                {loadingPrice ? "price loading" : livePrice ? money(livePrice) : "no live price"}
+              </div>
+            </div>
+          </div>
+
+          <div className={styles.summaryRight}>
+            <MiniPill tone={assetTone}>{asset.symbol}</MiniPill>
+            <ActionLink href="/investments">
+              <ArrowLeft size={14} /> Back
+            </ActionLink>
+            <ActionLink href={`/market/${encodeURIComponent(asset.symbol || "")}`}>
+              Open Market <ExternalLink size={14} />
+            </ActionLink>
+          </div>
+        </div>
+      </GlassPane>
+
+      <div className={styles.workspace}>
+        <div className={styles.leftCol}>
+          <GlassPane className={styles.navigatorPane}>
+            <PaneHeader
+              title="Trade ledger"
+              subcopy="Every fill feeding this position."
+              right={<MiniPill>{breakdown.rows.length} rows</MiniPill>}
+            />
+
+            {breakdown.rows.length ? (
+              <div className={styles.navigatorList}>
+                {[...breakdown.rows].reverse().map((row) => (
+                  <TradeLedgerRow
+                    key={row.id}
+                    row={row}
+                    selected={row.id === selectedTrade?.id}
+                    onClick={() => {
+                      setSelectedTradeId(row.id);
+                      setBoardTab("ledger");
+                    }}
+                  />
+                ))}
+              </div>
+            ) : (
+              <EmptyState
+                title="No trades logged"
+                detail="Use the ticket to start building this position."
+              />
+            )}
+          </GlassPane>
+        </div>
+
+        <div className={styles.mainCol}>
+          <GlassPane className={styles.focusPane}>
+            <div className={styles.focusStack}>
+              <div className={styles.focusHeader}>
+                <div>
+                  <div className={styles.eyebrow}>Position command</div>
+                  <div className={styles.focusTitle}>
+                    {String(asset.symbol || "—").toUpperCase()} view
+                  </div>
+                  <div className={styles.focusMeta}>
+                    {asset.account || "Brokerage"} • {asset.asset_type || "asset"} • {breakdown.rows.length} ledger rows
+                  </div>
                 </div>
 
-                <div style={{ marginTop: 10, ...mutedStyle(), maxWidth: 760 }}>
-                  This page should feel like a real position screen, not just math cards.
-                  Live value, ledger activity, research headlines, and a trade ticket are all here.
+                <div className={styles.focusHeaderRight}>
+                  <div className={styles.focusBadges}>
+                    <MiniPill tone={assetTone}>
+                      {loadingPrice ? "Loading price" : livePrice ? money(livePrice) : "No live price"}
+                    </MiniPill>
+                    <MiniPill tone={toneByValue(breakdown.realizedPnl)}>
+                      {signedMoney(breakdown.realizedPnl)}
+                    </MiniPill>
+                  </div>
                 </div>
               </div>
 
-              <div
-                style={{
-                  display: "flex",
-                  gap: 8,
-                  flexWrap: "wrap",
-                  justifyContent: "flex-end",
-                }}
-              >
-                <MiniPill tone={assetTone}>
-                  {loadingPrice ? "Loading price" : livePrice ? money(livePrice) : "No live price"}
-                </MiniPill>
-                <ActionLink href="/investments">
-                  <ArrowLeft size={14} /> Back
-                </ActionLink>
-                <ActionLink href={`/market/${encodeURIComponent(asset.symbol || "")}`}>
-                  Open Market <ExternalLink size={14} />
-                </ActionLink>
+              <div className={styles.tabRow}>
+                {["overview", "ledger", "research", "ticket"].map((tab) => (
+                  <button
+                    key={tab}
+                    type="button"
+                    className={cx(styles.tab, boardTab === tab && styles.tabActive)}
+                    onClick={() => setBoardTab(tab)}
+                  >
+                    {tab}
+                  </button>
+                ))}
+              </div>
+
+              <div className={styles.tabStage}>
+                {boardTab === "overview" ? (
+                  <div className={styles.splitLayout}>
+                    <div className={styles.panel}>
+                      <PaneHeader
+                        title="Position stack"
+                        subcopy="What is actually sitting in this name right now."
+                        right={<MiniPill tone={assetTone}>{asset.symbol}</MiniPill>}
+                      />
+
+                      <div className={styles.metricGrid}>
+                        <div className={styles.metricCard}>
+                          <div className={styles.metricIcon}>
+                            <Wallet size={16} />
+                          </div>
+                          <div className={styles.metricLabel}>Current Value</div>
+                          <div className={styles.metricValue}>
+                            {breakdown.currentValue != null ? money(breakdown.currentValue) : "—"}
+                          </div>
+                          <div className={styles.metricSub}>Live value of remaining shares.</div>
+                        </div>
+
+                        <div className={styles.metricCard}>
+                          <div className={styles.metricIcon}>
+                            <TrendingUp size={16} />
+                          </div>
+                          <div className={styles.metricLabel}>Unrealized</div>
+                          <div
+                            className={styles.metricValue}
+                            style={{ color: toneMeta(assetTone).text }}
+                          >
+                            {breakdown.unrealizedPnl != null ? signedMoney(breakdown.unrealizedPnl) : "—"}
+                          </div>
+                          <div className={styles.metricSub}>
+                            {breakdown.unrealizedPct != null ? pct(breakdown.unrealizedPct) : "Needs live quote"}
+                          </div>
+                        </div>
+
+                        <div className={styles.metricCard}>
+                          <div className={styles.metricIcon}>
+                            <Layers3 size={16} />
+                          </div>
+                          <div className={styles.metricLabel}>Remaining Shares</div>
+                          <div className={styles.metricValue}>
+                            {breakdown.remainingShares.toLocaleString(undefined, {
+                              maximumFractionDigits: 4,
+                            })}
+                          </div>
+                          <div className={styles.metricSub}>Avg cost {money(breakdown.avgCostRemaining)}</div>
+                        </div>
+
+                        <div className={styles.metricCard}>
+                          <div className={styles.metricIcon}>
+                            <BadgeDollarSign size={16} />
+                          </div>
+                          <div className={styles.metricLabel}>Realized</div>
+                          <div
+                            className={styles.metricValue}
+                            style={{ color: toneMeta(toneByValue(breakdown.realizedPnl)).text }}
+                          >
+                            {signedMoney(breakdown.realizedPnl)}
+                          </div>
+                          <div className={styles.metricSub}>Closed result from sells.</div>
+                        </div>
+                      </div>
+
+                      <div className={styles.heroPanel}>
+                        <div className={styles.heroTop}>
+                          <div>
+                            <div className={styles.metricLabel}>Remaining basis</div>
+                            <div className={styles.heroValue}>{money(breakdown.remainingBasis)}</div>
+                            <div className={styles.heroSub}>
+                              Buy cost {money(breakdown.totalBuyCost)} • Sell proceeds {money(breakdown.totalSellProceeds)}
+                            </div>
+                          </div>
+
+                          <div className={styles.heroMiniGrid}>
+                            <div className={styles.heroMiniCard}>
+                              <div className={styles.metricLabel}>Bought shares</div>
+                              <div className={styles.heroMiniValue}>
+                                {breakdown.totalBoughtShares.toLocaleString(undefined, {
+                                  maximumFractionDigits: 4,
+                                })}
+                              </div>
+                            </div>
+                            <div className={styles.heroMiniCard}>
+                              <div className={styles.metricLabel}>Sold shares</div>
+                              <div className={styles.heroMiniValue}>
+                                {breakdown.totalSoldShares.toLocaleString(undefined, {
+                                  maximumFractionDigits: 4,
+                                })}
+                              </div>
+                            </div>
+                            <div className={styles.heroMiniCard}>
+                              <div className={styles.metricLabel}>Basis removed</div>
+                              <div className={styles.heroMiniValue}>{money(breakdown.costRemovedBySells)}</div>
+                            </div>
+                            <div className={styles.heroMiniCard}>
+                              <div className={styles.metricLabel}>Live price</div>
+                              <div className={styles.heroMiniValue}>
+                                {loadingPrice ? "Loading..." : livePrice ? money(livePrice) : "—"}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className={styles.asideStack}>
+                      <div className={styles.panel}>
+                        <PaneHeader
+                          title="Selected trade"
+                          subcopy="Fast read on the highlighted fill."
+                        />
+
+                        {selectedTrade ? (
+                          <div className={styles.infoList}>
+                            <div className={styles.infoRow}>
+                              <span>Side</span>
+                              <span>{selectedTrade.txn_type}</span>
+                            </div>
+                            <div className={styles.infoRow}>
+                              <span>Date</span>
+                              <span>{shortDate(selectedTrade.txn_date)}</span>
+                            </div>
+                            <div className={styles.infoRow}>
+                              <span>Quantity</span>
+                              <span>
+                                {toNum(selectedTrade.qty).toLocaleString(undefined, {
+                                  maximumFractionDigits: 4,
+                                })}
+                              </span>
+                            </div>
+                            <div className={styles.infoRow}>
+                              <span>Price</span>
+                              <span>{money(selectedTrade.price)}</span>
+                            </div>
+                            <div className={styles.infoRow}>
+                              <span>Avg cost before</span>
+                              <span>{money(selectedTrade.avgCostBefore)}</span>
+                            </div>
+                            <div className={styles.infoRow}>
+                              <span>Realized on row</span>
+                              <span
+                                style={{
+                                  color: toneMeta(toneByValue(selectedTrade.realizedOnTxn)).text,
+                                }}
+                              >
+                                {String(selectedTrade.txn_type).toUpperCase() === "SELL"
+                                  ? signedMoney(selectedTrade.realizedOnTxn)
+                                  : "—"}
+                              </span>
+                            </div>
+                          </div>
+                        ) : (
+                          <EmptyState
+                            title="No selected trade"
+                            detail="Pick a row from the ledger on the left."
+                          />
+                        )}
+                      </div>
+
+                      <div className={styles.panel}>
+                        <PaneHeader
+                          title="Next moves"
+                          subcopy="Fast paths through the section."
+                        />
+                        <div className={styles.ctaStack}>
+                          <ActionLink href="/investments">
+                            Back to Investments <ArrowRight size={14} />
+                          </ActionLink>
+                          <ActionLink href="/investments/discover">
+                            Research Desk <ArrowRight size={14} />
+                          </ActionLink>
+                          <ActionLink href={`/market/${encodeURIComponent(asset.symbol || "")}`}>
+                            Open Market View <ArrowRight size={14} />
+                          </ActionLink>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
+
+                {boardTab === "ledger" ? (
+                  <div className={styles.splitLayout}>
+                    <div className={styles.panel}>
+                      <PaneHeader
+                        title="Ledger breakdown"
+                        subcopy="The exact math behind the position."
+                        right={<MiniPill>{breakdown.rows.length} rows</MiniPill>}
+                      />
+
+                      {selectedTrade ? (
+                        <div className={styles.feedList}>
+                          <div className={styles.tradeRow}>
+                            <div className={styles.tradeIcon}>
+                              {String(selectedTrade.txn_type).toUpperCase() === "SELL" ? "S" : "B"}
+                            </div>
+
+                            <div className={styles.tradeMain}>
+                              <div className={styles.tradeName}>
+                                {String(selectedTrade.txn_type).toUpperCase()} •{" "}
+                                {toNum(selectedTrade.qty).toLocaleString(undefined, {
+                                  maximumFractionDigits: 4,
+                                })}{" "}
+                                @ {money(selectedTrade.price)}
+                              </div>
+                              <div className={styles.tradeSub}>
+                                {shortDate(selectedTrade.txn_date)} • Avg cost before{" "}
+                                {money(selectedTrade.avgCostBefore)}
+                              </div>
+                            </div>
+
+                            <div className={styles.tradeValue}>
+                              {money(toNum(selectedTrade.qty) * toNum(selectedTrade.price))}
+                            </div>
+                          </div>
+
+                          <div className={styles.infoList}>
+                            <div className={styles.infoRow}>
+                              <span>Shares after</span>
+                              <span>
+                                {toNum(selectedTrade.sharesAfter).toLocaleString(undefined, {
+                                  maximumFractionDigits: 4,
+                                })}
+                              </span>
+                            </div>
+                            <div className={styles.infoRow}>
+                              <span>Basis after</span>
+                              <span>{money(selectedTrade.basisAfter)}</span>
+                            </div>
+                            <div className={styles.infoRow}>
+                              <span>Basis removed</span>
+                              <span>{money(selectedTrade.basisRemoved)}</span>
+                            </div>
+                            <div className={styles.infoRow}>
+                              <span>Realized on row</span>
+                              <span
+                                style={{
+                                  color: toneMeta(toneByValue(selectedTrade.realizedOnTxn)).text,
+                                }}
+                              >
+                                {String(selectedTrade.txn_type).toUpperCase() === "SELL"
+                                  ? signedMoney(selectedTrade.realizedOnTxn)
+                                  : "—"}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <EmptyState
+                          title="No ledger row selected"
+                          detail="Pick a ledger row from the left."
+                        />
+                      )}
+                    </div>
+
+                    <div className={styles.asideStack}>
+                      <div className={styles.panel}>
+                        <PaneHeader
+                          title="Position snapshot"
+                          subcopy="Whole-position readout."
+                        />
+                        <div className={styles.infoList}>
+                          <div className={styles.infoRow}>
+                            <span>Remaining shares</span>
+                            <span>
+                              {breakdown.remainingShares.toLocaleString(undefined, {
+                                maximumFractionDigits: 4,
+                              })}
+                            </span>
+                          </div>
+                          <div className={styles.infoRow}>
+                            <span>Remaining basis</span>
+                            <span>{money(breakdown.remainingBasis)}</span>
+                          </div>
+                          <div className={styles.infoRow}>
+                            <span>Current value</span>
+                            <span>
+                              {breakdown.currentValue != null ? money(breakdown.currentValue) : "—"}
+                            </span>
+                          </div>
+                          <div className={styles.infoRow}>
+                            <span>Unrealized</span>
+                            <span
+                              style={{ color: toneMeta(assetTone).text }}
+                            >
+                              {breakdown.unrealizedPnl != null ? signedMoney(breakdown.unrealizedPnl) : "—"}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
+
+                {boardTab === "research" ? (
+                  <div className={styles.splitLayout}>
+                    <div className={styles.panel}>
+                      <PaneHeader
+                        title="Research headlines"
+                        subcopy={`Live symbol news for ${asset.symbol}.`}
+                        right={<MiniPill>{news.length} stories</MiniPill>}
+                      />
+
+                      {news.length ? (
+                        <div className={styles.feedList}>
+                          {news.map((item, index) => (
+                            <HeadlineRow key={`${item.url}-${index}`} item={item} />
+                          ))}
+                        </div>
+                      ) : (
+                        <EmptyState
+                          title="No headlines returned"
+                          detail="Once the news route is live, this rail fills with symbol coverage."
+                        />
+                      )}
+                    </div>
+
+                    <div className={styles.asideStack}>
+                      <div className={styles.panel}>
+                        <PaneHeader
+                          title="Research routes"
+                          subcopy="Fast paths out of the position page."
+                        />
+                        <div className={styles.ctaStack}>
+                          <ActionLink href={`/market/${encodeURIComponent(asset.symbol || "")}`}>
+                            Open Market View <ExternalLink size={14} />
+                          </ActionLink>
+                          <ActionLink href="/investments/discover">
+                            Open Research Desk <ArrowRight size={14} />
+                          </ActionLink>
+                        </div>
+                      </div>
+
+                      <div className={styles.panel}>
+                        <PaneHeader
+                          title="Context"
+                          subcopy="What this position belongs to."
+                        />
+                        <div className={styles.infoList}>
+                          <div className={styles.infoRow}>
+                            <span>Symbol</span>
+                            <span>{String(asset.symbol || "—").toUpperCase()}</span>
+                          </div>
+                          <div className={styles.infoRow}>
+                            <span>Account</span>
+                            <span>{asset.account || "Brokerage"}</span>
+                          </div>
+                          <div className={styles.infoRow}>
+                            <span>Asset type</span>
+                            <span>{asset.asset_type || "—"}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
+
+                {boardTab === "ticket" ? (
+                  <div className={styles.splitLayout}>
+                    <div className={styles.panel}>
+                      <PaneHeader
+                        title="Trade ticket"
+                        subcopy="Looks like a real ticket, writes to your portfolio ledger."
+                        right={<MiniPill tone="amber">ledger route</MiniPill>}
+                      />
+
+                      <div className={styles.formStack}>
+                        <div className={styles.formGrid2}>
+                          <Field label="Side">
+                            <select
+                              value={tradeType}
+                              onChange={(e) => setTradeType(e.target.value)}
+                              className={styles.field}
+                            >
+                              <option value="BUY">BUY</option>
+                              <option value="SELL">SELL</option>
+                            </select>
+                          </Field>
+
+                          <Field label="Trade date">
+                            <input
+                              type="date"
+                              value={tradeDate}
+                              onChange={(e) => setTradeDate(e.target.value)}
+                              className={styles.field}
+                            />
+                          </Field>
+                        </div>
+
+                        <div className={styles.formGrid2}>
+                          <Field label="Quantity">
+                            <input
+                              type="number"
+                              step="0.0001"
+                              value={tradeQty}
+                              onChange={(e) => setTradeQty(e.target.value)}
+                              placeholder="0.0000"
+                              className={styles.field}
+                            />
+                          </Field>
+
+                          <Field label="Price">
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={tradePrice}
+                              onChange={(e) => setTradePrice(e.target.value)}
+                              placeholder="0.00"
+                              className={styles.field}
+                            />
+                          </Field>
+                        </div>
+
+                        <ActionBtn variant="primary" onClick={logTrade} full>
+                          <Plus size={14} /> Save Trade
+                        </ActionBtn>
+                      </div>
+                    </div>
+
+                    <div className={styles.asideStack}>
+                      <div className={styles.panel}>
+                        <PaneHeader
+                          title="Ticket context"
+                          subcopy="What this ticket is attached to."
+                        />
+                        <div className={styles.infoList}>
+                          <div className={styles.infoRow}>
+                            <span>Symbol</span>
+                            <span>{String(asset.symbol || "—").toUpperCase()}</span>
+                          </div>
+                          <div className={styles.infoRow}>
+                            <span>Live price</span>
+                            <span>{loadingPrice ? "Loading..." : livePrice ? money(livePrice) : "—"}</span>
+                          </div>
+                          <div className={styles.infoRow}>
+                            <span>Remaining shares</span>
+                            <span>
+                              {breakdown.remainingShares.toLocaleString(undefined, {
+                                maximumFractionDigits: 4,
+                              })}
+                            </span>
+                          </div>
+                          <div className={styles.infoRow}>
+                            <span>Current basis</span>
+                            <span>{money(breakdown.remainingBasis)}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className={styles.panel}>
+                        <PaneHeader
+                          title="Next path"
+                          subcopy="Where this flow goes."
+                        />
+                        <div className={styles.ctaStack}>
+                          <ActionLink href="/investments">
+                            Back to desk <ArrowRight size={14} />
+                          </ActionLink>
+                          <ActionLink href={`/market/${encodeURIComponent(asset.symbol || "")}`}>
+                            Open market <ExternalLink size={14} />
+                          </ActionLink>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
               </div>
             </div>
           </GlassPane>
-
-          {(status || error) && (
-            <GlassPane tone={error ? "red" : "green"} size="card">
-              <div style={{ fontWeight: 800, fontSize: 14, color: "#fff" }}>
-                {error || status}
-              </div>
-            </GlassPane>
-          )}
-
-          <section className="assetMetrics">
-            <MetricCard
-              icon={Wallet}
-              label="Current Value"
-              value={breakdown.currentValue != null ? money(breakdown.currentValue) : "—"}
-              detail="Live value of remaining shares."
-              tone={assetTone}
-            />
-            <MetricCard
-              icon={TrendingUp}
-              label="Unrealized P/L"
-              value={breakdown.unrealizedPnl != null ? signedMoney(breakdown.unrealizedPnl) : "—"}
-              detail={
-                breakdown.unrealizedPct != null
-                  ? `${pct(breakdown.unrealizedPct)} on remaining basis.`
-                  : "Needs live quote to calculate."
-              }
-              tone={assetTone}
-            />
-            <MetricCard
-              icon={Layers3}
-              label="Remaining Shares"
-              value={fmtNumber(breakdown.remainingShares)}
-              detail={`Avg remaining cost ${money(breakdown.avgCostRemaining)}`}
-              tone="neutral"
-            />
-            <MetricCard
-              icon={BadgeDollarSign}
-              label="Realized P/L"
-              value={signedMoney(breakdown.realizedPnl)}
-              detail="Closed result from completed sells."
-              tone={toneByValue(breakdown.realizedPnl)}
-            />
-          </section>
-
-          <section className="assetMain">
-            <div className="assetLeftCol">
-              <GlassPane tone={assetTone} size="card">
-                <PaneHeader
-                  title="Position stack"
-                  subcopy="The actual structure of the position sitting in this account."
-                  right={<MiniPill tone={assetTone}>{asset.asset_type || "asset"}</MiniPill>}
-                />
-
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-                    gap: 8,
-                  }}
-                >
-                  <MiniMetric title="Remaining Basis" value={money(breakdown.remainingBasis)} />
-                  <MiniMetric title="Bought Shares" value={fmtNumber(breakdown.totalBoughtShares)} />
-                  <MiniMetric title="Sold Shares" value={fmtNumber(breakdown.totalSoldShares)} />
-                  <MiniMetric title="Buy Cost" value={money(breakdown.totalBuyCost)} />
-                  <MiniMetric title="Sell Proceeds" value={money(breakdown.totalSellProceeds)} />
-                  <MiniMetric title="Basis Removed" value={money(breakdown.costRemovedBySells)} />
-                </div>
-              </GlassPane>
-
-              <GlassPane size="card">
-                <PaneHeader
-                  title="Research headlines"
-                  subcopy="Live symbol news for this name."
-                  right={<MiniPill>{news.length} stories</MiniPill>}
-                />
-
-                <div style={{ display: "grid", gap: 8 }}>
-                  {news.length === 0 ? (
-                    <EmptyState
-                      title="No headlines returned"
-                      detail="Once the news route is live, this rail fills with live symbol coverage."
-                    />
-                  ) : (
-                    news.map((item, index) => (
-                      <HeadlineRow key={`${item.url}-${index}`} item={item} />
-                    ))
-                  )}
-                </div>
-              </GlassPane>
-
-              <GlassPane size="card">
-                <PaneHeader
-                  title="Transaction ledger"
-                  subcopy="Every fill feeding the position math."
-                  right={<MiniPill>{txns.length} trades</MiniPill>}
-                />
-
-                <div style={{ display: "grid", gap: 8 }}>
-                  {breakdown.rows.length === 0 ? (
-                    <EmptyState
-                      title="No trades logged"
-                      detail="Use the ticket on the right to start building the ledger."
-                    />
-                  ) : (
-                    breakdown.rows
-                      .slice()
-                      .reverse()
-                      .map((row) => (
-                        <TradeRow
-                          key={row.id}
-                          txn={row}
-                          avgCostBefore={row.avgCostBefore}
-                          realizedOnTxn={row.realizedOnTxn}
-                          basisRemoved={row.basisRemoved}
-                        />
-                      ))
-                  )}
-                </div>
-              </GlassPane>
-            </div>
-
-            <div className="assetRightCol">
-              <GlassPane size="card">
-                <PaneHeader
-                  title="Snapshot"
-                  subcopy="Fast position readout."
-                />
-
-                <div style={{ display: "grid", gap: 8 }}>
-                  <SnapshotRow
-                    label="Symbol"
-                    value={String(asset.symbol || "—").toUpperCase()}
-                  />
-                  <SnapshotRow label="Account" value={asset.account || "Brokerage"} />
-                  <SnapshotRow label="Asset Type" value={asset.asset_type || "—"} />
-                  <SnapshotRow
-                    label="Live Price"
-                    value={loadingPrice ? "Loading..." : livePrice ? money(livePrice) : "—"}
-                  />
-                  <SnapshotRow
-                    label="Unrealized"
-                    value={
-                      breakdown.unrealizedPnl != null
-                        ? `${signedMoney(breakdown.unrealizedPnl)}${
-                            breakdown.unrealizedPct != null ? ` • ${pct(breakdown.unrealizedPct)}` : ""
-                          }`
-                        : "—"
-                    }
-                  />
-                </div>
-              </GlassPane>
-
-              <GlassPane size="card">
-                <PaneHeader
-                  title="Trade ticket"
-                  subcopy="Looks like a real trading ticket, but writes to your portfolio ledger."
-                  right={<MiniPill tone="amber">Ledger route</MiniPill>}
-                />
-
-                <div style={{ display: "grid", gap: 10 }}>
-                  <Field label="Side">
-                    <select
-                      value={tradeType}
-                      onChange={(e) => setTradeType(e.target.value)}
-                      style={inputStyle()}
-                    >
-                      <option value="BUY">BUY</option>
-                      <option value="SELL">SELL</option>
-                    </select>
-                  </Field>
-
-                  <Field label="Trade date">
-                    <input
-                      type="date"
-                      value={tradeDate}
-                      onChange={(e) => setTradeDate(e.target.value)}
-                      style={inputStyle()}
-                    />
-                  </Field>
-
-                  <div
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-                      gap: 8,
-                    }}
-                  >
-                    <Field label="Quantity">
-                      <input
-                        type="number"
-                        step="0.0001"
-                        value={tradeQty}
-                        onChange={(e) => setTradeQty(e.target.value)}
-                        placeholder="0.0000"
-                        style={inputStyle()}
-                      />
-                    </Field>
-
-                    <Field label="Price">
-                      <input
-                        type="number"
-                        step="0.01"
-                        value={tradePrice}
-                        onChange={(e) => setTradePrice(e.target.value)}
-                        placeholder="0.00"
-                        style={inputStyle()}
-                      />
-                    </Field>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={logTrade}
-                    style={buttonStyle({ primary: true })}
-                  >
-                    <Plus size={14} />
-                    Save Trade
-                  </button>
-                </div>
-              </GlassPane>
-
-              <GlassPane size="card">
-                <PaneHeader
-                  title="Next moves"
-                  subcopy="Fast paths through the investments flow."
-                />
-
-                <div style={{ display: "grid", gap: 8 }}>
-                  <ActionLink href="/investments">
-                    Back to Investments <ArrowRight size={14} />
-                  </ActionLink>
-                  <ActionLink href="/investments/discover">
-                    Open Research Desk <ArrowRight size={14} />
-                  </ActionLink>
-                  <ActionLink href={`/market/${encodeURIComponent(asset.symbol || "")}`}>
-                    Open Market View <ArrowRight size={14} />
-                  </ActionLink>
-                </div>
-              </GlassPane>
-            </div>
-          </section>
         </div>
-      </main>
-
-      <style jsx global>{`
-        .assetRoot {
-          position: relative;
-          z-index: 1;
-          padding: 18px 0 28px;
-          font-family: ${FONT_STACK};
-        }
-
-        .assetInner {
-          width: min(100%, 1380px);
-          margin: 0 auto;
-          display: grid;
-          gap: 14px;
-        }
-
-        .assetHeroGrid {
-          display: grid;
-          grid-template-columns: minmax(0, 1fr) auto;
-          gap: 14px;
-        }
-
-        .assetMetrics {
-          display: grid;
-          grid-template-columns: repeat(4, minmax(0, 1fr));
-          gap: 12px;
-          align-items: stretch;
-        }
-
-        .assetMain {
-          display: grid;
-          grid-template-columns: minmax(0, 1.35fr) minmax(340px, 0.84fr);
-          gap: 14px;
-          align-items: start;
-        }
-
-        .assetLeftCol,
-        .assetRightCol {
-          display: grid;
-          gap: 14px;
-          min-width: 0;
-        }
-
-        @media (max-width: 1260px) {
-          .assetMetrics {
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-          }
-
-          .assetMain {
-            grid-template-columns: 1fr;
-          }
-        }
-
-        @media (max-width: 860px) {
-          .assetRoot {
-            padding: 10px 0 22px;
-          }
-
-          .assetInner {
-            gap: 12px;
-          }
-
-          .assetHeroGrid {
-            grid-template-columns: 1fr;
-          }
-
-          .assetMetrics {
-            grid-template-columns: 1fr;
-            gap: 10px;
-          }
-        }
-      `}</style>
-    </>
+      </div>
+    </main>
   );
 }

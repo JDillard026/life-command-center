@@ -1,7 +1,7 @@
 .page {
   min-width: 0;
   display: grid;
-  gap: 12px;
+  gap: 14px;
   color: rgba(247, 251, 255, 0.98);
 }
 
@@ -9,15 +9,15 @@
 .summaryStrip,
 .queuePane,
 .focusPane {
-  border-radius: 22px;
+  border-radius: 20px;
   border: 1px solid rgba(214, 226, 255, 0.08);
   background:
-    radial-gradient(circle at top right, rgba(62, 102, 255, 0.1), transparent 32%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.036), rgba(255, 255, 255, 0.014)),
-    rgba(6, 10, 18, 0.84);
+    radial-gradient(circle at top right, rgba(88, 120, 194, 0.06), transparent 28%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.022), rgba(255, 255, 255, 0.008)),
+    rgba(11, 16, 26, 0.82);
   box-shadow:
-    0 18px 50px rgba(0, 0, 0, 0.26),
-    inset 0 1px 0 rgba(255, 255, 255, 0.03);
+    0 16px 38px rgba(0, 0, 0, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.028);
 }
 
 .gatePanel {
@@ -38,7 +38,7 @@
 
 .summaryInner {
   display: grid;
-  grid-template-columns: minmax(240px, 0.9fr) minmax(0, 1.6fr) auto;
+  grid-template-columns: minmax(230px, 0.82fr) minmax(0, 1.46fr) auto;
   align-items: center;
   gap: 14px;
   min-width: 0;
@@ -50,23 +50,24 @@
   min-width: 0;
 }
 
-.eyebrow,
-.summaryLabel,
-.heroLabel,
-.metricLabel,
-.sectionTitle {
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.14em;
-  font-weight: 800;
-  color: rgba(255, 255, 255, 0.38);
-}
-
 .pageTitleRow {
   display: flex;
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
+}
+
+.eyebrow,
+.summaryLabel,
+.metricLabel,
+.sectionTitle,
+.previewLabel,
+.heroFactLabel {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-weight: 800;
+  color: rgba(255, 255, 255, 0.38);
 }
 
 .pageTitle {
@@ -84,10 +85,9 @@
 .dataSub,
 .noteText,
 .ruleCopy,
-.heroCopy,
 .modalSub,
 .paneEmpty,
-.gateText {
+.previewText {
   color: rgba(255, 255, 255, 0.58);
   font-size: 12px;
   line-height: 1.45;
@@ -106,13 +106,12 @@
 .panel,
 .noteCard,
 .detailCardFill,
-.hero,
-.heroAside {
+.previewCard {
   border-radius: 18px;
-  border: 1px solid rgba(214, 226, 255, 0.08);
+  border: 1px solid rgba(214, 226, 255, 0.07);
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.024), rgba(255, 255, 255, 0.01)),
-    rgba(255, 255, 255, 0.014);
+    linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0.008)),
+    rgba(255, 255, 255, 0.012);
 }
 
 .summaryStat {
@@ -139,7 +138,7 @@
 
 .summaryRight {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
@@ -153,10 +152,10 @@
   gap: 8px;
   padding: 0 11px;
   border-radius: 999px;
-  border: 1px solid rgba(214, 226, 255, 0.12);
+  border: 1px solid rgba(214, 226, 255, 0.1);
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.012)),
-    rgba(255, 255, 255, 0.02);
+    linear-gradient(180deg, rgba(255, 255, 255, 0.034), rgba(255, 255, 255, 0.012)),
+    rgba(255, 255, 255, 0.018);
   font-size: 11px;
   font-weight: 800;
   white-space: nowrap;
@@ -177,12 +176,12 @@
 }
 
 .mobileTab {
-  min-height: 38px;
+  min-height: 40px;
   border-radius: 14px;
-  border: 1px solid rgba(214, 226, 255, 0.1);
+  border: 1px solid rgba(214, 226, 255, 0.09);
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.014)),
-    rgba(10, 14, 22, 0.84);
+    linear-gradient(180deg, rgba(255, 255, 255, 0.024), rgba(255, 255, 255, 0.01)),
+    rgba(11, 16, 26, 0.84);
   color: rgba(255, 255, 255, 0.88);
   font-size: 12px;
   font-weight: 800;
@@ -192,15 +191,15 @@
 .mobileTabActive,
 .scopeTabActive,
 .tabActive {
-  border-color: rgba(143, 177, 255, 0.24);
+  border-color: rgba(143, 177, 255, 0.2);
   background:
-    linear-gradient(180deg, rgba(143, 177, 255, 0.14), rgba(143, 177, 255, 0.04)),
-    rgba(255, 255, 255, 0.03);
+    linear-gradient(180deg, rgba(143, 177, 255, 0.12), rgba(143, 177, 255, 0.03)),
+    rgba(255, 255, 255, 0.02);
 }
 
 .workspace {
   display: grid;
-  grid-template-columns: minmax(310px, 0.86fr) minmax(0, 1.72fr);
+  grid-template-columns: minmax(320px, 0.84fr) minmax(0, 1.72fr);
   gap: 12px;
   min-height: calc(100svh - 176px);
   align-items: stretch;
@@ -211,6 +210,15 @@
   min-height: 0;
   height: 100%;
   display: block;
+}
+
+.workspaceColShow {
+  display: block;
+}
+
+.leftCol,
+.mainCol {
+  min-width: 0;
 }
 
 .queuePane,
@@ -265,7 +273,7 @@
   min-height: 42px;
   padding: 0 12px;
   border-radius: 14px;
-  border: 1px solid rgba(214, 226, 255, 0.08);
+  border: 1px solid rgba(214, 226, 255, 0.07);
   background: rgba(255, 255, 255, 0.02);
   color: rgba(255, 255, 255, 0.58);
 }
@@ -303,8 +311,8 @@
   border-radius: 14px;
   border: 1px solid rgba(214, 226, 255, 0.08);
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.022), rgba(255, 255, 255, 0.01)),
-    rgba(255, 255, 255, 0.012);
+    linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0.008)),
+    rgba(255, 255, 255, 0.014);
   color: rgba(255, 255, 255, 0.96);
   outline: 0;
 }
@@ -325,10 +333,10 @@
   min-height: 36px;
   padding: 0 13px;
   border-radius: 12px;
-  border: 1px solid rgba(214, 226, 255, 0.1);
+  border: 1px solid rgba(214, 226, 255, 0.08);
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.024), rgba(255, 255, 255, 0.01)),
-    rgba(255, 255, 255, 0.014);
+    linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0.008)),
+    rgba(255, 255, 255, 0.012);
   color: rgba(255, 255, 255, 0.9);
   font-size: 12px;
   font-weight: 800;
@@ -359,15 +367,15 @@
 
 .queueRow {
   width: 100%;
-  padding: 12px 12px 12px 0;
+  padding: 11px 12px 11px 0;
   display: grid;
   grid-template-columns: 3px 1fr auto;
   gap: 12px;
   border-radius: 16px;
-  border: 1px solid rgba(214, 226, 255, 0.08);
+  border: 1px solid rgba(214, 226, 255, 0.07);
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.022), rgba(255, 255, 255, 0.008)),
-    rgba(255, 255, 255, 0.016);
+    linear-gradient(180deg, rgba(255, 255, 255, 0.018), rgba(255, 255, 255, 0.006)),
+    rgba(255, 255, 255, 0.014);
   color: rgba(255, 255, 255, 0.98);
   text-align: left;
   cursor: pointer;
@@ -378,21 +386,27 @@
     box-shadow 140ms ease;
 }
 
-.queueRow:hover,
-.queueRowActive {
-  border-color: rgba(143, 177, 255, 0.28);
+.queueRow:hover {
+  border-color: rgba(214, 226, 255, 0.13);
   background:
-    linear-gradient(180deg, rgba(143, 177, 255, 0.1), rgba(143, 177, 255, 0.025)),
-    rgba(255, 255, 255, 0.03);
+    linear-gradient(180deg, rgba(255, 255, 255, 0.025), rgba(255, 255, 255, 0.008)),
+    rgba(255, 255, 255, 0.018);
+  transform: translateY(-1px);
+}
+
+.queueRowActive {
+  border-color: rgba(143, 177, 255, 0.22);
+  background:
+    linear-gradient(180deg, rgba(143, 177, 255, 0.08), rgba(143, 177, 255, 0.025)),
+    rgba(255, 255, 255, 0.025);
   box-shadow:
-    0 0 0 1px rgba(143, 177, 255, 0.08),
-    inset 0 0 28px rgba(143, 177, 255, 0.05);
+    inset 0 0 0 1px rgba(143, 177, 255, 0.06),
+    0 10px 24px rgba(0, 0, 0, 0.12);
 }
 
 .queueAccent {
   border-radius: 999px;
   min-height: 100%;
-  box-shadow: 0 0 18px rgba(143, 177, 255, 0.24);
 }
 
 .queueMain,
@@ -430,14 +444,14 @@
 .queueAmount,
 .dataAmount,
 .metricValue,
-.heroValue,
-.summaryValue {
+.summaryValue,
+.previewValue {
   font-weight: 850;
   letter-spacing: -0.03em;
 }
 
 .queueAmount {
-  font-size: 14px;
+  font-size: 13px;
   white-space: nowrap;
 }
 
@@ -453,7 +467,7 @@
   gap: 6px;
   flex-wrap: wrap;
   align-items: center;
-  font-size: 11px;
+  font-size: 10px;
   color: rgba(255, 255, 255, 0.56);
 }
 
@@ -478,16 +492,17 @@
   min-height: 100%;
   display: grid;
   gap: 12px;
-  grid-template-rows: auto auto auto auto minmax(0, 1fr);
+  grid-template-rows: auto auto auto minmax(0, 1fr);
 }
 
 .focusTitle,
 .modalTitle {
-  font-size: clamp(28px, 2.6vw, 42px);
-  line-height: 0.92;
+  font-size: clamp(24px, 2.2vw, 34px);
+  line-height: 0.94;
   font-weight: 900;
-  letter-spacing: -0.06em;
+  letter-spacing: -0.055em;
   color: rgba(247, 251, 255, 0.98);
+  word-break: break-word;
 }
 
 .focusHeaderRight {
@@ -496,48 +511,26 @@
   justify-items: end;
 }
 
-.hero {
-  display: grid;
-  grid-template-columns: minmax(0, 1.12fr) minmax(320px, 0.88fr);
-  gap: 14px;
-  align-items: stretch;
-  padding: 14px;
-}
-
-.heroMain {
-  display: grid;
-  gap: 8px;
-  align-content: start;
-}
-
-.heroAside,
-.metricCard,
-.panel,
-.noteCard,
-.detailCardFill,
-.sectionCard {
-  padding: 14px;
-}
-
-.heroValue {
-  margin-top: 2px;
-  font-size: clamp(38px, 3.2vw, 58px);
-  line-height: 0.92;
-  font-weight: 900;
-  letter-spacing: -0.06em;
-  color: rgba(247, 251, 255, 0.98);
-}
-
-.metricGrid,
+.commandMetricGrid,
 .formGrid2,
 .formGrid3,
-.formGrid4 {
+.formGrid4,
+.previewGrid {
   display: grid;
   gap: 10px;
 }
 
-.metricGrid {
+.commandMetricGrid {
   grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.metricCard,
+.panel,
+.noteCard,
+.detailCardFill,
+.sectionCard,
+.previewCard {
+  padding: 14px;
 }
 
 .metricCard {
@@ -546,8 +539,23 @@
 }
 
 .metricValue {
-  font-size: 22px;
+  font-size: 20px;
   line-height: 1;
+}
+
+.previewGrid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.previewCard {
+  display: grid;
+  gap: 5px;
+}
+
+.previewValue {
+  font-size: 18px;
+  line-height: 1.05;
+  color: rgba(255, 255, 255, 0.98);
 }
 
 .tabsRow {
@@ -561,7 +569,8 @@
 .formStack,
 .infoList,
 .ruleList,
-.dataList {
+.dataList,
+.actionStack {
   display: grid;
   gap: 12px;
 }
@@ -573,20 +582,20 @@
 .splitLayoutFill {
   min-height: 0;
   height: 100%;
-  grid-template-columns: minmax(0, 1.12fr) minmax(294px, 0.88fr);
-  align-items: stretch;
+  grid-template-columns: minmax(0, 1.08fr) minmax(310px, 0.92fr);
+  align-items: start;
 }
 
 .asideStackFill {
   min-height: 0;
   height: 100%;
-  grid-template-rows: minmax(0, 1fr) auto;
+  grid-template-rows: auto auto auto;
 }
 
 .panelFill {
   min-height: 0;
   height: 100%;
-  grid-template-rows: auto auto auto auto auto;
+  align-content: start;
 }
 
 .dataList,
@@ -598,10 +607,10 @@
 .dataRow {
   padding: 11px 12px;
   border-radius: 14px;
-  border: 1px solid rgba(214, 226, 255, 0.07);
+  border: 1px solid rgba(214, 226, 255, 0.06);
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.018), rgba(255, 255, 255, 0.008)),
-    rgba(255, 255, 255, 0.012);
+    linear-gradient(180deg, rgba(255, 255, 255, 0.016), rgba(255, 255, 255, 0.006)),
+    rgba(255, 255, 255, 0.01);
   display: flex;
   justify-content: space-between;
   gap: 12px;
@@ -664,20 +673,27 @@
   padding: 16px;
   border-left: 1px solid rgba(214, 226, 255, 0.08);
   background:
-    radial-gradient(circle at top right, rgba(62, 102, 255, 0.12), transparent 24%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.034), rgba(255, 255, 255, 0.014)),
-    rgba(8, 11, 18, 0.98);
-  box-shadow: -20px 0 40px rgba(0, 0, 0, 0.24);
+    radial-gradient(circle at top right, rgba(88, 120, 194, 0.08), transparent 24%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.024), rgba(255, 255, 255, 0.008)),
+    rgba(10, 14, 22, 0.98);
+  box-shadow: -20px 0 40px rgba(0, 0, 0, 0.22);
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   gap: 14px;
+}
+
+.ruleRow {
+  display: grid;
+  grid-template-columns: 14px 1fr;
+  gap: 10px;
+  align-items: start;
 }
 
 .button {
   min-height: 40px;
   padding: 0 13px;
   border-radius: 13px;
-  border: 1px solid rgba(214, 226, 255, 0.1);
+  border: 1px solid rgba(214, 226, 255, 0.08);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -695,16 +711,16 @@
 
 .buttonGhost {
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.024), rgba(255, 255, 255, 0.01)),
-    rgba(255, 255, 255, 0.014);
+    linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0.008)),
+    rgba(255, 255, 255, 0.012);
   color: rgba(255, 255, 255, 0.92);
 }
 
 .buttonPrimary {
   background:
-    linear-gradient(180deg, rgba(143, 177, 255, 0.16), rgba(143, 177, 255, 0.05)),
-    rgba(255, 255, 255, 0.03);
-  border-color: rgba(143, 177, 255, 0.22);
+    linear-gradient(180deg, rgba(143, 177, 255, 0.14), rgba(143, 177, 255, 0.04)),
+    rgba(255, 255, 255, 0.025);
+  border-color: rgba(143, 177, 255, 0.2);
   color: rgba(255, 255, 255, 0.98);
 }
 
@@ -766,10 +782,10 @@
   border-radius: 20px;
   border: 1px solid rgba(214, 226, 255, 0.12);
   background:
-    radial-gradient(circle at top right, rgba(62, 102, 255, 0.12), transparent 28%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.018)),
-    rgba(8, 11, 18, 0.96);
-  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.32);
+    radial-gradient(circle at top right, rgba(88, 120, 194, 0.1), transparent 28%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.012)),
+    rgba(9, 13, 21, 0.96);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.3);
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
 }
@@ -923,12 +939,12 @@
 }
 
 @media (max-width: 1080px) {
-  .hero,
-  .metricGrid,
+  .commandMetricGrid,
   .splitLayoutFill,
   .formGrid2,
   .formGrid3,
-  .formGrid4 {
+  .formGrid4,
+  .previewGrid {
     grid-template-columns: 1fr;
   }
 

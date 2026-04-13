@@ -55,6 +55,14 @@ function bucketForFilter(tx) {
   return "spending";
 }
 
+function forecastTone(summary) {
+  const projected14 = safeNum(summary?.projected14, 0);
+  const safeBuffer = safeNum(summary?.safeBuffer, 0);
+  if (projected14 < 0) return "red";
+  if (projected14 < safeBuffer) return "amber";
+  return "green";
+}
+
 export function Button({
   children,
   onClick,
@@ -197,7 +205,7 @@ export function SummaryStrip({
           </div>
 
           <div className={styles.workspaceCopy}>
-            Bank-style account control with forecast, buffer logic, and shared ledger flow.
+            Live account control with forecast, buffer logic, and shared ledger flow.
           </div>
         </div>
 
@@ -209,15 +217,9 @@ export function SummaryStrip({
           </div>
 
           <div className={styles.summaryStat}>
-            <div className={styles.summaryLabel}>Checking</div>
-            <div className={styles.summaryValue}>{fmtMoney(checkingTotal)}</div>
-            <div className={styles.summaryHint}>cash traffic</div>
-          </div>
-
-          <div className={styles.summaryStat}>
-            <div className={styles.summaryLabel}>Savings</div>
-            <div className={styles.summaryValue}>{fmtMoney(savingsTotal)}</div>
-            <div className={styles.summaryHint}>held aside</div>
+            <div className={styles.summaryLabel}>Total Cash</div>
+            <div className={styles.summaryValue}>{fmtMoney(totalCash)}</div>
+            <div className={styles.summaryHint}>liquid stack</div>
           </div>
 
           <div className={styles.summaryStat}>
@@ -240,18 +242,14 @@ export function SummaryStrip({
         </div>
 
         <div className={styles.summaryRight}>
-          {selectedAccount ? (
-            <MiniPill tone={selectedRisk?.chipTone || "blue"}>
-              {selectedAccount.name}
-            </MiniPill>
-          ) : null}
+          <MiniPill tone="blue">{fmtMoney(checkingTotal)} checking</MiniPill>
+          <MiniPill tone="green">{fmtMoney(savingsTotal)} savings</MiniPill>
           <MiniPill tone={selectedRisk?.chipTone || "blue"}>
             {selectedRisk?.label || "Stable"}
           </MiniPill>
           <MiniPill tone={atRiskCount > 0 ? "amber" : "green"}>
             {atRiskCount} at risk
           </MiniPill>
-          <MiniPill tone="green">{fmtMoney(totalCash)} total cash</MiniPill>
         </div>
       </div>
     </GlassPane>
@@ -262,6 +260,7 @@ function AccountQueueRow({ account, summary, selected, onSelect, isPrimary }) {
   const risk = riskMeta(summary);
   const tone = risk.chipTone || accountTone(account.account_type);
   const meta = toneMeta(tone);
+  const projectedTone = forecastTone(summary);
 
   return (
     <button
@@ -297,18 +296,20 @@ function AccountQueueRow({ account, summary, selected, onSelect, isPrimary }) {
             <span>•</span>
             <span
               style={{
-                color: safeNum(summary?.last30Delta, 0) >= 0 ? "#97efc7" : "#ff646b",
+                color:
+                  safeNum(summary?.last30Delta, 0) >= 0 ? "#97efc7" : "#ff646b",
               }}
             >
-              {safeNum(summary?.last30Delta, 0) >= 0 ? "+" : ""}
-              {fmtMoney(summary?.last30Delta)} 30D
+              30D {safeNum(summary?.last30Delta, 0) >= 0 ? "+" : ""}
+              {fmtMoney(summary?.last30Delta)}
             </span>
-            <span>•</span>
-            <span>{fmtMoney(summary?.projected14)} 14D</span>
           </div>
 
           <div className={styles.queueBadges}>
             {isPrimary ? <MiniPill tone="green">Primary</MiniPill> : null}
+            <MiniPill tone={projectedTone}>
+              {fmtMoney(summary?.projected14)} 14D
+            </MiniPill>
             {summary?.riskLevel === "warning" ? <MiniPill tone="amber">Watch</MiniPill> : null}
             {summary?.riskLevel === "critical" ? <MiniPill tone="red">Critical</MiniPill> : null}
           </div>
@@ -347,7 +348,7 @@ export function QueuePane({
             className={styles.searchInput}
             value={accountSearch}
             onChange={(e) => setAccountSearch(e.target.value)}
-            placeholder="Search accounts…"
+            placeholder="Search accounts..."
           />
           {accountSearch ? (
             <button
@@ -596,7 +597,7 @@ function TransactionDetail({ tx }) {
       <div className={styles.detailModalCard}>
         <div className={styles.metricLabel}>Bucket</div>
         <div className={styles.detailModalValue}>{bucket}</div>
-        <div className={styles.modalSub}>How this movement is being grouped on the page.</div>
+        <div className={styles.modalSub}>How this movement is grouped on the page.</div>
       </div>
 
       <div className={styles.detailInfoList}>
@@ -758,13 +759,7 @@ export function FocusPane({
               label="Forecast 14D"
               value={fmtMoney(selectedSummary.projected14)}
               sub="Two-week forward balance"
-              tone={
-                selectedSummary.projected14 < 0
-                  ? "red"
-                  : selectedSummary.projected14 < selectedSummary.safeBuffer
-                  ? "amber"
-                  : "green"
-              }
+              tone={forecastTone(selectedSummary)}
             />
 
             <TopMetric
@@ -1171,13 +1166,7 @@ export function FocusPane({
                     <QuickInfoRow
                       label="Forecast 14D"
                       value={fmtMoney(selectedSummary.projected14)}
-                      tone={
-                        selectedSummary.projected14 < 0
-                          ? "red"
-                          : selectedSummary.projected14 < selectedSummary.safeBuffer
-                          ? "amber"
-                          : "green"
-                      }
+                      tone={forecastTone(selectedSummary)}
                     />
                     <QuickInfoRow
                       label="Month End"

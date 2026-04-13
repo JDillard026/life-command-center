@@ -3,14 +3,20 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   CalendarDays,
+  ChevronRight,
   CreditCard,
+  FileText,
   Gem,
+  Landmark,
   LayoutDashboard,
+  LogOut,
   Menu,
   PiggyBank,
   Receipt,
+  Settings,
   Shield,
   Target,
   TrendingUp,
@@ -30,8 +36,35 @@ const NAV_ITEMS = [
   { label: "Spending", href: "/spending", icon: PiggyBank, section: "money" },
   { label: "Investments", href: "/investments", icon: TrendingUp, section: "money", badge: "LIVE" },
   { label: "Savings", href: "/savings", icon: Target, section: "money" },
-  { label: "Admin", href: "/admin", icon: Shield, section: "system" },
-  { label: "Settings", href: "/settings", icon: UserCircle2, section: "system" },
+  { label: "Refinance Analyzer", href: "/tools/refinance", icon: Landmark, section: "tools", badge: "NEW" },
+  { label: "PFS Builder", href: "/tools/pfs", icon: FileText, section: "tools" },
+];
+
+const PROFILE_ITEMS = [
+  {
+    label: "Account center",
+    note: "Profile, plan, billing, and workspace controls.",
+    href: "/settings",
+    icon: UserCircle2,
+  },
+  {
+    label: "Settings",
+    note: "Preferences and product behavior.",
+    href: "/settings",
+    icon: Settings,
+  },
+  {
+    label: "Admin console",
+    note: "Hidden system access for authorized users.",
+    href: "/admin",
+    icon: Shield,
+  },
+  {
+    label: "Sign out",
+    note: "Leave the command center cleanly.",
+    href: "/logout",
+    icon: LogOut,
+  },
 ];
 
 function cx(...names) {
@@ -60,8 +93,96 @@ function NavDetailItem({ item, active, onNavigate }) {
         <span className={styles.detailLabel}>{item.label}</span>
       </div>
 
-      {item.badge ? <span className={styles.detailBadge}>{item.badge}</span> : null}
+      <div className={styles.detailItemRight}>
+        {item.badge ? <span className={styles.detailBadge}>{item.badge}</span> : null}
+        <ChevronRight size={13} className={styles.detailArrow} />
+      </div>
     </Link>
+  );
+}
+
+function ProfileMenu({ open, compact = false, onNavigate }) {
+  const pathname = usePathname() || "";
+
+  if (!open) return null;
+
+  return (
+    <div className={cx(styles.profileMenu, compact ? styles.profileMenuCompact : styles.profileMenuExpanded)}>
+      <div className={styles.profileMenuHead}>
+        <div className={styles.profileAvatarLarge}>J</div>
+        <div className={styles.profileMenuCopy}>
+          <div className={styles.profileMenuName}>Jacob</div>
+          <div className={styles.profileMenuPlan}>Life Command Center</div>
+        </div>
+      </div>
+
+      <div className={styles.profileMetaCard}>
+        <div className={styles.profileMetaLabel}>Workspace</div>
+        <div className={styles.profileMetaValue}>Premium finance OS</div>
+        <div className={styles.profileMetaSub}>Account and system controls now live here instead of cluttering the nav.</div>
+      </div>
+
+      <div className={styles.profileLinks}>
+        {PROFILE_ITEMS.map((item) => {
+          const Icon = item.icon;
+          const active = isActive(pathname, item.href);
+
+          return (
+            <Link
+              key={`${item.href}-${item.label}`}
+              href={item.href}
+              className={cx(styles.profileLink, active && styles.profileLinkActive)}
+              onClick={() => onNavigate?.()}
+            >
+              <div className={styles.profileLinkIcon}>
+                <Icon size={15} strokeWidth={2} />
+              </div>
+              <div className={styles.profileLinkCopy}>
+                <div className={styles.profileLinkTitle}>{item.label}</div>
+                <div className={styles.profileLinkNote}>{item.note}</div>
+              </div>
+            </Link>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function ExpandedAccountButton({ open, onToggle }) {
+  return (
+    <button
+      type="button"
+      className={cx(styles.accountButton, open && styles.accountButtonOpen)}
+      aria-expanded={open}
+      aria-label="Open account menu"
+      onClick={onToggle}
+    >
+      <div className={styles.accountAvatar}>J</div>
+      <div className={styles.accountCopy}>
+        <div className={styles.accountName}>Jacob</div>
+        <div className={styles.accountPlan}>Account & settings</div>
+      </div>
+      <div className={styles.accountChevronWrap}>
+        <ChevronRight size={14} className={cx(styles.accountChevron, open && styles.accountChevronOpen)} />
+      </div>
+    </button>
+  );
+}
+
+function CompactAccountButton({ open, onToggle }) {
+  return (
+    <button
+      type="button"
+      className={cx(styles.compactAccountButton, open && styles.compactAccountButtonOpen)}
+      aria-expanded={open}
+      aria-label="Open account menu"
+      title="Account"
+      onClick={onToggle}
+    >
+      <div className={styles.profileAvatar}>J</div>
+      <div className={styles.profileButtonGlow} />
+    </button>
   );
 }
 
@@ -72,14 +193,62 @@ export default function SideNav({
   onCloseMobile,
 }) {
   const pathname = usePathname() || "";
+  const [profileOpen, setProfileOpen] = useState(false);
+  const compactProfileRef = useRef(null);
+  const expandedProfileRef = useRef(null);
+
   const activeItem = NAV_ITEMS.find((item) => isActive(pathname, item.href)) || NAV_ITEMS[0];
 
-  const overviewItems = NAV_ITEMS.filter((item) => item.section === "overview");
-  const moneyItems = NAV_ITEMS.filter((item) => item.section === "money");
-  const systemItems = NAV_ITEMS.filter((item) => item.section === "system");
+  const overviewItems = useMemo(() => NAV_ITEMS.filter((item) => item.section === "overview"), []);
+  const moneyItems = useMemo(() => NAV_ITEMS.filter((item) => item.section === "money"), []);
+  const toolItems = useMemo(() => NAV_ITEMS.filter((item) => item.section === "tools"), []);
+
+  useEffect(() => {
+    setProfileOpen(false);
+  }, [pathname, collapsed, mobile]);
+
+  useEffect(() => {
+    function handlePointerDown(event) {
+      const compactNode = compactProfileRef.current;
+      const expandedNode = expandedProfileRef.current;
+      const insideCompact = compactNode?.contains(event.target);
+      const insideExpanded = expandedNode?.contains(event.target);
+      if (!insideCompact && !insideExpanded) {
+        setProfileOpen(false);
+      }
+    }
+
+    function handleEscape(event) {
+      if (event.key === "Escape") {
+        setProfileOpen(false);
+      }
+    }
+
+    document.addEventListener("mousedown", handlePointerDown);
+    window.addEventListener("keydown", handleEscape);
+
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      window.removeEventListener("keydown", handleEscape);
+    };
+  }, []);
+
+  function handleNavigate() {
+    setProfileOpen(false);
+    onCloseMobile?.();
+  }
+
+  const showCompactAccount = collapsed || mobile;
 
   return (
-    <div className={cx(styles.shell, collapsed && !mobile && styles.shellCollapsed, mobile && styles.shellMobile)}>
+    <div
+      className={cx(
+        styles.shell,
+        collapsed && styles.shellCollapsed,
+        mobile && styles.shellMobile,
+        mobile && collapsed && styles.shellMobileCollapsed
+      )}
+    >
       <div className={styles.iconRail}>
         <button
           type="button"
@@ -109,7 +278,7 @@ export default function SideNav({
               <Link
                 key={item.href}
                 href={item.href}
-                onClick={() => onCloseMobile?.()}
+                onClick={handleNavigate}
                 className={cx(styles.iconButton, active && styles.iconButtonActive)}
                 aria-current={active ? "page" : undefined}
                 title={item.label}
@@ -119,6 +288,13 @@ export default function SideNav({
             );
           })}
         </nav>
+
+        {showCompactAccount ? (
+          <div className={styles.iconRailBottom} ref={compactProfileRef}>
+            <CompactAccountButton open={profileOpen} onToggle={() => setProfileOpen((prev) => !prev)} />
+            <ProfileMenu open={profileOpen} compact onNavigate={handleNavigate} />
+          </div>
+        ) : null}
 
         {mobile ? (
           <button
@@ -133,7 +309,7 @@ export default function SideNav({
         ) : null}
       </div>
 
-      <div className={cx(styles.detailRail, collapsed && !mobile && styles.detailRailCollapsed)}>
+      <div className={cx(styles.detailRail, collapsed && styles.detailRailCollapsed)}>
         <div className={styles.detailHeader}>
           <div>
             <div className={styles.detailEyebrow}>Financial OS</div>
@@ -155,6 +331,9 @@ export default function SideNav({
         <div className={styles.activeSummary}>
           <div className={styles.activeSummaryLabel}>Current</div>
           <div className={styles.activeSummaryName}>{activeItem.label}</div>
+          <div className={styles.activeSummaryNote}>
+            Core pages stay visible. Account and system actions are tucked into the profile control.
+          </div>
         </div>
 
         <div className={styles.detailBody}>
@@ -166,7 +345,7 @@ export default function SideNav({
                   key={item.href}
                   item={item}
                   active={isActive(pathname, item.href)}
-                  onNavigate={onCloseMobile}
+                  onNavigate={handleNavigate}
                 />
               ))}
             </div>
@@ -180,36 +359,33 @@ export default function SideNav({
                   key={item.href}
                   item={item}
                   active={isActive(pathname, item.href)}
-                  onNavigate={onCloseMobile}
+                  onNavigate={handleNavigate}
                 />
               ))}
             </div>
           </div>
 
           <div className={styles.detailSection}>
-            <div className={styles.sectionLabel}>System</div>
+            <div className={styles.sectionLabel}>Tools</div>
             <div className={styles.detailList}>
-              {systemItems.map((item) => (
+              {toolItems.map((item) => (
                 <NavDetailItem
                   key={item.href}
                   item={item}
                   active={isActive(pathname, item.href)}
-                  onNavigate={onCloseMobile}
+                  onNavigate={handleNavigate}
                 />
               ))}
             </div>
           </div>
         </div>
 
-        <div className={styles.detailFooter}>
-          <div className={styles.userRow}>
-            <div className={styles.avatar}>J</div>
-            <div className={styles.userCopy}>
-              <div className={styles.userName}>Jacob</div>
-              <div className={styles.userPlan}>Life Command Center</div>
-            </div>
+        {!collapsed ? (
+          <div className={styles.detailFooter} ref={expandedProfileRef}>
+            <ExpandedAccountButton open={profileOpen} onToggle={() => setProfileOpen((prev) => !prev)} />
+            <ProfileMenu open={profileOpen} onNavigate={handleNavigate} />
           </div>
-        </div>
+        ) : null}
       </div>
     </div>
   );

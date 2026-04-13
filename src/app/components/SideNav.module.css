@@ -1,13 +1,13 @@
 .shell {
   display: grid;
-  grid-template-columns: 58px minmax(0, 1fr);
+  grid-template-columns: 62px minmax(0, 1fr);
   height: 100%;
   min-height: 0;
-  overflow: hidden;
+  overflow: visible;
   border-radius: 20px;
   border: 1px solid rgba(255, 255, 255, 0.06);
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.018), rgba(255, 255, 255, 0) 76px),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.018), rgba(255, 255, 255, 0) 84px),
     rgba(6, 10, 16, 0.96);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.028),
@@ -15,8 +15,9 @@
     0 18px 44px rgba(0, 0, 0, 0.34);
 }
 
-.shellCollapsed {
-  grid-template-columns: 58px 0fr;
+.shellCollapsed,
+.shellMobileCollapsed {
+  grid-template-columns: 62px 0fr;
 }
 
 .shellMobile {
@@ -38,15 +39,20 @@
 
 .logoButton,
 .collapseButton,
-.mobileClose {
+.mobileClose,
+.accountButton,
+.compactAccountButton {
   appearance: none;
   border: 0;
   background: transparent;
   padding: 0;
 }
 
-.logoButton {
-  flex: 0 0 auto;
+.logoButton,
+.collapseButton,
+.mobileClose,
+.accountButton,
+.compactAccountButton {
   cursor: pointer;
 }
 
@@ -81,7 +87,8 @@
   scrollbar-width: none;
 }
 
-.iconRailList::-webkit-scrollbar {
+.iconRailList::-webkit-scrollbar,
+.detailBody::-webkit-scrollbar {
   display: none;
 }
 
@@ -103,11 +110,13 @@
     box-shadow 140ms ease;
 }
 
-.iconButton:hover {
+.iconButton:hover,
+.iconButton:focus-visible {
   background: rgba(255, 255, 255, 0.04);
   color: rgba(226, 234, 248, 0.84);
   border-color: rgba(255, 255, 255, 0.06);
   transform: translateY(-1px);
+  outline: none;
 }
 
 .iconButtonActive {
@@ -134,17 +143,71 @@
   box-shadow: 0 0 12px rgba(109, 160, 255, 0.45);
 }
 
-.mobileClose {
-  width: 36px;
-  height: 36px;
+.iconRailBottom {
+  position: relative;
   margin-top: auto;
-  border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.04);
-  color: rgba(232, 237, 245, 0.82);
+  padding-top: 6px;
+}
+
+.compactAccountButton {
+  position: relative;
+  width: 42px;
+  height: 42px;
+  border-radius: 999px;
   display: grid;
   place-items: center;
-  cursor: pointer;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0)),
+    rgba(255, 255, 255, 0.035);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.compactAccountButtonOpen {
+  border-color: rgba(123, 166, 247, 0.22);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 0 0 1px rgba(78, 124, 226, 0.08);
+}
+
+.profileAvatar,
+.accountAvatar,
+.profileAvatarLarge {
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  font-weight: 900;
+  color: #091019;
+  background: linear-gradient(135deg, rgba(176, 196, 238, 0.94), rgba(91, 143, 232, 0.82));
+}
+
+.profileAvatar {
+  width: 28px;
+  height: 28px;
+  font-size: 11px;
+}
+
+.accountAvatar {
+  width: 36px;
+  height: 36px;
+  font-size: 13px;
+  flex: 0 0 auto;
+}
+
+.profileAvatarLarge {
+  width: 40px;
+  height: 40px;
+  font-size: 14px;
+  flex: 0 0 auto;
+}
+
+.profileButtonGlow {
+  position: absolute;
+  inset: -4px;
+  border-radius: inherit;
+  pointer-events: none;
+  background: radial-gradient(circle, rgba(102, 154, 255, 0.24), transparent 68%);
+  opacity: 0.7;
 }
 
 .detailRail {
@@ -177,11 +240,17 @@
   gap: 10px;
 }
 
-.detailEyebrow {
+.detailEyebrow,
+.sectionLabel,
+.activeSummaryLabel,
+.profileMetaLabel {
   font-size: 9px;
   font-weight: 800;
   letter-spacing: 0.12em;
   text-transform: uppercase;
+}
+
+.detailEyebrow {
   color: rgba(160, 178, 210, 0.42);
 }
 
@@ -203,17 +272,18 @@
   color: rgba(232, 237, 245, 0.72);
   display: grid;
   place-items: center;
-  cursor: pointer;
   transition:
     background 140ms ease,
     border-color 140ms ease,
     transform 140ms ease;
 }
 
-.collapseButton:hover {
+.collapseButton:hover,
+.collapseButton:focus-visible {
   background: rgba(255, 255, 255, 0.05);
   border-color: rgba(255, 255, 255, 0.12);
   transform: translateY(-1px);
+  outline: none;
 }
 
 .activeSummary {
@@ -227,9 +297,6 @@
 }
 
 .activeSummaryLabel {
-  font-size: 9px;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
   color: rgba(255, 255, 255, 0.32);
 }
 
@@ -240,6 +307,13 @@
   color: #fff;
 }
 
+.activeSummaryNote {
+  margin-top: 6px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.45);
+}
+
 .detailBody {
   flex: 1 1 auto;
   min-height: 0;
@@ -248,19 +322,12 @@
   scrollbar-width: none;
 }
 
-.detailBody::-webkit-scrollbar {
-  display: none;
-}
-
 .detailSection {
   padding: 12px 10px 0;
 }
 
 .sectionLabel {
   padding: 0 6px 6px;
-  font-size: 9px;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
   color: rgba(255, 255, 255, 0.28);
 }
 
@@ -286,11 +353,13 @@
     transform 140ms ease;
 }
 
-.detailItem:hover {
+.detailItem:hover,
+.detailItem:focus-visible {
   background: rgba(255, 255, 255, 0.04);
   border-color: rgba(255, 255, 255, 0.06);
   color: rgba(232, 237, 245, 0.9);
   transform: translateY(-1px);
+  outline: none;
 }
 
 .detailItemActive {
@@ -302,14 +371,27 @@
   box-shadow: inset 2px 0 0 rgba(123, 166, 247, 0.5);
 }
 
-.detailItemLeft {
+.detailItemLeft,
+.detailItemRight,
+.accountCopy,
+.profileMenuHead {
   display: inline-flex;
   align-items: center;
   gap: 9px;
   min-width: 0;
 }
 
-.detailIcon {
+.detailItemRight {
+  flex: 0 0 auto;
+}
+
+.detailArrow {
+  color: rgba(255, 255, 255, 0.26);
+}
+
+.detailIcon,
+.profileLinkIcon,
+.accountChevronWrap {
   width: 24px;
   height: 24px;
   border-radius: 8px;
@@ -320,7 +402,10 @@
   flex: 0 0 auto;
 }
 
-.detailLabel {
+.detailLabel,
+.profileLinkTitle,
+.accountName,
+.profileMenuName {
   font-size: 12.5px;
   font-weight: 700;
   white-space: nowrap;
@@ -342,60 +427,197 @@
 }
 
 .detailFooter {
+  position: relative;
   margin-top: auto;
   padding: 14px 10px 10px;
   border-top: 1px solid rgba(255, 255, 255, 0.06);
 }
 
-.userRow {
-  min-height: 44px;
-  padding: 0 8px;
-  border-radius: 11px;
+.accountButton {
+  width: 100%;
+  min-height: 56px;
+  padding: 10px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: 10px;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.016), rgba(255, 255, 255, 0)),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.018), rgba(255, 255, 255, 0)),
     rgba(255, 255, 255, 0.018);
+  color: #fff;
+  transition:
+    border-color 140ms ease,
+    background 140ms ease,
+    transform 140ms ease,
+    box-shadow 140ms ease;
 }
 
-.avatar {
-  width: 28px;
-  height: 28px;
-  border-radius: 999px;
-  background: linear-gradient(135deg, rgba(176, 196, 238, 0.94), rgba(91, 143, 232, 0.82));
-  color: #091019;
-  font-size: 11px;
-  font-weight: 900;
+.accountButton:hover,
+.accountButton:focus-visible,
+.accountButtonOpen {
+  border-color: rgba(123, 166, 247, 0.18);
+  background:
+    linear-gradient(180deg, rgba(123, 166, 247, 0.1), rgba(255, 255, 255, 0.015)),
+    rgba(255, 255, 255, 0.028);
+  transform: translateY(-1px);
+  box-shadow: 0 0 0 1px rgba(78, 124, 226, 0.06);
+  outline: none;
+}
+
+.accountCopy {
+  flex: 1 1 auto;
   display: grid;
-  place-items: center;
+  gap: 2px;
+  justify-items: start;
 }
 
-.userCopy {
+.accountPlan,
+.profileMenuPlan,
+.profileLinkNote,
+.profileMetaSub {
+  font-size: 10px;
+  line-height: 1.45;
+  color: rgba(255, 255, 255, 0.42);
+}
+
+.accountChevron {
+  transition: transform 160ms ease;
+}
+
+.accountChevronOpen {
+  transform: rotate(90deg);
+}
+
+.profileMenu {
+  padding: 12px;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0) 64px),
+    rgba(7, 11, 18, 0.98);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.03),
+    0 20px 44px rgba(0, 0, 0, 0.36);
+  z-index: 30;
+}
+
+.profileMenuExpanded {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(100% + 10px);
+}
+
+.profileMenuCompact {
+  position: absolute;
+  left: calc(100% + 12px);
+  bottom: 0;
+  width: min(286px, calc(100vw - 118px));
+}
+
+.profileMenuHead {
+  gap: 10px;
+}
+
+.profileMenuCopy {
   min-width: 0;
 }
 
-.userName {
-  font-size: 11px;
+.profileMenuName {
+  color: #fff;
+}
+
+.profileMetaCard {
+  margin-top: 12px;
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.profileMetaLabel {
+  color: rgba(255, 255, 255, 0.32);
+}
+
+.profileMetaValue {
+  margin-top: 4px;
+  font-size: 13px;
   font-weight: 800;
   color: #fff;
 }
 
-.userPlan {
-  margin-top: 1px;
-  font-size: 10px;
-  color: rgba(255, 255, 255, 0.38);
+.profileLinks {
+  margin-top: 12px;
+  display: grid;
+  gap: 6px;
+}
+
+.profileLink {
+  min-height: 52px;
+  padding: 10px;
+  border-radius: 14px;
+  border: 1px solid transparent;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: rgba(232, 237, 245, 0.82);
+  transition:
+    background 140ms ease,
+    border-color 140ms ease,
+    transform 140ms ease;
+}
+
+.profileLink:hover,
+.profileLink:focus-visible {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.06);
+  transform: translateY(-1px);
+  outline: none;
+}
+
+.profileLinkActive {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(123, 166, 247, 0.16);
+}
+
+.profileLinkCopy {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.mobileClose {
+  width: 36px;
+  height: 36px;
+  margin-top: 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(232, 237, 245, 0.82);
+  display: grid;
+  place-items: center;
 }
 
 @media (max-width: 1100px) {
-  .shell {
-    height: 100%;
-    max-height: 100%;
-  }
-
   .detailRailCollapsed {
     opacity: 1;
     transform: none;
     pointer-events: auto;
+  }
+
+  .profileMenuCompact {
+    width: min(280px, calc(100vw - 118px));
+  }
+}
+
+@media (max-width: 640px) {
+  .shell,
+  .shellMobile {
+    border-radius: 18px;
+  }
+
+  .profileMenuCompact {
+    width: min(272px, calc(100vw - 104px));
   }
 }
