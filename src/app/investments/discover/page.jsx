@@ -1,108 +1,38 @@
 "use client";
 
 import Link from "next/link";
-import { useParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import {
-  ArrowLeft,
   ArrowRight,
-  BadgeDollarSign,
   BookOpenText,
   ExternalLink,
-  Layers3,
   Newspaper,
   Plus,
-  TrendingDown,
-  TrendingUp,
+  Search,
+  Star,
   Wallet,
 } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import GlassPane from "../../components/GlassPane";
 import styles from "../InvestmentsPage.module.css";
+import { ActionBtn, ActionLink, MiniPill } from "../investments.components";
 import {
+  BOARD_SYMBOLS,
+  DISCOVER_QUICK_SEARCHES,
+  DISCOVER_TYPES,
+  asSymbol,
   fullDateTime,
   money,
+  normalizeMarketResults,
+  parseBatchPrices,
   pct,
-  shortDate,
   signedMoney,
   toneByValue,
   toneMeta,
-  toNum,
 } from "../investments.helpers";
 
 function cx(...parts) {
   return parts.filter(Boolean).join(" ");
-}
-
-function MiniPill({ children, tone = "neutral" }) {
-  const meta = toneMeta(tone);
-
-  return (
-    <div
-      className={styles.miniPill}
-      style={{
-        borderColor: meta.border,
-        color: tone === "neutral" ? "rgba(255,255,255,0.9)" : meta.text,
-        boxShadow: `0 0 12px ${meta.glow}`,
-      }}
-    >
-      {children}
-    </div>
-  );
-}
-
-function ActionLink({ href, children }) {
-  return (
-    <Link href={href} className={styles.actionLink}>
-      {children}
-    </Link>
-  );
-}
-
-function ActionBtn({
-  children,
-  onClick,
-  variant = "ghost",
-  disabled = false,
-  type = "button",
-  full = false,
-}) {
-  return (
-    <button
-      type={type}
-      onClick={onClick}
-      disabled={disabled}
-      className={cx(
-        styles.actionBtn,
-        variant === "primary" && styles.actionBtnPrimary,
-        variant === "danger" && styles.actionBtnDanger,
-        full && styles.actionBtnFull
-      )}
-    >
-      {children}
-    </button>
-  );
-}
-
-function PaneHeader({ title, subcopy, right }) {
-  return (
-    <div className={styles.paneHeader}>
-      <div style={{ minWidth: 0 }}>
-        <div className={styles.paneTitle}>{title}</div>
-        {subcopy ? <div className={styles.paneSub}>{subcopy}</div> : null}
-      </div>
-      {right || null}
-    </div>
-  );
-}
-
-function Field({ label, children }) {
-  return (
-    <label className={styles.fieldWrap}>
-      <span>{label}</span>
-      {children}
-    </label>
-  );
 }
 
 function EmptyState({ title, detail }) {
@@ -143,9 +73,8 @@ function HeadlineRow({ item }) {
   );
 }
 
-function TradeLedgerRow({ row, selected, onClick }) {
-  const type = String(row.txn_type || "").toUpperCase();
-  const tone = type === "SELL" ? toneByValue(row.realizedOnTxn) : "neutral";
+function ResultRow({ row, quote, selected, onClick, owned, watched }) {
+  const tone = toneByValue(quote?.changesPercentage ?? quote?.change ?? 0);
   const meta = toneMeta(tone);
 
   return (
@@ -168,145 +97,279 @@ function TradeLedgerRow({ row, selected, onClick }) {
         style={{
           borderColor: meta.border,
           background: meta.iconBg,
-          color: type === "SELL" ? meta.text : "#fff",
+          color: tone === "neutral" ? "#fff" : meta.text,
         }}
       >
-        {type === "SELL" ? "S" : "B"}
+        {row.symbol.slice(0, 2)}
       </div>
 
       <div className={styles.navigatorMain}>
         <div className={styles.navigatorTop}>
-          <div className={styles.navigatorName}>
-            {type} • {toNum(row.qty).toLocaleString(undefined, { maximumFractionDigits: 4 })}
+          <div className={styles.navigatorName}>{row.symbol}</div>
+          <div className={styles.navigatorAmount}>
+            {Number.isFinite(Number(quote?.price)) ? money(quote.price) : "—"}
           </div>
-          <div className={styles.navigatorAmount}>{money(toNum(row.qty) * toNum(row.price))}</div>
         </div>
 
         <div className={styles.navigatorMeta}>
-          {money(row.price)} • {shortDate(row.txn_date)}
+          {row.name} • {row.exchange || "Market"} • {row.currency || "USD"}
         </div>
 
         <div className={styles.navigatorBadges}>
-          <MiniPill tone={tone}>{type}</MiniPill>
-          {type === "SELL" ? (
-            <MiniPill tone={tone}>{signedMoney(row.realizedOnTxn)}</MiniPill>
-          ) : (
-            <MiniPill>basis build</MiniPill>
-          )}
+          <MiniPill>{row.type || "Stock"}</MiniPill>
+          {quote?.changesPercentage != null ? (
+            <MiniPill tone={tone}>{pct(quote.changesPercentage)}</MiniPill>
+          ) : null}
+          {owned ? <MiniPill tone="green">on desk</MiniPill> : null}
+          {watched ? <MiniPill tone="amber">watching</MiniPill> : null}
         </div>
       </div>
     </button>
   );
 }
 
-export default function InvestmentAssetPage() {
-  const params = useParams();
-  const assetId = params?.id;
+function DeskRow({ asset }) {
+  return (
+    <Link href={`/investments/${asset.id}`} className={styles.favoriteRow}>
+      <div className={styles.favoriteIcon}>
+        <Wallet size={14} />
+      </div>
+      <div className={styles.favoriteMain}>
+        <div className={styles.favoriteName}>{asSymbol(asset.symbol)}</div>
+        <div className={styles.favoriteSub}>{asset.account || "Brokerage"}</div>
+      </div>
+      <div className={styles.favoritePrice}>Desk</div>
+    </Link>
+  );
+}
 
-  const [asset, setAsset] = useState(null);
-  const [txns, setTxns] = useState([]);
-  const [livePrice, setLivePrice] = useState(null);
+function WatchRow({ row, quote }) {
+  const tone = toneByValue(quote?.changesPercentage ?? quote?.change ?? 0);
+  const meta = toneMeta(tone);
+
+  return (
+    <Link href={`/market/${asSymbol(row.symbol)}`} className={styles.favoriteRow}>
+      <div
+        className={styles.favoriteIcon}
+        style={{
+          borderColor: meta.border,
+          background: meta.iconBg,
+          color: tone === "neutral" ? "#fff" : meta.text,
+        }}
+      >
+        <Star size={14} />
+      </div>
+      <div className={styles.favoriteMain}>
+        <div className={styles.favoriteName}>{asSymbol(row.symbol)}</div>
+        <div className={styles.favoriteSub}>{row.name || "Saved name"}</div>
+      </div>
+      <div
+        className={styles.favoritePrice}
+        style={{ color: tone === "neutral" ? "rgba(255,255,255,0.76)" : meta.text }}
+      >
+        {Number.isFinite(Number(quote?.price)) ? money(quote.price) : "—"}
+      </div>
+    </Link>
+  );
+}
+
+function BoardCard({ symbol, label, quote }) {
+  const tone = toneByValue(quote?.changesPercentage ?? quote?.change ?? 0);
+  const meta = toneMeta(tone);
+
+  return (
+    <Link href={`/market/${symbol}`} className={styles.marketCard}>
+      <div className={styles.marketCardTop}>
+        <div>
+          <div className={styles.marketLabel}>{label}</div>
+          <div className={styles.marketSymbol}>{symbol}</div>
+        </div>
+
+        <div
+          className={styles.marketIcon}
+          style={{
+            borderColor: meta.border,
+            background: meta.iconBg,
+            color: tone === "neutral" ? "#fff" : meta.text,
+          }}
+        >
+          <BookOpenText size={14} />
+        </div>
+      </div>
+
+      <div className={styles.marketPrice}>
+        {Number.isFinite(Number(quote?.price)) ? money(quote.price) : "—"}
+      </div>
+
+      <div
+        className={styles.marketMove}
+        style={{ color: tone === "neutral" ? "rgba(255,255,255,0.62)" : meta.text }}
+      >
+        {Number.isFinite(Number(quote?.change)) ? signedMoney(quote.change) : "Waiting"}
+        {Number.isFinite(Number(quote?.changesPercentage))
+          ? ` • ${pct(quote.changesPercentage)}`
+          : ""}
+      </div>
+    </Link>
+  );
+}
+
+function SnapshotStat({ label, value, note }) {
+  return (
+    <div className={styles.summaryStat}>
+      <div className={styles.summaryLabel}>{label}</div>
+      <div className={styles.summaryValue}>{value}</div>
+      <div className={styles.summaryHint}>{note}</div>
+    </div>
+  );
+}
+
+export default function InvestmentsDiscoverPage() {
+  const [assets, setAssets] = useState([]);
+  const [favorites, setFavorites] = useState([]);
+  const [quotes, setQuotes] = useState({});
   const [news, setNews] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [loadingPrice, setLoadingPrice] = useState(false);
+
+  const [query, setQuery] = useState("");
+  const [type, setType] = useState("ALL");
+  const [results, setResults] = useState([]);
+  const [selectedSymbol, setSelectedSymbol] = useState("");
+
+  const [loadingWorkspace, setLoadingWorkspace] = useState(true);
+  const [loadingSearch, setLoadingSearch] = useState(false);
+  const [working, setWorking] = useState(false);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
 
-  const [selectedTradeId, setSelectedTradeId] = useState("");
-  const [boardTab, setBoardTab] = useState("overview");
-
-  const [tradeType, setTradeType] = useState("BUY");
-  const [tradeQty, setTradeQty] = useState("");
-  const [tradePrice, setTradePrice] = useState("");
-  const [tradeDate, setTradeDate] = useState(new Date().toISOString().slice(0, 10));
-
   useEffect(() => {
-    async function load() {
-      setLoading(true);
+    let cancelled = false;
+
+    async function loadWorkspace() {
+      setLoadingWorkspace(true);
       setError("");
 
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
-      if (!user) {
-        setError("You must be logged in.");
-        setLoading(false);
-        return;
-      }
-
-      const { data: assetRow, error: assetError } = await supabase
-        .from("investment_assets")
-        .select("*")
-        .eq("id", assetId)
-        .eq("user_id", user.id)
-        .single();
-
-      if (assetError || !assetRow) {
-        console.error(assetError);
-        setError("Could not load asset.");
-        setLoading(false);
-        return;
-      }
-
-      const { data: txnRows, error: txnError } = await supabase
-        .from("investment_transactions")
-        .select("*")
-        .eq("asset_id", assetId)
-        .eq("user_id", user.id)
-        .order("txn_date", { ascending: true });
-
-      if (txnError) {
-        console.error(txnError);
-        setError("Could not load transactions.");
-        setLoading(false);
-        return;
-      }
-
-      setAsset(assetRow);
-      setTxns(txnRows || []);
-      setSelectedTradeId((txnRows || []).length ? txnRows[txnRows.length - 1].id : "");
-      setLoading(false);
-    }
-
-    if (assetId) load();
-  }, [assetId]);
-
-  useEffect(() => {
-    async function loadPrice() {
-      const symbol = String(asset?.symbol || "").toUpperCase().trim();
-      if (!symbol) {
-        setLivePrice(null);
-        return;
-      }
-
-      setLoadingPrice(true);
-
       try {
-        const res = await fetch(`/api/prices?symbol=${encodeURIComponent(symbol)}`, {
-          cache: "no-store",
-        });
-        const data = await res.json();
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
 
-        if (res.ok && Number.isFinite(Number(data?.price)) && Number(data.price) > 0) {
-          setLivePrice(Number(data.price));
-        } else {
-          setLivePrice(null);
+        if (!user) {
+          if (!cancelled) {
+            setLoadingWorkspace(false);
+            setError("You must be logged in.");
+          }
+          return;
+        }
+
+        const [assetRes, favoriteRes] = await Promise.all([
+          supabase
+            .from("investment_assets")
+            .select("*")
+            .eq("user_id", user.id)
+            .order("created_at", { ascending: false }),
+          supabase
+            .from("investment_favorites")
+            .select("*")
+            .eq("user_id", user.id)
+            .order("created_at", { ascending: false }),
+        ]);
+
+        if (assetRes.error || favoriteRes.error) {
+          console.error(assetRes.error || favoriteRes.error);
+          if (!cancelled) {
+            setError("Failed loading research workspace.");
+            setLoadingWorkspace(false);
+          }
+          return;
+        }
+
+        if (!cancelled) {
+          setAssets(assetRes.data || []);
+          setFavorites(favoriteRes.data || []);
+          setLoadingWorkspace(false);
         }
       } catch (err) {
-        console.error("price fetch failed", err);
-        setLivePrice(null);
+        console.error(err);
+        if (!cancelled) {
+          setError("Failed loading research workspace.");
+          setLoadingWorkspace(false);
+        }
       }
-
-      setLoadingPrice(false);
     }
 
-    if (asset?.symbol) loadPrice();
-  }, [asset]);
+    loadWorkspace();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const ownedSymbols = useMemo(() => {
+    return new Set(assets.map((asset) => asSymbol(asset.symbol)).filter(Boolean));
+  }, [assets]);
+
+  const favoriteSymbols = useMemo(() => {
+    return new Set(favorites.map((row) => asSymbol(row.symbol)).filter(Boolean));
+  }, [favorites]);
+
+  const selectedResult = useMemo(() => {
+    return results.find((row) => row.symbol === selectedSymbol) || results[0] || null;
+  }, [results, selectedSymbol]);
+
+  const watchSymbols = useMemo(() => {
+    const resultSymbols = results.slice(0, 16).map((row) => asSymbol(row.symbol));
+    const saved = favorites.slice(0, 10).map((row) => asSymbol(row.symbol));
+    const owned = assets.slice(0, 10).map((row) => asSymbol(row.symbol));
+    const selected = selectedResult?.symbol ? [asSymbol(selectedResult.symbol)] : [];
+
+    return [
+      ...new Set([
+        ...BOARD_SYMBOLS.map((b) => b.symbol),
+        ...resultSymbols,
+        ...saved,
+        ...owned,
+        ...selected,
+      ]),
+    ].filter(Boolean);
+  }, [results, favorites, assets, selectedResult]);
 
   useEffect(() => {
+    let cancelled = false;
+
+    async function loadPrices() {
+      if (!watchSymbols.length) {
+        setQuotes({});
+        return;
+      }
+
+      try {
+        const res = await fetch(
+          `/api/prices-batch?symbols=${encodeURIComponent(watchSymbols.join(","))}`,
+          { cache: "no-store" }
+        );
+        const data = await res.json();
+
+        if (!cancelled && res.ok) {
+          setQuotes(parseBatchPrices(data));
+        }
+      } catch (err) {
+        if (cancelled) return;
+        console.error("discover price batch failed", err);
+      }
+    }
+
+    loadPrices();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [watchSymbols]);
+
+  useEffect(() => {
+    let cancelled = false;
+
     async function loadNews() {
-      const symbol = String(asset?.symbol || "").toUpperCase().trim();
+      const symbol = asSymbol(selectedResult?.symbol);
       if (!symbol) {
         setNews([]);
         return;
@@ -314,134 +377,73 @@ export default function InvestmentAssetPage() {
 
       try {
         const res = await fetch(
-          `/api/stock-news?symbols=${encodeURIComponent(symbol)}&limit=8`,
+          `/api/stock-news?symbols=${encodeURIComponent(symbol)}&limit=6`,
           { cache: "no-store" }
         );
         const data = await res.json();
-        setNews(res.ok && Array.isArray(data?.articles) ? data.articles : []);
+
+        if (!cancelled) {
+          setNews(res.ok && Array.isArray(data?.articles) ? data.articles : []);
+        }
       } catch (err) {
-        console.error("news fetch failed", err);
+        if (cancelled) return;
+        console.error("discover news failed", err);
         setNews([]);
       }
     }
 
-    if (asset?.symbol) loadNews();
-  }, [asset]);
+    loadNews();
 
-  const breakdown = useMemo(() => {
-    const ordered = [...txns].sort((a, b) => {
-      const ad = new Date(a.txn_date || 0).getTime();
-      const bd = new Date(b.txn_date || 0).getTime();
-      return ad - bd;
-    });
-
-    let shares = 0;
-    let remainingBasis = 0;
-    let totalBoughtShares = 0;
-    let totalSoldShares = 0;
-    let totalBuyCost = 0;
-    let totalSellProceeds = 0;
-    let costRemovedBySells = 0;
-    let realizedPnl = 0;
-
-    const rows = ordered.map((t) => {
-      const qty = toNum(t.qty);
-      const price = toNum(t.price);
-      const txnType = String(t.txn_type || "").toUpperCase();
-
-      const avgCostBefore = shares > 0 ? remainingBasis / shares : 0;
-      let basisRemoved = 0;
-      let realizedOnTxn = 0;
-      let sharesAfter = shares;
-      let basisAfter = remainingBasis;
-
-      if (qty > 0 && price >= 0) {
-        if (txnType === "BUY") {
-          totalBoughtShares += qty;
-          totalBuyCost += qty * price;
-          sharesAfter = shares + qty;
-          basisAfter = remainingBasis + qty * price;
-        } else if (txnType === "SELL") {
-          totalSoldShares += qty;
-          totalSellProceeds += qty * price;
-          basisRemoved = avgCostBefore * qty;
-          costRemovedBySells += basisRemoved;
-          realizedOnTxn = qty * price - basisRemoved;
-          realizedPnl += realizedOnTxn;
-          sharesAfter = shares - qty;
-          basisAfter = remainingBasis - basisRemoved;
-        }
-      }
-
-      shares = sharesAfter;
-      remainingBasis = basisAfter;
-
-      return {
-        ...t,
-        avgCostBefore,
-        basisRemoved,
-        realizedOnTxn,
-        sharesAfter,
-        basisAfter,
-      };
-    });
-
-    const remainingShares = shares;
-    const currentValue =
-      Number.isFinite(Number(livePrice)) && Number(livePrice) > 0
-        ? remainingShares * Number(livePrice)
-        : null;
-
-    const avgCostRemaining = remainingShares > 0 ? remainingBasis / remainingShares : 0;
-
-    const unrealizedPnl = currentValue != null ? currentValue - remainingBasis : null;
-
-    const unrealizedPct =
-      currentValue != null && remainingBasis > 0
-        ? ((currentValue - remainingBasis) / remainingBasis) * 100
-        : null;
-
-    return {
-      rows,
-      remainingShares,
-      remainingBasis,
-      avgCostRemaining,
-      realizedPnl,
-      totalBoughtShares,
-      totalSoldShares,
-      totalBuyCost,
-      totalSellProceeds,
-      costRemovedBySells,
-      currentValue,
-      unrealizedPnl,
-      unrealizedPct,
+    return () => {
+      cancelled = true;
     };
-  }, [txns, livePrice]);
+  }, [selectedResult]);
 
-  const assetTone =
-    breakdown.unrealizedPnl == null ? "neutral" : toneByValue(breakdown.unrealizedPnl);
+  async function runSearch(nextQuery = query, nextType = type) {
+    const clean = String(nextQuery || "").trim();
 
-  const selectedTrade =
-    breakdown.rows.find((row) => row.id === selectedTradeId) ||
-    breakdown.rows[breakdown.rows.length - 1] ||
-    null;
-
-  async function logTrade() {
+    setLoadingSearch(true);
     setStatus("");
     setError("");
 
-    const qty = toNum(tradeQty, NaN);
-    const price = toNum(tradePrice, NaN);
+    try {
+      if (!clean) {
+        setResults([]);
+        setSelectedSymbol("");
+        setLoadingSearch(false);
+        return;
+      }
 
-    if (!Number.isFinite(qty) || qty <= 0) {
-      setError("Enter a valid quantity.");
-      return;
-    }
+      const res = await fetch(
+        `/api/market-search?query=${encodeURIComponent(clean)}&type=${encodeURIComponent(nextType)}&limit=24`,
+        { cache: "no-store" }
+      );
+      const data = await res.json();
 
-    if (!Number.isFinite(price) || price <= 0) {
-      setError("Enter a valid price.");
-      return;
+      if (!res.ok) {
+        setError(data?.error || "Search failed.");
+        setLoadingSearch(false);
+        return;
+      }
+
+      const nextResults = normalizeMarketResults(data?.results || []);
+      setResults(nextResults);
+      setSelectedSymbol(nextResults[0]?.symbol || "");
+    } catch (err) {
+      console.error(err);
+      setError("Search failed.");
+    } finally {
+      setLoadingSearch(false);
     }
+  }
+
+  async function addToDesk(symbol) {
+    const clean = asSymbol(symbol);
+    if (!clean) return;
+
+    setWorking(true);
+    setStatus("");
+    setError("");
 
     try {
       const {
@@ -450,66 +452,118 @@ export default function InvestmentAssetPage() {
 
       if (!user) {
         setError("You must be logged in.");
+        setWorking(false);
+        return;
+      }
+
+      if (ownedSymbols.has(clean)) {
+        setStatus(`${clean} is already on your desk.`);
+        setWorking(false);
         return;
       }
 
       const { data, error: insertError } = await supabase
-        .from("investment_transactions")
+        .from("investment_assets")
         .insert({
           user_id: user.id,
-          asset_id: assetId,
-          txn_type: tradeType,
-          qty,
-          price,
-          txn_date: tradeDate,
+          symbol: clean,
+          asset_type: "stock",
+          account: "Brokerage",
         })
         .select()
         .single();
 
       if (insertError) {
         console.error(insertError);
-        setError("Could not save trade.");
+        setError(`Could not add ${clean}.`);
+        setWorking(false);
         return;
       }
 
-      setTxns((prev) => [...prev, data]);
-      setSelectedTradeId(data.id);
-      setTradeQty("");
-      setTradePrice("");
-      setBoardTab("ledger");
-      setStatus(`${tradeType} saved to ledger.`);
+      setAssets((prev) => [data, ...prev]);
+      setStatus(`${clean} added to your portfolio desk.`);
     } catch (err) {
       console.error(err);
-      setError("Failed saving trade.");
+      setError("Failed adding the symbol.");
+    } finally {
+      setWorking(false);
     }
   }
 
-  if (loading) {
-    return (
-      <main className={styles.page}>
-        <GlassPane className={styles.gatePanel}>
-          <div className={styles.gateText}>Loading position.</div>
-        </GlassPane>
-      </main>
-    );
-  }
+  async function toggleWatch(row) {
+    const symbol = asSymbol(row?.symbol);
+    if (!symbol) return;
 
-  if (error || !asset) {
-    return (
-      <main className={styles.page}>
-        <GlassPane className={styles.statusStrip}>
-          <div className={styles.statusTitle}>Position error</div>
-          <div className={styles.statusText}>{error || "Could not load asset."}</div>
-        </GlassPane>
-      </main>
-    );
+    setWorking(true);
+    setStatus("");
+    setError("");
+
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) {
+        setError("You must be logged in.");
+        setWorking(false);
+        return;
+      }
+
+      const existing = favorites.find((item) => asSymbol(item.symbol) === symbol);
+
+      if (existing) {
+        const { error: deleteError } = await supabase
+          .from("investment_favorites")
+          .delete()
+          .eq("id", existing.id)
+          .eq("user_id", user.id);
+
+        if (deleteError) {
+          console.error(deleteError);
+          setError(`Could not remove ${symbol} from watchlist.`);
+          setWorking(false);
+          return;
+        }
+
+        setFavorites((prev) => prev.filter((item) => item.id !== existing.id));
+        setStatus(`${symbol} removed from watchlist.`);
+        setWorking(false);
+        return;
+      }
+
+      const { data, error: insertError } = await supabase
+        .from("investment_favorites")
+        .insert({
+          user_id: user.id,
+          symbol,
+          name: row?.name || symbol,
+          asset_type: row?.type || "Stock",
+        })
+        .select()
+        .single();
+
+      if (insertError) {
+        console.error(insertError);
+        setError(`Could not save ${symbol} to watchlist.`);
+        setWorking(false);
+        return;
+      }
+
+      setFavorites((prev) => [data, ...prev]);
+      setStatus(`${symbol} added to watchlist.`);
+    } catch (err) {
+      console.error(err);
+      setError("Failed updating watchlist.");
+    } finally {
+      setWorking(false);
+    }
   }
 
   return (
     <main className={styles.page}>
       {(status || error) && (
         <GlassPane className={styles.statusStrip}>
-          <div className={styles.statusTitle}>{error ? "Position error" : "Position update"}</div>
+          <div className={styles.statusTitle}>{error ? "Research error" : "Research update"}</div>
           <div className={styles.statusText}>{error || status}</div>
         </GlassPane>
       )}
@@ -517,75 +571,27 @@ export default function InvestmentAssetPage() {
       <GlassPane className={styles.summaryStrip}>
         <div className={styles.summaryInner}>
           <div className={styles.titleBlock}>
-            <div className={styles.eyebrow}>Investments / Position</div>
+            <div className={styles.eyebrow}>Stocks / Research Desk</div>
             <div className={styles.pageTitleRow}>
-              <div className={styles.pageTitle}>{String(asset.symbol || "—").toUpperCase()}</div>
-              <MiniPill tone={assetTone}>{asset.asset_type || "asset"}</MiniPill>
+              <div className={styles.pageTitle}>Discover</div>
+              <MiniPill tone="blue">lab</MiniPill>
             </div>
             <div className={styles.workspaceCopy}>
-              One-symbol command page with live value, full ledger, research, and routing.
+              Search, compare, save, and push names into the portfolio desk without the page feeling empty or fake.
             </div>
           </div>
 
           <div className={styles.summaryStats}>
-            <div className={styles.summaryStat}>
-              <div className={styles.summaryLabel}>Current Value</div>
-              <div className={styles.summaryValue}>
-                {breakdown.currentValue != null ? money(breakdown.currentValue) : "—"}
-              </div>
-              <div className={styles.summaryHint}>{asset.account || "Brokerage"}</div>
-            </div>
-
-            <div className={styles.summaryStat}>
-              <div className={styles.summaryLabel}>Unrealized P/L</div>
-              <div
-                className={styles.summaryValue}
-                style={{ color: toneMeta(assetTone).text }}
-              >
-                {breakdown.unrealizedPnl != null ? signedMoney(breakdown.unrealizedPnl) : "—"}
-              </div>
-              <div className={styles.summaryHint}>
-                {breakdown.unrealizedPct != null ? pct(breakdown.unrealizedPct) : "needs live quote"}
-              </div>
-            </div>
-
-            <div className={styles.summaryStat}>
-              <div className={styles.summaryLabel}>Remaining Shares</div>
-              <div className={styles.summaryValue}>
-                {breakdown.remainingShares.toLocaleString(undefined, {
-                  maximumFractionDigits: 4,
-                })}
-              </div>
-              <div className={styles.summaryHint}>avg cost {money(breakdown.avgCostRemaining)}</div>
-            </div>
-
-            <div className={styles.summaryStat}>
-              <div className={styles.summaryLabel}>Realized P/L</div>
-              <div
-                className={styles.summaryValue}
-                style={{ color: toneMeta(toneByValue(breakdown.realizedPnl)).text }}
-              >
-                {signedMoney(breakdown.realizedPnl)}
-              </div>
-              <div className={styles.summaryHint}>closed result</div>
-            </div>
-
-            <div className={styles.summaryStat}>
-              <div className={styles.summaryLabel}>Ledger Rows</div>
-              <div className={styles.summaryValue}>{breakdown.rows.length}</div>
-              <div className={styles.summaryHint}>
-                {loadingPrice ? "price loading" : livePrice ? money(livePrice) : "no live price"}
-              </div>
-            </div>
+            <SnapshotStat label="Positions" value={assets.length} note="on your desk" />
+            <SnapshotStat label="Watchlist" value={favorites.length} note="saved names" />
+            <SnapshotStat label="Results" value={results.length} note="search universe" />
+            <SnapshotStat label="Focus" value={selectedResult?.symbol || "—"} note={selectedResult?.type || "no symbol selected"} />
+            <SnapshotStat label="Workspace" value={loadingWorkspace ? "..." : "Ready"} note="research route live" />
           </div>
 
           <div className={styles.summaryRight}>
-            <MiniPill tone={assetTone}>{asset.symbol}</MiniPill>
             <ActionLink href="/investments">
-              <ArrowLeft size={14} /> Back
-            </ActionLink>
-            <ActionLink href={`/market/${encodeURIComponent(asset.symbol || "")}`}>
-              Open Market <ExternalLink size={14} />
+              Portfolio Desk <ArrowRight size={14} />
             </ActionLink>
           </div>
         </div>
@@ -594,544 +600,416 @@ export default function InvestmentAssetPage() {
       <div className={styles.workspace}>
         <div className={styles.leftCol}>
           <GlassPane className={styles.navigatorPane}>
-            <PaneHeader
-              title="Trade ledger"
-              subcopy="Every fill feeding this position."
-              right={<MiniPill>{breakdown.rows.length} rows</MiniPill>}
-            />
+            <div className={styles.paneHeader}>
+              <div>
+                <div className={styles.paneTitle}>Search universe</div>
+                <div className={styles.paneSub}>Find stocks and ETFs fast.</div>
+              </div>
+              <MiniPill>{results.length} results</MiniPill>
+            </div>
 
-            {breakdown.rows.length ? (
+            <form
+              className={styles.queueToolbar}
+              onSubmit={(e) => {
+                e.preventDefault();
+                runSearch();
+              }}
+            >
+              <label className={styles.searchWrap}>
+                <Search size={14} />
+                <input
+                  className={styles.searchInput}
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Search AAPL, Nvidia, VOO..."
+                />
+              </label>
+
+              <div className={styles.fieldActionRow}>
+                <select
+                  className={styles.field}
+                  value={type}
+                  onChange={(e) => setType(e.target.value)}
+                >
+                  {DISCOVER_TYPES.map((value) => (
+                    <option key={value} value={value}>
+                      {value}
+                    </option>
+                  ))}
+                </select>
+
+                <ActionBtn type="submit" variant="primary">
+                  Search
+                </ActionBtn>
+              </div>
+            </form>
+
+            <div className={styles.chipRow} style={{ marginBottom: 8 }}>
+              {DISCOVER_QUICK_SEARCHES.map((value) => (
+                <button
+                  key={value}
+                  type="button"
+                  className={cx(styles.chipButton, query === value && styles.chipButtonActive)}
+                  onClick={() => {
+                    setQuery(value);
+                    runSearch(value, type);
+                  }}
+                >
+                  {value}
+                </button>
+              ))}
+            </div>
+
+            {loadingSearch ? (
+              <EmptyState title="Searching market" detail="Pulling symbol results now." />
+            ) : results.length ? (
               <div className={styles.navigatorList}>
-                {[...breakdown.rows].reverse().map((row) => (
-                  <TradeLedgerRow
-                    key={row.id}
+                {results.map((row) => (
+                  <ResultRow
+                    key={`${row.symbol}-${row.exchange}`}
                     row={row}
-                    selected={row.id === selectedTrade?.id}
-                    onClick={() => {
-                      setSelectedTradeId(row.id);
-                      setBoardTab("ledger");
-                    }}
+                    quote={quotes[row.symbol] || null}
+                    selected={row.symbol === selectedResult?.symbol}
+                    onClick={() => setSelectedSymbol(row.symbol)}
+                    owned={ownedSymbols.has(row.symbol)}
+                    watched={favoriteSymbols.has(row.symbol)}
                   />
                 ))}
               </div>
             ) : (
-              <EmptyState
-                title="No trades logged"
-                detail="Use the ticket to start building this position."
-              />
+              <div style={{ display: "grid", gap: 8, minHeight: 0, overflow: "auto", paddingRight: 2 }}>
+                <div className={styles.panel}>
+                  <div className={styles.paneHeader}>
+                    <div>
+                      <div className={styles.paneTitle}>Already on desk</div>
+                      <div className={styles.paneSub}>Names you already track.</div>
+                    </div>
+                    <MiniPill>{assets.length}</MiniPill>
+                  </div>
+
+                  {assets.length ? (
+                    <div className={styles.feedList}>
+                      {assets.slice(0, 4).map((asset) => (
+                        <DeskRow key={asset.id} asset={asset} />
+                      ))}
+                    </div>
+                  ) : (
+                    <EmptyState
+                      title="Search the market"
+                      detail="Use a ticker, company name, or one of the quick chips."
+                    />
+                  )}
+                </div>
+
+                <div className={styles.panel}>
+                  <div className={styles.paneHeader}>
+                    <div>
+                      <div className={styles.paneTitle}>Saved names</div>
+                      <div className={styles.paneSub}>Watchlist names ready for later.</div>
+                    </div>
+                    <MiniPill>{favorites.length}</MiniPill>
+                  </div>
+
+                  {favorites.length ? (
+                    <div className={styles.feedList}>
+                      {favorites.slice(0, 4).map((row) => (
+                        <WatchRow
+                          key={row.id}
+                          row={row}
+                          quote={quotes[asSymbol(row.symbol)] || null}
+                        />
+                      ))}
+                    </div>
+                  ) : (
+                    <EmptyState
+                      title="No saved names yet"
+                      detail="Search a name and hit Save Watch to build the list."
+                    />
+                  )}
+                </div>
+              </div>
             )}
           </GlassPane>
         </div>
 
         <div className={styles.mainCol}>
           <GlassPane className={styles.focusPane}>
-            <div className={styles.focusStack}>
-              <div className={styles.focusHeader}>
-                <div>
-                  <div className={styles.eyebrow}>Position command</div>
-                  <div className={styles.focusTitle}>
-                    {String(asset.symbol || "—").toUpperCase()} view
+            {selectedResult ? (
+              <div className={styles.focusStack}>
+                <div className={styles.focusHeader}>
+                  <div>
+                    <div className={styles.eyebrow}>Research focus</div>
+                    <div className={styles.focusTitle}>{selectedResult.symbol}</div>
+                    <div className={styles.focusMeta}>
+                      {selectedResult.name} • {selectedResult.exchange || "Market"} • {selectedResult.type || "Stock"}
+                    </div>
                   </div>
-                  <div className={styles.focusMeta}>
-                    {asset.account || "Brokerage"} • {asset.asset_type || "asset"} • {breakdown.rows.length} ledger rows
+
+                  <div className={styles.focusHeaderRight}>
+                    <div className={styles.focusBadges}>
+                      <MiniPill>{selectedResult.type}</MiniPill>
+                      {Number.isFinite(Number(quotes[selectedResult.symbol]?.changesPercentage)) ? (
+                        <MiniPill tone={toneByValue(quotes[selectedResult.symbol]?.changesPercentage)}>
+                          {pct(quotes[selectedResult.symbol]?.changesPercentage)}
+                        </MiniPill>
+                      ) : null}
+                    </div>
+
+                    <div className={styles.focusActionRow}>
+                      <ActionBtn
+                        variant="primary"
+                        onClick={() => addToDesk(selectedResult.symbol)}
+                        disabled={working || ownedSymbols.has(selectedResult.symbol)}
+                      >
+                        <Plus size={14} />
+                        {ownedSymbols.has(selectedResult.symbol) ? "On Desk" : "Add to Desk"}
+                      </ActionBtn>
+
+                      <ActionBtn
+                        onClick={() => toggleWatch(selectedResult)}
+                        disabled={working}
+                      >
+                        <Star size={14} />
+                        {favoriteSymbols.has(selectedResult.symbol) ? "Watching" : "Save Watch"}
+                      </ActionBtn>
+
+                      <ActionLink href={`/market/${encodeURIComponent(selectedResult.symbol)}`}>
+                        Open Market <ExternalLink size={14} />
+                      </ActionLink>
+                    </div>
                   </div>
                 </div>
 
-                <div className={styles.focusHeaderRight}>
-                  <div className={styles.focusBadges}>
-                    <MiniPill tone={assetTone}>
-                      {loadingPrice ? "Loading price" : livePrice ? money(livePrice) : "No live price"}
-                    </MiniPill>
-                    <MiniPill tone={toneByValue(breakdown.realizedPnl)}>
-                      {signedMoney(breakdown.realizedPnl)}
-                    </MiniPill>
-                  </div>
-                </div>
-              </div>
-
-              <div className={styles.tabRow}>
-                {["overview", "ledger", "research", "ticket"].map((tab) => (
-                  <button
-                    key={tab}
-                    type="button"
-                    className={cx(styles.tab, boardTab === tab && styles.tabActive)}
-                    onClick={() => setBoardTab(tab)}
-                  >
-                    {tab}
-                  </button>
-                ))}
-              </div>
-
-              <div className={styles.tabStage}>
-                {boardTab === "overview" ? (
-                  <div className={styles.splitLayout}>
-                    <div className={styles.panel}>
-                      <PaneHeader
-                        title="Position stack"
-                        subcopy="What is actually sitting in this name right now."
-                        right={<MiniPill tone={assetTone}>{asset.symbol}</MiniPill>}
-                      />
-
-                      <div className={styles.metricGrid}>
-                        <div className={styles.metricCard}>
-                          <div className={styles.metricIcon}>
-                            <Wallet size={16} />
-                          </div>
-                          <div className={styles.metricLabel}>Current Value</div>
-                          <div className={styles.metricValue}>
-                            {breakdown.currentValue != null ? money(breakdown.currentValue) : "—"}
-                          </div>
-                          <div className={styles.metricSub}>Live value of remaining shares.</div>
+                <div className={styles.splitLayout}>
+                  <div className={styles.panel}>
+                    <div className={styles.metricGrid}>
+                      <div className={styles.metricCard}>
+                        <div className={styles.metricIcon}>
+                          <Wallet size={16} />
                         </div>
-
-                        <div className={styles.metricCard}>
-                          <div className={styles.metricIcon}>
-                            <TrendingUp size={16} />
-                          </div>
-                          <div className={styles.metricLabel}>Unrealized</div>
-                          <div
-                            className={styles.metricValue}
-                            style={{ color: toneMeta(assetTone).text }}
-                          >
-                            {breakdown.unrealizedPnl != null ? signedMoney(breakdown.unrealizedPnl) : "—"}
-                          </div>
-                          <div className={styles.metricSub}>
-                            {breakdown.unrealizedPct != null ? pct(breakdown.unrealizedPct) : "Needs live quote"}
-                          </div>
+                        <div className={styles.metricLabel}>Price</div>
+                        <div className={styles.metricValue}>
+                          {Number.isFinite(Number(quotes[selectedResult.symbol]?.price))
+                            ? money(quotes[selectedResult.symbol]?.price)
+                            : "—"}
                         </div>
+                        <div className={styles.metricSub}>Live quote</div>
+                      </div>
 
-                        <div className={styles.metricCard}>
-                          <div className={styles.metricIcon}>
-                            <Layers3 size={16} />
-                          </div>
-                          <div className={styles.metricLabel}>Remaining Shares</div>
-                          <div className={styles.metricValue}>
-                            {breakdown.remainingShares.toLocaleString(undefined, {
-                              maximumFractionDigits: 4,
-                            })}
-                          </div>
-                          <div className={styles.metricSub}>Avg cost {money(breakdown.avgCostRemaining)}</div>
+                      <div className={styles.metricCard}>
+                        <div className={styles.metricIcon}>
+                          <BookOpenText size={16} />
                         </div>
-
-                        <div className={styles.metricCard}>
-                          <div className={styles.metricIcon}>
-                            <BadgeDollarSign size={16} />
-                          </div>
-                          <div className={styles.metricLabel}>Realized</div>
-                          <div
-                            className={styles.metricValue}
-                            style={{ color: toneMeta(toneByValue(breakdown.realizedPnl)).text }}
-                          >
-                            {signedMoney(breakdown.realizedPnl)}
-                          </div>
-                          <div className={styles.metricSub}>Closed result from sells.</div>
+                        <div className={styles.metricLabel}>Daily Move</div>
+                        <div
+                          className={styles.metricValue}
+                          style={{
+                            color: toneMeta(
+                              toneByValue(
+                                quotes[selectedResult.symbol]?.changesPercentage ??
+                                  quotes[selectedResult.symbol]?.change ??
+                                  0
+                              )
+                            ).text,
+                          }}
+                        >
+                          {Number.isFinite(Number(quotes[selectedResult.symbol]?.change))
+                            ? signedMoney(quotes[selectedResult.symbol]?.change)
+                            : "—"}
+                        </div>
+                        <div className={styles.metricSub}>
+                          {Number.isFinite(Number(quotes[selectedResult.symbol]?.changesPercentage))
+                            ? pct(quotes[selectedResult.symbol]?.changesPercentage)
+                            : "waiting"}
                         </div>
                       </div>
 
-                      <div className={styles.heroPanel}>
-                        <div className={styles.heroTop}>
-                          <div>
-                            <div className={styles.metricLabel}>Remaining basis</div>
-                            <div className={styles.heroValue}>{money(breakdown.remainingBasis)}</div>
-                            <div className={styles.heroSub}>
-                              Buy cost {money(breakdown.totalBuyCost)} • Sell proceeds {money(breakdown.totalSellProceeds)}
-                            </div>
-                          </div>
-
-                          <div className={styles.heroMiniGrid}>
-                            <div className={styles.heroMiniCard}>
-                              <div className={styles.metricLabel}>Bought shares</div>
-                              <div className={styles.heroMiniValue}>
-                                {breakdown.totalBoughtShares.toLocaleString(undefined, {
-                                  maximumFractionDigits: 4,
-                                })}
-                              </div>
-                            </div>
-                            <div className={styles.heroMiniCard}>
-                              <div className={styles.metricLabel}>Sold shares</div>
-                              <div className={styles.heroMiniValue}>
-                                {breakdown.totalSoldShares.toLocaleString(undefined, {
-                                  maximumFractionDigits: 4,
-                                })}
-                              </div>
-                            </div>
-                            <div className={styles.heroMiniCard}>
-                              <div className={styles.metricLabel}>Basis removed</div>
-                              <div className={styles.heroMiniValue}>{money(breakdown.costRemovedBySells)}</div>
-                            </div>
-                            <div className={styles.heroMiniCard}>
-                              <div className={styles.metricLabel}>Live price</div>
-                              <div className={styles.heroMiniValue}>
-                                {loadingPrice ? "Loading..." : livePrice ? money(livePrice) : "—"}
-                              </div>
-                            </div>
-                          </div>
+                      <div className={styles.metricCard}>
+                        <div className={styles.metricIcon}>
+                          <Search size={16} />
                         </div>
+                        <div className={styles.metricLabel}>Exchange</div>
+                        <div className={styles.metricValue}>{selectedResult.exchange || "—"}</div>
+                        <div className={styles.metricSub}>{selectedResult.currency || "USD"}</div>
+                      </div>
+
+                      <div className={styles.metricCard}>
+                        <div className={styles.metricIcon}>
+                          <Star size={16} />
+                        </div>
+                        <div className={styles.metricLabel}>Status</div>
+                        <div className={styles.metricValue}>
+                          {ownedSymbols.has(selectedResult.symbol)
+                            ? "Owned"
+                            : favoriteSymbols.has(selectedResult.symbol)
+                              ? "Watching"
+                              : "Research"}
+                        </div>
+                        <div className={styles.metricSub}>workspace relationship</div>
                       </div>
                     </div>
 
-                    <div className={styles.asideStack}>
-                      <div className={styles.panel}>
-                        <PaneHeader
-                          title="Selected trade"
-                          subcopy="Fast read on the highlighted fill."
-                        />
-
-                        {selectedTrade ? (
-                          <div className={styles.infoList}>
-                            <div className={styles.infoRow}>
-                              <span>Side</span>
-                              <span>{selectedTrade.txn_type}</span>
-                            </div>
-                            <div className={styles.infoRow}>
-                              <span>Date</span>
-                              <span>{shortDate(selectedTrade.txn_date)}</span>
-                            </div>
-                            <div className={styles.infoRow}>
-                              <span>Quantity</span>
-                              <span>
-                                {toNum(selectedTrade.qty).toLocaleString(undefined, {
-                                  maximumFractionDigits: 4,
-                                })}
-                              </span>
-                            </div>
-                            <div className={styles.infoRow}>
-                              <span>Price</span>
-                              <span>{money(selectedTrade.price)}</span>
-                            </div>
-                            <div className={styles.infoRow}>
-                              <span>Avg cost before</span>
-                              <span>{money(selectedTrade.avgCostBefore)}</span>
-                            </div>
-                            <div className={styles.infoRow}>
-                              <span>Realized on row</span>
-                              <span
-                                style={{
-                                  color: toneMeta(toneByValue(selectedTrade.realizedOnTxn)).text,
-                                }}
-                              >
-                                {String(selectedTrade.txn_type).toUpperCase() === "SELL"
-                                  ? signedMoney(selectedTrade.realizedOnTxn)
-                                  : "—"}
-                              </span>
-                            </div>
-                          </div>
-                        ) : (
-                          <EmptyState
-                            title="No selected trade"
-                            detail="Pick a row from the ledger on the left."
-                          />
-                        )}
-                      </div>
-
-                      <div className={styles.panel}>
-                        <PaneHeader
-                          title="Next moves"
-                          subcopy="Fast paths through the section."
-                        />
-                        <div className={styles.ctaStack}>
-                          <ActionLink href="/investments">
-                            Back to Investments <ArrowRight size={14} />
-                          </ActionLink>
-                          <ActionLink href="/investments/discover">
-                            Research Desk <ArrowRight size={14} />
-                          </ActionLink>
-                          <ActionLink href={`/market/${encodeURIComponent(asset.symbol || "")}`}>
-                            Open Market View <ArrowRight size={14} />
-                          </ActionLink>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ) : null}
-
-                {boardTab === "ledger" ? (
-                  <div className={styles.splitLayout}>
-                    <div className={styles.panel}>
-                      <PaneHeader
-                        title="Ledger breakdown"
-                        subcopy="The exact math behind the position."
-                        right={<MiniPill>{breakdown.rows.length} rows</MiniPill>}
-                      />
-
-                      {selectedTrade ? (
-                        <div className={styles.feedList}>
-                          <div className={styles.tradeRow}>
-                            <div className={styles.tradeIcon}>
-                              {String(selectedTrade.txn_type).toUpperCase() === "SELL" ? "S" : "B"}
-                            </div>
-
-                            <div className={styles.tradeMain}>
-                              <div className={styles.tradeName}>
-                                {String(selectedTrade.txn_type).toUpperCase()} •{" "}
-                                {toNum(selectedTrade.qty).toLocaleString(undefined, {
-                                  maximumFractionDigits: 4,
-                                })}{" "}
-                                @ {money(selectedTrade.price)}
-                              </div>
-                              <div className={styles.tradeSub}>
-                                {shortDate(selectedTrade.txn_date)} • Avg cost before{" "}
-                                {money(selectedTrade.avgCostBefore)}
-                              </div>
-                            </div>
-
-                            <div className={styles.tradeValue}>
-                              {money(toNum(selectedTrade.qty) * toNum(selectedTrade.price))}
-                            </div>
-                          </div>
-
-                          <div className={styles.infoList}>
-                            <div className={styles.infoRow}>
-                              <span>Shares after</span>
-                              <span>
-                                {toNum(selectedTrade.sharesAfter).toLocaleString(undefined, {
-                                  maximumFractionDigits: 4,
-                                })}
-                              </span>
-                            </div>
-                            <div className={styles.infoRow}>
-                              <span>Basis after</span>
-                              <span>{money(selectedTrade.basisAfter)}</span>
-                            </div>
-                            <div className={styles.infoRow}>
-                              <span>Basis removed</span>
-                              <span>{money(selectedTrade.basisRemoved)}</span>
-                            </div>
-                            <div className={styles.infoRow}>
-                              <span>Realized on row</span>
-                              <span
-                                style={{
-                                  color: toneMeta(toneByValue(selectedTrade.realizedOnTxn)).text,
-                                }}
-                              >
-                                {String(selectedTrade.txn_type).toUpperCase() === "SELL"
-                                  ? signedMoney(selectedTrade.realizedOnTxn)
-                                  : "—"}
-                              </span>
-                            </div>
+                    <div style={{ marginTop: 10 }}>
+                      <div className={styles.paneHeader}>
+                        <div>
+                          <div className={styles.paneTitle}>Headlines</div>
+                          <div className={styles.paneSub}>
+                            Live symbol news for {selectedResult.symbol}.
                           </div>
                         </div>
-                      ) : (
-                        <EmptyState
-                          title="No ledger row selected"
-                          detail="Pick a ledger row from the left."
-                        />
-                      )}
-                    </div>
-
-                    <div className={styles.asideStack}>
-                      <div className={styles.panel}>
-                        <PaneHeader
-                          title="Position snapshot"
-                          subcopy="Whole-position readout."
-                        />
-                        <div className={styles.infoList}>
-                          <div className={styles.infoRow}>
-                            <span>Remaining shares</span>
-                            <span>
-                              {breakdown.remainingShares.toLocaleString(undefined, {
-                                maximumFractionDigits: 4,
-                              })}
-                            </span>
-                          </div>
-                          <div className={styles.infoRow}>
-                            <span>Remaining basis</span>
-                            <span>{money(breakdown.remainingBasis)}</span>
-                          </div>
-                          <div className={styles.infoRow}>
-                            <span>Current value</span>
-                            <span>
-                              {breakdown.currentValue != null ? money(breakdown.currentValue) : "—"}
-                            </span>
-                          </div>
-                          <div className={styles.infoRow}>
-                            <span>Unrealized</span>
-                            <span
-                              style={{ color: toneMeta(assetTone).text }}
-                            >
-                              {breakdown.unrealizedPnl != null ? signedMoney(breakdown.unrealizedPnl) : "—"}
-                            </span>
-                          </div>
-                        </div>
+                        <MiniPill>{news.length} stories</MiniPill>
                       </div>
-                    </div>
-                  </div>
-                ) : null}
-
-                {boardTab === "research" ? (
-                  <div className={styles.splitLayout}>
-                    <div className={styles.panel}>
-                      <PaneHeader
-                        title="Research headlines"
-                        subcopy={`Live symbol news for ${asset.symbol}.`}
-                        right={<MiniPill>{news.length} stories</MiniPill>}
-                      />
 
                       {news.length ? (
                         <div className={styles.feedList}>
-                          {news.map((item, index) => (
+                          {news.slice(0, 4).map((item, index) => (
                             <HeadlineRow key={`${item.url}-${index}`} item={item} />
                           ))}
                         </div>
                       ) : (
                         <EmptyState
-                          title="No headlines returned"
-                          detail="Once the news route is live, this rail fills with symbol coverage."
+                          title="No headlines yet"
+                          detail="Search another name or wait for the news route to return."
+                        />
+                      )}
+                    </div>
+                  </div>
+
+                  <div className={styles.asideStack}>
+                    <div className={styles.panel}>
+                      <div className={styles.paneHeader}>
+                        <div>
+                          <div className={styles.paneTitle}>Board watch</div>
+                          <div className={styles.paneSub}>Keep a few macro names visible.</div>
+                        </div>
+                      </div>
+
+                      <div className={styles.marketBoardGrid}>
+                        {BOARD_SYMBOLS.slice(0, 4).map((item) => (
+                          <BoardCard
+                            key={item.symbol}
+                            symbol={item.symbol}
+                            label={item.label}
+                            quote={quotes[item.symbol] || null}
+                          />
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className={styles.panel}>
+                      <div className={styles.paneHeader}>
+                        <div>
+                          <div className={styles.paneTitle}>Quick routes</div>
+                          <div className={styles.paneSub}>Fast next steps.</div>
+                        </div>
+                      </div>
+
+                      <div className={styles.ctaStack}>
+                        <ActionLink href="/investments">
+                          Portfolio Desk <ArrowRight size={14} />
+                        </ActionLink>
+                        <ActionLink href={`/market/${encodeURIComponent(selectedResult.symbol)}`}>
+                          Open Market <ExternalLink size={14} />
+                        </ActionLink>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className={styles.focusStack}>
+                <div className={styles.focusHeader}>
+                  <div>
+                    <div className={styles.eyebrow}>Research desk</div>
+                    <div className={styles.focusTitle}>Find the next stock</div>
+                    <div className={styles.focusMeta}>
+                      This page stays useful before search instead of just sitting there dead.
+                    </div>
+                  </div>
+
+                  <div className={styles.focusHeaderRight}>
+                    <div className={styles.focusBadges}>
+                      <MiniPill tone="blue">search</MiniPill>
+                      <MiniPill tone="amber">watchlist</MiniPill>
+                    </div>
+                  </div>
+                </div>
+
+                <div className={styles.splitLayout}>
+                  <div className={styles.panel}>
+                    <div className={styles.paneHeader}>
+                      <div>
+                        <div className={styles.paneTitle}>Market board</div>
+                        <div className={styles.paneSub}>Starter market view without wasted space.</div>
+                      </div>
+                    </div>
+
+                    <div className={styles.marketBoardGrid}>
+                      {BOARD_SYMBOLS.map((item) => (
+                        <BoardCard
+                          key={item.symbol}
+                          symbol={item.symbol}
+                          label={item.label}
+                          quote={quotes[item.symbol] || null}
+                        />
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className={styles.asideStack}>
+                    <div className={styles.panel}>
+                      <div className={styles.paneHeader}>
+                        <div>
+                          <div className={styles.paneTitle}>Owned positions</div>
+                          <div className={styles.paneSub}>What is already on your desk.</div>
+                        </div>
+                        <MiniPill>{assets.length}</MiniPill>
+                      </div>
+
+                      {assets.length ? (
+                        <div className={styles.feedList}>
+                          {assets.slice(0, 6).map((asset) => (
+                            <DeskRow key={asset.id} asset={asset} />
+                          ))}
+                        </div>
+                      ) : (
+                        <EmptyState
+                          title="No positions yet"
+                          detail="Search something and add it to the desk."
                         />
                       )}
                     </div>
 
-                    <div className={styles.asideStack}>
-                      <div className={styles.panel}>
-                        <PaneHeader
-                          title="Research routes"
-                          subcopy="Fast paths out of the position page."
-                        />
-                        <div className={styles.ctaStack}>
-                          <ActionLink href={`/market/${encodeURIComponent(asset.symbol || "")}`}>
-                            Open Market View <ExternalLink size={14} />
-                          </ActionLink>
-                          <ActionLink href="/investments/discover">
-                            Open Research Desk <ArrowRight size={14} />
-                          </ActionLink>
-                        </div>
-                      </div>
-
-                      <div className={styles.panel}>
-                        <PaneHeader
-                          title="Context"
-                          subcopy="What this position belongs to."
-                        />
-                        <div className={styles.infoList}>
-                          <div className={styles.infoRow}>
-                            <span>Symbol</span>
-                            <span>{String(asset.symbol || "—").toUpperCase()}</span>
-                          </div>
-                          <div className={styles.infoRow}>
-                            <span>Account</span>
-                            <span>{asset.account || "Brokerage"}</span>
-                          </div>
-                          <div className={styles.infoRow}>
-                            <span>Asset type</span>
-                            <span>{asset.asset_type || "—"}</span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ) : null}
-
-                {boardTab === "ticket" ? (
-                  <div className={styles.splitLayout}>
                     <div className={styles.panel}>
-                      <PaneHeader
-                        title="Trade ticket"
-                        subcopy="Looks like a real ticket, writes to your portfolio ledger."
-                        right={<MiniPill tone="amber">ledger route</MiniPill>}
-                      />
-
-                      <div className={styles.formStack}>
-                        <div className={styles.formGrid2}>
-                          <Field label="Side">
-                            <select
-                              value={tradeType}
-                              onChange={(e) => setTradeType(e.target.value)}
-                              className={styles.field}
-                            >
-                              <option value="BUY">BUY</option>
-                              <option value="SELL">SELL</option>
-                            </select>
-                          </Field>
-
-                          <Field label="Trade date">
-                            <input
-                              type="date"
-                              value={tradeDate}
-                              onChange={(e) => setTradeDate(e.target.value)}
-                              className={styles.field}
-                            />
-                          </Field>
+                      <div className={styles.paneHeader}>
+                        <div>
+                          <div className={styles.paneTitle}>Watchlist</div>
+                          <div className={styles.paneSub}>Saved names ready for later.</div>
                         </div>
-
-                        <div className={styles.formGrid2}>
-                          <Field label="Quantity">
-                            <input
-                              type="number"
-                              step="0.0001"
-                              value={tradeQty}
-                              onChange={(e) => setTradeQty(e.target.value)}
-                              placeholder="0.0000"
-                              className={styles.field}
-                            />
-                          </Field>
-
-                          <Field label="Price">
-                            <input
-                              type="number"
-                              step="0.01"
-                              value={tradePrice}
-                              onChange={(e) => setTradePrice(e.target.value)}
-                              placeholder="0.00"
-                              className={styles.field}
-                            />
-                          </Field>
-                        </div>
-
-                        <ActionBtn variant="primary" onClick={logTrade} full>
-                          <Plus size={14} /> Save Trade
-                        </ActionBtn>
+                        <MiniPill>{favorites.length}</MiniPill>
                       </div>
-                    </div>
 
-                    <div className={styles.asideStack}>
-                      <div className={styles.panel}>
-                        <PaneHeader
-                          title="Ticket context"
-                          subcopy="What this ticket is attached to."
+                      {favorites.length ? (
+                        <div className={styles.feedList}>
+                          {favorites.slice(0, 6).map((row) => (
+                            <WatchRow
+                              key={row.id}
+                              row={row}
+                              quote={quotes[asSymbol(row.symbol)] || null}
+                            />
+                          ))}
+                        </div>
+                      ) : (
+                        <EmptyState
+                          title="No saved names"
+                          detail="Search a name and hit Save Watch."
                         />
-                        <div className={styles.infoList}>
-                          <div className={styles.infoRow}>
-                            <span>Symbol</span>
-                            <span>{String(asset.symbol || "—").toUpperCase()}</span>
-                          </div>
-                          <div className={styles.infoRow}>
-                            <span>Live price</span>
-                            <span>{loadingPrice ? "Loading..." : livePrice ? money(livePrice) : "—"}</span>
-                          </div>
-                          <div className={styles.infoRow}>
-                            <span>Remaining shares</span>
-                            <span>
-                              {breakdown.remainingShares.toLocaleString(undefined, {
-                                maximumFractionDigits: 4,
-                              })}
-                            </span>
-                          </div>
-                          <div className={styles.infoRow}>
-                            <span>Current basis</span>
-                            <span>{money(breakdown.remainingBasis)}</span>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className={styles.panel}>
-                        <PaneHeader
-                          title="Next path"
-                          subcopy="Where this flow goes."
-                        />
-                        <div className={styles.ctaStack}>
-                          <ActionLink href="/investments">
-                            Back to desk <ArrowRight size={14} />
-                          </ActionLink>
-                          <ActionLink href={`/market/${encodeURIComponent(asset.symbol || "")}`}>
-                            Open market <ExternalLink size={14} />
-                          </ActionLink>
-                        </div>
-                      </div>
+                      )}
                     </div>
                   </div>
-                ) : null}
+                </div>
               </div>
-            </div>
+            )}
           </GlassPane>
         </div>
       </div>

@@ -49,42 +49,42 @@ function toNum(value, fallback = null) {
   return Number.isFinite(n) ? n : fallback;
 }
 
-function money(n) {
-  const num = Number(n);
-  if (!Number.isFinite(num)) return "—";
-  return num.toLocaleString(undefined, {
+function money(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return "—";
+  return n.toLocaleString(undefined, {
     style: "currency",
     currency: "USD",
     maximumFractionDigits: 2,
   });
 }
 
-function pct(n) {
-  const num = Number(n);
-  if (!Number.isFinite(num)) return "—";
-  return `${num >= 0 ? "+" : ""}${num.toFixed(2)}%`;
-}
-
-function signedMoney(n) {
-  const num = Number(n);
-  if (!Number.isFinite(num)) return "—";
-  const abs = Math.abs(num).toLocaleString(undefined, {
+function signedMoney(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return "—";
+  const abs = Math.abs(n).toLocaleString(undefined, {
     style: "currency",
     currency: "USD",
     maximumFractionDigits: 2,
   });
-  if (num > 0) return `+${abs}`;
-  if (num < 0) return `-${abs}`;
+  if (n > 0) return `+${abs}`;
+  if (n < 0) return `-${abs}`;
   return abs;
 }
 
-function compactNumber(n) {
-  const num = Number(n);
-  if (!Number.isFinite(num)) return "—";
+function pct(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return "—";
+  return `${n >= 0 ? "+" : ""}${n.toFixed(2)}%`;
+}
+
+function compactNumber(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return "—";
   return new Intl.NumberFormat(undefined, {
     notation: "compact",
     maximumFractionDigits: 2,
-  }).format(num);
+  }).format(n);
 }
 
 function fullDateTime(value) {
@@ -111,9 +111,8 @@ function toneMeta(tone = "neutral") {
       text: "#97efc7",
       border: "rgba(143,240,191,0.16)",
       glow: "rgba(110,229,173,0.10)",
-      dot: "#8ef4bb",
-      pillBg: "rgba(8,18,12,0.42)",
       iconBg: "rgba(12,22,17,0.72)",
+      softBg: "rgba(10,20,14,0.32)",
     };
   }
 
@@ -122,9 +121,8 @@ function toneMeta(tone = "neutral") {
       text: "#ffb4c5",
       border: "rgba(255,132,163,0.16)",
       glow: "rgba(255,108,145,0.10)",
-      dot: "#ff96ae",
-      pillBg: "rgba(18,8,11,0.42)",
       iconBg: "rgba(24,11,15,0.72)",
+      softBg: "rgba(24,12,16,0.32)",
     };
   }
 
@@ -133,9 +131,8 @@ function toneMeta(tone = "neutral") {
       text: "#f5cf88",
       border: "rgba(255,204,112,0.16)",
       glow: "rgba(255,194,92,0.10)",
-      dot: "#ffd089",
-      pillBg: "rgba(18,14,8,0.42)",
       iconBg: "rgba(24,18,11,0.72)",
+      softBg: "rgba(24,18,11,0.32)",
     };
   }
 
@@ -143,52 +140,8 @@ function toneMeta(tone = "neutral") {
     text: "#f7fbff",
     border: "rgba(214,226,255,0.13)",
     glow: "rgba(140,170,255,0.08)",
-    dot: "#f7fbff",
-    pillBg: "rgba(10,14,21,0.40)",
     iconBg: "rgba(12,16,24,0.72)",
-  };
-}
-
-function overlineStyle() {
-  return {
-    fontSize: 10,
-    textTransform: "uppercase",
-    letterSpacing: ".22em",
-    fontWeight: 800,
-    color: "rgba(255,255,255,0.42)",
-  };
-}
-
-function mutedStyle() {
-  return {
-    fontSize: 13,
-    lineHeight: 1.5,
-    color: "rgba(255,255,255,0.64)",
-  };
-}
-
-function buttonStyle({ primary = false, disabled = false } = {}) {
-  return {
-    minHeight: 42,
-    padding: "0 12px",
-    borderRadius: 14,
-    border: primary
-      ? "1px solid rgba(255,255,255,0.18)"
-      : "1px solid rgba(214,226,255,0.10)",
-    background: disabled
-      ? "rgba(255,255,255,0.04)"
-      : primary
-      ? "linear-gradient(180deg, rgba(255,255,255,0.95), rgba(233,239,248,0.88))"
-      : "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.012))",
-    color: disabled ? "rgba(255,255,255,0.42)" : primary ? "#0b1220" : "#f7fbff",
-    display: "inline-flex",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    fontWeight: 800,
-    fontSize: 13,
-    cursor: disabled ? "not-allowed" : "pointer",
-    textDecoration: "none",
+    softBg: "rgba(10,14,21,0.30)",
   };
 }
 
@@ -200,13 +153,66 @@ function resolveAssetType(raw) {
   return value || "Stock";
 }
 
+function overlineStyle() {
+  return {
+    fontSize: 10,
+    textTransform: "uppercase",
+    letterSpacing: ".18em",
+    fontWeight: 800,
+    color: "rgba(255,255,255,0.42)",
+  };
+}
+
+function mutedStyle() {
+  return {
+    fontSize: 12.5,
+    lineHeight: 1.5,
+    color: "rgba(255,255,255,0.62)",
+  };
+}
+
+function buttonStyle({ primary = false, danger = false, disabled = false } = {}) {
+  return {
+    minHeight: 40,
+    padding: "0 12px",
+    borderRadius: 14,
+    border: danger
+      ? "1px solid rgba(255,132,163,0.16)"
+      : primary
+        ? "1px solid rgba(255,255,255,0.18)"
+        : "1px solid rgba(214,226,255,0.10)",
+    background: disabled
+      ? "rgba(255,255,255,0.04)"
+      : danger
+        ? "linear-gradient(180deg, rgba(255,132,163,0.08), rgba(255,132,163,0.03))"
+        : primary
+          ? "linear-gradient(180deg, rgba(255,255,255,0.96), rgba(233,239,248,0.88))"
+          : "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.012))",
+    color: disabled
+      ? "rgba(255,255,255,0.42)"
+      : danger
+        ? "#ffd4df"
+        : primary
+          ? "#0b1220"
+          : "#f7fbff",
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    fontWeight: 800,
+    fontSize: 13,
+    cursor: disabled ? "not-allowed" : "pointer",
+    textDecoration: "none",
+  };
+}
+
 function MiniPill({ children, tone = "neutral" }) {
   const meta = toneMeta(tone);
 
   return (
     <div
       style={{
-        minHeight: 32,
+        minHeight: 30,
         display: "inline-flex",
         alignItems: "center",
         gap: 8,
@@ -215,11 +221,11 @@ function MiniPill({ children, tone = "neutral" }) {
         border: `1px solid ${meta.border}`,
         background:
           "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01))",
-        boxShadow: `inset 0 1px 0 rgba(255,255,255,0.035), 0 0 10px ${meta.glow}`,
         color: tone === "neutral" ? "rgba(255,255,255,0.88)" : meta.text,
         fontSize: 11,
         fontWeight: 800,
         whiteSpace: "nowrap",
+        boxShadow: `0 0 10px ${meta.glow}`,
       }}
     >
       {children}
@@ -229,27 +235,7 @@ function MiniPill({ children, tone = "neutral" }) {
 
 function ActionLink({ href, children }) {
   return (
-    <Link
-      href={href}
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        justifyContent: "center",
-        gap: 8,
-        minHeight: 40,
-        padding: "10px 13px",
-        borderRadius: 14,
-        border: "1px solid rgba(214,226,255,0.10)",
-        background:
-          "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.012))",
-        color: "#f7fbff",
-        textDecoration: "none",
-        fontWeight: 800,
-        fontSize: 13,
-        boxShadow:
-          "inset 0 1px 0 rgba(255,255,255,0.04), 0 10px 18px rgba(0,0,0,0.12)",
-      }}
-    >
+    <Link href={href} style={buttonStyle()}>
       {children}
     </Link>
   );
@@ -271,8 +257,8 @@ function PaneHeader({ title, subcopy, right }) {
         <div
           style={{
             fontSize: 18,
-            lineHeight: 1.1,
-            fontWeight: 800,
+            lineHeight: 1.05,
+            fontWeight: 850,
             letterSpacing: "-0.03em",
             color: "#fff",
           }}
@@ -294,7 +280,7 @@ function MetricCard({ icon: Icon, label, value, detail, tone = "neutral" }) {
     <GlassPane tone={tone} size="card" style={{ height: "100%" }}>
       <div
         style={{
-          minHeight: 132,
+          minHeight: 120,
           display: "grid",
           gridTemplateRows: "auto auto 1fr",
           gap: 8,
@@ -302,28 +288,27 @@ function MetricCard({ icon: Icon, label, value, detail, tone = "neutral" }) {
       >
         <div
           style={{
-            width: 38,
-            height: 38,
-            borderRadius: 13,
+            width: 36,
+            height: 36,
+            borderRadius: 12,
             display: "grid",
             placeItems: "center",
             border: `1px solid ${meta.border}`,
             background: meta.iconBg,
             color: tone === "neutral" ? "#fff" : meta.text,
-            boxShadow: `0 0 12px ${meta.glow}`,
           }}
         >
           <Icon size={16} />
         </div>
 
-        <div style={{ minWidth: 0 }}>
+        <div>
           <div style={overlineStyle()}>{label}</div>
           <div
             style={{
               marginTop: 8,
-              fontSize: "clamp(20px, 2.7vw, 30px)",
+              fontSize: "clamp(20px, 2.1vw, 30px)",
               lineHeight: 1,
-              fontWeight: 850,
+              fontWeight: 900,
               letterSpacing: "-0.05em",
               color: tone === "neutral" ? "#fff" : meta.text,
               overflowWrap: "anywhere",
@@ -343,7 +328,7 @@ function SnapshotRow({ label, value }) {
   return (
     <div
       style={{
-        minHeight: 56,
+        minHeight: 54,
         display: "grid",
         gridTemplateColumns: "minmax(0, 1fr) auto",
         gap: 10,
@@ -371,19 +356,44 @@ function SnapshotRow({ label, value }) {
   );
 }
 
+function EmptyBlock({ title, detail }) {
+  return (
+    <div
+      style={{
+        minHeight: 170,
+        display: "grid",
+        placeItems: "center",
+        borderRadius: 20,
+        border: "1px solid rgba(214,226,255,0.10)",
+        background:
+          "linear-gradient(180deg, rgba(255,255,255,0.025), rgba(255,255,255,0.01))",
+      }}
+    >
+      <div style={{ maxWidth: 360, padding: 18 }}>
+        <div
+          style={{
+            fontSize: 17,
+            fontWeight: 850,
+            color: "#fff",
+            textAlign: "center",
+          }}
+        >
+          {title}
+        </div>
+        <div style={{ marginTop: 8, ...mutedStyle(), textAlign: "center" }}>{detail}</div>
+      </div>
+    </div>
+  );
+}
+
 function HeadlineRow({ item }) {
   return (
-    <a
-      href={item.url || "#"}
-      target="_blank"
-      rel="noreferrer"
-      style={{ textDecoration: "none" }}
-    >
+    <a href={item.url || "#"} target="_blank" rel="noreferrer" style={{ textDecoration: "none" }}>
       <div
         style={{
-          minHeight: 90,
+          minHeight: 88,
           display: "grid",
-          gridTemplateColumns: "40px minmax(0, 1fr) auto",
+          gridTemplateColumns: "38px minmax(0, 1fr) auto",
           gap: 12,
           alignItems: "start",
           padding: "12px 13px",
@@ -395,8 +405,8 @@ function HeadlineRow({ item }) {
       >
         <div
           style={{
-            width: 40,
-            height: 40,
+            width: 38,
+            height: 38,
             borderRadius: 12,
             display: "grid",
             placeItems: "center",
@@ -405,13 +415,13 @@ function HeadlineRow({ item }) {
             color: "#f7fbff",
           }}
         >
-          <Newspaper size={16} />
+          <Newspaper size={15} />
         </div>
 
         <div style={{ minWidth: 0 }}>
           <div
             style={{
-              fontSize: 14,
+              fontSize: 13.5,
               fontWeight: 800,
               color: "#fff",
               lineHeight: 1.35,
@@ -426,7 +436,7 @@ function HeadlineRow({ item }) {
           <div
             style={{
               marginTop: 6,
-              fontSize: 11,
+              fontSize: 10.5,
               fontWeight: 800,
               color: "rgba(255,255,255,0.44)",
               textTransform: "uppercase",
@@ -437,47 +447,11 @@ function HeadlineRow({ item }) {
           </div>
         </div>
 
-        <div style={{ color: "rgba(255,255,255,0.52)" }}>
+        <div style={{ color: "rgba(255,255,255,0.50)" }}>
           <ExternalLink size={14} />
         </div>
       </div>
     </a>
-  );
-}
-
-function EmptyState({ title, detail }) {
-  return (
-    <div
-      style={{
-        minHeight: 140,
-        display: "grid",
-        placeItems: "center",
-      }}
-    >
-      <div style={{ width: "100%", maxWidth: 360 }}>
-        <div
-          style={{
-            fontSize: 17,
-            fontWeight: 800,
-            color: "#fff",
-            textAlign: "center",
-          }}
-        >
-          {title}
-        </div>
-        <div
-          style={{
-            marginTop: 8,
-            fontSize: 13,
-            lineHeight: 1.55,
-            color: "rgba(255,255,255,0.64)",
-            textAlign: "center",
-          }}
-        >
-          {detail}
-        </div>
-      </div>
-    </div>
   );
 }
 
@@ -512,12 +486,12 @@ export default function MarketSymbolPage() {
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
 
-  const assetTypeLabel = useMemo(() => {
-    return resolveAssetType(asset?.type || "");
-  }, [asset]);
-
-  const chartData = mode === "candles" ? chartCandles : chartLine;
+  const assetTypeLabel = useMemo(() => resolveAssetType(asset?.type || ""), [asset]);
   const quoteTone = toneByValue(quote?.changesPercentage ?? quote?.change ?? 0);
+  const quoteMeta = toneMeta(quoteTone);
+  const chartData = mode === "candles" ? chartCandles : chartLine;
+  const resolvedName = asset?.name || quote?.name || symbol;
+  const resolvedExchange = asset?.exchange || quote?.exchange || "—";
 
   useEffect(() => {
     let cancelled = false;
@@ -557,9 +531,7 @@ export default function MarketSymbolPage() {
             const exact =
               rows.find((x) => String(x.symbol || "").toUpperCase() === symbol) || rows[0];
 
-            if (exact) {
-              nextAsset = exact;
-            }
+            if (exact) nextAsset = exact;
           }
         } catch (err) {
           console.error("market search failed", err);
@@ -599,13 +571,9 @@ export default function MarketSymbolPage() {
         }
       } catch (err) {
         console.error(err);
-        if (!cancelled) {
-          setError(err?.message || "Failed to load market symbol.");
-        }
+        if (!cancelled) setError(err?.message || "Failed to load market symbol.");
       } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
+        if (!cancelled) setLoading(false);
       }
     }
 
@@ -701,10 +669,9 @@ export default function MarketSymbolPage() {
           return;
         }
 
-        if (Array.isArray(data?.line)) setChartLine(data.line);
-        if (Array.isArray(data?.candles)) setChartCandles(data.candles);
-        if (Array.isArray(data?.volume)) setChartVolume(data.volume);
-
+        setChartLine(Array.isArray(data?.line) ? data.line : []);
+        setChartCandles(Array.isArray(data?.candles) ? data.candles : []);
+        setChartVolume(Array.isArray(data?.volume) ? data.volume : []);
         setChartNotice(data?.notice || "");
         setChartMeta({
           interval: data?.interval || "",
@@ -715,9 +682,7 @@ export default function MarketSymbolPage() {
         console.error("chart fetch failed", err);
         setChartError("Chart temporarily unavailable.");
       } finally {
-        if (!cancelled) {
-          setChartLoading(false);
-        }
+        if (!cancelled) setChartLoading(false);
       }
     }
 
@@ -734,6 +699,7 @@ export default function MarketSymbolPage() {
     async function loadNews() {
       if (!symbol) return;
 
+      setNews([]);
       setNewsError("");
 
       try {
@@ -745,7 +711,7 @@ export default function MarketSymbolPage() {
 
         if (cancelled) return;
 
-        if (Array.isArray(data?.articles) && data.articles.length > 0) {
+        if (Array.isArray(data?.articles)) {
           setNews(data.articles);
         }
 
@@ -782,25 +748,25 @@ export default function MarketSymbolPage() {
       }
 
       if (isFavorite) {
-        const { error } = await supabase
+        const { error: deleteError } = await supabase
           .from("investment_favorites")
           .delete()
           .eq("user_id", user.id)
           .eq("symbol", symbol);
 
-        if (error) throw error;
+        if (deleteError) throw deleteError;
 
         setIsFavorite(false);
         setStatus(`${symbol} removed from favorites.`);
       } else {
-        const { error } = await supabase.from("investment_favorites").insert({
+        const { error: insertError } = await supabase.from("investment_favorites").insert({
           user_id: user.id,
           symbol,
-          name: asset?.name || quote?.name || symbol,
+          name: resolvedName,
           asset_type: assetTypeLabel.toLowerCase(),
         });
 
-        if (error) throw error;
+        if (insertError) throw insertError;
 
         setIsFavorite(true);
         setStatus(`${symbol} added to favorites.`);
@@ -834,15 +800,15 @@ export default function MarketSymbolPage() {
         return;
       }
 
-      const { error } = await supabase.from("investment_assets").insert({
+      const { error: insertError } = await supabase.from("investment_assets").insert({
         user_id: user.id,
         symbol,
-        name: asset?.name || quote?.name || symbol,
+        name: resolvedName,
         asset_type: assetTypeLabel.toLowerCase() === "etf" ? "etf" : "stock",
         account: "Brokerage",
       });
 
-      if (error) throw error;
+      if (insertError) throw insertError;
 
       setIsOwned(true);
       setStatus(`${symbol} added to portfolio.`);
@@ -856,8 +822,8 @@ export default function MarketSymbolPage() {
 
   if (loading) {
     return (
-      <main style={{ padding: "18px 0 28px", fontFamily: 'Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif' }}>
-        <div style={{ width: "min(100%, 1380px)", margin: "0 auto" }}>
+      <main className="marketRoot">
+        <div className="marketInner">
           <GlassPane size="card">
             <div style={{ fontWeight: 800, fontSize: 18, color: "#fff" }}>
               Loading market asset.
@@ -870,12 +836,10 @@ export default function MarketSymbolPage() {
 
   if (error && !asset) {
     return (
-      <main style={{ padding: "18px 0 28px", fontFamily: 'Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif' }}>
-        <div style={{ width: "min(100%, 1380px)", margin: "0 auto" }}>
+      <main className="marketRoot">
+        <div className="marketInner">
           <GlassPane tone="red" size="card">
-            <div style={{ fontWeight: 800, fontSize: 18, color: "#fff" }}>
-              {error}
-            </div>
+            <div style={{ fontWeight: 800, fontSize: 18, color: "#fff" }}>{error}</div>
             <div style={{ marginTop: 12 }}>
               <ActionLink href="/investments/discover">
                 Back to Discover <ArrowRight size={14} />
@@ -902,14 +866,14 @@ export default function MarketSymbolPage() {
           <GlassPane size="card">
             <div className="marketHeroGrid">
               <div style={{ minWidth: 0 }}>
-                <div style={overlineStyle()}>Public Market View</div>
+                <div style={overlineStyle()}>Stocks / Market View</div>
 
                 <div
                   style={{
                     marginTop: 8,
-                    fontSize: "clamp(28px, 3.5vw, 40px)",
-                    lineHeight: 0.98,
-                    fontWeight: 900,
+                    fontSize: "clamp(28px, 3.2vw, 40px)",
+                    lineHeight: 0.96,
+                    fontWeight: 950,
                     letterSpacing: "-0.06em",
                     color: "#fff",
                   }}
@@ -920,45 +884,38 @@ export default function MarketSymbolPage() {
                 <div
                   style={{
                     marginTop: 8,
-                    fontSize: 17,
+                    fontSize: 18,
                     fontWeight: 800,
                     color: "#fff",
                     overflowWrap: "anywhere",
                   }}
                 >
-                  {asset?.name || quote?.name || symbol}
+                  {resolvedName}
                 </div>
 
-                <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
                   <MiniPill>{assetTypeLabel}</MiniPill>
-                  <MiniPill>{asset?.exchange || quote?.exchange || "—"}</MiniPill>
+                  <MiniPill>{resolvedExchange}</MiniPill>
                   <MiniPill tone={quoteTone}>
                     {quote.price !== null ? money(quote.price) : "Price unavailable"}
                   </MiniPill>
                 </div>
 
                 <div style={{ marginTop: 10, ...mutedStyle(), maxWidth: 760 }}>
-                  This is the public market page for the symbol. It stays usable even when quote,
-                  chart, or news providers misbehave.
+                  Tight public market view for quote, chart, headlines, and quick actions. No fake
+                  brokerage clutter.
                 </div>
               </div>
 
-              <div
-                style={{
-                  minWidth: 260,
-                  display: "grid",
-                  gap: 10,
-                  alignContent: "start",
-                }}
-              >
+              <div className="heroSide">
                 <div
                   style={{
                     padding: 16,
                     borderRadius: 18,
-                    border: `1px solid ${toneMeta(quoteTone).border}`,
+                    border: `1px solid ${quoteMeta.border}`,
                     background:
                       "linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.015))",
-                    boxShadow: `0 0 20px ${toneMeta(quoteTone).glow}`,
+                    boxShadow: `0 0 18px ${quoteMeta.glow}`,
                   }}
                 >
                   <div style={overlineStyle()}>Live Price</div>
@@ -967,7 +924,8 @@ export default function MarketSymbolPage() {
                       marginTop: 8,
                       fontWeight: 950,
                       fontSize: 34,
-                      color: quoteTone === "neutral" ? "#fff" : toneMeta(quoteTone).text,
+                      lineHeight: 1,
+                      color: quoteTone === "neutral" ? "#fff" : quoteMeta.text,
                     }}
                   >
                     {quote.price !== null ? money(quote.price) : "—"}
@@ -978,7 +936,8 @@ export default function MarketSymbolPage() {
                       marginTop: 8,
                       fontWeight: 800,
                       fontSize: 14,
-                      color: quoteTone === "neutral" ? "rgba(255,255,255,0.72)" : toneMeta(quoteTone).text,
+                      color:
+                        quoteTone === "neutral" ? "rgba(255,255,255,0.72)" : quoteMeta.text,
                     }}
                   >
                     {quote.change !== null ? signedMoney(quote.change) : "—"}
@@ -994,7 +953,7 @@ export default function MarketSymbolPage() {
 
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                   <ActionLink href="/investments/discover">
-                    <ArrowLeft size={14} /> Research Desk
+                    <ArrowLeft size={14} /> Discover
                   </ActionLink>
                   <ActionLink href="/investments">
                     Portfolio <ArrowRight size={14} />
@@ -1009,7 +968,7 @@ export default function MarketSymbolPage() {
               icon={Wallet}
               label="Price"
               value={quote.price !== null ? money(quote.price) : "—"}
-              detail="Latest quote returned by your price route."
+              detail="Latest quote from your live price route."
               tone={quoteTone}
             />
             <MetricCard
@@ -1048,7 +1007,7 @@ export default function MarketSymbolPage() {
               <GlassPane size="card">
                 <PaneHeader
                   title="Chart"
-                  subcopy="Keep the chart area alive even if the provider has a moment."
+                  subcopy="Keep the market page useful even when the chart provider is weak."
                   right={
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                       {MODE_OPTIONS.map((option) => (
@@ -1081,10 +1040,10 @@ export default function MarketSymbolPage() {
                 <div
                   style={{
                     border: "1px solid rgba(214,226,255,0.10)",
-                    borderRadius: 24,
+                    borderRadius: 22,
                     overflow: "hidden",
                     background: "rgba(255,255,255,0.02)",
-                    minHeight: 520,
+                    minHeight: 430,
                   }}
                 >
                   {chartLoading ? (
@@ -1096,29 +1055,21 @@ export default function MarketSymbolPage() {
                       data={chartData}
                       volumeData={mode === "candles" ? chartVolume : []}
                       mode={mode}
-                      height={520}
+                      height={430}
                     />
                   ) : (
-                    <div style={{ padding: 24, fontWeight: 900, color: "#fff" }}>
-                      No chart data available.
-                    </div>
+                    <EmptyBlock
+                      title="No chart data available"
+                      detail={chartError || "The chart route returned nothing usable right now."}
+                    />
                   )}
                 </div>
 
-                {(chartError || chartNotice || chartMeta.interval || chartMeta.source) && (
-                  <div
-                    style={{
-                      marginTop: 12,
-                      display: "flex",
-                      gap: 12,
-                      flexWrap: "wrap",
-                      ...mutedStyle(),
-                    }}
-                  >
+                {(chartNotice || chartMeta.interval || chartMeta.source) && (
+                  <div style={{ marginTop: 10, display: "flex", gap: 12, flexWrap: "wrap", ...mutedStyle() }}>
                     {chartMeta.interval ? <span>Interval: {chartMeta.interval}</span> : null}
                     {chartMeta.source ? <span>Source: {chartMeta.source}</span> : null}
                     {chartNotice ? <span>{chartNotice}</span> : null}
-                    {chartError ? <span>{chartError}</span> : null}
                   </div>
                 )}
               </GlassPane>
@@ -1126,26 +1077,22 @@ export default function MarketSymbolPage() {
               <GlassPane size="card">
                 <PaneHeader
                   title="Research headlines"
-                  subcopy="This should not disappear every time one request gets rate limited."
+                  subcopy="News should stay readable instead of blowing the layout apart."
                   right={<MiniPill>{news.length} stories</MiniPill>}
                 />
 
-                <div style={{ display: "grid", gap: 8 }}>
-                  {news.length === 0 ? (
-                    <EmptyState
-                      title="No headlines returned"
-                      detail={newsError || "Research headlines temporarily unavailable."}
-                    />
-                  ) : (
-                    news.map((item, index) => (
+                {news.length ? (
+                  <div style={{ display: "grid", gap: 8 }}>
+                    {news.slice(0, 5).map((item, index) => (
                       <HeadlineRow key={`${item.url}-${index}`} item={item} />
-                    ))
-                  )}
-                </div>
-
-                {newsError && news.length > 0 ? (
-                  <div style={{ marginTop: 10, ...mutedStyle() }}>{newsError}</div>
-                ) : null}
+                    ))}
+                  </div>
+                ) : (
+                  <EmptyBlock
+                    title="No headlines returned"
+                    detail={newsError || "Research headlines temporarily unavailable."}
+                  />
+                )}
               </GlassPane>
             </div>
 
@@ -1153,7 +1100,7 @@ export default function MarketSymbolPage() {
               <GlassPane size="card">
                 <PaneHeader
                   title="Actions"
-                  subcopy="Public market actions, not owned-position math."
+                  subcopy="Clear public-market actions only."
                 />
 
                 <div style={{ display: "grid", gap: 10 }}>
@@ -1177,22 +1124,19 @@ export default function MarketSymbolPage() {
                     {isFavorite ? "Remove Favorite" : "Add to Favorites"}
                   </button>
 
-                  <ActionLink href={`/investments/discover`}>
+                  <ActionLink href="/investments/discover">
                     Back to Discover <ArrowRight size={14} />
                   </ActionLink>
                 </div>
               </GlassPane>
 
               <GlassPane size="card">
-                <PaneHeader
-                  title="Snapshot"
-                  subcopy="Fast market readout."
-                />
+                <PaneHeader title="Snapshot" subcopy="Fast market readout." />
 
                 <div style={{ display: "grid", gap: 8 }}>
                   <SnapshotRow label="Symbol" value={symbol || "—"} />
                   <SnapshotRow label="Asset Type" value={assetTypeLabel} />
-                  <SnapshotRow label="Exchange" value={asset?.exchange || quote?.exchange || "—"} />
+                  <SnapshotRow label="Exchange" value={resolvedExchange} />
                   <SnapshotRow
                     label="Open / Prev Close"
                     value={
@@ -1234,21 +1178,28 @@ export default function MarketSymbolPage() {
         .marketRoot {
           position: relative;
           z-index: 1;
-          padding: 18px 0 28px;
-          font-family: 'Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+          padding: 16px 0 26px;
+          font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
         }
 
         .marketInner {
           width: min(100%, 1380px);
           margin: 0 auto;
           display: grid;
-          gap: 14px;
+          gap: 12px;
         }
 
         .marketHeroGrid {
           display: grid;
-          grid-template-columns: minmax(0, 1fr) auto;
+          grid-template-columns: minmax(0, 1fr) minmax(250px, 300px);
           gap: 14px;
+          align-items: start;
+        }
+
+        .heroSide {
+          display: grid;
+          gap: 10px;
+          align-content: start;
         }
 
         .marketMetrics {
@@ -1260,15 +1211,15 @@ export default function MarketSymbolPage() {
 
         .marketMain {
           display: grid;
-          grid-template-columns: minmax(0, 1.4fr) minmax(340px, 0.82fr);
-          gap: 14px;
+          grid-template-columns: minmax(0, 1.34fr) minmax(320px, 0.78fr);
+          gap: 12px;
           align-items: start;
         }
 
         .marketLeftCol,
         .marketRightCol {
           display: grid;
-          gap: 14px;
+          gap: 12px;
           min-width: 0;
         }
 
@@ -1277,21 +1228,21 @@ export default function MarketSymbolPage() {
             grid-template-columns: repeat(2, minmax(0, 1fr));
           }
 
-          .marketMain {
+          .marketMain,
+          .marketHeroGrid {
             grid-template-columns: 1fr;
           }
         }
 
-        @media (max-width: 860px) {
+        @media (max-width: 760px) {
           .marketRoot {
-            padding: 10px 0 22px;
+            padding: 10px 0 20px;
           }
 
           .marketInner {
-            gap: 12px;
+            gap: 10px;
           }
 
-          .marketHeroGrid,
           .marketMetrics {
             grid-template-columns: 1fr;
           }

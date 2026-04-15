@@ -6,12 +6,11 @@ import styles from "./InvestmentsPage.module.css";
 import { supabase } from "@/lib/supabaseClient";
 import {
   BOARD_SYMBOLS,
-  DESK_TABS,
   NEWS_TTL_MS,
+  asSymbol,
   buildPortfolio,
   parseBatchPrices,
   sameNewsArticles,
-  toneByValue,
   toNum,
 } from "./investments.helpers";
 import {
@@ -52,9 +51,10 @@ export default function InvestmentsCommand() {
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
+  const [deletingAsset, setDeletingAsset] = useState(false);
 
   const [selectedAssetId, setSelectedAssetId] = useState("");
-  const [boardTab, setBoardTab] = useState("dashboard");
+  const [boardTab, setBoardTab] = useState("overview");
   const [filter, setFilter] = useState("open");
   const [sort, setSort] = useState("value");
   const [search, setSearch] = useState("");
@@ -109,9 +109,12 @@ export default function InvestmentsCommand() {
       }
 
       const assetRows = assetRes.data || [];
+      const txnRows = txnRes.data || [];
+      const favoriteRows = favoriteRes.data || [];
+
       setAssets(assetRows);
-      setTxns(txnRes.data || []);
-      setFavorites(favoriteRes.data || []);
+      setTxns(txnRows);
+      setFavorites(favoriteRows);
       setTradeAssetId(assetRows[0]?.id || "");
       setSelectedAssetId(assetRows[0]?.id || "");
       setLoading(false);
@@ -124,8 +127,8 @@ export default function InvestmentsCommand() {
     return [
       ...new Set(
         [
-          ...assets.map((a) => String(a.symbol || "").toUpperCase().trim()),
-          ...favorites.map((f) => String(f.symbol || "").toUpperCase().trim()),
+          ...assets.map((a) => asSymbol(a.symbol)),
+          ...favorites.map((f) => asSymbol(f.symbol)),
           ...BOARD_SYMBOLS.map((x) => x.symbol),
         ].filter(Boolean)
       ),
@@ -230,7 +233,7 @@ export default function InvestmentsCommand() {
         const bd = new Date(b.txn_date || 0).getTime();
         return bd - ad;
       })
-      .slice(0, 6);
+      .slice(0, 8);
   }, [txns]);
 
   const selectedHolding = useMemo(() => {
@@ -255,18 +258,15 @@ export default function InvestmentsCommand() {
 
   const visibleAssets = useMemo(() => {
     const q = search.trim().toLowerCase();
-    const favoriteSet = new Set(
-      favorites.map((f) => String(f.symbol || "").toUpperCase().trim())
-    );
+    const favoriteSet = new Set(favorites.map((f) => asSymbol(f.symbol)));
 
     let list = [...portfolio.holdings].filter((item) => {
       const symbolText = String(item.symbol || "").toLowerCase();
       const accountText = String(item.account || "").toLowerCase();
 
       if (q && !`${symbolText} ${accountText}`.includes(q)) return false;
-
       if (filter === "open" && !(toNum(item.shares) > 0)) return false;
-      if (filter === "watch" && !favoriteSet.has(String(item.symbol || "").toUpperCase())) return false;
+      if (filter === "watch" && !favoriteSet.has(asSymbol(item.symbol))) return false;
       if (filter === "red" && !(toNum(item.pnl) < 0 || !item.hasLivePrice)) return false;
 
       return true;
@@ -292,9 +292,9 @@ export default function InvestmentsCommand() {
   }, [portfolio.holdings, favorites, search, filter, sort]);
 
   const newsSymbols = useMemo(() => {
-    const selected = selectedHolding?.symbol ? [String(selectedHolding.symbol).toUpperCase()] : [];
-    const topOwned = openPositions.slice(0, 4).map((h) => String(h.symbol || "").toUpperCase());
-    const watch = favorites.slice(0, 3).map((f) => String(f.symbol || "").toUpperCase());
+    const selected = selectedHolding?.symbol ? [asSymbol(selectedHolding.symbol)] : [];
+    const topOwned = openPositions.slice(0, 4).map((h) => asSymbol(h.symbol));
+    const watch = favorites.slice(0, 3).map((f) => asSymbol(f.symbol));
 
     return [...new Set([...selected, ...topOwned, ...watch, "SPY"])].filter(Boolean).slice(0, 6);
   }, [selectedHolding, openPositions, favorites]);
@@ -367,7 +367,7 @@ export default function InvestmentsCommand() {
   }, [newsSymbolsKey]);
 
   async function addAsset() {
-    const clean = String(symbol || "").toUpperCase().trim();
+    const clean = asSymbol(symbol);
     if (!clean) return;
 
     setStatus("");
@@ -383,9 +383,13 @@ export default function InvestmentsCommand() {
         return;
       }
 
-      const exists = assets.some((a) => String(a.symbol || "").toUpperCase() === clean);
-      if (exists) {
-        setError(`${clean} is already in your portfolio.`);
+      const existing = assets.find((a) => asSymbol(a.symbol) === clean);
+      if (existing) {
+        setSelectedAssetId(existing.id);
+        setTradeAssetId(existing.id);
+        setBoardTab("overview");
+        setSymbol("");
+        setStatus(`${clean} is already on the desk. Moved focus to it.`);
         return;
       }
 
@@ -409,7 +413,7 @@ export default function InvestmentsCommand() {
       setAssets((prev) => [data, ...prev]);
       setTradeAssetId(data.id);
       setSelectedAssetId(data.id);
-      setBoardTab("ticket");
+      setBoardTab("overview");
       setSymbol("");
       setStatus(`${clean} added to the desk.`);
     } catch (err) {
@@ -478,11 +482,90 @@ export default function InvestmentsCommand() {
     }
   }
 
+  async function deleteSelectedAsset() {
+    if (!selectedHolding) return;
+
+    const symbolToDelete = asSymbol(selectedHolding.symbol);
+    const confirmed = window.confirm(
+      `Delete ${symbolToDelete} from the desk?\n\nThis will remove the asset and every fill tied to it.`
+    );
+
+    if (!confirmed) return;
+
+    setStatus("");
+    setError("");
+    setDeletingAsset(true);
+
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) {
+        setError("You must be logged in.");
+        setDeletingAsset(false);
+        return;
+      }
+
+      const favoriteDeleteRes = await supabase
+        .from("investment_favorites")
+        .delete()
+        .eq("user_id", user.id)
+        .eq("symbol", symbolToDelete);
+
+      if (favoriteDeleteRes.error) {
+        console.error(favoriteDeleteRes.error);
+      }
+
+      const txnDeleteRes = await supabase
+        .from("investment_transactions")
+        .delete()
+        .eq("user_id", user.id)
+        .eq("asset_id", selectedHolding.id);
+
+      if (txnDeleteRes.error) {
+        console.error(txnDeleteRes.error);
+        setError("Could not delete the position fills.");
+        setDeletingAsset(false);
+        return;
+      }
+
+      const assetDeleteRes = await supabase
+        .from("investment_assets")
+        .delete()
+        .eq("user_id", user.id)
+        .eq("id", selectedHolding.id);
+
+      if (assetDeleteRes.error) {
+        console.error(assetDeleteRes.error);
+        setError("Could not delete the position.");
+        setDeletingAsset(false);
+        return;
+      }
+
+      const remainingAssets = assets.filter((asset) => asset.id !== selectedHolding.id);
+      const nextId = remainingAssets[0]?.id || "";
+
+      setAssets(remainingAssets);
+      setTxns((prev) => prev.filter((txn) => txn.asset_id !== selectedHolding.id));
+      setFavorites((prev) => prev.filter((row) => asSymbol(row.symbol) !== symbolToDelete));
+      setSelectedAssetId(nextId);
+      setTradeAssetId(nextId);
+      setBoardTab("overview");
+      setStatus(`${symbolToDelete} deleted from the desk.`);
+    } catch (err) {
+      console.error(err);
+      setError("Failed deleting the position.");
+    } finally {
+      setDeletingAsset(false);
+    }
+  }
+
   if (loading) {
     return (
       <main className={styles.page}>
         <GlassPane className={styles.gatePanel}>
-          <div className={styles.gateText}>Loading investments desk.</div>
+          <div className={styles.gateText}>Loading portfolio desk.</div>
         </GlassPane>
       </main>
     );
@@ -531,7 +614,7 @@ export default function InvestmentsCommand() {
             favorites={favorites}
             recentTxns={recentTxns}
             assetMap={assetMap}
-            boardTab={DESK_TABS.includes(boardTab) ? boardTab : "dashboard"}
+            boardTab={boardTab}
             setBoardTab={setBoardTab}
             assets={assets}
             tradeAssetId={tradeAssetId}
@@ -548,6 +631,8 @@ export default function InvestmentsCommand() {
             setSymbol={setSymbol}
             addAsset={addAsset}
             logTrade={logTrade}
+            deleteSelectedAsset={deleteSelectedAsset}
+            deletingAsset={deletingAsset}
           />
         </div>
       </div>

@@ -46,13 +46,6 @@
   border: 0;
   background: transparent;
   padding: 0;
-}
-
-.logoButton,
-.collapseButton,
-.mobileClose,
-.accountButton,
-.compactAccountButton {
   cursor: pointer;
 }
 
@@ -288,7 +281,7 @@
 
 .activeSummary {
   margin: 12px 14px 0;
-  padding: 10px 12px;
+  padding: 12px;
   border-radius: 13px;
   border: 1px solid rgba(255, 255, 255, 0.05);
   background:
@@ -311,7 +304,7 @@
   margin-top: 6px;
   font-size: 11px;
   line-height: 1.5;
-  color: rgba(255, 255, 255, 0.45);
+  color: rgba(255, 255, 255, 0.48);
 }
 
 .detailBody {

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  BookOpenText,
   CalendarDays,
   ChevronRight,
   CreditCard,
@@ -29,13 +30,17 @@ import styles from "./SideNav.module.css";
 const NAV_ITEMS = [
   { label: "Dashboard", href: "/", icon: LayoutDashboard, section: "overview" },
   { label: "Calendar", href: "/calendar", icon: CalendarDays, section: "overview" },
+
   { label: "Accounts", href: "/accounts", icon: Wallet, section: "money" },
   { label: "Bills", href: "/bills", icon: Receipt, section: "money" },
   { label: "Debt", href: "/debt", icon: CreditCard, section: "money" },
   { label: "Income", href: "/income", icon: Gem, section: "money" },
   { label: "Spending", href: "/spending", icon: PiggyBank, section: "money" },
-  { label: "Investments", href: "/investments", icon: TrendingUp, section: "money", badge: "LIVE" },
   { label: "Savings", href: "/savings", icon: Target, section: "money" },
+
+  { label: "Portfolio Desk", href: "/investments", icon: TrendingUp, section: "stocks", badge: "LIVE" },
+  { label: "Research Desk", href: "/investments/discover", icon: BookOpenText, section: "stocks", badge: "LAB" },
+
   { label: "Refinance Analyzer", href: "/tools/refinance", icon: Landmark, section: "tools", badge: "NEW" },
   { label: "PFS Builder", href: "/tools/pfs", icon: FileText, section: "tools" },
 ];
@@ -67,6 +72,13 @@ const PROFILE_ITEMS = [
   },
 ];
 
+const SECTION_COPY = {
+  overview: "Core system visibility and daily command pages.",
+  money: "Cash flow, bills, debt, spending, savings, and account movement.",
+  stocks: "Your stock workspace, portfolio desk, research desk, and market routes.",
+  tools: "Standalone premium tools and future paid utility routes.",
+};
+
 function cx(...names) {
   return names.filter(Boolean).join(" ");
 }
@@ -74,6 +86,13 @@ function cx(...names) {
 function isActive(pathname, href) {
   if (href === "/") return pathname === "/";
   return pathname === href || pathname.startsWith(`${href}/`);
+}
+
+function resolveActiveItem(pathname) {
+  if (pathname.startsWith("/market/")) {
+    return NAV_ITEMS.find((item) => item.href === "/investments/discover");
+  }
+  return NAV_ITEMS.find((item) => isActive(pathname, item.href)) || NAV_ITEMS[0];
 }
 
 function NavDetailItem({ item, active, onNavigate }) {
@@ -119,7 +138,9 @@ function ProfileMenu({ open, compact = false, onNavigate }) {
       <div className={styles.profileMetaCard}>
         <div className={styles.profileMetaLabel}>Workspace</div>
         <div className={styles.profileMetaValue}>Premium finance OS</div>
-        <div className={styles.profileMetaSub}>Account and system controls now live here instead of cluttering the nav.</div>
+        <div className={styles.profileMetaSub}>
+          Account and system controls live here so the main nav stays clean.
+        </div>
       </div>
 
       <div className={styles.profileLinks}>
@@ -197,10 +218,11 @@ export default function SideNav({
   const compactProfileRef = useRef(null);
   const expandedProfileRef = useRef(null);
 
-  const activeItem = NAV_ITEMS.find((item) => isActive(pathname, item.href)) || NAV_ITEMS[0];
+  const activeItem = resolveActiveItem(pathname);
 
   const overviewItems = useMemo(() => NAV_ITEMS.filter((item) => item.section === "overview"), []);
   const moneyItems = useMemo(() => NAV_ITEMS.filter((item) => item.section === "money"), []);
+  const stockItems = useMemo(() => NAV_ITEMS.filter((item) => item.section === "stocks"), []);
   const toolItems = useMemo(() => NAV_ITEMS.filter((item) => item.section === "tools"), []);
 
   useEffect(() => {
@@ -213,6 +235,7 @@ export default function SideNav({
       const expandedNode = expandedProfileRef.current;
       const insideCompact = compactNode?.contains(event.target);
       const insideExpanded = expandedNode?.contains(event.target);
+
       if (!insideCompact && !insideExpanded) {
         setProfileOpen(false);
       }
@@ -239,6 +262,7 @@ export default function SideNav({
   }
 
   const showCompactAccount = collapsed || mobile;
+  const activeSummaryCopy = SECTION_COPY[activeItem?.section] || SECTION_COPY.overview;
 
   return (
     <div
@@ -330,10 +354,8 @@ export default function SideNav({
 
         <div className={styles.activeSummary}>
           <div className={styles.activeSummaryLabel}>Current</div>
-          <div className={styles.activeSummaryName}>{activeItem.label}</div>
-          <div className={styles.activeSummaryNote}>
-            Core pages stay visible. Account and system actions are tucked into the profile control.
-          </div>
+          <div className={styles.activeSummaryName}>{activeItem?.label || "Dashboard"}</div>
+          <div className={styles.activeSummaryNote}>{activeSummaryCopy}</div>
         </div>
 
         <div className={styles.detailBody}>
@@ -355,6 +377,20 @@ export default function SideNav({
             <div className={styles.sectionLabel}>Money</div>
             <div className={styles.detailList}>
               {moneyItems.map((item) => (
+                <NavDetailItem
+                  key={item.href}
+                  item={item}
+                  active={isActive(pathname, item.href)}
+                  onNavigate={handleNavigate}
+                />
+              ))}
+            </div>
+          </div>
+
+          <div className={styles.detailSection}>
+            <div className={styles.sectionLabel}>Stocks</div>
+            <div className={styles.detailList}>
+              {stockItems.map((item) => (
                 <NavDetailItem
                   key={item.href}
                   item={item}

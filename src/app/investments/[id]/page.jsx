@@ -1,25 +1,26 @@
 "use client";
 
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import {
   ArrowLeft,
   ArrowRight,
   BadgeDollarSign,
-  BookOpenText,
   ExternalLink,
   Layers3,
   Newspaper,
   Plus,
-  TrendingDown,
+  Trash2,
   TrendingUp,
   Wallet,
 } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import GlassPane from "../../components/GlassPane";
 import styles from "../InvestmentsPage.module.css";
+import { ActionBtn, ActionLink, MiniPill } from "../investments.components";
 import {
+  asSymbol,
   fullDateTime,
   money,
   pct,
@@ -32,56 +33,6 @@ import {
 
 function cx(...parts) {
   return parts.filter(Boolean).join(" ");
-}
-
-function MiniPill({ children, tone = "neutral" }) {
-  const meta = toneMeta(tone);
-
-  return (
-    <div
-      className={styles.miniPill}
-      style={{
-        borderColor: meta.border,
-        color: tone === "neutral" ? "rgba(255,255,255,0.9)" : meta.text,
-        boxShadow: `0 0 12px ${meta.glow}`,
-      }}
-    >
-      {children}
-    </div>
-  );
-}
-
-function ActionLink({ href, children }) {
-  return (
-    <Link href={href} className={styles.actionLink}>
-      {children}
-    </Link>
-  );
-}
-
-function ActionBtn({
-  children,
-  onClick,
-  variant = "ghost",
-  disabled = false,
-  type = "button",
-  full = false,
-}) {
-  return (
-    <button
-      type={type}
-      onClick={onClick}
-      disabled={disabled}
-      className={cx(
-        styles.actionBtn,
-        variant === "primary" && styles.actionBtnPrimary,
-        variant === "danger" && styles.actionBtnDanger,
-        full && styles.actionBtnFull
-      )}
-    >
-      {children}
-    </button>
-  );
 }
 
 function PaneHeader({ title, subcopy, right }) {
@@ -201,14 +152,17 @@ function TradeLedgerRow({ row, selected, onClick }) {
 
 export default function InvestmentAssetPage() {
   const params = useParams();
+  const router = useRouter();
   const assetId = params?.id;
 
   const [asset, setAsset] = useState(null);
   const [txns, setTxns] = useState([]);
-  const [livePrice, setLivePrice] = useState(null);
+  const [liveQuote, setLiveQuote] = useState(null);
   const [news, setNews] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [loadingPrice, setLoadingPrice] = useState(false);
+  const [savingTrade, setSavingTrade] = useState(false);
+  const [deletingTrade, setDeletingTrade] = useState(false);
+  const [deletingAsset, setDeletingAsset] = useState(false);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
 
@@ -274,13 +228,11 @@ export default function InvestmentAssetPage() {
 
   useEffect(() => {
     async function loadPrice() {
-      const symbol = String(asset?.symbol || "").toUpperCase().trim();
+      const symbol = asSymbol(asset?.symbol);
       if (!symbol) {
-        setLivePrice(null);
+        setLiveQuote(null);
         return;
       }
-
-      setLoadingPrice(true);
 
       try {
         const res = await fetch(`/api/prices?symbol=${encodeURIComponent(symbol)}`, {
@@ -288,17 +240,23 @@ export default function InvestmentAssetPage() {
         });
         const data = await res.json();
 
-        if (res.ok && Number.isFinite(Number(data?.price)) && Number(data.price) > 0) {
-          setLivePrice(Number(data.price));
+        if (res.ok && !data?.error) {
+          setLiveQuote({
+            price: Number.isFinite(Number(data?.price)) ? Number(data.price) : null,
+            change: Number.isFinite(Number(data?.change)) ? Number(data.change) : null,
+            changesPercentage: Number.isFinite(
+              Number(data?.changesPercentage ?? data?.changePercent ?? data?.percent_change)
+            )
+              ? Number(data?.changesPercentage ?? data?.changePercent ?? data?.percent_change)
+              : null,
+          });
         } else {
-          setLivePrice(null);
+          setLiveQuote(null);
         }
       } catch (err) {
         console.error("price fetch failed", err);
-        setLivePrice(null);
+        setLiveQuote(null);
       }
-
-      setLoadingPrice(false);
     }
 
     if (asset?.symbol) loadPrice();
@@ -306,7 +264,7 @@ export default function InvestmentAssetPage() {
 
   useEffect(() => {
     async function loadNews() {
-      const symbol = String(asset?.symbol || "").toUpperCase().trim();
+      const symbol = asSymbol(asset?.symbol);
       if (!symbol) {
         setNews([]);
         return;
@@ -362,13 +320,14 @@ export default function InvestmentAssetPage() {
           sharesAfter = shares + qty;
           basisAfter = remainingBasis + qty * price;
         } else if (txnType === "SELL") {
-          totalSoldShares += qty;
-          totalSellProceeds += qty * price;
-          basisRemoved = avgCostBefore * qty;
+          const qtySold = Math.min(shares, qty);
+          totalSoldShares += qtySold;
+          totalSellProceeds += qtySold * price;
+          basisRemoved = avgCostBefore * qtySold;
           costRemovedBySells += basisRemoved;
-          realizedOnTxn = qty * price - basisRemoved;
+          realizedOnTxn = qtySold * price - basisRemoved;
           realizedPnl += realizedOnTxn;
-          sharesAfter = shares - qty;
+          sharesAfter = shares - qtySold;
           basisAfter = remainingBasis - basisRemoved;
         }
       }
@@ -387,15 +346,14 @@ export default function InvestmentAssetPage() {
     });
 
     const remainingShares = shares;
-    const currentValue =
-      Number.isFinite(Number(livePrice)) && Number(livePrice) > 0
-        ? remainingShares * Number(livePrice)
+    const livePrice =
+      Number.isFinite(Number(liveQuote?.price)) && Number(liveQuote?.price) > 0
+        ? Number(liveQuote.price)
         : null;
 
+    const currentValue = livePrice != null ? remainingShares * livePrice : null;
     const avgCostRemaining = remainingShares > 0 ? remainingBasis / remainingShares : 0;
-
     const unrealizedPnl = currentValue != null ? currentValue - remainingBasis : null;
-
     const unrealizedPct =
       currentValue != null && remainingBasis > 0
         ? ((currentValue - remainingBasis) / remainingBasis) * 100
@@ -415,8 +373,9 @@ export default function InvestmentAssetPage() {
       currentValue,
       unrealizedPnl,
       unrealizedPct,
+      livePrice,
     };
-  }, [txns, livePrice]);
+  }, [txns, liveQuote]);
 
   const assetTone =
     breakdown.unrealizedPnl == null ? "neutral" : toneByValue(breakdown.unrealizedPnl);
@@ -443,6 +402,8 @@ export default function InvestmentAssetPage() {
       return;
     }
 
+    setSavingTrade(true);
+
     try {
       const {
         data: { user },
@@ -450,6 +411,7 @@ export default function InvestmentAssetPage() {
 
       if (!user) {
         setError("You must be logged in.");
+        setSavingTrade(false);
         return;
       }
 
@@ -469,6 +431,7 @@ export default function InvestmentAssetPage() {
       if (insertError) {
         console.error(insertError);
         setError("Could not save trade.");
+        setSavingTrade(false);
         return;
       }
 
@@ -481,6 +444,125 @@ export default function InvestmentAssetPage() {
     } catch (err) {
       console.error(err);
       setError("Failed saving trade.");
+    } finally {
+      setSavingTrade(false);
+    }
+  }
+
+  async function deleteSelectedTrade() {
+    if (!selectedTrade) return;
+
+    const confirmed = window.confirm(
+      `Delete this ${String(selectedTrade.txn_type || "").toUpperCase()} fill?\n\nThis only removes the selected ledger row.`
+    );
+    if (!confirmed) return;
+
+    setDeletingTrade(true);
+    setStatus("");
+    setError("");
+
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) {
+        setError("You must be logged in.");
+        setDeletingTrade(false);
+        return;
+      }
+
+      const { error: deleteError } = await supabase
+        .from("investment_transactions")
+        .delete()
+        .eq("id", selectedTrade.id)
+        .eq("user_id", user.id);
+
+      if (deleteError) {
+        console.error(deleteError);
+        setError("Could not delete the selected fill.");
+        setDeletingTrade(false);
+        return;
+      }
+
+      const remaining = txns.filter((row) => row.id !== selectedTrade.id);
+      setTxns(remaining);
+      setSelectedTradeId(remaining[remaining.length - 1]?.id || "");
+      setStatus("Selected fill deleted.");
+    } catch (err) {
+      console.error(err);
+      setError("Failed deleting the selected fill.");
+    } finally {
+      setDeletingTrade(false);
+    }
+  }
+
+  async function deletePosition() {
+    const symbol = asSymbol(asset?.symbol);
+    if (!symbol) return;
+
+    const confirmed = window.confirm(
+      `Delete ${symbol} from investments?\n\nThis removes the position and every fill tied to it.`
+    );
+    if (!confirmed) return;
+
+    setDeletingAsset(true);
+    setStatus("");
+    setError("");
+
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) {
+        setError("You must be logged in.");
+        setDeletingAsset(false);
+        return;
+      }
+
+      const favDelete = await supabase
+        .from("investment_favorites")
+        .delete()
+        .eq("user_id", user.id)
+        .eq("symbol", symbol);
+
+      if (favDelete.error) {
+        console.error(favDelete.error);
+      }
+
+      const txnDelete = await supabase
+        .from("investment_transactions")
+        .delete()
+        .eq("user_id", user.id)
+        .eq("asset_id", assetId);
+
+      if (txnDelete.error) {
+        console.error(txnDelete.error);
+        setError("Could not delete position fills.");
+        setDeletingAsset(false);
+        return;
+      }
+
+      const assetDelete = await supabase
+        .from("investment_assets")
+        .delete()
+        .eq("user_id", user.id)
+        .eq("id", assetId);
+
+      if (assetDelete.error) {
+        console.error(assetDelete.error);
+        setError("Could not delete the position.");
+        setDeletingAsset(false);
+        return;
+      }
+
+      router.push("/investments");
+    } catch (err) {
+      console.error(err);
+      setError("Failed deleting the position.");
+    } finally {
+      setDeletingAsset(false);
     }
   }
 
@@ -517,13 +599,13 @@ export default function InvestmentAssetPage() {
       <GlassPane className={styles.summaryStrip}>
         <div className={styles.summaryInner}>
           <div className={styles.titleBlock}>
-            <div className={styles.eyebrow}>Investments / Position</div>
+            <div className={styles.eyebrow}>Stocks / Position</div>
             <div className={styles.pageTitleRow}>
-              <div className={styles.pageTitle}>{String(asset.symbol || "—").toUpperCase()}</div>
+              <div className={styles.pageTitle}>{asSymbol(asset.symbol)}</div>
               <MiniPill tone={assetTone}>{asset.asset_type || "asset"}</MiniPill>
             </div>
             <div className={styles.workspaceCopy}>
-              One-symbol command page with live value, full ledger, research, and routing.
+              Single-position page with live value, ledger math, ticket, research, and very obvious delete controls.
             </div>
           </div>
 
@@ -574,19 +656,23 @@ export default function InvestmentAssetPage() {
               <div className={styles.summaryLabel}>Ledger Rows</div>
               <div className={styles.summaryValue}>{breakdown.rows.length}</div>
               <div className={styles.summaryHint}>
-                {loadingPrice ? "price loading" : livePrice ? money(livePrice) : "no live price"}
+                {breakdown.livePrice ? money(breakdown.livePrice) : "no live price"}
               </div>
             </div>
           </div>
 
           <div className={styles.summaryRight}>
-            <MiniPill tone={assetTone}>{asset.symbol}</MiniPill>
+            <MiniPill tone={assetTone}>{asSymbol(asset.symbol)}</MiniPill>
             <ActionLink href="/investments">
               <ArrowLeft size={14} /> Back
             </ActionLink>
             <ActionLink href={`/market/${encodeURIComponent(asset.symbol || "")}`}>
               Open Market <ExternalLink size={14} />
             </ActionLink>
+            <ActionBtn variant="danger" onClick={deletePosition} disabled={deletingAsset}>
+              <Trash2 size={14} />
+              {deletingAsset ? "Deleting..." : "Delete Position"}
+            </ActionBtn>
           </div>
         </div>
       </GlassPane>
@@ -629,9 +715,7 @@ export default function InvestmentAssetPage() {
               <div className={styles.focusHeader}>
                 <div>
                   <div className={styles.eyebrow}>Position command</div>
-                  <div className={styles.focusTitle}>
-                    {String(asset.symbol || "—").toUpperCase()} view
-                  </div>
+                  <div className={styles.focusTitle}>{asSymbol(asset.symbol)} view</div>
                   <div className={styles.focusMeta}>
                     {asset.account || "Brokerage"} • {asset.asset_type || "asset"} • {breakdown.rows.length} ledger rows
                   </div>
@@ -640,7 +724,7 @@ export default function InvestmentAssetPage() {
                 <div className={styles.focusHeaderRight}>
                   <div className={styles.focusBadges}>
                     <MiniPill tone={assetTone}>
-                      {loadingPrice ? "Loading price" : livePrice ? money(livePrice) : "No live price"}
+                      {breakdown.livePrice ? money(breakdown.livePrice) : "No live price"}
                     </MiniPill>
                     <MiniPill tone={toneByValue(breakdown.realizedPnl)}>
                       {signedMoney(breakdown.realizedPnl)}
@@ -650,7 +734,7 @@ export default function InvestmentAssetPage() {
               </div>
 
               <div className={styles.tabRow}>
-                {["overview", "ledger", "research", "ticket"].map((tab) => (
+                {["overview", "ledger", "research", "ticket", "manage"].map((tab) => (
                   <button
                     key={tab}
                     type="button"
@@ -669,7 +753,7 @@ export default function InvestmentAssetPage() {
                       <PaneHeader
                         title="Position stack"
                         subcopy="What is actually sitting in this name right now."
-                        right={<MiniPill tone={assetTone}>{asset.symbol}</MiniPill>}
+                        right={<MiniPill tone={assetTone}>{asSymbol(asset.symbol)}</MiniPill>}
                       />
 
                       <div className={styles.metricGrid}>
@@ -762,7 +846,7 @@ export default function InvestmentAssetPage() {
                             <div className={styles.heroMiniCard}>
                               <div className={styles.metricLabel}>Live price</div>
                               <div className={styles.heroMiniValue}>
-                                {loadingPrice ? "Loading..." : livePrice ? money(livePrice) : "—"}
+                                {breakdown.livePrice ? money(breakdown.livePrice) : "—"}
                               </div>
                             </div>
                           </div>
@@ -827,11 +911,11 @@ export default function InvestmentAssetPage() {
                       <div className={styles.panel}>
                         <PaneHeader
                           title="Next moves"
-                          subcopy="Fast paths through the section."
+                          subcopy="Fast paths through the stock section."
                         />
                         <div className={styles.ctaStack}>
                           <ActionLink href="/investments">
-                            Back to Investments <ArrowRight size={14} />
+                            Back to Portfolio Desk <ArrowRight size={14} />
                           </ActionLink>
                           <ActionLink href="/investments/discover">
                             Research Desk <ArrowRight size={14} />
@@ -922,6 +1006,29 @@ export default function InvestmentAssetPage() {
                     <div className={styles.asideStack}>
                       <div className={styles.panel}>
                         <PaneHeader
+                          title="Ledger controls"
+                          subcopy="Delete the selected fill here."
+                        />
+                        <div className={styles.dangerBlock}>
+                          <div className={styles.dangerTitle}>Delete selected fill</div>
+                          <div className={styles.dangerText}>
+                            This removes only the highlighted ledger row, not the whole stock.
+                          </div>
+                          <div className={styles.dangerActions}>
+                            <ActionBtn
+                              variant="danger"
+                              onClick={deleteSelectedTrade}
+                              disabled={!selectedTrade || deletingTrade}
+                            >
+                              <Trash2 size={14} />
+                              {deletingTrade ? "Deleting..." : "Delete Selected Fill"}
+                            </ActionBtn>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className={styles.panel}>
+                        <PaneHeader
                           title="Position snapshot"
                           subcopy="Whole-position readout."
                         />
@@ -940,15 +1047,11 @@ export default function InvestmentAssetPage() {
                           </div>
                           <div className={styles.infoRow}>
                             <span>Current value</span>
-                            <span>
-                              {breakdown.currentValue != null ? money(breakdown.currentValue) : "—"}
-                            </span>
+                            <span>{breakdown.currentValue != null ? money(breakdown.currentValue) : "—"}</span>
                           </div>
                           <div className={styles.infoRow}>
                             <span>Unrealized</span>
-                            <span
-                              style={{ color: toneMeta(assetTone).text }}
-                            >
+                            <span style={{ color: toneMeta(assetTone).text }}>
                               {breakdown.unrealizedPnl != null ? signedMoney(breakdown.unrealizedPnl) : "—"}
                             </span>
                           </div>
@@ -963,7 +1066,7 @@ export default function InvestmentAssetPage() {
                     <div className={styles.panel}>
                       <PaneHeader
                         title="Research headlines"
-                        subcopy={`Live symbol news for ${asset.symbol}.`}
+                        subcopy={`Live symbol news for ${asSymbol(asset.symbol)}.`}
                         right={<MiniPill>{news.length} stories</MiniPill>}
                       />
 
@@ -976,7 +1079,7 @@ export default function InvestmentAssetPage() {
                       ) : (
                         <EmptyState
                           title="No headlines returned"
-                          detail="Once the news route is live, this rail fills with symbol coverage."
+                          detail="Once the news route returns, this rail fills with symbol coverage."
                         />
                       )}
                     </div>
@@ -1005,7 +1108,7 @@ export default function InvestmentAssetPage() {
                         <div className={styles.infoList}>
                           <div className={styles.infoRow}>
                             <span>Symbol</span>
-                            <span>{String(asset.symbol || "—").toUpperCase()}</span>
+                            <span>{asSymbol(asset.symbol)}</span>
                           </div>
                           <div className={styles.infoRow}>
                             <span>Account</span>
@@ -1026,7 +1129,7 @@ export default function InvestmentAssetPage() {
                     <div className={styles.panel}>
                       <PaneHeader
                         title="Trade ticket"
-                        subcopy="Looks like a real ticket, writes to your portfolio ledger."
+                        subcopy="Looks like a real ticket and writes to your portfolio ledger."
                         right={<MiniPill tone="amber">ledger route</MiniPill>}
                       />
 
@@ -1077,8 +1180,8 @@ export default function InvestmentAssetPage() {
                           </Field>
                         </div>
 
-                        <ActionBtn variant="primary" onClick={logTrade} full>
-                          <Plus size={14} /> Save Trade
+                        <ActionBtn variant="primary" onClick={logTrade} full disabled={savingTrade}>
+                          <Plus size={14} /> {savingTrade ? "Saving..." : "Save Trade"}
                         </ActionBtn>
                       </div>
                     </div>
@@ -1092,11 +1195,11 @@ export default function InvestmentAssetPage() {
                         <div className={styles.infoList}>
                           <div className={styles.infoRow}>
                             <span>Symbol</span>
-                            <span>{String(asset.symbol || "—").toUpperCase()}</span>
+                            <span>{asSymbol(asset.symbol)}</span>
                           </div>
                           <div className={styles.infoRow}>
                             <span>Live price</span>
-                            <span>{loadingPrice ? "Loading..." : livePrice ? money(livePrice) : "—"}</span>
+                            <span>{breakdown.livePrice ? money(breakdown.livePrice) : "—"}</span>
                           </div>
                           <div className={styles.infoRow}>
                             <span>Remaining shares</span>
@@ -1124,6 +1227,101 @@ export default function InvestmentAssetPage() {
                           </ActionLink>
                           <ActionLink href={`/market/${encodeURIComponent(asset.symbol || "")}`}>
                             Open market <ExternalLink size={14} />
+                          </ActionLink>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
+
+                {boardTab === "manage" ? (
+                  <div className={styles.splitLayout}>
+                    <div className={styles.panel}>
+                      <PaneHeader
+                        title="Position controls"
+                        subcopy="This is the obvious delete zone you asked for."
+                        right={<MiniPill tone="amber">clear action zone</MiniPill>}
+                      />
+
+                      <div className={styles.infoList}>
+                        <div className={styles.infoRow}>
+                          <span>Symbol</span>
+                          <span>{asSymbol(asset.symbol)}</span>
+                        </div>
+                        <div className={styles.infoRow}>
+                          <span>Account</span>
+                          <span>{asset.account || "Brokerage"}</span>
+                        </div>
+                        <div className={styles.infoRow}>
+                          <span>Remaining shares</span>
+                          <span>
+                            {breakdown.remainingShares.toLocaleString(undefined, {
+                              maximumFractionDigits: 4,
+                            })}
+                          </span>
+                        </div>
+                        <div className={styles.infoRow}>
+                          <span>Ledger rows</span>
+                          <span>{breakdown.rows.length}</span>
+                        </div>
+                      </div>
+
+                      <div className={styles.dangerBlock}>
+                        <div className={styles.dangerTitle}>Delete this stock</div>
+                        <div className={styles.dangerText}>
+                          This deletes the position itself and every fill attached to it. It is not buried.
+                          It is right here.
+                        </div>
+                        <div className={styles.dangerActions}>
+                          <ActionBtn
+                            variant="danger"
+                            onClick={deletePosition}
+                            disabled={deletingAsset}
+                          >
+                            <Trash2 size={14} />
+                            {deletingAsset ? "Deleting..." : `Delete ${asSymbol(asset.symbol)}`}
+                          </ActionBtn>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className={styles.asideStack}>
+                      <div className={styles.panel}>
+                        <PaneHeader
+                          title="What delete does"
+                          subcopy="No hidden behavior."
+                        />
+                        <div className={styles.infoList}>
+                          <div className={styles.infoRow}>
+                            <span>Position row</span>
+                            <span>Deleted</span>
+                          </div>
+                          <div className={styles.infoRow}>
+                            <span>Ledger rows</span>
+                            <span>Deleted</span>
+                          </div>
+                          <div className={styles.infoRow}>
+                            <span>Watchlist entry</span>
+                            <span>Removed</span>
+                          </div>
+                          <div className={styles.infoRow}>
+                            <span>Other stocks</span>
+                            <span>Unaffected</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className={styles.panel}>
+                        <PaneHeader
+                          title="Safer routes"
+                          subcopy="If you want to inspect first."
+                        />
+                        <div className={styles.ctaStack}>
+                          <ActionLink href="/investments">
+                            Back to Portfolio Desk <ArrowRight size={14} />
+                          </ActionLink>
+                          <ActionLink href={`/market/${encodeURIComponent(asset.symbol || "")}`}>
+                            Open Market <ExternalLink size={14} />
                           </ActionLink>
                         </div>
                       </div>

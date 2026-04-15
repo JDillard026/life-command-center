@@ -1,8 +1,9 @@
 .page {
   min-width: 0;
   display: grid;
-  gap: 12px;
+  gap: 10px;
   color: rgba(247, 251, 255, 0.98);
+  min-height: 0;
 }
 
 .statusStrip,
@@ -10,31 +11,45 @@
 .navigatorPane,
 .focusPane,
 .gatePanel {
-  border-radius: 20px;
-  border: 1px solid rgba(214, 226, 255, 0.08);
+  border-radius: 18px;
+  border: 1px solid rgba(214, 226, 255, 0.07);
   background:
-    radial-gradient(circle at top right, rgba(62, 102, 255, 0.08), transparent 30%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.024), rgba(255, 255, 255, 0.01)),
-    rgba(8, 11, 18, 0.86);
+    radial-gradient(circle at top right, rgba(52, 94, 255, 0.06), transparent 28%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0.008)),
+    rgba(8, 11, 18, 0.9);
   box-shadow:
-    0 18px 44px rgba(0, 0, 0, 0.24),
-    inset 0 1px 0 rgba(255, 255, 255, 0.028);
+    0 14px 36px rgba(0, 0, 0, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.024);
 }
 
 .statusStrip {
-  padding: 14px 16px;
+  padding: 12px 14px;
 }
 
 .statusTitle {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 850;
   color: #fff;
 }
 
-.statusText {
-  margin-top: 4px;
-  font-size: 13px;
-  color: rgba(255, 255, 255, 0.68);
+.statusText,
+.workspaceCopy,
+.summaryHint,
+.paneSub,
+.metricSub,
+.focusMeta,
+.emptyText,
+.feedSub,
+.signalDetail,
+.navigatorMeta,
+.holdingMeta,
+.holdingSub,
+.favoriteSub,
+.tradeSub,
+.dangerText {
+  font-size: 11.5px;
+  line-height: 1.42;
+  color: rgba(255, 255, 255, 0.6);
 }
 
 .gatePanel {
@@ -50,19 +65,19 @@
 }
 
 .summaryStrip {
-  padding: 14px 16px;
+  padding: 12px 14px;
 }
 
 .summaryInner {
   display: grid;
-  grid-template-columns: minmax(220px, 0.92fr) minmax(0, 1.5fr) auto;
-  gap: 12px;
+  grid-template-columns: minmax(220px, 0.9fr) minmax(0, 1.45fr) auto;
+  gap: 10px;
   align-items: center;
 }
 
 .titleBlock {
   display: grid;
-  gap: 6px;
+  gap: 5px;
   min-width: 0;
 }
 
@@ -72,65 +87,48 @@
 .paneTitle,
 .marketLabel,
 .feedMeta {
-  font-size: 10px;
+  font-size: 9px;
   text-transform: uppercase;
   letter-spacing: 0.15em;
   font-weight: 800;
-  color: rgba(255, 255, 255, 0.42);
+  color: rgba(255, 255, 255, 0.4);
 }
 
 .pageTitleRow {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   flex-wrap: wrap;
 }
 
 .pageTitle {
-  font-size: clamp(24px, 2.7vw, 34px);
-  line-height: 1;
+  font-size: clamp(22px, 2.4vw, 30px);
+  line-height: 0.98;
   font-weight: 900;
-  letter-spacing: -0.055em;
+  letter-spacing: -0.05em;
   color: #fff;
-}
-
-.workspaceCopy,
-.summaryHint,
-.paneSub,
-.metricSub,
-.focusMeta,
-.emptyText,
-.feedSub,
-.signalDetail,
-.navigatorMeta,
-.holdingMeta,
-.holdingSub,
-.statusText {
-  font-size: 12px;
-  line-height: 1.45;
-  color: rgba(255, 255, 255, 0.60);
 }
 
 .summaryStats {
   display: grid;
-  grid-template-columns: repeat(5, minmax(108px, 1fr));
+  grid-template-columns: repeat(5, minmax(100px, 1fr));
   gap: 8px;
   min-width: 0;
 }
 
 .summaryStat {
-  padding: 10px 11px;
-  border-radius: 16px;
-  border: 1px solid rgba(214, 226, 255, 0.08);
+  padding: 9px 10px;
+  border-radius: 14px;
+  border: 1px solid rgba(214, 226, 255, 0.07);
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.024), rgba(255, 255, 255, 0.012)),
-    rgba(255, 255, 255, 0.014);
+    linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0.01)),
+    rgba(255, 255, 255, 0.012);
   display: grid;
   gap: 4px;
 }
 
 .summaryValue {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 850;
   letter-spacing: -0.03em;
   color: #fff;
@@ -141,7 +139,10 @@
 .focusBadges,
 .focusActionRow,
 .tabRow,
-.ctaStack {
+.ctaStack,
+.dangerActions,
+.navigatorBadges,
+.chipRow {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
@@ -153,38 +154,41 @@
 }
 
 .miniPill {
-  min-height: 28px;
+  min-height: 26px;
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 0 11px;
+  gap: 7px;
+  padding: 0 10px;
   border-radius: 999px;
-  border: 1px solid rgba(214, 226, 255, 0.12);
+  border: 1px solid rgba(214, 226, 255, 0.11);
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.012)),
-    rgba(255, 255, 255, 0.02);
-  font-size: 11px;
+    linear-gradient(180deg, rgba(255, 255, 255, 0.038), rgba(255, 255, 255, 0.01)),
+    rgba(255, 255, 255, 0.018);
+  font-size: 10.5px;
   font-weight: 800;
   white-space: nowrap;
 }
 
 .workspace {
   display: grid;
-  grid-template-columns: minmax(400px, 0.9fr) minmax(0, 1.62fr);
-  gap: 12px;
+  grid-template-columns: minmax(330px, 0.82fr) minmax(0, 1.68fr);
+  gap: 10px;
   align-items: stretch;
+  min-height: clamp(620px, calc(100svh - 210px), 760px);
 }
 
 .leftCol,
 .mainCol {
   min-width: 0;
+  min-height: 0;
 }
 
 .navigatorPane,
 .focusPane {
   height: 100%;
   min-height: 0;
-  padding: 14px;
+  padding: 12px;
+  overflow: hidden;
 }
 
 .navigatorPane {
@@ -194,7 +198,6 @@
 
 .focusPane {
   position: relative;
-  overflow: hidden;
 }
 
 .paneHeader {
@@ -203,18 +206,18 @@
   gap: 10px;
   align-items: flex-start;
   flex-wrap: wrap;
-  margin-bottom: 10px;
+  margin-bottom: 8px;
 }
 
 .paneTitle {
-  font-size: 13px;
+  font-size: 12px;
   color: rgba(255, 255, 255, 0.42);
 }
 
 .queueToolbar {
   display: grid;
   gap: 8px;
-  margin-bottom: 10px;
+  margin-bottom: 8px;
 }
 
 .searchWrap {
@@ -222,21 +225,22 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  min-height: 44px;
+  min-height: 42px;
   padding: 0 12px;
-  border-radius: 14px;
-  border: 1px solid rgba(214, 226, 255, 0.10);
+  border-radius: 12px;
+  border: 1px solid rgba(214, 226, 255, 0.09);
   background:
-    linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.012)),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.01)),
     rgba(8, 12, 20, 0.76);
-  color: rgba(255,255,255,0.58);
+  color: rgba(255, 255, 255, 0.58);
 }
 
 .searchInput,
 .field,
 .scopeTab,
 .tab,
-.actionBtn {
+.actionBtn,
+.chipButton {
   font: inherit;
 }
 
@@ -251,7 +255,7 @@
 
 .searchInput::placeholder,
 .field::placeholder {
-  color: rgba(225, 233, 245, 0.38);
+  color: rgba(225, 233, 245, 0.36);
 }
 
 .scopeTabs {
@@ -261,28 +265,34 @@
 }
 
 .scopeTab,
-.tab {
-  min-height: 34px;
-  padding: 0 12px;
+.tab,
+.chipButton {
+  min-height: 32px;
+  padding: 0 11px;
   border-radius: 999px;
-  border: 1px solid rgba(214, 226, 255, 0.10);
+  border: 1px solid rgba(214, 226, 255, 0.09);
   background:
-    linear-gradient(180deg, rgba(255,255,255,0.022), rgba(255,255,255,0.008)),
-    rgba(255,255,255,0.012);
+    linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0.008)),
+    rgba(255, 255, 255, 0.01);
   color: rgba(255, 255, 255, 0.84);
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 800;
   text-transform: capitalize;
   cursor: pointer;
 }
 
 .scopeTabActive,
-.tabActive {
-  border-color: rgba(143, 177, 255, 0.24);
+.tabActive,
+.chipButtonActive {
+  border-color: rgba(143, 177, 255, 0.22);
   background:
-    linear-gradient(180deg, rgba(143, 177, 255, 0.14), rgba(143, 177, 255, 0.04)),
-    rgba(255, 255, 255, 0.03);
+    linear-gradient(180deg, rgba(143, 177, 255, 0.12), rgba(143, 177, 255, 0.035)),
+    rgba(255, 255, 255, 0.02);
   color: rgba(255, 255, 255, 0.98);
+}
+
+.chipRow {
+  margin-top: 2px;
 }
 
 .navigatorControls {
@@ -292,23 +302,23 @@
 
 .field {
   width: 100%;
-  min-height: 44px;
-  border-radius: 14px;
-  border: 1px solid rgba(214,226,255,0.10);
+  min-height: 42px;
+  border-radius: 12px;
+  border: 1px solid rgba(214, 226, 255, 0.09);
   background:
-    linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.012)),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.01)),
     rgba(8, 12, 20, 0.76);
-  color: var(--lcc-text);
-  padding: 0 13px;
+  color: rgba(247, 251, 255, 0.98);
+  padding: 0 12px;
   outline: none;
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.024);
 }
 
 .field:focus {
-  border-color: rgba(143,177,255,0.30);
+  border-color: rgba(143, 177, 255, 0.26);
   box-shadow:
-    0 0 0 4px rgba(79,114,255,0.08),
-    inset 0 1px 0 rgba(255,255,255,0.035);
+    0 0 0 4px rgba(79, 114, 255, 0.07),
+    inset 0 1px 0 rgba(255, 255, 255, 0.03);
 }
 
 .field option {
@@ -317,12 +327,24 @@
 }
 
 .navigatorList,
-.feedList {
-  display: grid;
-  gap: 10px;
+.feedList,
+.tabStage {
   min-height: 0;
   overflow: auto;
   padding-right: 2px;
+}
+
+.navigatorList,
+.feedList {
+  display: grid;
+  gap: 8px;
+}
+
+.navigatorList::-webkit-scrollbar,
+.feedList::-webkit-scrollbar,
+.tabStage::-webkit-scrollbar {
+  width: 0;
+  height: 0;
 }
 
 .navigatorRow,
@@ -330,26 +352,27 @@
 .favoriteRow,
 .tradeRow,
 .signalRow,
-.feedItem {
-  border-radius: 18px;
-  border: 1px solid rgba(255,255,255,0.07);
+.feedItem,
+.marketCard {
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.065);
   background:
-    linear-gradient(180deg, rgba(8,13,24,0.78), rgba(4,8,16,0.72));
+    linear-gradient(180deg, rgba(8, 13, 24, 0.82), rgba(4, 8, 16, 0.74));
 }
 
 .navigatorRow {
   display: grid;
-  grid-template-columns: 3px 42px minmax(0, 1fr);
+  grid-template-columns: 3px 40px minmax(0, 1fr);
   gap: 10px;
   align-items: center;
-  min-height: 116px;
-  padding: 12px 14px 12px 0;
+  min-height: 98px;
+  padding: 10px 12px 10px 0;
   cursor: pointer;
   text-align: left;
 }
 
 .navigatorRowActive {
-  border-color: rgba(143,177,255,0.22);
+  border-color: rgba(143, 177, 255, 0.2);
 }
 
 .navigatorAccent {
@@ -364,19 +387,19 @@
 .holdingAvatar,
 .marketIcon,
 .feedIconWrap {
-  border-radius: 14px;
+  border-radius: 12px;
   display: grid;
   place-items: center;
-  border: 1px solid rgba(255,255,255,0.08);
+  border: 1px solid rgba(255, 255, 255, 0.075);
   background: rgba(12, 16, 24, 0.72);
 }
 
 .navigatorAvatar {
-  width: 42px;
-  height: 42px;
-  font-size: 12px;
+  width: 40px;
+  height: 40px;
+  font-size: 11px;
   font-weight: 800;
-  letter-spacing: .05em;
+  letter-spacing: 0.05em;
 }
 
 .navigatorMain,
@@ -388,8 +411,7 @@
 }
 
 .navigatorTop,
-.marketCardTop,
-.feedTop {
+.marketCardTop {
   display: flex;
   justify-content: space-between;
   gap: 10px;
@@ -404,7 +426,8 @@
 .feedTitle,
 .signalTitle,
 .focusTitle,
-.marketSymbol {
+.marketSymbol,
+.dangerTitle {
   font-weight: 850;
   color: #fff;
   line-height: 1.2;
@@ -416,30 +439,22 @@
 .favoriteName,
 .tradeName,
 .feedTitle {
-  font-size: 13.5px;
+  font-size: 13px;
 }
 
 .navigatorAmount,
 .holdingValue,
 .tradeValue {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 850;
   color: #fff;
   white-space: nowrap;
 }
 
-.navigatorBadges {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  align-items: center;
-  margin-top: 8px;
-}
-
 .focusStack {
   min-height: 100%;
   display: grid;
-  gap: 10px;
+  gap: 8px;
   grid-template-rows: auto auto minmax(0, 1fr);
 }
 
@@ -452,9 +467,9 @@
 }
 
 .focusTitle {
-  font-size: clamp(24px, 2.8vw, 34px);
+  font-size: clamp(22px, 2.6vw, 32px);
   line-height: 0.96;
-  letter-spacing: -0.055em;
+  letter-spacing: -0.05em;
 }
 
 .focusHeaderRight {
@@ -465,18 +480,18 @@
 
 .actionLink,
 .actionBtn {
-  min-height: 40px;
-  padding: 10px 13px;
-  border-radius: 14px;
-  border: 1px solid rgba(214,226,255,0.10);
+  min-height: 38px;
+  padding: 9px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(214, 226, 255, 0.09);
   background:
-    linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.012));
+    linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.01));
   color: #f7fbff;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 800;
   line-height: 1;
   text-decoration: none;
@@ -484,20 +499,25 @@
 }
 
 .actionBtnPrimary {
-  border-color: rgba(143,177,255,0.18);
+  border-color: rgba(143, 177, 255, 0.16);
   background:
-    linear-gradient(180deg, rgba(143,177,255,0.14), rgba(143,177,255,0.06));
+    linear-gradient(180deg, rgba(143, 177, 255, 0.12), rgba(143, 177, 255, 0.05));
 }
 
 .actionBtnDanger {
-  border-color: rgba(255,132,163,0.18);
+  border-color: rgba(255, 132, 163, 0.16);
   background:
-    linear-gradient(180deg, rgba(255,132,163,0.10), rgba(255,132,163,0.05));
+    linear-gradient(180deg, rgba(255, 132, 163, 0.08), rgba(255, 132, 163, 0.04));
   color: #ffd3df;
 }
 
 .actionBtnFull {
   width: 100%;
+}
+
+.actionBtn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 .tabStage {
@@ -506,54 +526,59 @@
 
 .splitLayout {
   display: grid;
-  grid-template-columns: minmax(0, 1.18fr) minmax(320px, 0.82fr);
-  gap: 12px;
-  min-height: 0;
+  grid-template-columns: minmax(0, 1.16fr) minmax(290px, 0.84fr);
+  gap: 10px;
+  min-height: 100%;
 }
 
 .asideStack {
   display: grid;
-  grid-template-rows: auto auto auto;
-  gap: 12px;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 10px;
   min-height: 0;
+}
+
+.asideStack > .panel {
+  min-height: 0;
+  overflow: hidden;
 }
 
 .panel,
 .heroPanel,
 .metricCard,
 .heroMiniCard {
-  border-radius: 18px;
-  border: 1px solid rgba(214, 226, 255, 0.08);
+  border-radius: 16px;
+  border: 1px solid rgba(214, 226, 255, 0.07);
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.024), rgba(255, 255, 255, 0.01)),
-    rgba(255, 255, 255, 0.014);
+    linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0.008)),
+    rgba(255, 255, 255, 0.012);
 }
 
 .panel,
 .heroPanel {
-  padding: 12px;
+  padding: 10px;
 }
 
 .metricGrid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
+  gap: 8px;
 }
 
 .metricCard {
   display: grid;
-  gap: 6px;
-  padding: 12px;
-  min-height: 132px;
+  gap: 5px;
+  padding: 10px;
+  min-height: 110px;
 }
 
 .metricIcon {
-  width: 38px;
-  height: 38px;
+  width: 34px;
+  height: 34px;
 }
 
 .metricValue {
-  font-size: 21px;
+  font-size: 18px;
   line-height: 1;
   font-weight: 850;
   letter-spacing: -0.04em;
@@ -563,69 +588,65 @@
 
 .heroTop {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(280px, 0.9fr);
-  gap: 12px;
+  grid-template-columns: minmax(0, 1fr) minmax(250px, 0.9fr);
+  gap: 10px;
   align-items: start;
 }
 
 .heroValue {
-  margin-top: 8px;
-  font-size: clamp(32px, 3.8vw, 48px);
+  margin-top: 6px;
+  font-size: clamp(28px, 3.4vw, 42px);
   line-height: 1;
   font-weight: 900;
   letter-spacing: -0.05em;
 }
 
 .heroSub {
-  margin-top: 6px;
-  font-size: 12px;
-  color: rgba(255,255,255,0.60);
+  margin-top: 5px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.58);
 }
 
 .heroMiniGrid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  gap: 8px;
 }
 
 .heroMiniCard {
-  padding: 11px 12px;
+  padding: 10px 11px;
 }
 
 .heroMiniValue {
-  margin-top: 6px;
-  font-size: 16px;
+  margin-top: 5px;
+  font-size: 15px;
   font-weight: 850;
   color: #fff;
 }
 
 .marketBoardGrid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
-  margin-top: 12px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 10px;
 }
 
 .marketCard {
-  min-height: 122px;
-  padding: 14px;
-  border-radius: 18px;
-  border: 1px solid rgba(214,226,255,0.10);
-  background:
-    linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01));
+  min-height: 96px;
+  padding: 12px;
   text-decoration: none;
   display: grid;
-  gap: 8px;
+  gap: 6px;
 }
 
 .marketIcon {
-  width: 30px;
-  height: 30px;
+  width: 28px;
+  height: 28px;
   border-radius: 10px;
 }
 
 .marketPrice {
-  font-size: 22px;
+  font-size: 18px;
   line-height: 1;
   font-weight: 900;
   letter-spacing: -0.05em;
@@ -633,9 +654,9 @@
 }
 
 .marketMove {
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 800;
-  color: rgba(255,255,255,0.62);
+  color: rgba(255, 255, 255, 0.6);
 }
 
 .holdingRow,
@@ -644,22 +665,22 @@
 .signalRow,
 .feedItem {
   display: grid;
-  gap: 12px;
+  gap: 10px;
   align-items: center;
-  padding: 12px;
+  padding: 10px;
   text-decoration: none;
 }
 
 .holdingRow {
-  grid-template-columns: 52px minmax(0, 1fr) auto;
+  grid-template-columns: 46px minmax(0, 1fr) auto;
 }
 
 .holdingAvatar {
-  width: 52px;
-  height: 52px;
+  width: 46px;
+  height: 46px;
   font-weight: 900;
-  font-size: 13px;
-  letter-spacing: .06em;
+  font-size: 12px;
+  letter-spacing: 0.06em;
 }
 
 .holdingRight {
@@ -667,18 +688,18 @@
 }
 
 .holdingPnl {
-  margin-top: 4px;
-  font-size: 12px;
+  margin-top: 3px;
+  font-size: 11px;
   font-weight: 800;
 }
 
 .feedItem {
-  grid-template-columns: 40px minmax(0, 1fr) auto;
+  grid-template-columns: 36px minmax(0, 1fr) auto;
 }
 
 .feedIconWrap {
-  width: 40px;
-  height: 40px;
+  width: 36px;
+  height: 36px;
   color: #f7fbff;
 }
 
@@ -690,32 +711,32 @@
 }
 
 .feedLinkIcon {
-  color: rgba(255,255,255,0.52);
+  color: rgba(255, 255, 255, 0.5);
 }
 
 .favoriteRow {
-  grid-template-columns: 38px minmax(0, 1fr) auto;
+  grid-template-columns: 36px minmax(0, 1fr) auto;
 }
 
 .favoriteIcon {
-  width: 38px;
-  height: 38px;
+  width: 36px;
+  height: 36px;
 }
 
 .favoritePrice {
   text-align: right;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 800;
   white-space: nowrap;
 }
 
 .tradeRow {
-  grid-template-columns: 42px minmax(0, 1fr) auto;
+  grid-template-columns: 40px minmax(0, 1fr) auto;
 }
 
 .tradeIcon {
-  width: 42px;
-  height: 42px;
+  width: 40px;
+  height: 40px;
   font-weight: 900;
   font-size: 12px;
 }
@@ -725,14 +746,14 @@
 }
 
 .signalValue {
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 800;
   white-space: nowrap;
 }
 
 .infoList {
   display: grid;
-  gap: 8px;
+  gap: 6px;
 }
 
 .infoRow {
@@ -740,10 +761,10 @@
   justify-content: space-between;
   gap: 12px;
   align-items: center;
-  padding: 8px 0;
-  border-bottom: 1px solid rgba(255,255,255,0.045);
-  color: rgba(255,255,255,0.72);
-  font-size: 12px;
+  padding: 7px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 11.5px;
 }
 
 .infoRow:last-child {
@@ -752,26 +773,26 @@
 
 .formStack {
   display: grid;
-  gap: 10px;
+  gap: 9px;
 }
 
 .formGrid2 {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  gap: 9px;
 }
 
 .fieldWrap {
   display: grid;
-  gap: 7px;
+  gap: 6px;
 }
 
 .fieldWrap span {
-  font-size: 11px;
+  font-size: 10px;
   text-transform: uppercase;
-  letter-spacing: .15em;
+  letter-spacing: 0.15em;
   font-weight: 800;
-  color: rgba(255,255,255,0.42);
+  color: rgba(255, 255, 255, 0.42);
 }
 
 .fieldActionRow {
@@ -781,22 +802,32 @@
 }
 
 .emptyState {
-  min-height: 180px;
+  min-height: 160px;
   display: grid;
   place-items: center;
   text-align: center;
-  padding: 16px;
+  padding: 14px;
 }
 
 .emptyTitle {
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 850;
   color: #fff;
 }
 
-.emptyText {
-  margin-top: 8px;
-  max-width: 380px;
+.dangerBlock {
+  margin-top: 12px;
+  padding: 12px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 132, 163, 0.14);
+  background:
+    linear-gradient(180deg, rgba(255, 132, 163, 0.06), rgba(255, 132, 163, 0.018)),
+    rgba(28, 10, 16, 0.36);
+}
+
+.dangerTitle {
+  font-size: 14px;
+  color: #ffd5df;
 }
 
 @media (max-width: 1500px) {
@@ -809,16 +840,11 @@
   }
 
   .summaryStats {
-    grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
-  }
-
-  .metricGrid,
-  .marketBoardGrid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
   }
 }
 
-@media (max-width: 1280px) {
+@media (max-width: 1360px) {
   .workspace,
   .splitLayout,
   .heroTop {
@@ -827,6 +853,15 @@
 
   .asideStack {
     grid-template-rows: auto;
+  }
+
+  .metricGrid,
+  .marketBoardGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .workspace {
+    min-height: auto;
   }
 }
 
@@ -857,6 +892,10 @@
   .heroMiniGrid {
     grid-template-columns: 1fr;
   }
+
+  .focusHeaderRight {
+    justify-items: start;
+  }
 }
 
 @media (max-width: 760px) {
@@ -867,14 +906,14 @@
   }
 
   .pageTitle {
-    font-size: 28px;
+    font-size: 26px;
   }
 
   .scopeTabs {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .navigatorRow {
-    grid-template-columns: 3px 42px minmax(0, 1fr);
+  .workspace {
+    grid-template-columns: 1fr;
   }
 }

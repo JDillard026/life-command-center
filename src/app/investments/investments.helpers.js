@@ -3,18 +3,39 @@ export const BOARD_SYMBOLS = [
   { symbol: "QQQ", label: "Nasdaq 100" },
   { symbol: "DIA", label: "Dow 30" },
   { symbol: "IWM", label: "Russell 2000" },
+  { symbol: "VTI", label: "Total Market" },
+  { symbol: "XLF", label: "Financials" },
 ];
 
-export const DESK_TABS = ["dashboard", "positions", "research", "ticket", "watchlist"];
+export const DESK_TABS = ["overview", "positions", "ticket", "research", "manage"];
 export const NEWS_TTL_MS = 1000 * 60 * 5;
 
-export function toNum(v, fallback = 0) {
-  const n = Number(v);
-  return Number.isFinite(n) ? n : fallback;
+export const DISCOVER_TYPES = ["ALL", "STOCK", "ETF", "FUND"];
+
+export const DISCOVER_QUICK_SEARCHES = [
+  "NVDA",
+  "AAPL",
+  "MSFT",
+  "AMZN",
+  "META",
+  "TSLA",
+  "SPY",
+  "VOO",
+  "VTI",
+  "XLF",
+];
+
+export function asSymbol(value) {
+  return String(value || "").trim().toUpperCase();
 }
 
-export function money(n) {
-  const num = Number(n);
+export function toNum(value, fallback = 0) {
+  const num = Number(value);
+  return Number.isFinite(num) ? num : fallback;
+}
+
+export function money(value) {
+  const num = Number(value);
   if (!Number.isFinite(num)) return "—";
   return num.toLocaleString(undefined, {
     style: "currency",
@@ -23,21 +44,32 @@ export function money(n) {
   });
 }
 
-export function signedMoney(n) {
-  const num = Number(n);
+export function moneyTight(value) {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return "—";
+  return num.toLocaleString(undefined, {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
+  });
+}
+
+export function signedMoney(value) {
+  const num = Number(value);
   if (!Number.isFinite(num)) return "—";
   const abs = Math.abs(num).toLocaleString(undefined, {
     style: "currency",
     currency: "USD",
     maximumFractionDigits: 2,
   });
+
   if (num > 0) return `+${abs}`;
   if (num < 0) return `-${abs}`;
   return abs;
 }
 
-export function pct(n) {
-  const num = Number(n);
+export function pct(value) {
+  const num = Number(value);
   if (!Number.isFinite(num)) return "—";
   return `${num >= 0 ? "+" : ""}${num.toFixed(2)}%`;
 }
@@ -77,7 +109,7 @@ export function initials(label = "") {
   return clean
     .split(/\s+/)
     .slice(0, 2)
-    .map((x) => x[0])
+    .map((part) => part[0])
     .join("")
     .toUpperCase();
 }
@@ -87,7 +119,7 @@ export function toneMeta(tone = "neutral") {
     return {
       text: "#97efc7",
       border: "rgba(143,240,191,0.16)",
-      glow: "rgba(110,229,173,0.10)",
+      glow: "rgba(110,229,173,0.12)",
       iconBg: "rgba(12,22,17,0.72)",
     };
   }
@@ -95,8 +127,8 @@ export function toneMeta(tone = "neutral") {
   if (tone === "red") {
     return {
       text: "#ffb4c5",
-      border: "rgba(255,132,163,0.16)",
-      glow: "rgba(255,108,145,0.10)",
+      border: "rgba(255,132,163,0.18)",
+      glow: "rgba(255,108,145,0.12)",
       iconBg: "rgba(24,11,15,0.72)",
     };
   }
@@ -104,8 +136,8 @@ export function toneMeta(tone = "neutral") {
   if (tone === "amber") {
     return {
       text: "#f5cf88",
-      border: "rgba(255,204,112,0.16)",
-      glow: "rgba(255,194,92,0.10)",
+      border: "rgba(255,204,112,0.18)",
+      glow: "rgba(255,194,92,0.12)",
       iconBg: "rgba(24,18,11,0.72)",
     };
   }
@@ -113,8 +145,8 @@ export function toneMeta(tone = "neutral") {
   if (tone === "blue") {
     return {
       text: "#bcd7ff",
-      border: "rgba(143,177,255,0.16)",
-      glow: "rgba(143,177,255,0.10)",
+      border: "rgba(143,177,255,0.18)",
+      glow: "rgba(143,177,255,0.12)",
       iconBg: "rgba(12,16,24,0.72)",
     };
   }
@@ -122,22 +154,34 @@ export function toneMeta(tone = "neutral") {
   return {
     text: "#f7fbff",
     border: "rgba(214,226,255,0.13)",
-    glow: "rgba(140,170,255,0.08)",
+    glow: "rgba(140,170,255,0.09)",
     iconBg: "rgba(12,16,24,0.72)",
   };
 }
 
 export function toneByValue(value) {
-  const n = Number(value);
-  if (!Number.isFinite(n) || n === 0) return "neutral";
-  return n > 0 ? "green" : "red";
+  const num = Number(value);
+  if (!Number.isFinite(num) || num === 0) return "neutral";
+  return num > 0 ? "green" : "red";
+}
+
+export function normalizeMarketResults(rows = []) {
+  return rows
+    .map((row) => ({
+      symbol: asSymbol(row.symbol),
+      name: String(row.name || "").trim(),
+      exchange: String(row.exchange || "").trim(),
+      type: String(row.type || "").trim() || "Stock",
+      currency: String(row.currency || "").trim() || "USD",
+    }))
+    .filter((row) => row.symbol && row.name);
 }
 
 export function parseBatchPrices(json) {
   const out = {};
 
   function assign(symbol, raw) {
-    const sym = String(symbol || "").trim().toUpperCase();
+    const sym = asSymbol(symbol);
     if (!sym) return;
 
     if (typeof raw === "number") {
@@ -180,7 +224,7 @@ export function parseBatchPrices(json) {
 
   if (json && typeof json === "object" && !Array.isArray(json)) {
     Object.entries(json).forEach(([symbol, raw]) => {
-      if (!out[String(symbol).toUpperCase()]) assign(symbol, raw);
+      if (!out[asSymbol(symbol)]) assign(symbol, raw);
     });
   }
 
@@ -245,7 +289,7 @@ export function buildPortfolio(assets, txns, prices) {
       }
     }
 
-    const sym = String(asset.symbol || "").toUpperCase().trim();
+    const sym = asSymbol(asset.symbol);
     const quote = prices[sym] || null;
     const livePrice = Number.isFinite(Number(quote?.price)) ? Number(quote.price) : null;
     const dayChange = Number.isFinite(Number(quote?.change)) ? Number(quote.change) : null;
@@ -270,6 +314,7 @@ export function buildPortfolio(assets, txns, prices) {
 
     return {
       ...asset,
+      symbol: sym,
       shares,
       remainingBasis,
       livePrice,

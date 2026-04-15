@@ -6,10 +6,12 @@ import {
   ArrowRight,
   BookOpenText,
   ExternalLink,
+  Layers3,
   Newspaper,
   Plus,
   Search,
   Star,
+  Trash2,
   TrendingDown,
   TrendingUp,
   Wallet,
@@ -97,45 +99,16 @@ function PaneHeader({ title, subcopy, right }) {
   );
 }
 
-function MetricCard({ icon: Icon, label, value, detail, tone = "neutral" }) {
-  const meta = toneMeta(tone);
-
-  return (
-    <div className={styles.metricCard}>
-      <div
-        className={styles.metricIcon}
-        style={{
-          borderColor: meta.border,
-          color: tone === "neutral" ? "#fff" : meta.text,
-          boxShadow: `0 0 10px ${meta.glow}`,
-          background: meta.iconBg,
-        }}
-      >
-        <Icon size={16} />
-      </div>
-
-      <div className={styles.metricLabel}>{label}</div>
-      <div
-        className={styles.metricValue}
-        style={{ color: tone === "neutral" ? "#fff" : meta.text }}
-      >
-        {value}
-      </div>
-      <div className={styles.metricSub}>{detail}</div>
-    </div>
-  );
-}
-
-function EmptyState({ title, detail, linkHref, linkLabel }) {
+function EmptyState({ title, detail, href, label }) {
   return (
     <div className={styles.emptyState}>
       <div>
         <div className={styles.emptyTitle}>{title}</div>
         <div className={styles.emptyText}>{detail}</div>
-        {linkHref && linkLabel ? (
-          <div style={{ marginTop: 14, display: "flex", justifyContent: "center" }}>
-            <ActionLink href={linkHref}>
-              {linkLabel} <ArrowRight size={14} />
+        {href && label ? (
+          <div className={styles.ctaStack} style={{ justifyContent: "center", marginTop: 14 }}>
+            <ActionLink href={href}>
+              {label} <ArrowRight size={14} />
             </ActionLink>
           </div>
         ) : null}
@@ -247,8 +220,8 @@ function MarketBoardCard({ symbol, label, quote, tone }) {
         className={styles.marketMove}
         style={{ color: tone === "neutral" ? "rgba(255,255,255,0.62)" : meta.text }}
       >
-        {change != null ? signedMoney(change) : "Waiting"}{" "}
-        {changePct != null ? `• ${pct(changePct)}` : ""}
+        {change != null ? signedMoney(change) : "Waiting"}
+        {changePct != null ? ` • ${pct(changePct)}` : ""}
       </div>
     </Link>
   );
@@ -286,9 +259,7 @@ function HoldingRow({ item }) {
         <div className={styles.holdingValue}>{money(item.value)}</div>
         <div
           className={styles.holdingPnl}
-          style={{
-            color: item.hasLivePrice ? meta.text : "rgba(255,255,255,0.58)",
-          }}
+          style={{ color: item.hasLivePrice ? meta.text : "rgba(255,255,255,0.58)" }}
         >
           {item.hasLivePrice ? `${signedMoney(item.pnl)} • ${pct(item.pnlPct)}` : "Pending"}
         </div>
@@ -302,12 +273,7 @@ function HeadlineRow({ item }) {
     Array.isArray(item.symbols) && item.symbols.length ? item.symbols[0] : item.symbol || "";
 
   return (
-    <a
-      href={item.url || "#"}
-      target="_blank"
-      rel="noreferrer"
-      className={styles.feedItem}
-    >
+    <a href={item.url || "#"} target="_blank" rel="noreferrer" className={styles.feedItem}>
       <div className={styles.feedIconWrap}>
         <Newspaper size={16} />
       </div>
@@ -328,7 +294,63 @@ function HeadlineRow({ item }) {
   );
 }
 
-function SignalRow({ title, detail, tone = "neutral", value }) {
+function FavoriteRow({ item, quote }) {
+  const sym = String(item.symbol || "").toUpperCase();
+  const tone = toneByValue(quote?.changesPercentage ?? quote?.change ?? 0);
+  const meta = toneMeta(tone);
+
+  return (
+    <Link href={`/market/${encodeURIComponent(sym)}`} className={styles.favoriteRow}>
+      <div
+        className={styles.favoriteIcon}
+        style={{
+          borderColor: meta.border,
+          background: meta.iconBg,
+          color: tone === "neutral" ? "#fff" : meta.text,
+        }}
+      >
+        <Star size={14} />
+      </div>
+
+      <div className={styles.favoriteMain}>
+        <div className={styles.favoriteName}>{sym}</div>
+        <div className={styles.favoriteSub}>{item.name || item.asset_type || "Watchlist"}</div>
+      </div>
+
+      <div
+        className={styles.favoritePrice}
+        style={{ color: tone === "neutral" ? "rgba(255,255,255,0.76)" : meta.text }}
+      >
+        {Number.isFinite(Number(quote?.price)) ? money(quote.price) : "—"}
+      </div>
+    </Link>
+  );
+}
+
+function TradeRow({ txn, assetMap }) {
+  const type = String(txn.txn_type || "").toUpperCase();
+  const sym = assetMap.get(txn.asset_id)?.symbol || "—";
+
+  return (
+    <div className={styles.tradeRow}>
+      <div className={styles.tradeIcon}>{type === "SELL" ? "S" : "B"}</div>
+
+      <div className={styles.tradeMain}>
+        <div className={styles.tradeName}>
+          {sym} {type}
+        </div>
+        <div className={styles.tradeSub}>
+          {toNum(txn.qty).toLocaleString(undefined, { maximumFractionDigits: 4 })} @{" "}
+          {money(txn.price)} • {shortDate(txn.txn_date)}
+        </div>
+      </div>
+
+      <div className={styles.tradeValue}>{money(toNum(txn.qty) * toNum(txn.price))}</div>
+    </div>
+  );
+}
+
+function SignalRow({ title, detail, value, tone = "neutral" }) {
   const meta = toneMeta(tone);
 
   return (
@@ -348,91 +370,20 @@ function SignalRow({ title, detail, tone = "neutral", value }) {
   );
 }
 
-function FavoriteRow({ item, quote }) {
-  const sym = String(item.symbol || "").toUpperCase();
-  const tone = toneByValue(quote?.changesPercentage ?? quote?.change ?? 0);
-  const meta = toneMeta(tone);
-
-  return (
-    <Link href={`/market/${encodeURIComponent(sym)}`} className={styles.favoriteRow}>
-      <div
-        className={styles.favoriteIcon}
-        style={{
-          borderColor: meta.border,
-          background: meta.iconBg,
-          color: tone === "neutral" ? "#fff" : meta.text,
-        }}
-      >
-        <BookOpenText size={15} />
-      </div>
-
-      <div className={styles.favoriteMain}>
-        <div className={styles.favoriteName}>{sym}</div>
-        <div className={styles.favoriteSub}>{item.name || item.asset_type || "Watchlist name"}</div>
-      </div>
-
-      <div
-        className={styles.favoritePrice}
-        style={{ color: tone === "neutral" ? "rgba(255,255,255,0.76)" : meta.text }}
-      >
-        {Number.isFinite(Number(quote?.price)) ? money(quote.price) : "—"}
-      </div>
-    </Link>
-  );
-}
-
-function TradeRow({ txn, assetMap }) {
-  const type = String(txn.txn_type || "").toUpperCase();
-  const tone = type === "SELL" ? "green" : "neutral";
-  const meta = toneMeta(tone);
-  const sym = assetMap.get(txn.asset_id)?.symbol || "—";
-
-  return (
-    <div className={styles.tradeRow} style={{ borderColor: meta.border }}>
-      <div
-        className={styles.tradeIcon}
-        style={{
-          borderColor: meta.border,
-          color: type === "SELL" ? "#8ef4bb" : "#f7fbff",
-        }}
-      >
-        {type === "SELL" ? "S" : "B"}
-      </div>
-
-      <div className={styles.tradeMain}>
-        <div className={styles.tradeName}>
-          {sym} {type}
-        </div>
-        <div className={styles.tradeSub}>
-          {toNum(txn.qty).toLocaleString(undefined, { maximumFractionDigits: 4 })} @{" "}
-          {money(txn.price)} • {shortDate(txn.txn_date)}
-        </div>
-      </div>
-
-      <div className={styles.tradeValue}>{money(toNum(txn.qty) * toNum(txn.price))}</div>
-    </div>
-  );
-}
-
-export function SummaryStrip({
-  portfolio,
-  openPositions,
-  favorites,
-  selectedHolding,
-}) {
+export function SummaryStrip({ portfolio, openPositions, favorites, selectedHolding }) {
   const heroTone = toneByValue(portfolio.totalPnl);
 
   return (
     <GlassPane className={styles.summaryStrip}>
       <div className={styles.summaryInner}>
         <div className={styles.titleBlock}>
-          <div className={styles.eyebrow}>Money / Investments</div>
+          <div className={styles.eyebrow}>Stocks / Portfolio Desk</div>
           <div className={styles.pageTitleRow}>
             <div className={styles.pageTitle}>Investments</div>
             <MiniPill tone="green">desk</MiniPill>
           </div>
           <div className={styles.workspaceCopy}>
-            Brokerage-style tracking, internal order routing, live quotes, and research.
+            Tighter portfolio desk with position control, research flow, and obvious delete actions.
           </div>
         </div>
 
@@ -481,16 +432,8 @@ export function SummaryStrip({
         </div>
 
         <div className={styles.summaryRight}>
-          <MiniPill tone={heroTone}>
-            {portfolio.totalPnl >= 0 ? "desk green" : "desk red"}
-          </MiniPill>
-          {selectedHolding ? (
-            <MiniPill tone={toneByValue(selectedHolding.pnl)}>
-              {selectedHolding.symbol}
-            </MiniPill>
-          ) : (
-            <MiniPill>starter</MiniPill>
-          )}
+          <MiniPill tone={heroTone}>{portfolio.totalPnl >= 0 ? "book green" : "book red"}</MiniPill>
+          {selectedHolding ? <MiniPill>{selectedHolding.symbol}</MiniPill> : null}
         </div>
       </div>
     </GlassPane>
@@ -508,11 +451,18 @@ export function NavigatorPane({
   setSort,
   onSelectAsset,
 }) {
+  const emptyTitle =
+    filter === "open" ? "No open positions" : visibleAssets.length ? "" : "No symbols found";
+  const emptyDetail =
+    filter === "open"
+      ? "You do not have an open share position under this filter. Switch to All to see tracked names."
+      : "Add a symbol or switch the filter.";
+
   return (
     <GlassPane className={styles.navigatorPane}>
       <PaneHeader
         title="Asset navigator"
-        subcopy="Choose the symbol you want to command."
+        subcopy="Pick the position you want to command."
         right={<MiniPill>{visibleAssets.length} showing</MiniPill>}
       />
 
@@ -584,128 +534,132 @@ export function NavigatorPane({
           ))}
         </div>
       ) : (
-        <EmptyState
-          title="No symbols found"
-          detail="Add a symbol to start building your desk."
-        />
+        <EmptyState title={emptyTitle} detail={emptyDetail} />
       )}
     </GlassPane>
   );
 }
 
-function DashboardTab({
+function OverviewTab({
   portfolio,
   prices,
   selectedHolding,
   alerts,
-  openPositions,
   news,
   newsError,
 }) {
   const quote = selectedHolding
     ? prices[String(selectedHolding.symbol || "").toUpperCase()] || {}
     : {};
-  const priceTone = toneByValue(quote?.changesPercentage ?? quote?.change ?? selectedHolding?.pnl ?? 0);
+  const priceTone = toneByValue(
+    quote?.changesPercentage ?? quote?.change ?? selectedHolding?.pnl ?? 0
+  );
+
+  if (!selectedHolding) {
+    return (
+      <EmptyState
+        title="No selected symbol"
+        detail="Add an asset or switch the filter so the desk has something to command."
+      />
+    );
+  }
 
   return (
     <div className={styles.splitLayout}>
       <div className={styles.panel}>
-        {selectedHolding ? (
-          <>
-            <PaneHeader
-              title={`${selectedHolding.symbol} command`}
-              subcopy={`${selectedHolding.asset_type || "stock"} • ${selectedHolding.account || "Brokerage"} • ${selectedHolding.txCount} fills`}
-              right={
-                <div className={styles.inlineRow}>
-                  <MiniPill tone={priceTone}>
-                    {quote?.changesPercentage != null ? pct(quote.changesPercentage) : "live"}
-                  </MiniPill>
-                  <MiniPill tone={toneByValue(selectedHolding.pnl)}>
-                    {selectedHolding.hasLivePrice ? signedMoney(selectedHolding.pnl) : "pending"}
-                  </MiniPill>
-                </div>
-              }
-            />
+        <PaneHeader
+          title={`${selectedHolding.symbol} desk`}
+          subcopy={`${selectedHolding.asset_type || "stock"} • ${selectedHolding.account || "Brokerage"} • ${selectedHolding.txCount} fills`}
+          right={
+            <div className={styles.inlineRow}>
+              <MiniPill tone={priceTone}>
+                {quote?.changesPercentage != null ? pct(quote.changesPercentage) : "live"}
+              </MiniPill>
+              <MiniPill tone={toneByValue(selectedHolding.pnl)}>
+                {selectedHolding.hasLivePrice ? signedMoney(selectedHolding.pnl) : "pending"}
+              </MiniPill>
+            </div>
+          }
+        />
 
-            <div className={styles.heroPanel}>
-              <div className={styles.heroTop}>
-                <div>
-                  <div className={styles.metricLabel}>Live price</div>
-                  <div
-                    className={styles.heroValue}
-                    style={{ color: toneMeta(priceTone).text }}
-                  >
-                    {selectedHolding.hasLivePrice ? money(selectedHolding.livePrice) : "—"}
-                  </div>
-                  <div className={styles.heroSub}>
-                    {quote?.change != null
-                      ? `${signedMoney(quote.change)} • ${pct(quote.changesPercentage)} today`
-                      : "Waiting on quote"}
-                  </div>
-                </div>
-
-                <div className={styles.heroMiniGrid}>
-                  <div className={styles.heroMiniCard}>
-                    <div className={styles.metricLabel}>Shares</div>
-                    <div className={styles.heroMiniValue}>
-                      {selectedHolding.shares.toLocaleString(undefined, {
-                        maximumFractionDigits: 4,
-                      })}
-                    </div>
-                  </div>
-                  <div className={styles.heroMiniCard}>
-                    <div className={styles.metricLabel}>Position value</div>
-                    <div className={styles.heroMiniValue}>{money(selectedHolding.value)}</div>
-                  </div>
-                  <div className={styles.heroMiniCard}>
-                    <div className={styles.metricLabel}>Remaining basis</div>
-                    <div className={styles.heroMiniValue}>{money(selectedHolding.remainingBasis)}</div>
-                  </div>
-                  <div className={styles.heroMiniCard}>
-                    <div className={styles.metricLabel}>Unrealized</div>
-                    <div
-                      className={styles.heroMiniValue}
-                      style={{ color: toneMeta(toneByValue(selectedHolding.pnl)).text }}
-                    >
-                      {selectedHolding.hasLivePrice ? signedMoney(selectedHolding.pnl) : "—"}
-                    </div>
-                  </div>
-                </div>
+        <div className={styles.heroPanel}>
+          <div className={styles.heroTop}>
+            <div>
+              <div className={styles.metricLabel}>Live price</div>
+              <div
+                className={styles.heroValue}
+                style={{ color: toneMeta(priceTone).text }}
+              >
+                {selectedHolding.hasLivePrice ? money(selectedHolding.livePrice) : "—"}
               </div>
-
-              <div className={styles.marketBoardGrid}>
-                {BOARD_SYMBOLS.map((item) => {
-                  const q = prices[item.symbol] || {};
-                  const tone = toneByValue(q?.changesPercentage ?? q?.change);
-                  return (
-                    <MarketBoardCard
-                      key={item.symbol}
-                      symbol={item.symbol}
-                      label={item.label}
-                      quote={q}
-                      tone={tone}
-                    />
-                  );
-                })}
+              <div className={styles.heroSub}>
+                {quote?.change != null
+                  ? `${signedMoney(quote.change)} • ${pct(quote.changesPercentage)} today`
+                  : "Waiting on quote"}
               </div>
             </div>
-          </>
-        ) : (
-          <EmptyState
-            title="No selected symbol"
-            detail="Add an asset and the desk will light up."
+
+            <div className={styles.heroMiniGrid}>
+              <div className={styles.heroMiniCard}>
+                <div className={styles.metricLabel}>Shares</div>
+                <div className={styles.heroMiniValue}>
+                  {selectedHolding.shares.toLocaleString(undefined, {
+                    maximumFractionDigits: 4,
+                  })}
+                </div>
+              </div>
+              <div className={styles.heroMiniCard}>
+                <div className={styles.metricLabel}>Position value</div>
+                <div className={styles.heroMiniValue}>{money(selectedHolding.value)}</div>
+              </div>
+              <div className={styles.heroMiniCard}>
+                <div className={styles.metricLabel}>Remaining basis</div>
+                <div className={styles.heroMiniValue}>{money(selectedHolding.remainingBasis)}</div>
+              </div>
+              <div className={styles.heroMiniCard}>
+                <div className={styles.metricLabel}>Unrealized</div>
+                <div
+                  className={styles.heroMiniValue}
+                  style={{ color: toneMeta(toneByValue(selectedHolding.pnl)).text }}
+                >
+                  {selectedHolding.hasLivePrice ? signedMoney(selectedHolding.pnl) : "—"}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style={{ marginTop: 10 }}>
+          <PaneHeader
+            title="Board watch"
+            subcopy="Keep the big indexes visible without letting them take over the page."
           />
-        )}
+          <div className={styles.marketBoardGrid}>
+            {BOARD_SYMBOLS.slice(0, 4).map((item) => {
+              const q = prices[item.symbol] || {};
+              const tone = toneByValue(q?.changesPercentage ?? q?.change);
+              return (
+                <MarketBoardCard
+                  key={item.symbol}
+                  symbol={item.symbol}
+                  label={item.label}
+                  quote={q}
+                  tone={tone}
+                />
+              );
+            })}
+          </div>
+        </div>
       </div>
 
       <div className={styles.asideStack}>
         <div className={styles.panel}>
           <PaneHeader
             title="Signals"
-            subcopy="Fast pressure checks, not a toy dashboard."
+            subcopy="What needs your attention right now."
             right={
               <MiniPill tone={alerts.length ? "amber" : "green"}>
-                {alerts.length ? `${alerts.length} live` : "clean"}
+                {alerts.length ? `${alerts.length} active` : "clean"}
               </MiniPill>
             }
           />
@@ -715,11 +669,11 @@ function DashboardTab({
               <SignalRow
                 tone="green"
                 title="Portfolio looks stable"
-                detail="All open positions are live priced and none are red right now."
+                detail="Nothing is flashing red and your selected book looks calm."
                 value="Clear"
               />
             ) : (
-              alerts.slice(0, 4).map((item) => (
+              alerts.slice(0, 3).map((item) => (
                 <SignalRow
                   key={item.id}
                   tone={!item.hasLivePrice ? "amber" : "red"}
@@ -727,9 +681,7 @@ function DashboardTab({
                   detail={
                     !item.hasLivePrice
                       ? "No live quote returned for this holding."
-                      : `${signedMoney(item.pnl)} unrealized • ${item.shares.toLocaleString(undefined, {
-                          maximumFractionDigits: 4,
-                        })} shares`
+                      : `${signedMoney(item.pnl)} unrealized`
                   }
                   value={!item.hasLivePrice ? "Pending" : signedMoney(item.pnl)}
                 />
@@ -740,46 +692,37 @@ function DashboardTab({
 
         <div className={styles.panel}>
           <PaneHeader
-            title="Research headlines"
-            subcopy="Fast read for the names near your book."
+            title="Headlines"
+            subcopy="Only the useful stories near your current book."
             right={<MiniPill>{news.length} stories</MiniPill>}
           />
 
           {news.length ? (
             <div className={styles.feedList}>
-              {news.slice(0, 5).map((item, index) => (
+              {news.slice(0, 3).map((item, index) => (
                 <HeadlineRow key={`${item.url}-${index}`} item={item} />
               ))}
             </div>
           ) : (
             <EmptyState
               title="No headlines returned"
-              detail={newsError || "Research headlines temporarily unavailable."}
+              detail={newsError || "Research headlines are temporarily unavailable."}
             />
           )}
         </div>
 
         <div className={styles.panel}>
           <PaneHeader
-            title="Desk snapshot"
-            subcopy="Whole-book read without leaving the command view."
+            title="Quick routes"
+            subcopy="Fast paths without bloating the desk."
           />
-
-          <div className={styles.infoList}>
-            <div className={styles.infoRow}>
-              <span>Portfolio value</span>
-              <span>{money(portfolio.totalValue)}</span>
-            </div>
-            <div className={styles.infoRow}>
-              <span>Open positions</span>
-              <span>{openPositions.length}</span>
-            </div>
-            <div className={styles.infoRow}>
-              <span>Unrealized P/L</span>
-              <span style={{ color: toneMeta(toneByValue(portfolio.totalPnl)).text }}>
-                {signedMoney(portfolio.totalPnl)}
-              </span>
-            </div>
+          <div className={styles.ctaStack}>
+            <ActionLink href="/investments/discover">
+              Research desk <ArrowRight size={14} />
+            </ActionLink>
+            <ActionLink href={`/market/${selectedHolding.symbol}`}>
+              Open market <ExternalLink size={14} />
+            </ActionLink>
           </div>
         </div>
       </div>
@@ -793,22 +736,22 @@ function PositionsTab({ openPositions, assetMap, recentTxns, selectedHolding }) 
       <div className={styles.panel}>
         <PaneHeader
           title="Open positions"
-          subcopy="Your live holdings with brokerage-style presentation."
+          subcopy="Clean position board. No junk."
           right={<MiniPill>{openPositions.length} active</MiniPill>}
         />
 
         {openPositions.length ? (
           <div className={styles.feedList}>
-            {openPositions.slice(0, 12).map((item) => (
+            {openPositions.slice(0, 14).map((item) => (
               <HoldingRow key={item.id} item={item} />
             ))}
           </div>
         ) : (
           <EmptyState
             title="No open positions yet"
-            detail="Add a symbol and log your first fill so the desk has something real to track."
-            linkHref="/investments/discover"
-            linkLabel="Open research desk"
+            detail="Add a symbol and log the first fill so the desk has something real to track."
+            href="/investments/discover"
+            label="Open research desk"
           />
         )}
       </div>
@@ -817,7 +760,7 @@ function PositionsTab({ openPositions, assetMap, recentTxns, selectedHolding }) 
         <div className={styles.panel}>
           <PaneHeader
             title="Recent fills"
-            subcopy="Latest activity hitting your ledger."
+            subcopy="Latest ledger activity."
             right={<MiniPill>{recentTxns.length} shown</MiniPill>}
           />
 
@@ -828,18 +771,12 @@ function PositionsTab({ openPositions, assetMap, recentTxns, selectedHolding }) 
               ))}
             </div>
           ) : (
-            <EmptyState
-              title="No fills yet"
-              detail="Your fills will show here once you start logging trades."
-            />
+            <EmptyState title="No fills yet" detail="Your fills will show here once you start logging trades." />
           )}
         </div>
 
         <div className={styles.panel}>
-          <PaneHeader
-            title="Selected position"
-            subcopy="Fast context panel."
-          />
+          <PaneHeader title="Selected position" subcopy="Fast read on the highlighted name." />
 
           {selectedHolding ? (
             <div className={styles.infoList}>
@@ -867,10 +804,7 @@ function PositionsTab({ openPositions, assetMap, recentTxns, selectedHolding }) 
               </div>
             </div>
           ) : (
-            <EmptyState
-              title="No selected position"
-              detail="Pick a position from the navigator."
-            />
+            <EmptyState title="No selected position" detail="Pick a position from the navigator." />
           )}
         </div>
       </div>
@@ -886,8 +820,8 @@ function ResearchTab({ news, newsError, favorites, prices, selectedHolding }) {
           title="Research headlines"
           subcopy={
             selectedHolding
-              ? `News flow around ${selectedHolding.symbol} and nearby names.`
-              : "Live stock-news feed for the symbols closest to your desk."
+              ? `News flow around ${selectedHolding.symbol} and the names near it.`
+              : "Live stock-news feed for the symbols nearest your book."
           }
           right={<MiniPill>{news.length} stories</MiniPill>}
         />
@@ -901,7 +835,7 @@ function ResearchTab({ news, newsError, favorites, prices, selectedHolding }) {
         ) : (
           <EmptyState
             title="No headlines returned"
-            detail={newsError || "Research headlines temporarily unavailable."}
+            detail={newsError || "Research headlines are temporarily unavailable."}
           />
         )}
       </div>
@@ -927,9 +861,9 @@ function ResearchTab({ news, newsError, favorites, prices, selectedHolding }) {
           ) : (
             <EmptyState
               title="No saved names"
-              detail="Use the research desk to start building a serious watchlist."
-              linkHref="/investments/discover"
-              linkLabel="Go discover"
+              detail="Use the research desk to build a real watchlist."
+              href="/investments/discover"
+              label="Go discover"
             />
           )}
         </div>
@@ -977,8 +911,8 @@ function TicketTab({
       <div className={styles.panel}>
         <PaneHeader
           title="Order ticket"
-          subcopy="Logs to your internal portfolio ledger now. Live broker route later."
-          right={<MiniPill tone="amber">portfolio route</MiniPill>}
+          subcopy="Internal ledger route now. Broker rail later."
+          right={<MiniPill tone="amber">ledger route</MiniPill>}
         />
 
         <div className={styles.formStack}>
@@ -1078,18 +1012,12 @@ function TicketTab({
               ))}
             </div>
           ) : (
-            <EmptyState
-              title="No fills yet"
-              detail="Log a trade and it will appear here."
-            />
+            <EmptyState title="No fills yet" detail="Log a trade and it will appear here." />
           )}
         </div>
 
         <div className={styles.panel}>
-          <PaneHeader
-            title="Route notes"
-            subcopy="What this ticket is designed for."
-          />
+          <PaneHeader title="Route notes" subcopy="What this ticket is designed for." />
           <div className={styles.infoList}>
             <div className={styles.infoRow}>
               <span>Execution</span>
@@ -1114,70 +1042,98 @@ function TicketTab({
   );
 }
 
-function WatchlistTab({ favorites, prices, selectedHolding }) {
+function ManageTab({ selectedHolding, deletingAsset, deleteSelectedAsset }) {
+  if (!selectedHolding) {
+    return <EmptyState title="No selected position" detail="Pick a position from the navigator first." />;
+  }
+
   return (
     <div className={styles.splitLayout}>
       <div className={styles.panel}>
         <PaneHeader
-          title="Watchlist"
-          subcopy="Saved names ready for research and future routing."
-          right={<MiniPill>{favorites.length} saved</MiniPill>}
+          title="Position controls"
+          subcopy="This is where the position gets managed or removed."
+          right={<MiniPill tone="amber">clear action zone</MiniPill>}
         />
 
-        {favorites.length ? (
-          <div className={styles.feedList}>
-            {favorites.map((item) => (
-              <FavoriteRow
-                key={item.id}
-                item={item}
-                quote={prices[String(item.symbol).toUpperCase()] || null}
-              />
-            ))}
+        <div className={styles.infoList}>
+          <div className={styles.infoRow}>
+            <span>Symbol</span>
+            <span>{selectedHolding.symbol}</span>
           </div>
-        ) : (
-          <EmptyState
-            title="No saved names"
-            detail="Use the research desk to build a serious watchlist."
-            linkHref="/investments/discover"
-            linkLabel="Go discover"
-          />
-        )}
+          <div className={styles.infoRow}>
+            <span>Account</span>
+            <span>{selectedHolding.account || "Brokerage"}</span>
+          </div>
+          <div className={styles.infoRow}>
+            <span>Shares</span>
+            <span>
+              {selectedHolding.shares.toLocaleString(undefined, {
+                maximumFractionDigits: 4,
+              })}
+            </span>
+          </div>
+          <div className={styles.infoRow}>
+            <span>Position value</span>
+            <span>{money(selectedHolding.value)}</span>
+          </div>
+          <div className={styles.infoRow}>
+            <span>Ledger rows</span>
+            <span>{selectedHolding.txCount}</span>
+          </div>
+        </div>
+
+        <div className={styles.dangerBlock}>
+          <div className={styles.dangerTitle}>Delete this stock from the desk</div>
+          <div className={styles.dangerText}>
+            This removes the asset itself and every fill tied to it. It is not hidden.
+            It is right here on purpose.
+          </div>
+
+          <div className={styles.dangerActions}>
+            <ActionBtn
+              variant="danger"
+              onClick={deleteSelectedAsset}
+              disabled={deletingAsset}
+            >
+              <Trash2 size={14} />
+              {deletingAsset ? "Deleting..." : `Delete ${selectedHolding.symbol}`}
+            </ActionBtn>
+          </div>
+        </div>
       </div>
 
       <div className={styles.asideStack}>
         <div className={styles.panel}>
-          <PaneHeader
-            title="Market board"
-            subcopy="Fast macro read without leaving watch mode."
-          />
-          <div className={styles.marketBoardGrid}>
-            {BOARD_SYMBOLS.map((item) => {
-              const q = prices[item.symbol] || {};
-              const tone = toneByValue(q?.changesPercentage ?? q?.change);
-              return (
-                <MarketBoardCard
-                  key={item.symbol}
-                  symbol={item.symbol}
-                  label={item.label}
-                  quote={q}
-                  tone={tone}
-                />
-              );
-            })}
+          <PaneHeader title="What delete does" subcopy="No vague behavior." />
+          <div className={styles.infoList}>
+            <div className={styles.infoRow}>
+              <span>Asset row</span>
+              <span>Deleted</span>
+            </div>
+            <div className={styles.infoRow}>
+              <span>Trade history for asset</span>
+              <span>Deleted</span>
+            </div>
+            <div className={styles.infoRow}>
+              <span>Watchlist entry for symbol</span>
+              <span>Removed</span>
+            </div>
+            <div className={styles.infoRow}>
+              <span>Other stocks</span>
+              <span>Unaffected</span>
+            </div>
           </div>
         </div>
 
         <div className={styles.panel}>
-          <PaneHeader
-            title="Next path"
-            subcopy="Where to go from here."
-          />
+          <PaneHeader title="Safer route" subcopy="If you just need to inspect it first." />
           <div className={styles.ctaStack}>
-            <ActionLink href="/investments/discover">
-              Research desk <ArrowRight size={14} />
+            <ActionLink href={`/investments/${selectedHolding.id}`}>
+              Open full position page <ArrowRight size={14} />
             </ActionLink>
-            <ActionLink href={selectedHolding ? `/market/${selectedHolding.symbol}` : "/investments/discover"}>
-              Open market <ExternalLink size={14} />
+            <ActionLink href={`/market/${selectedHolding.symbol}`}>
+              Open market page <ExternalLink size={14} />
             </ActionLink>
           </div>
         </div>
@@ -1192,10 +1148,10 @@ function ZeroStateDesk({ symbol, setSymbol, addAsset }) {
       <div className={styles.focusStack}>
         <div className={styles.focusHeader}>
           <div>
-            <div className={styles.eyebrow}>Investments starter</div>
-            <div className={styles.focusTitle}>Build the desk first</div>
+            <div className={styles.eyebrow}>Portfolio desk starter</div>
+            <div className={styles.focusTitle}>Build the stock desk first</div>
             <div className={styles.focusMeta}>
-              Live pricing, research, and order routing are ready to wake up once you add symbols.
+              Add a symbol, route the first fill, then the rest of the desk wakes up.
             </div>
           </div>
 
@@ -1207,43 +1163,9 @@ function ZeroStateDesk({ symbol, setSymbol, addAsset }) {
           </div>
         </div>
 
-        <div className={styles.metricGrid}>
-          <MetricCard
-            icon={Wallet}
-            label="Portfolio route"
-            value="Internal"
-            detail="Track positions and fills before broker rails exist."
-            tone="green"
-          />
-          <MetricCard
-            icon={Activity}
-            label="Live prices"
-            value="Ready"
-            detail="Quotes start flowing as soon as symbols hit the desk."
-            tone="blue"
-          />
-          <MetricCard
-            icon={Star}
-            label="Watchlist"
-            value="Ready"
-            detail="Saved names can feed future trade routing."
-            tone="amber"
-          />
-          <MetricCard
-            icon={BookOpenText}
-            label="Research"
-            value="Live"
-            detail="News and market paths are already part of the structure."
-            tone="neutral"
-          />
-        </div>
-
         <div className={styles.splitLayout}>
           <div className={styles.panel}>
-            <PaneHeader
-              title="Quick start"
-              subcopy="Add a symbol and wake the desk up."
-            />
+            <PaneHeader title="Quick start" subcopy="Add a symbol and wake the desk up." />
 
             <div className={styles.formStack}>
               <Field label="Starter symbol">
@@ -1270,12 +1192,9 @@ function ZeroStateDesk({ symbol, setSymbol, addAsset }) {
 
           <div className={styles.asideStack}>
             <div className={styles.panel}>
-              <PaneHeader
-                title="Starter market board"
-                subcopy="Macro names worth keeping in view."
-              />
+              <PaneHeader title="Board watch" subcopy="Macro names worth keeping visible." />
               <div className={styles.marketBoardGrid}>
-                {BOARD_SYMBOLS.map((item) => (
+                {BOARD_SYMBOLS.slice(0, 4).map((item) => (
                   <div key={item.symbol} className={styles.marketCard}>
                     <div className={styles.marketCardTop}>
                       <div>
@@ -1286,38 +1205,31 @@ function ZeroStateDesk({ symbol, setSymbol, addAsset }) {
                         <Activity size={14} />
                       </div>
                     </div>
-                    <div className={styles.marketPrice}>Live once loaded</div>
-                    <div className={styles.marketMove}>Quote rail wakes up after symbols land</div>
+                    <div className={styles.marketPrice}>Ready</div>
+                    <div className={styles.marketMove}>Quotes load once the desk is populated</div>
                   </div>
                 ))}
               </div>
             </div>
 
             <div className={styles.panel}>
-              <PaneHeader
-                title="What comes next"
-                subcopy="The desk is already structured for the future build."
-              />
+              <PaneHeader title="What comes next" subcopy="This desk is now tighter on purpose." />
               <div className={styles.infoList}>
                 <div className={styles.infoRow}>
-                  <span>Dashboard</span>
-                  <span>Selected symbol command</span>
+                  <span>Overview</span>
+                  <span>One symbol command view</span>
                 </div>
                 <div className={styles.infoRow}>
                   <span>Positions</span>
                   <span>Live holdings board</span>
                 </div>
                 <div className={styles.infoRow}>
-                  <span>Research</span>
-                  <span>News + market flow</span>
-                </div>
-                <div className={styles.infoRow}>
                   <span>Ticket</span>
-                  <span>Internal buy / sell routing</span>
+                  <span>Internal buy/sell routing</span>
                 </div>
                 <div className={styles.infoRow}>
-                  <span>Future phase</span>
-                  <span>Real broker rails</span>
+                  <span>Manage</span>
+                  <span>Clear delete zone</span>
                 </div>
               </div>
             </div>
@@ -1357,6 +1269,8 @@ export function CommandBoard(props) {
     setSymbol,
     addAsset,
     logTrade,
+    deleteSelectedAsset,
+    deletingAsset,
   } = props;
 
   if (!selectedHolding && assets.length === 0) {
@@ -1373,10 +1287,8 @@ export function CommandBoard(props) {
       <div className={styles.focusStack}>
         <div className={styles.focusHeader}>
           <div>
-            <div className={styles.eyebrow}>Investments command</div>
-            <div className={styles.focusTitle}>
-              {selectedSymbol || "Desk starter"}
-            </div>
+            <div className={styles.eyebrow}>Portfolio command</div>
+            <div className={styles.focusTitle}>{selectedSymbol || "Desk starter"}</div>
             <div className={styles.focusMeta}>
               {selectedHolding
                 ? `${selectedHolding.asset_type || "stock"} • ${selectedHolding.account || "Brokerage"} • ${selectedHolding.txCount} fills`
@@ -1407,6 +1319,16 @@ export function CommandBoard(props) {
               <ActionLink href={openMarketHref}>
                 Open Market <ExternalLink size={14} />
               </ActionLink>
+              {selectedHolding ? (
+                <ActionBtn
+                  variant="danger"
+                  onClick={deleteSelectedAsset}
+                  disabled={deletingAsset}
+                >
+                  <Trash2 size={14} />
+                  {deletingAsset ? "Deleting..." : "Delete Position"}
+                </ActionBtn>
+              ) : null}
             </div>
           </div>
         </div>
@@ -1425,13 +1347,12 @@ export function CommandBoard(props) {
         </div>
 
         <div className={styles.tabStage}>
-          {boardTab === "dashboard" ? (
-            <DashboardTab
+          {boardTab === "overview" ? (
+            <OverviewTab
               portfolio={portfolio}
               prices={prices}
               selectedHolding={selectedHolding}
               alerts={alerts}
-              openPositions={openPositions}
               news={news}
               newsError={newsError}
             />
@@ -1442,16 +1363,6 @@ export function CommandBoard(props) {
               openPositions={openPositions}
               assetMap={assetMap}
               recentTxns={recentTxns}
-              selectedHolding={selectedHolding}
-            />
-          ) : null}
-
-          {boardTab === "research" ? (
-            <ResearchTab
-              news={news}
-              newsError={newsError}
-              favorites={favorites}
-              prices={prices}
               selectedHolding={selectedHolding}
             />
           ) : null}
@@ -1478,11 +1389,21 @@ export function CommandBoard(props) {
             />
           ) : null}
 
-          {boardTab === "watchlist" ? (
-            <WatchlistTab
+          {boardTab === "research" ? (
+            <ResearchTab
+              news={news}
+              newsError={newsError}
               favorites={favorites}
               prices={prices}
               selectedHolding={selectedHolding}
+            />
+          ) : null}
+
+          {boardTab === "manage" ? (
+            <ManageTab
+              selectedHolding={selectedHolding}
+              deletingAsset={deletingAsset}
+              deleteSelectedAsset={deleteSelectedAsset}
             />
           ) : null}
         </div>
