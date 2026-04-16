@@ -1,27 +1,27 @@
+
 "use client";
 
-import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import {
-  ArrowRight,
-  BookOpenText,
-  ExternalLink,
-  Newspaper,
-  Plus,
-  Search,
-  Star,
-  Wallet,
-} from "lucide-react";
+import { ArrowRight, ExternalLink, Plus, Star } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import GlassPane from "../../components/GlassPane";
 import styles from "../InvestmentsPage.module.css";
-import { ActionBtn, ActionLink, MiniPill } from "../investments.components";
+import {
+  ActionBtn,
+  ActionLink,
+  BoardCard,
+  MiniPill,
+  NewsRow,
+  SearchResultRow,
+  WatchRow,
+} from "../investments.components";
 import {
   BOARD_SYMBOLS,
   DISCOVER_QUICK_SEARCHES,
   DISCOVER_TYPES,
   asSymbol,
-  fullDateTime,
+  buildDiscoverDecision,
+  compactNumber,
   money,
   normalizeMarketResults,
   parseBatchPrices,
@@ -31,195 +31,36 @@ import {
   toneMeta,
 } from "../investments.helpers";
 
-function cx(...parts) {
-  return parts.filter(Boolean).join(" ");
-}
+export const dynamic = "force-dynamic";
 
-function EmptyState({ title, detail }) {
+function ScoreCard({ label, value, note, tone = "neutral" }) {
+  const meta = toneMeta(tone);
+
   return (
-    <div className={styles.emptyState}>
-      <div>
-        <div className={styles.emptyTitle}>{title}</div>
-        <div className={styles.emptyText}>{detail}</div>
+    <div className={styles.decisionCard}>
+      <div className={styles.decisionLabel}>{label}</div>
+      <div
+        className={styles.decisionValue}
+        style={{ color: tone === "neutral" ? "#fff" : meta.text }}
+      >
+        {value}
       </div>
+      <div className={styles.decisionNote}>{note}</div>
     </div>
   );
 }
 
-function HeadlineRow({ item }) {
+function ReasonBlock({ title, items }) {
   return (
-    <a
-      href={item.url || "#"}
-      target="_blank"
-      rel="noreferrer"
-      className={styles.feedItem}
-    >
-      <div className={styles.feedIconWrap}>
-        <Newspaper size={16} />
-      </div>
-
-      <div className={styles.feedMain}>
-        <div className={styles.feedTitle}>{item.title || "Untitled headline"}</div>
-        <div className={styles.feedSub}>{item.text || item.site || "Market story"}</div>
-        <div className={styles.feedMeta}>
-          {(item.site || "Source") + " • " + fullDateTime(item.publishedDate)}
-        </div>
-      </div>
-
-      <div className={styles.feedRight}>
-        <ExternalLink size={14} className={styles.feedLinkIcon} />
-      </div>
-    </a>
-  );
-}
-
-function ResultRow({ row, quote, selected, onClick, owned, watched }) {
-  const tone = toneByValue(quote?.changesPercentage ?? quote?.change ?? 0);
-  const meta = toneMeta(tone);
-
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cx(styles.navigatorRow, selected && styles.navigatorRowActive)}
-      style={{
-        borderColor: selected ? meta.border : undefined,
-        boxShadow: selected ? `0 0 18px ${meta.glow}` : undefined,
-      }}
-    >
-      <div
-        className={styles.navigatorAccent}
-        style={{ background: selected ? meta.text : "transparent" }}
-      />
-
-      <div
-        className={styles.navigatorAvatar}
-        style={{
-          borderColor: meta.border,
-          background: meta.iconBg,
-          color: tone === "neutral" ? "#fff" : meta.text,
-        }}
-      >
-        {row.symbol.slice(0, 2)}
-      </div>
-
-      <div className={styles.navigatorMain}>
-        <div className={styles.navigatorTop}>
-          <div className={styles.navigatorName}>{row.symbol}</div>
-          <div className={styles.navigatorAmount}>
-            {Number.isFinite(Number(quote?.price)) ? money(quote.price) : "—"}
-          </div>
-        </div>
-
-        <div className={styles.navigatorMeta}>
-          {row.name} • {row.exchange || "Market"} • {row.currency || "USD"}
-        </div>
-
-        <div className={styles.navigatorBadges}>
-          <MiniPill>{row.type || "Stock"}</MiniPill>
-          {quote?.changesPercentage != null ? (
-            <MiniPill tone={tone}>{pct(quote.changesPercentage)}</MiniPill>
-          ) : null}
-          {owned ? <MiniPill tone="green">on desk</MiniPill> : null}
-          {watched ? <MiniPill tone="amber">watching</MiniPill> : null}
-        </div>
-      </div>
-    </button>
-  );
-}
-
-function DeskRow({ asset }) {
-  return (
-    <Link href={`/investments/${asset.id}`} className={styles.favoriteRow}>
-      <div className={styles.favoriteIcon}>
-        <Wallet size={14} />
-      </div>
-      <div className={styles.favoriteMain}>
-        <div className={styles.favoriteName}>{asSymbol(asset.symbol)}</div>
-        <div className={styles.favoriteSub}>{asset.account || "Brokerage"}</div>
-      </div>
-      <div className={styles.favoritePrice}>Desk</div>
-    </Link>
-  );
-}
-
-function WatchRow({ row, quote }) {
-  const tone = toneByValue(quote?.changesPercentage ?? quote?.change ?? 0);
-  const meta = toneMeta(tone);
-
-  return (
-    <Link href={`/market/${asSymbol(row.symbol)}`} className={styles.favoriteRow}>
-      <div
-        className={styles.favoriteIcon}
-        style={{
-          borderColor: meta.border,
-          background: meta.iconBg,
-          color: tone === "neutral" ? "#fff" : meta.text,
-        }}
-      >
-        <Star size={14} />
-      </div>
-      <div className={styles.favoriteMain}>
-        <div className={styles.favoriteName}>{asSymbol(row.symbol)}</div>
-        <div className={styles.favoriteSub}>{row.name || "Saved name"}</div>
-      </div>
-      <div
-        className={styles.favoritePrice}
-        style={{ color: tone === "neutral" ? "rgba(255,255,255,0.76)" : meta.text }}
-      >
-        {Number.isFinite(Number(quote?.price)) ? money(quote.price) : "—"}
-      </div>
-    </Link>
-  );
-}
-
-function BoardCard({ symbol, label, quote }) {
-  const tone = toneByValue(quote?.changesPercentage ?? quote?.change ?? 0);
-  const meta = toneMeta(tone);
-
-  return (
-    <Link href={`/market/${symbol}`} className={styles.marketCard}>
-      <div className={styles.marketCardTop}>
-        <div>
-          <div className={styles.marketLabel}>{label}</div>
-          <div className={styles.marketSymbol}>{symbol}</div>
-        </div>
-
-        <div
-          className={styles.marketIcon}
-          style={{
-            borderColor: meta.border,
-            background: meta.iconBg,
-            color: tone === "neutral" ? "#fff" : meta.text,
-          }}
-        >
-          <BookOpenText size={14} />
-        </div>
-      </div>
-
-      <div className={styles.marketPrice}>
-        {Number.isFinite(Number(quote?.price)) ? money(quote.price) : "—"}
-      </div>
-
-      <div
-        className={styles.marketMove}
-        style={{ color: tone === "neutral" ? "rgba(255,255,255,0.62)" : meta.text }}
-      >
-        {Number.isFinite(Number(quote?.change)) ? signedMoney(quote.change) : "Waiting"}
-        {Number.isFinite(Number(quote?.changesPercentage))
-          ? ` • ${pct(quote.changesPercentage)}`
-          : ""}
-      </div>
-    </Link>
-  );
-}
-
-function SnapshotStat({ label, value, note }) {
-  return (
-    <div className={styles.summaryStat}>
-      <div className={styles.summaryLabel}>{label}</div>
-      <div className={styles.summaryValue}>{value}</div>
-      <div className={styles.summaryHint}>{note}</div>
+    <div className={styles.bulletCard}>
+      <div className={styles.bulletTitle}>{title}</div>
+      <ul className={styles.bulletList}>
+        {items.map((item) => (
+          <li key={item} className={styles.bulletItem}>
+            {item}
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
@@ -275,25 +116,17 @@ export default function InvestmentsDiscoverPage() {
         ]);
 
         if (assetRes.error || favoriteRes.error) {
-          console.error(assetRes.error || favoriteRes.error);
-          if (!cancelled) {
-            setError("Failed loading research workspace.");
-            setLoadingWorkspace(false);
-          }
-          return;
+          throw assetRes.error || favoriteRes.error;
         }
 
-        if (!cancelled) {
-          setAssets(assetRes.data || []);
-          setFavorites(favoriteRes.data || []);
-          setLoadingWorkspace(false);
-        }
-      } catch (err) {
-        console.error(err);
-        if (!cancelled) {
-          setError("Failed loading research workspace.");
-          setLoadingWorkspace(false);
-        }
+        if (cancelled) return;
+        setAssets(assetRes.data || []);
+        setFavorites(favoriteRes.data || []);
+      } catch (loadError) {
+        console.error(loadError);
+        if (!cancelled) setError("Failed loading discover workspace.");
+      } finally {
+        if (!cancelled) setLoadingWorkspace(false);
       }
     }
 
@@ -304,33 +137,32 @@ export default function InvestmentsDiscoverPage() {
     };
   }, []);
 
-  const ownedSymbols = useMemo(() => {
-    return new Set(assets.map((asset) => asSymbol(asset.symbol)).filter(Boolean));
-  }, [assets]);
+  const ownedSymbols = useMemo(
+    () => new Set(assets.map((asset) => asSymbol(asset.symbol)).filter(Boolean)),
+    [assets]
+  );
 
-  const favoriteSymbols = useMemo(() => {
-    return new Set(favorites.map((row) => asSymbol(row.symbol)).filter(Boolean));
-  }, [favorites]);
+  const favoriteSymbols = useMemo(
+    () => new Set(favorites.map((item) => asSymbol(item.symbol)).filter(Boolean)),
+    [favorites]
+  );
 
   const selectedResult = useMemo(() => {
-    return results.find((row) => row.symbol === selectedSymbol) || results[0] || null;
+    return results.find((item) => item.symbol === selectedSymbol) || results[0] || null;
   }, [results, selectedSymbol]);
 
   const watchSymbols = useMemo(() => {
-    const resultSymbols = results.slice(0, 16).map((row) => asSymbol(row.symbol));
-    const saved = favorites.slice(0, 10).map((row) => asSymbol(row.symbol));
-    const owned = assets.slice(0, 10).map((row) => asSymbol(row.symbol));
-    const selected = selectedResult?.symbol ? [asSymbol(selectedResult.symbol)] : [];
-
     return [
-      ...new Set([
-        ...BOARD_SYMBOLS.map((b) => b.symbol),
-        ...resultSymbols,
-        ...saved,
-        ...owned,
-        ...selected,
-      ]),
-    ].filter(Boolean);
+      ...new Set(
+        [
+          ...BOARD_SYMBOLS.map((item) => item.symbol),
+          ...results.slice(0, 12).map((item) => asSymbol(item.symbol)),
+          ...favorites.slice(0, 8).map((item) => asSymbol(item.symbol)),
+          ...assets.slice(0, 8).map((item) => asSymbol(item.symbol)),
+          selectedResult?.symbol,
+        ].filter(Boolean)
+      ),
+    ];
   }, [results, favorites, assets, selectedResult]);
 
   useEffect(() => {
@@ -343,18 +175,18 @@ export default function InvestmentsDiscoverPage() {
       }
 
       try {
-        const res = await fetch(
+        const response = await fetch(
           `/api/prices-batch?symbols=${encodeURIComponent(watchSymbols.join(","))}`,
           { cache: "no-store" }
         );
-        const data = await res.json();
+        const json = await response.json();
 
-        if (!cancelled && res.ok) {
-          setQuotes(parseBatchPrices(data));
-        }
-      } catch (err) {
         if (cancelled) return;
-        console.error("discover price batch failed", err);
+        setQuotes(response.ok ? parseBatchPrices(json) : {});
+      } catch (priceError) {
+        if (cancelled) return;
+        console.error("discover price batch failed", priceError);
+        setQuotes({});
       }
     }
 
@@ -369,25 +201,23 @@ export default function InvestmentsDiscoverPage() {
     let cancelled = false;
 
     async function loadNews() {
-      const symbol = asSymbol(selectedResult?.symbol);
-      if (!symbol) {
+      if (!selectedResult?.symbol) {
         setNews([]);
         return;
       }
 
       try {
-        const res = await fetch(
-          `/api/stock-news?symbols=${encodeURIComponent(symbol)}&limit=6`,
+        const response = await fetch(
+          `/api/stock-news?symbols=${encodeURIComponent(selectedResult.symbol)}&limit=6`,
           { cache: "no-store" }
         );
-        const data = await res.json();
+        const json = await response.json();
 
-        if (!cancelled) {
-          setNews(res.ok && Array.isArray(data?.articles) ? data.articles : []);
-        }
-      } catch (err) {
         if (cancelled) return;
-        console.error("discover news failed", err);
+        setNews(response.ok && Array.isArray(json?.articles) ? json.articles : []);
+      } catch (newsLoadError) {
+        if (cancelled) return;
+        console.error("discover news failed", newsLoadError);
         setNews([]);
       }
     }
@@ -414,23 +244,23 @@ export default function InvestmentsDiscoverPage() {
         return;
       }
 
-      const res = await fetch(
+      const response = await fetch(
         `/api/market-search?query=${encodeURIComponent(clean)}&type=${encodeURIComponent(nextType)}&limit=24`,
         { cache: "no-store" }
       );
-      const data = await res.json();
+      const json = await response.json();
 
-      if (!res.ok) {
-        setError(data?.error || "Search failed.");
+      if (!response.ok) {
+        setError(json?.error || "Search failed.");
         setLoadingSearch(false);
         return;
       }
 
-      const nextResults = normalizeMarketResults(data?.results || []);
+      const nextResults = normalizeMarketResults(json?.results || []);
       setResults(nextResults);
       setSelectedSymbol(nextResults[0]?.symbol || "");
-    } catch (err) {
-      console.error(err);
+    } catch (searchError) {
+      console.error(searchError);
       setError("Search failed.");
     } finally {
       setLoadingSearch(false);
@@ -473,18 +303,13 @@ export default function InvestmentsDiscoverPage() {
         .select()
         .single();
 
-      if (insertError) {
-        console.error(insertError);
-        setError(`Could not add ${clean}.`);
-        setWorking(false);
-        return;
-      }
+      if (insertError) throw insertError;
 
       setAssets((prev) => [data, ...prev]);
-      setStatus(`${clean} added to your portfolio desk.`);
-    } catch (err) {
-      console.error(err);
-      setError("Failed adding the symbol.");
+      setStatus(`${clean} added to portfolio.`);
+    } catch (saveError) {
+      console.error(saveError);
+      setError(`Could not add ${clean}.`);
     } finally {
       setWorking(false);
     }
@@ -518,12 +343,7 @@ export default function InvestmentsDiscoverPage() {
           .eq("id", existing.id)
           .eq("user_id", user.id);
 
-        if (deleteError) {
-          console.error(deleteError);
-          setError(`Could not remove ${symbol} from watchlist.`);
-          setWorking(false);
-          return;
-        }
+        if (deleteError) throw deleteError;
 
         setFavorites((prev) => prev.filter((item) => item.id !== existing.id));
         setStatus(`${symbol} removed from watchlist.`);
@@ -542,476 +362,372 @@ export default function InvestmentsDiscoverPage() {
         .select()
         .single();
 
-      if (insertError) {
-        console.error(insertError);
-        setError(`Could not save ${symbol} to watchlist.`);
-        setWorking(false);
-        return;
-      }
+      if (insertError) throw insertError;
 
       setFavorites((prev) => [data, ...prev]);
       setStatus(`${symbol} added to watchlist.`);
-    } catch (err) {
-      console.error(err);
-      setError("Failed updating watchlist.");
+    } catch (watchError) {
+      console.error(watchError);
+      setError(`Could not update ${symbol}.`);
     } finally {
       setWorking(false);
     }
   }
 
+  const selectedQuote = selectedResult ? quotes[selectedResult.symbol] || null : null;
+  const selectedTone = toneByValue(selectedQuote?.changesPercentage ?? selectedQuote?.change ?? 0);
+  const selectedMeta = toneMeta(selectedTone);
+
+  const decision = useMemo(() => {
+    if (!selectedResult) return null;
+    return buildDiscoverDecision({
+      row: selectedResult,
+      quote: selectedQuote,
+      newsCount: news.length,
+      owned: ownedSymbols.has(selectedResult.symbol),
+      watched: favoriteSymbols.has(selectedResult.symbol),
+    });
+  }, [selectedResult, selectedQuote, news.length, ownedSymbols, favoriteSymbols]);
+
   return (
     <main className={styles.page}>
       {(status || error) && (
         <GlassPane className={styles.statusStrip}>
-          <div className={styles.statusTitle}>{error ? "Research error" : "Research update"}</div>
+          <div className={styles.statusTitle}>{error ? "discover error" : "discover update"}</div>
           <div className={styles.statusText}>{error || status}</div>
         </GlassPane>
       )}
 
-      <GlassPane className={styles.summaryStrip}>
-        <div className={styles.summaryInner}>
-          <div className={styles.titleBlock}>
-            <div className={styles.eyebrow}>Stocks / Research Desk</div>
-            <div className={styles.pageTitleRow}>
-              <div className={styles.pageTitle}>Discover</div>
-              <MiniPill tone="blue">lab</MiniPill>
-            </div>
-            <div className={styles.workspaceCopy}>
-              Search, compare, save, and push names into the portfolio desk without the page feeling empty or fake.
+      <GlassPane className={styles.topStrip}>
+        <div className={styles.topMain}>
+          <div>
+            <div className={styles.pageMicro}>Invest / Discover Intelligence</div>
+            <div className={styles.pageName}>Discover</div>
+            <div className={styles.pageSub}>
+              Search, compare, understand the stock, and decide whether the setup fits long-term or trader logic.
             </div>
           </div>
 
-          <div className={styles.summaryStats}>
-            <SnapshotStat label="Positions" value={assets.length} note="on your desk" />
-            <SnapshotStat label="Watchlist" value={favorites.length} note="saved names" />
-            <SnapshotStat label="Results" value={results.length} note="search universe" />
-            <SnapshotStat label="Focus" value={selectedResult?.symbol || "—"} note={selectedResult?.type || "no symbol selected"} />
-            <SnapshotStat label="Workspace" value={loadingWorkspace ? "..." : "Ready"} note="research route live" />
-          </div>
-
-          <div className={styles.summaryRight}>
-            <ActionLink href="/investments">
-              Portfolio Desk <ArrowRight size={14} />
+          <div className={styles.pageActions}>
+            <ActionLink href="/investments" variant="primary">
+              Portfolio <ArrowRight size={14} />
             </ActionLink>
+          </div>
+        </div>
+
+        <div className={styles.compactSearchRow}>
+          <div className={styles.searchDock}>
+            <input
+              className={styles.compactField}
+              placeholder="Search ticker or company"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+            />
+            <select
+              className={styles.compactSelect}
+              value={type}
+              onChange={(event) => setType(event.target.value)}
+            >
+              {DISCOVER_TYPES.map((entry) => (
+                <option key={entry} value={entry}>
+                  {entry}
+                </option>
+              ))}
+            </select>
+            <ActionBtn variant="primary" onClick={() => runSearch()}>
+              Search
+            </ActionBtn>
+          </div>
+
+          <div className={styles.slimChipRow}>
+            {DISCOVER_QUICK_SEARCHES.map((chip) => (
+              <button
+                key={chip}
+                type="button"
+                className={styles.rangeButton}
+                onClick={() => {
+                  setQuery(chip);
+                  runSearch(chip, type);
+                }}
+              >
+                {chip}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className={styles.inlineMetricStrip}>
+          <div className={styles.inlineMetricCell}>
+            <div className={styles.inlineMetricLabel}>Desk names</div>
+            <div className={styles.inlineMetricValue}>{assets.length}</div>
+            <div className={styles.inlineMetricNote}>already tracked</div>
+          </div>
+          <div className={styles.inlineMetricCell}>
+            <div className={styles.inlineMetricLabel}>Watchlist</div>
+            <div className={styles.inlineMetricValue}>{favorites.length}</div>
+            <div className={styles.inlineMetricNote}>saved</div>
+          </div>
+          <div className={styles.inlineMetricCell}>
+            <div className={styles.inlineMetricLabel}>Results</div>
+            <div className={styles.inlineMetricValue}>{results.length}</div>
+            <div className={styles.inlineMetricNote}>current search</div>
+          </div>
+          <div className={styles.inlineMetricCell}>
+            <div className={styles.inlineMetricLabel}>Workspace</div>
+            <div className={styles.inlineMetricValue}>{loadingWorkspace ? "..." : "Ready"}</div>
+            <div className={styles.inlineMetricNote}>decision engine live</div>
           </div>
         </div>
       </GlassPane>
 
-      <div className={styles.workspace}>
-        <div className={styles.leftCol}>
-          <GlassPane className={styles.navigatorPane}>
-            <div className={styles.paneHeader}>
-              <div>
-                <div className={styles.paneTitle}>Search universe</div>
-                <div className={styles.paneSub}>Find stocks and ETFs fast.</div>
-              </div>
-              <MiniPill>{results.length} results</MiniPill>
+      <div className={styles.deskGrid}>
+        <GlassPane className={styles.deskSurface}>
+          <div className={styles.surfaceHeader}>
+            <div>
+              <div className={styles.surfaceTitle}>Results</div>
+              <div className={styles.surfaceSub}>Selected symbol drives the intelligence panel.</div>
             </div>
+            <MiniPill>{results.length} results</MiniPill>
+          </div>
 
-            <form
-              className={styles.queueToolbar}
-              onSubmit={(e) => {
-                e.preventDefault();
-                runSearch();
-              }}
-            >
-              <label className={styles.searchWrap}>
-                <Search size={14} />
-                <input
-                  className={styles.searchInput}
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  placeholder="Search AAPL, Nvidia, VOO..."
-                />
-              </label>
-
-              <div className={styles.fieldActionRow}>
-                <select
-                  className={styles.field}
-                  value={type}
-                  onChange={(e) => setType(e.target.value)}
-                >
-                  {DISCOVER_TYPES.map((value) => (
-                    <option key={value} value={value}>
-                      {value}
-                    </option>
-                  ))}
-                </select>
-
-                <ActionBtn type="submit" variant="primary">
-                  Search
-                </ActionBtn>
-              </div>
-            </form>
-
-            <div className={styles.chipRow} style={{ marginBottom: 8 }}>
-              {DISCOVER_QUICK_SEARCHES.map((value) => (
-                <button
-                  key={value}
-                  type="button"
-                  className={cx(styles.chipButton, query === value && styles.chipButtonActive)}
-                  onClick={() => {
-                    setQuery(value);
-                    runSearch(value, type);
-                  }}
-                >
-                  {value}
-                </button>
-              ))}
-            </div>
-
+          <div className={styles.tableArea}>
             {loadingSearch ? (
-              <EmptyState title="Searching market" detail="Pulling symbol results now." />
+              <div className={styles.quietEmpty}>
+                <div className={styles.emptyTitle}>Searching market</div>
+                <div className={styles.emptyText}>Pulling the result set now.</div>
+              </div>
             ) : results.length ? (
-              <div className={styles.navigatorList}>
+              <div className={styles.resultList}>
                 {results.map((row) => (
-                  <ResultRow
+                  <SearchResultRow
                     key={`${row.symbol}-${row.exchange}`}
                     row={row}
                     quote={quotes[row.symbol] || null}
                     selected={row.symbol === selectedResult?.symbol}
-                    onClick={() => setSelectedSymbol(row.symbol)}
                     owned={ownedSymbols.has(row.symbol)}
                     watched={favoriteSymbols.has(row.symbol)}
+                    onSelect={() => setSelectedSymbol(row.symbol)}
                   />
                 ))}
               </div>
             ) : (
-              <div style={{ display: "grid", gap: 8, minHeight: 0, overflow: "auto", paddingRight: 2 }}>
-                <div className={styles.panel}>
-                  <div className={styles.paneHeader}>
-                    <div>
-                      <div className={styles.paneTitle}>Already on desk</div>
-                      <div className={styles.paneSub}>Names you already track.</div>
-                    </div>
-                    <MiniPill>{assets.length}</MiniPill>
-                  </div>
-
-                  {assets.length ? (
-                    <div className={styles.feedList}>
-                      {assets.slice(0, 4).map((asset) => (
-                        <DeskRow key={asset.id} asset={asset} />
-                      ))}
-                    </div>
-                  ) : (
-                    <EmptyState
-                      title="Search the market"
-                      detail="Use a ticker, company name, or one of the quick chips."
-                    />
-                  )}
-                </div>
-
-                <div className={styles.panel}>
-                  <div className={styles.paneHeader}>
-                    <div>
-                      <div className={styles.paneTitle}>Saved names</div>
-                      <div className={styles.paneSub}>Watchlist names ready for later.</div>
-                    </div>
-                    <MiniPill>{favorites.length}</MiniPill>
-                  </div>
-
-                  {favorites.length ? (
-                    <div className={styles.feedList}>
-                      {favorites.slice(0, 4).map((row) => (
-                        <WatchRow
-                          key={row.id}
-                          row={row}
-                          quote={quotes[asSymbol(row.symbol)] || null}
-                        />
-                      ))}
-                    </div>
-                  ) : (
-                    <EmptyState
-                      title="No saved names yet"
-                      detail="Search a name and hit Save Watch to build the list."
-                    />
-                  )}
+              <div className={styles.quietEmpty}>
+                <div className={styles.emptyTitle}>Search a ticker or company</div>
+                <div className={styles.emptyText}>
+                  Use the search bar or a quick chip. This page is for understanding the stock, not just locating it.
                 </div>
               </div>
             )}
-          </GlassPane>
-        </div>
+          </div>
+        </GlassPane>
 
-        <div className={styles.mainCol}>
-          <GlassPane className={styles.focusPane}>
-            {selectedResult ? (
-              <div className={styles.focusStack}>
-                <div className={styles.focusHeader}>
-                  <div>
-                    <div className={styles.eyebrow}>Research focus</div>
-                    <div className={styles.focusTitle}>{selectedResult.symbol}</div>
-                    <div className={styles.focusMeta}>
-                      {selectedResult.name} • {selectedResult.exchange || "Market"} • {selectedResult.type || "Stock"}
-                    </div>
-                  </div>
-
-                  <div className={styles.focusHeaderRight}>
-                    <div className={styles.focusBadges}>
-                      <MiniPill>{selectedResult.type}</MiniPill>
-                      {Number.isFinite(Number(quotes[selectedResult.symbol]?.changesPercentage)) ? (
-                        <MiniPill tone={toneByValue(quotes[selectedResult.symbol]?.changesPercentage)}>
-                          {pct(quotes[selectedResult.symbol]?.changesPercentage)}
-                        </MiniPill>
-                      ) : null}
-                    </div>
-
-                    <div className={styles.focusActionRow}>
-                      <ActionBtn
-                        variant="primary"
-                        onClick={() => addToDesk(selectedResult.symbol)}
-                        disabled={working || ownedSymbols.has(selectedResult.symbol)}
-                      >
-                        <Plus size={14} />
-                        {ownedSymbols.has(selectedResult.symbol) ? "On Desk" : "Add to Desk"}
-                      </ActionBtn>
-
-                      <ActionBtn
-                        onClick={() => toggleWatch(selectedResult)}
-                        disabled={working}
-                      >
-                        <Star size={14} />
-                        {favoriteSymbols.has(selectedResult.symbol) ? "Watching" : "Save Watch"}
-                      </ActionBtn>
-
-                      <ActionLink href={`/market/${encodeURIComponent(selectedResult.symbol)}`}>
-                        Open Market <ExternalLink size={14} />
-                      </ActionLink>
-                    </div>
+        <GlassPane className={styles.deskSurface}>
+          {selectedResult && decision ? (
+            <>
+              <div className={styles.surfaceHeader}>
+                <div>
+                  <div className={styles.surfaceTitle}>{selectedResult.symbol}</div>
+                  <div className={styles.surfaceSub}>
+                    {selectedResult.name} • {selectedResult.exchange || "Market"} • {selectedResult.type || "Stock"}
                   </div>
                 </div>
 
-                <div className={styles.splitLayout}>
-                  <div className={styles.panel}>
-                    <div className={styles.metricGrid}>
-                      <div className={styles.metricCard}>
-                        <div className={styles.metricIcon}>
-                          <Wallet size={16} />
-                        </div>
-                        <div className={styles.metricLabel}>Price</div>
-                        <div className={styles.metricValue}>
-                          {Number.isFinite(Number(quotes[selectedResult.symbol]?.price))
-                            ? money(quotes[selectedResult.symbol]?.price)
-                            : "—"}
-                        </div>
-                        <div className={styles.metricSub}>Live quote</div>
-                      </div>
-
-                      <div className={styles.metricCard}>
-                        <div className={styles.metricIcon}>
-                          <BookOpenText size={16} />
-                        </div>
-                        <div className={styles.metricLabel}>Daily Move</div>
-                        <div
-                          className={styles.metricValue}
-                          style={{
-                            color: toneMeta(
-                              toneByValue(
-                                quotes[selectedResult.symbol]?.changesPercentage ??
-                                  quotes[selectedResult.symbol]?.change ??
-                                  0
-                              )
-                            ).text,
-                          }}
-                        >
-                          {Number.isFinite(Number(quotes[selectedResult.symbol]?.change))
-                            ? signedMoney(quotes[selectedResult.symbol]?.change)
-                            : "—"}
-                        </div>
-                        <div className={styles.metricSub}>
-                          {Number.isFinite(Number(quotes[selectedResult.symbol]?.changesPercentage))
-                            ? pct(quotes[selectedResult.symbol]?.changesPercentage)
-                            : "waiting"}
-                        </div>
-                      </div>
-
-                      <div className={styles.metricCard}>
-                        <div className={styles.metricIcon}>
-                          <Search size={16} />
-                        </div>
-                        <div className={styles.metricLabel}>Exchange</div>
-                        <div className={styles.metricValue}>{selectedResult.exchange || "—"}</div>
-                        <div className={styles.metricSub}>{selectedResult.currency || "USD"}</div>
-                      </div>
-
-                      <div className={styles.metricCard}>
-                        <div className={styles.metricIcon}>
-                          <Star size={16} />
-                        </div>
-                        <div className={styles.metricLabel}>Status</div>
-                        <div className={styles.metricValue}>
-                          {ownedSymbols.has(selectedResult.symbol)
-                            ? "Owned"
-                            : favoriteSymbols.has(selectedResult.symbol)
-                              ? "Watching"
-                              : "Research"}
-                        </div>
-                        <div className={styles.metricSub}>workspace relationship</div>
-                      </div>
-                    </div>
-
-                    <div style={{ marginTop: 10 }}>
-                      <div className={styles.paneHeader}>
-                        <div>
-                          <div className={styles.paneTitle}>Headlines</div>
-                          <div className={styles.paneSub}>
-                            Live symbol news for {selectedResult.symbol}.
-                          </div>
-                        </div>
-                        <MiniPill>{news.length} stories</MiniPill>
-                      </div>
-
-                      {news.length ? (
-                        <div className={styles.feedList}>
-                          {news.slice(0, 4).map((item, index) => (
-                            <HeadlineRow key={`${item.url}-${index}`} item={item} />
-                          ))}
-                        </div>
-                      ) : (
-                        <EmptyState
-                          title="No headlines yet"
-                          detail="Search another name or wait for the news route to return."
-                        />
-                      )}
-                    </div>
+                <div className={styles.focusStackFlat}>
+                  <div
+                    className={styles.focusHeadline}
+                    style={{ color: selectedTone === "neutral" ? "#fff" : selectedMeta.text }}
+                  >
+                    {selectedQuote?.price != null ? money(selectedQuote.price) : "—"}
                   </div>
-
-                  <div className={styles.asideStack}>
-                    <div className={styles.panel}>
-                      <div className={styles.paneHeader}>
-                        <div>
-                          <div className={styles.paneTitle}>Board watch</div>
-                          <div className={styles.paneSub}>Keep a few macro names visible.</div>
-                        </div>
-                      </div>
-
-                      <div className={styles.marketBoardGrid}>
-                        {BOARD_SYMBOLS.slice(0, 4).map((item) => (
-                          <BoardCard
-                            key={item.symbol}
-                            symbol={item.symbol}
-                            label={item.label}
-                            quote={quotes[item.symbol] || null}
-                          />
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className={styles.panel}>
-                      <div className={styles.paneHeader}>
-                        <div>
-                          <div className={styles.paneTitle}>Quick routes</div>
-                          <div className={styles.paneSub}>Fast next steps.</div>
-                        </div>
-                      </div>
-
-                      <div className={styles.ctaStack}>
-                        <ActionLink href="/investments">
-                          Portfolio Desk <ArrowRight size={14} />
-                        </ActionLink>
-                        <ActionLink href={`/market/${encodeURIComponent(selectedResult.symbol)}`}>
-                          Open Market <ExternalLink size={14} />
-                        </ActionLink>
-                      </div>
-                    </div>
+                  <div
+                    className={styles.surfaceSub}
+                    style={{ color: selectedTone === "neutral" ? "rgba(255,255,255,0.66)" : selectedMeta.text }}
+                  >
+                    {selectedQuote?.change != null
+                      ? `${signedMoney(selectedQuote.change)} • ${pct(selectedQuote.changesPercentage)}`
+                      : "waiting on quote"}
                   </div>
                 </div>
               </div>
-            ) : (
-              <div className={styles.focusStack}>
-                <div className={styles.focusHeader}>
-                  <div>
-                    <div className={styles.eyebrow}>Research desk</div>
-                    <div className={styles.focusTitle}>Find the next stock</div>
-                    <div className={styles.focusMeta}>
-                      This page stays useful before search instead of just sitting there dead.
-                    </div>
-                  </div>
 
-                  <div className={styles.focusHeaderRight}>
-                    <div className={styles.focusBadges}>
-                      <MiniPill tone="blue">search</MiniPill>
-                      <MiniPill tone="amber">watchlist</MiniPill>
-                    </div>
+              <div className={styles.pageActions}>
+                <ActionBtn
+                  variant="primary"
+                  onClick={() => addToDesk(selectedResult.symbol)}
+                  disabled={working || ownedSymbols.has(selectedResult.symbol)}
+                >
+                  <Plus size={14} />
+                  {ownedSymbols.has(selectedResult.symbol) ? "On Desk" : "Add to Desk"}
+                </ActionBtn>
+
+                <ActionBtn onClick={() => toggleWatch(selectedResult)} disabled={working}>
+                  <Star size={14} />
+                  {favoriteSymbols.has(selectedResult.symbol) ? "Watching" : "Save Watch"}
+                </ActionBtn>
+
+                <ActionLink href={`/market/${encodeURIComponent(selectedResult.symbol)}`}>
+                  Open Market <ExternalLink size={14} />
+                </ActionLink>
+              </div>
+
+              <div className={styles.surfaceDivider} />
+
+              <div className={styles.decisionGrid}>
+                <ScoreCard
+                  label="Overall"
+                  value={decision.overallScore}
+                  note={decision.style === "trader" ? "best read as a trader setup" : "best read as a long-term setup"}
+                  tone={decision.overallScore >= 70 ? "green" : decision.overallScore < 55 ? "red" : "amber"}
+                />
+                <ScoreCard
+                  label="Long-term"
+                  value={decision.longTermScore}
+                  note="quality / size / stability"
+                  tone={decision.longTermScore >= 70 ? "green" : decision.longTermScore < 55 ? "red" : "amber"}
+                />
+                <ScoreCard
+                  label="Trader"
+                  value={decision.traderScore}
+                  note="movement / liquidity / attention"
+                  tone={decision.traderScore >= 70 ? "green" : decision.traderScore < 55 ? "red" : "amber"}
+                />
+                <ScoreCard
+                  label="Entry"
+                  value={decision.entryScore}
+                  note="how clean the current entry looks"
+                  tone={decision.entryScore >= 65 ? "green" : decision.entryScore < 50 ? "red" : "amber"}
+                />
+              </div>
+
+              <div className={styles.verdictStrip}>
+                <div>
+                  <div className={styles.verdictTitle}>{decision.verdict}</div>
+                  <div className={styles.verdictText}>{decision.verdictSub}</div>
+                </div>
+                <MiniPill tone="blue">light model</MiniPill>
+              </div>
+
+              <div className={styles.bulletGrid}>
+                <ReasonBlock title="Why now" items={decision.whyNow} />
+                <ReasonBlock title="Why not now" items={decision.whyNot} />
+                <ReasonBlock title="Watch for" items={decision.watchFor} />
+              </div>
+
+              <div className={styles.surfaceDivider} />
+
+              <div className={styles.focusSubgrid}>
+                <div className={styles.focusCell}>
+                  <div className={styles.inlineMetricLabel}>Market cap</div>
+                  <div className={styles.focusValue}>
+                    {selectedQuote?.marketCap != null ? compactNumber(selectedQuote.marketCap) : "—"}
                   </div>
                 </div>
-
-                <div className={styles.splitLayout}>
-                  <div className={styles.panel}>
-                    <div className={styles.paneHeader}>
-                      <div>
-                        <div className={styles.paneTitle}>Market board</div>
-                        <div className={styles.paneSub}>Starter market view without wasted space.</div>
-                      </div>
-                    </div>
-
-                    <div className={styles.marketBoardGrid}>
-                      {BOARD_SYMBOLS.map((item) => (
-                        <BoardCard
-                          key={item.symbol}
-                          symbol={item.symbol}
-                          label={item.label}
-                          quote={quotes[item.symbol] || null}
-                        />
-                      ))}
-                    </div>
+                <div className={styles.focusCell}>
+                  <div className={styles.inlineMetricLabel}>Volume</div>
+                  <div className={styles.focusValue}>
+                    {selectedQuote?.volume != null ? compactNumber(selectedQuote.volume) : "—"}
                   </div>
+                </div>
+                <div className={styles.focusCell}>
+                  <div className={styles.inlineMetricLabel}>Exchange</div>
+                  <div className={styles.focusValue}>{selectedResult.exchange || "—"}</div>
+                </div>
+                <div className={styles.focusCell}>
+                  <div className={styles.inlineMetricLabel}>Type</div>
+                  <div className={styles.focusValue}>{selectedResult.type || "Stock"}</div>
+                </div>
+              </div>
 
-                  <div className={styles.asideStack}>
-                    <div className={styles.panel}>
-                      <div className={styles.paneHeader}>
-                        <div>
-                          <div className={styles.paneTitle}>Owned positions</div>
-                          <div className={styles.paneSub}>What is already on your desk.</div>
-                        </div>
-                        <MiniPill>{assets.length}</MiniPill>
-                      </div>
+              <div className={styles.surfaceDivider} />
 
-                      {assets.length ? (
-                        <div className={styles.feedList}>
-                          {assets.slice(0, 6).map((asset) => (
-                            <DeskRow key={asset.id} asset={asset} />
-                          ))}
-                        </div>
-                      ) : (
-                        <EmptyState
-                          title="No positions yet"
-                          detail="Search something and add it to the desk."
-                        />
-                      )}
-                    </div>
+              <div className={styles.surfaceHeader}>
+                <div>
+                  <div className={styles.surfaceTitle}>Headlines</div>
+                  <div className={styles.surfaceSub}>
+                    Catalysts that might strengthen or weaken the current setup.
+                  </div>
+                </div>
+                <MiniPill>{news.length} stories</MiniPill>
+              </div>
 
-                    <div className={styles.panel}>
-                      <div className={styles.paneHeader}>
-                        <div>
-                          <div className={styles.paneTitle}>Watchlist</div>
-                          <div className={styles.paneSub}>Saved names ready for later.</div>
-                        </div>
-                        <MiniPill>{favorites.length}</MiniPill>
-                      </div>
-
-                      {favorites.length ? (
-                        <div className={styles.feedList}>
-                          {favorites.slice(0, 6).map((row) => (
-                            <WatchRow
-                              key={row.id}
-                              row={row}
-                              quote={quotes[asSymbol(row.symbol)] || null}
-                            />
-                          ))}
-                        </div>
-                      ) : (
-                        <EmptyState
-                          title="No saved names"
-                          detail="Search a name and hit Save Watch."
-                        />
-                      )}
-                    </div>
+              {news.length ? (
+                <div className={styles.newsList}>
+                  {news.map((item, index) => (
+                    <NewsRow key={`${item.url}-${index}`} item={item} />
+                  ))}
+                </div>
+              ) : (
+                <div className={styles.quietEmpty}>
+                  <div className={styles.emptyTitle}>No headlines returned</div>
+                  <div className={styles.emptyText}>The news route came back empty for this symbol.</div>
+                </div>
+              )}
+            </>
+          ) : (
+            <>
+              <div className={styles.surfaceHeader}>
+                <div>
+                  <div className={styles.surfaceTitle}>Discover intelligence</div>
+                  <div className={styles.surfaceSub}>
+                    Search a stock and this side turns into the explanation engine.
                   </div>
                 </div>
               </div>
-            )}
-          </GlassPane>
-        </div>
+
+              <div className={styles.quietEmpty}>
+                <div className={styles.emptyTitle}>No symbol selected</div>
+                <div className={styles.emptyText}>
+                  Search a stock, click a result, and this panel will break down whether it looks stronger for long-term ownership or for trading.
+                </div>
+              </div>
+
+              <div className={styles.surfaceDivider} />
+
+              <div className={styles.surfaceHeader}>
+                <div>
+                  <div className={styles.surfaceTitle}>Watchlist</div>
+                  <div className={styles.surfaceSub}>Saved names ready for later.</div>
+                </div>
+                <MiniPill>{favorites.length}</MiniPill>
+              </div>
+
+              {favorites.length ? (
+                <div className={styles.watchList}>
+                  {favorites.slice(0, 4).map((item) => (
+                    <WatchRow
+                      key={item.id}
+                      symbol={asSymbol(item.symbol)}
+                      name={item.name || item.asset_type || "Watchlist"}
+                      quote={quotes[asSymbol(item.symbol)] || null}
+                      href={`/market/${encodeURIComponent(asSymbol(item.symbol))}`}
+                    />
+                  ))}
+                </div>
+              ) : null}
+
+              <div className={styles.surfaceDivider} />
+
+              <div className={styles.surfaceHeader}>
+                <div>
+                  <div className={styles.surfaceTitle}>Tape</div>
+                  <div className={styles.surfaceSub}>Macro names worth keeping visible.</div>
+                </div>
+              </div>
+
+              <div className={styles.boardGrid}>
+                {BOARD_SYMBOLS.slice(0, 4).map((item) => (
+                  <BoardCard
+                    key={item.symbol}
+                    symbol={item.symbol}
+                    label={item.label}
+                    quote={quotes[item.symbol] || null}
+                    href={`/market/${encodeURIComponent(item.symbol)}`}
+                  />
+                ))}
+              </div>
+            </>
+          )}
+        </GlassPane>
       </div>
     </main>
   );

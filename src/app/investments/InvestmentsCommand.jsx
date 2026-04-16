@@ -1,65 +1,57 @@
+
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { ArrowRight, Sparkles, Trash2 } from "lucide-react";
+import { supabase } from "@/lib/supabaseClient";
 import GlassPane from "../components/GlassPane";
 import styles from "./InvestmentsPage.module.css";
-import { supabase } from "@/lib/supabaseClient";
+import {
+  ActionBtn,
+  ActionLink,
+  BoardCard,
+  EmptyState,
+  FillRow,
+  HoldingRow,
+  MiniPill,
+  NewsRow,
+  WatchRow,
+} from "./investments.components";
 import {
   BOARD_SYMBOLS,
-  NEWS_TTL_MS,
   asSymbol,
   buildPortfolio,
+  money,
+  moneyTight,
+  monthLabel,
   parseBatchPrices,
-  sameNewsArticles,
+  pct,
+  signedMoney,
+  toneByValue,
+  toneMeta,
   toNum,
 } from "./investments.helpers";
-import {
-  SummaryStrip,
-  NavigatorPane,
-  CommandBoard,
-} from "./investments.components";
-
-const newsResponseCache = new Map();
-const newsInFlightKeys = new Set();
-
-function getCachedNews(key) {
-  const hit = newsResponseCache.get(key);
-  if (!hit) return null;
-
-  if (Date.now() - hit.ts > NEWS_TTL_MS) {
-    newsResponseCache.delete(key);
-    return null;
-  }
-
-  return hit.data;
-}
-
-function setCachedNews(key, data) {
-  newsResponseCache.set(key, {
-    ts: Date.now(),
-    data,
-  });
-}
 
 export default function InvestmentsCommand() {
+  const router = useRouter();
+
   const [assets, setAssets] = useState([]);
   const [txns, setTxns] = useState([]);
   const [favorites, setFavorites] = useState([]);
   const [prices, setPrices] = useState({});
   const [news, setNews] = useState([]);
-  const [newsError, setNewsError] = useState("");
+
   const [loading, setLoading] = useState(true);
+  const [workspaceError, setWorkspaceError] = useState("");
   const [status, setStatus] = useState("");
-  const [error, setError] = useState("");
-  const [deletingAsset, setDeletingAsset] = useState(false);
+  const [working, setWorking] = useState(false);
 
   const [selectedAssetId, setSelectedAssetId] = useState("");
-  const [boardTab, setBoardTab] = useState("overview");
-  const [filter, setFilter] = useState("open");
-  const [sort, setSort] = useState("value");
-  const [search, setSearch] = useState("");
+  const [holdingSearch, setHoldingSearch] = useState("");
+  const [holdingToneFilter, setHoldingToneFilter] = useState("all");
 
-  const [symbol, setSymbol] = useState("");
+  const [quickSymbol, setQuickSymbol] = useState("");
   const [tradeAssetId, setTradeAssetId] = useState("");
   const [tradeType, setTradeType] = useState("BUY");
   const [tradeQty, setTradeQty] = useState("");
@@ -67,69 +59,83 @@ export default function InvestmentsCommand() {
   const [tradeDate, setTradeDate] = useState(new Date().toISOString().slice(0, 10));
 
   useEffect(() => {
-    async function load() {
+    let cancelled = false;
+
+    async function loadWorkspace() {
       setLoading(true);
-      setError("");
+      setWorkspaceError("");
+      setStatus("");
 
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      try {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
 
-      if (!user) {
-        setLoading(false);
-        setError("You must be logged in.");
-        return;
+        if (!user) {
+          if (!cancelled) {
+            setWorkspaceError("You must be logged in.");
+            setLoading(false);
+          }
+          return;
+        }
+
+        const [assetRes, txnRes, favoriteRes] = await Promise.all([
+          supabase
+            .from("investment_assets")
+            .select("*")
+            .eq("user_id", user.id)
+            .order("created_at", { ascending: false }),
+          supabase
+            .from("investment_transactions")
+            .select("*")
+            .eq("user_id", user.id)
+            .order("txn_date", { ascending: false }),
+          supabase
+            .from("investment_favorites")
+            .select("*")
+            .eq("user_id", user.id)
+            .order("created_at", { ascending: false }),
+        ]);
+
+        if (assetRes.error || txnRes.error || favoriteRes.error) {
+          throw assetRes.error || txnRes.error || favoriteRes.error;
+        }
+
+        if (cancelled) return;
+
+        const nextAssets = assetRes.data || [];
+        const nextTxns = txnRes.data || [];
+        const nextFavorites = favoriteRes.data || [];
+
+        setAssets(nextAssets);
+        setTxns(nextTxns);
+        setFavorites(nextFavorites);
+        setTradeAssetId(nextAssets[0]?.id || "");
+        setSelectedAssetId(nextAssets[0]?.id || "");
+      } catch (error) {
+        console.error(error);
+        if (!cancelled) {
+          setWorkspaceError("Failed loading investment workspace.");
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
       }
-
-      const [assetRes, txnRes, favoriteRes] = await Promise.all([
-        supabase
-          .from("investment_assets")
-          .select("*")
-          .eq("user_id", user.id)
-          .order("created_at", { ascending: false }),
-
-        supabase
-          .from("investment_transactions")
-          .select("*")
-          .eq("user_id", user.id)
-          .order("txn_date", { ascending: false }),
-
-        supabase
-          .from("investment_favorites")
-          .select("*")
-          .eq("user_id", user.id)
-          .order("created_at", { ascending: false }),
-      ]);
-
-      if (assetRes.error || txnRes.error || favoriteRes.error) {
-        console.error(assetRes.error || txnRes.error || favoriteRes.error);
-        setError("Failed loading investment data.");
-        setLoading(false);
-        return;
-      }
-
-      const assetRows = assetRes.data || [];
-      const txnRows = txnRes.data || [];
-      const favoriteRows = favoriteRes.data || [];
-
-      setAssets(assetRows);
-      setTxns(txnRows);
-      setFavorites(favoriteRows);
-      setTradeAssetId(assetRows[0]?.id || "");
-      setSelectedAssetId(assetRows[0]?.id || "");
-      setLoading(false);
     }
 
-    load();
+    loadWorkspace();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const watchSymbols = useMemo(() => {
     return [
       ...new Set(
         [
-          ...assets.map((a) => asSymbol(a.symbol)),
-          ...favorites.map((f) => asSymbol(f.symbol)),
-          ...BOARD_SYMBOLS.map((x) => x.symbol),
+          ...assets.map((asset) => asSymbol(asset.symbol)),
+          ...favorites.map((item) => asSymbol(item.symbol)),
+          ...BOARD_SYMBOLS.map((item) => item.symbol),
         ].filter(Boolean)
       ),
     ];
@@ -144,62 +150,19 @@ export default function InvestmentsCommand() {
         return;
       }
 
-      const nextPrices = {};
-
       try {
-        const batchRes = await fetch(
+        const response = await fetch(
           `/api/prices-batch?symbols=${encodeURIComponent(watchSymbols.join(","))}`,
           { cache: "no-store" }
         );
-        const batchData = await batchRes.json();
+        const json = await response.json();
 
         if (cancelled) return;
-
-        if (batchRes.ok) {
-          Object.assign(nextPrices, parseBatchPrices(batchData));
-        }
-      } catch (err) {
+        setPrices(response.ok ? parseBatchPrices(json) : {});
+      } catch (error) {
         if (cancelled) return;
-        console.error("batch price fetch failed", err);
-      }
-
-      const missing = watchSymbols.filter((sym) => {
-        const row = nextPrices[sym];
-        return !row || !Number.isFinite(Number(row.price)) || Number(row.price) <= 0;
-      });
-
-      if (missing.length) {
-        await Promise.all(
-          missing.map(async (sym) => {
-            try {
-              const res = await fetch(`/api/prices?symbol=${encodeURIComponent(sym)}`, {
-                cache: "no-store",
-              });
-              const data = await res.json();
-
-              if (!cancelled && res.ok && !data?.error) {
-                nextPrices[sym] = {
-                  price: Number.isFinite(Number(data?.price)) ? Number(data.price) : null,
-                  change: Number.isFinite(Number(data?.change)) ? Number(data.change) : null,
-                  changesPercentage: Number.isFinite(
-                    Number(data?.changesPercentage ?? data?.changePercent ?? data?.percent_change)
-                  )
-                    ? Number(
-                        data?.changesPercentage ?? data?.changePercent ?? data?.percent_change
-                      )
-                    : null,
-                };
-              }
-            } catch (err) {
-              if (cancelled) return;
-              console.error(`single price fetch failed for ${sym}`, err);
-            }
-          })
-        );
-      }
-
-      if (!cancelled) {
-        setPrices(nextPrices);
+        console.error("portfolio price batch failed", error);
+        setPrices({});
       }
     }
 
@@ -213,36 +176,17 @@ export default function InvestmentsCommand() {
   const portfolio = useMemo(() => buildPortfolio(assets, txns, prices), [assets, txns, prices]);
 
   const openPositions = useMemo(() => {
-    return portfolio.holdings.filter((h) => toNum(h.shares) > 0);
+    return portfolio.holdings.filter((item) => toNum(item.shares) > 0);
   }, [portfolio.holdings]);
-
-  const alerts = useMemo(() => {
-    return openPositions.filter((h) => !h.hasLivePrice || toNum(h.pnl) < 0);
-  }, [openPositions]);
-
-  const assetMap = useMemo(() => {
-    const map = new Map();
-    assets.forEach((asset) => map.set(asset.id, asset));
-    return map;
-  }, [assets]);
-
-  const recentTxns = useMemo(() => {
-    return [...txns]
-      .sort((a, b) => {
-        const ad = new Date(a.txn_date || 0).getTime();
-        const bd = new Date(b.txn_date || 0).getTime();
-        return bd - ad;
-      })
-      .slice(0, 8);
-  }, [txns]);
 
   const selectedHolding = useMemo(() => {
     return (
       portfolio.holdings.find((item) => item.id === selectedAssetId) ||
+      openPositions[0] ||
       portfolio.holdings[0] ||
       null
     );
-  }, [portfolio.holdings, selectedAssetId]);
+  }, [portfolio.holdings, openPositions, selectedAssetId]);
 
   useEffect(() => {
     if (!selectedHolding && portfolio.holdings.length) {
@@ -252,110 +196,78 @@ export default function InvestmentsCommand() {
 
   useEffect(() => {
     if (!tradeAssetId && assets.length) {
-      setTradeAssetId(assets[0].id);
+      setTradeAssetId(assets[0]?.id || "");
     }
   }, [tradeAssetId, assets]);
 
-  const visibleAssets = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    const favoriteSet = new Set(favorites.map((f) => asSymbol(f.symbol)));
+  const selectedQuote = useMemo(() => {
+    if (!selectedHolding) return null;
+    return prices[asSymbol(selectedHolding.symbol)] || null;
+  }, [selectedHolding, prices]);
 
-    let list = [...portfolio.holdings].filter((item) => {
-      const symbolText = String(item.symbol || "").toLowerCase();
-      const accountText = String(item.account || "").toLowerCase();
+  const recentTxns = useMemo(() => {
+    return [...txns]
+      .sort((a, b) => new Date(b.txn_date || 0).getTime() - new Date(a.txn_date || 0).getTime())
+      .slice(0, 8);
+  }, [txns]);
 
-      if (q && !`${symbolText} ${accountText}`.includes(q)) return false;
-      if (filter === "open" && !(toNum(item.shares) > 0)) return false;
-      if (filter === "watch" && !favoriteSet.has(asSymbol(item.symbol))) return false;
-      if (filter === "red" && !(toNum(item.pnl) < 0 || !item.hasLivePrice)) return false;
+  const assetMap = useMemo(() => {
+    const map = new Map();
+    assets.forEach((asset) => map.set(asset.id, asset));
+    return map;
+  }, [assets]);
 
+  const visibleHoldings = useMemo(() => {
+    const query = holdingSearch.trim().toLowerCase();
+    const watchedSet = new Set(favorites.map((item) => asSymbol(item.symbol)));
+
+    return openPositions.filter((item) => {
+      const haystack = `${item.symbol} ${item.account || ""}`.toLowerCase();
+      if (query && !haystack.includes(query)) return false;
+      if (holdingToneFilter === "red" && !(item.hasLivePrice && toNum(item.pnl) < 0)) return false;
+      if (holdingToneFilter === "green" && !(item.hasLivePrice && toNum(item.pnl) > 0)) return false;
+      if (holdingToneFilter === "watch" && !watchedSet.has(asSymbol(item.symbol))) return false;
       return true;
     });
-
-    if (sort === "symbol") {
-      list.sort((a, b) => String(a.symbol || "").localeCompare(String(b.symbol || "")));
-      return list;
-    }
-
-    if (sort === "pnl") {
-      list.sort((a, b) => toNum(b.pnl, -Infinity) - toNum(a.pnl, -Infinity));
-      return list;
-    }
-
-    if (sort === "activity") {
-      list.sort((a, b) => toNum(b.txCount) - toNum(a.txCount));
-      return list;
-    }
-
-    list.sort((a, b) => toNum(b.value) - toNum(a.value));
-    return list;
-  }, [portfolio.holdings, favorites, search, filter, sort]);
+  }, [openPositions, favorites, holdingSearch, holdingToneFilter]);
 
   const newsSymbols = useMemo(() => {
-    const selected = selectedHolding?.symbol ? [asSymbol(selectedHolding.symbol)] : [];
-    const topOwned = openPositions.slice(0, 4).map((h) => asSymbol(h.symbol));
-    const watch = favorites.slice(0, 3).map((f) => asSymbol(f.symbol));
-
-    return [...new Set([...selected, ...topOwned, ...watch, "SPY"])].filter(Boolean).slice(0, 6);
+    return [
+      ...new Set(
+        [
+          selectedHolding?.symbol,
+          ...openPositions.slice(0, 3).map((item) => item.symbol),
+          ...favorites.slice(0, 2).map((item) => item.symbol),
+          "SPY",
+        ]
+          .map(asSymbol)
+          .filter(Boolean)
+      ),
+    ].slice(0, 6);
   }, [selectedHolding, openPositions, favorites]);
-
-  const newsSymbolsKey = useMemo(() => newsSymbols.join(","), [newsSymbols]);
 
   useEffect(() => {
     let cancelled = false;
 
     async function loadNews() {
-      if (!newsSymbolsKey) return;
-
-      const cached = getCachedNews(newsSymbolsKey);
-      if (cached) {
-        if (!cancelled) {
-          if (Array.isArray(cached.articles) && cached.articles.length > 0) {
-            setNews((prev) => (sameNewsArticles(prev, cached.articles) ? prev : cached.articles));
-          }
-          setNewsError(cached.error || "");
-        }
+      if (!newsSymbols.length) {
+        setNews([]);
         return;
       }
 
-      if (newsInFlightKeys.has(newsSymbolsKey)) return;
-      newsInFlightKeys.add(newsSymbolsKey);
-      setNewsError("");
-
       try {
-        const res = await fetch(
-          `/api/stock-news?symbols=${encodeURIComponent(newsSymbolsKey)}&limit=10`,
+        const response = await fetch(
+          `/api/stock-news?symbols=${encodeURIComponent(newsSymbols.join(","))}&limit=8`,
           { cache: "no-store" }
         );
-        const data = await res.json();
+        const json = await response.json();
 
         if (cancelled) return;
-
-        const payload = {
-          articles: Array.isArray(data?.articles) ? data.articles : [],
-          error: data?.error || "",
-        };
-
-        setCachedNews(newsSymbolsKey, payload);
-
-        if (payload.articles.length > 0) {
-          setNews((prev) => (sameNewsArticles(prev, payload.articles) ? prev : payload.articles));
-        }
-
-        setNewsError(payload.error);
-      } catch (err) {
+        setNews(response.ok && Array.isArray(json?.articles) ? json.articles : []);
+      } catch (error) {
         if (cancelled) return;
-        console.error("news fetch failed", err);
-
-        const payload = {
-          articles: [],
-          error: "Research headlines temporarily unavailable.",
-        };
-
-        setCachedNews(newsSymbolsKey, payload);
-        setNewsError(payload.error);
-      } finally {
-        newsInFlightKeys.delete(newsSymbolsKey);
+        console.error("portfolio news failed", error);
+        setNews([]);
       }
     }
 
@@ -364,14 +276,15 @@ export default function InvestmentsCommand() {
     return () => {
       cancelled = true;
     };
-  }, [newsSymbolsKey]);
+  }, [newsSymbols]);
 
   async function addAsset() {
-    const clean = asSymbol(symbol);
+    const clean = asSymbol(quickSymbol);
     if (!clean) return;
 
+    setWorking(true);
+    setWorkspaceError("");
     setStatus("");
-    setError("");
 
     try {
       const {
@@ -379,21 +292,22 @@ export default function InvestmentsCommand() {
       } = await supabase.auth.getUser();
 
       if (!user) {
-        setError("You must be logged in.");
+        setWorkspaceError("You must be logged in.");
+        setWorking(false);
         return;
       }
 
-      const existing = assets.find((a) => asSymbol(a.symbol) === clean);
+      const existing = assets.find((asset) => asSymbol(asset.symbol) === clean);
       if (existing) {
         setSelectedAssetId(existing.id);
         setTradeAssetId(existing.id);
-        setBoardTab("overview");
-        setSymbol("");
-        setStatus(`${clean} is already on the desk. Moved focus to it.`);
+        setQuickSymbol("");
+        setStatus(`${clean} is already on your desk.`);
+        setWorking(false);
         return;
       }
 
-      const { data, error: insertError } = await supabase
+      const { data, error } = await supabase
         .from("investment_assets")
         .insert({
           user_id: user.id,
@@ -404,55 +318,45 @@ export default function InvestmentsCommand() {
         .select()
         .single();
 
-      if (insertError) {
-        console.error(insertError);
-        setError(`Could not add ${clean}.`);
-        return;
-      }
+      if (error) throw error;
 
       setAssets((prev) => [data, ...prev]);
-      setTradeAssetId(data.id);
       setSelectedAssetId(data.id);
-      setBoardTab("overview");
-      setSymbol("");
-      setStatus(`${clean} added to the desk.`);
-    } catch (err) {
-      console.error(err);
-      setError("Failed adding the asset.");
+      setTradeAssetId(data.id);
+      setQuickSymbol("");
+      setStatus(`${clean} added to portfolio.`);
+    } catch (error) {
+      console.error(error);
+      setWorkspaceError(`Could not add ${clean}.`);
+    } finally {
+      setWorking(false);
     }
   }
 
   async function logTrade() {
-    setStatus("");
-    setError("");
-
     const qty = toNum(tradeQty, NaN);
     const price = toNum(tradePrice, NaN);
 
-    if (!tradeAssetId) {
-      setError("Pick an asset first.");
-      return;
-    }
-    if (!Number.isFinite(qty) || qty <= 0) {
-      setError("Enter a valid quantity.");
-      return;
-    }
-    if (!Number.isFinite(price) || price <= 0) {
-      setError("Enter a valid price.");
-      return;
-    }
+    setWorking(true);
+    setWorkspaceError("");
+    setStatus("");
 
     try {
+      if (!tradeAssetId) throw new Error("Pick an asset first.");
+      if (!Number.isFinite(qty) || qty <= 0) throw new Error("Enter a valid quantity.");
+      if (!Number.isFinite(price) || price <= 0) throw new Error("Enter a valid price.");
+
       const {
         data: { user },
       } = await supabase.auth.getUser();
 
       if (!user) {
-        setError("You must be logged in.");
+        setWorkspaceError("You must be logged in.");
+        setWorking(false);
         return;
       }
 
-      const { data, error: insertError } = await supabase
+      const { data, error } = await supabase
         .from("investment_transactions")
         .insert({
           user_id: user.id,
@@ -465,36 +369,34 @@ export default function InvestmentsCommand() {
         .select()
         .single();
 
-      if (insertError) {
-        console.error(insertError);
-        setError("Could not save trade.");
-        return;
-      }
+      if (error) throw error;
 
       setTxns((prev) => [data, ...prev]);
       setTradeQty("");
       setTradePrice("");
-      setBoardTab("positions");
       setStatus(`${tradeType} saved to portfolio ledger.`);
-    } catch (err) {
-      console.error(err);
-      setError("Failed saving trade.");
+    } catch (error) {
+      console.error(error);
+      setWorkspaceError(error?.message || "Could not save trade.");
+    } finally {
+      setWorking(false);
     }
   }
 
-  async function deleteSelectedAsset() {
-    if (!selectedHolding) return;
+  async function deleteAsset(assetId) {
+    const target = assets.find((item) => item.id === assetId);
+    const symbol = asSymbol(target?.symbol);
+    if (!target || !symbol) return;
 
-    const symbolToDelete = asSymbol(selectedHolding.symbol);
     const confirmed = window.confirm(
-      `Delete ${symbolToDelete} from the desk?\n\nThis will remove the asset and every fill tied to it.`
+      `Delete ${symbol} from the desk?\n\nThis removes the asset and every trade tied to it.`
     );
 
     if (!confirmed) return;
 
+    setWorking(true);
+    setWorkspaceError("");
     setStatus("");
-    setError("");
-    setDeletingAsset(true);
 
     try {
       const {
@@ -502,138 +404,419 @@ export default function InvestmentsCommand() {
       } = await supabase.auth.getUser();
 
       if (!user) {
-        setError("You must be logged in.");
-        setDeletingAsset(false);
+        setWorkspaceError("You must be logged in.");
+        setWorking(false);
         return;
       }
 
-      const favoriteDeleteRes = await supabase
+      const favoriteDelete = await supabase
         .from("investment_favorites")
         .delete()
         .eq("user_id", user.id)
-        .eq("symbol", symbolToDelete);
+        .eq("symbol", symbol);
 
-      if (favoriteDeleteRes.error) {
-        console.error(favoriteDeleteRes.error);
-      }
+      if (favoriteDelete.error) console.error(favoriteDelete.error);
 
-      const txnDeleteRes = await supabase
+      const txnDelete = await supabase
         .from("investment_transactions")
         .delete()
         .eq("user_id", user.id)
-        .eq("asset_id", selectedHolding.id);
+        .eq("asset_id", assetId);
 
-      if (txnDeleteRes.error) {
-        console.error(txnDeleteRes.error);
-        setError("Could not delete the position fills.");
-        setDeletingAsset(false);
-        return;
-      }
+      if (txnDelete.error) throw txnDelete.error;
 
-      const assetDeleteRes = await supabase
+      const assetDelete = await supabase
         .from("investment_assets")
         .delete()
         .eq("user_id", user.id)
-        .eq("id", selectedHolding.id);
+        .eq("id", assetId);
 
-      if (assetDeleteRes.error) {
-        console.error(assetDeleteRes.error);
-        setError("Could not delete the position.");
-        setDeletingAsset(false);
-        return;
-      }
+      if (assetDelete.error) throw assetDelete.error;
 
-      const remainingAssets = assets.filter((asset) => asset.id !== selectedHolding.id);
-      const nextId = remainingAssets[0]?.id || "";
-
+      const remainingAssets = assets.filter((item) => item.id !== assetId);
       setAssets(remainingAssets);
-      setTxns((prev) => prev.filter((txn) => txn.asset_id !== selectedHolding.id));
-      setFavorites((prev) => prev.filter((row) => asSymbol(row.symbol) !== symbolToDelete));
-      setSelectedAssetId(nextId);
-      setTradeAssetId(nextId);
-      setBoardTab("overview");
-      setStatus(`${symbolToDelete} deleted from the desk.`);
-    } catch (err) {
-      console.error(err);
-      setError("Failed deleting the position.");
+      setTxns((prev) => prev.filter((txn) => txn.asset_id !== assetId));
+      setFavorites((prev) => prev.filter((item) => asSymbol(item.symbol) !== symbol));
+      setSelectedAssetId(remainingAssets[0]?.id || "");
+      setTradeAssetId(remainingAssets[0]?.id || "");
+      setStatus(`${symbol} deleted from portfolio.`);
+    } catch (error) {
+      console.error(error);
+      setWorkspaceError("Could not delete the position.");
     } finally {
-      setDeletingAsset(false);
+      setWorking(false);
     }
   }
 
   if (loading) {
     return (
       <main className={styles.page}>
-        <GlassPane className={styles.gatePanel}>
-          <div className={styles.gateText}>Loading portfolio desk.</div>
+        <GlassPane className={styles.deskSurface}>
+          <div className={styles.emptyTitle}>Loading portfolio desk.</div>
         </GlassPane>
       </main>
     );
   }
 
+  const selectedTone = toneByValue(
+    selectedHolding?.hasLivePrice ? selectedHolding?.pnl : selectedQuote?.changesPercentage ?? 0
+  );
+  const selectedMeta = toneMeta(selectedTone);
+
   return (
     <main className={styles.page}>
-      {(status || error) && (
+      {(status || workspaceError) && (
         <GlassPane className={styles.statusStrip}>
-          <div className={styles.statusTitle}>{error ? "Desk error" : "Desk update"}</div>
-          <div className={styles.statusText}>{error || status}</div>
+          <div className={styles.statusTitle}>
+            {workspaceError ? "portfolio error" : "portfolio update"}
+          </div>
+          <div className={styles.statusText}>{workspaceError || status}</div>
         </GlassPane>
       )}
 
-      <SummaryStrip
-        portfolio={portfolio}
-        openPositions={openPositions}
-        favorites={favorites}
-        selectedHolding={selectedHolding}
-      />
+      <GlassPane className={styles.topStrip}>
+        <div className={styles.topMain}>
+          <div>
+            <div className={styles.pageMicro}>Invest / Portfolio</div>
+            <div className={styles.pageName}>Portfolio</div>
+            <div className={styles.pageSub}>
+              Live book first. Research and routing second. No fake dashboard treatment.
+            </div>
+          </div>
 
-      <div className={styles.workspace}>
-        <div className={styles.leftCol}>
-          <NavigatorPane
-            visibleAssets={visibleAssets}
-            selectedHolding={selectedHolding}
-            search={search}
-            setSearch={setSearch}
-            filter={filter}
-            setFilter={setFilter}
-            sort={sort}
-            setSort={setSort}
-            onSelectAsset={setSelectedAssetId}
-          />
+          <div className={styles.pageActions}>
+            <ActionLink href="/investments/discover" variant="primary">
+              Discover <ArrowRight size={14} />
+            </ActionLink>
+            <ActionLink href="/investments/auto">
+              Auto Invest <Sparkles size={14} />
+            </ActionLink>
+          </div>
         </div>
 
-        <div className={styles.mainCol}>
-          <CommandBoard
-            selectedHolding={selectedHolding}
-            portfolio={portfolio}
-            prices={prices}
-            alerts={alerts}
-            openPositions={openPositions}
-            news={news}
-            newsError={newsError}
-            favorites={favorites}
-            recentTxns={recentTxns}
-            assetMap={assetMap}
-            boardTab={boardTab}
-            setBoardTab={setBoardTab}
-            assets={assets}
-            tradeAssetId={tradeAssetId}
-            setTradeAssetId={setTradeAssetId}
-            tradeType={tradeType}
-            setTradeType={setTradeType}
-            tradeQty={tradeQty}
-            setTradeQty={setTradeQty}
-            tradePrice={tradePrice}
-            setTradePrice={setTradePrice}
-            tradeDate={tradeDate}
-            setTradeDate={setTradeDate}
-            symbol={symbol}
-            setSymbol={setSymbol}
-            addAsset={addAsset}
-            logTrade={logTrade}
-            deleteSelectedAsset={deleteSelectedAsset}
-            deletingAsset={deletingAsset}
-          />
+        <div className={styles.inlineMetricStrip}>
+          <div className={styles.inlineMetricCell}>
+            <div className={styles.inlineMetricLabel}>Value</div>
+            <div className={styles.inlineMetricValue}>{moneyTight(portfolio.totalValue)}</div>
+            <div className={styles.inlineMetricNote}>{monthLabel()}</div>
+          </div>
+
+          <div className={styles.inlineMetricCell}>
+            <div className={styles.inlineMetricLabel}>Day move</div>
+            <div
+              className={styles.inlineMetricValue}
+              style={{ color: toneMeta(toneByValue(portfolio.totalDayMove)).text }}
+            >
+              {signedMoney(portfolio.totalDayMove)}
+            </div>
+            <div className={styles.inlineMetricNote}>
+              {portfolio.totalDayPct != null ? pct(portfolio.totalDayPct) : "waiting"}
+            </div>
+          </div>
+
+          <div className={styles.inlineMetricCell}>
+            <div className={styles.inlineMetricLabel}>Unrealized</div>
+            <div
+              className={styles.inlineMetricValue}
+              style={{ color: toneMeta(toneByValue(portfolio.totalPnl)).text }}
+            >
+              {signedMoney(portfolio.totalPnl)}
+            </div>
+            <div className={styles.inlineMetricNote}>book P/L</div>
+          </div>
+
+          <div className={styles.inlineMetricCell}>
+            <div className={styles.inlineMetricLabel}>Cost basis</div>
+            <div className={styles.inlineMetricValue}>{moneyTight(portfolio.totalCost)}</div>
+            <div className={styles.inlineMetricNote}>capital at work</div>
+          </div>
+
+          <div className={styles.inlineMetricCell}>
+            <div className={styles.inlineMetricLabel}>Positions</div>
+            <div className={styles.inlineMetricValue}>{openPositions.length}</div>
+            <div className={styles.inlineMetricNote}>open names</div>
+          </div>
+        </div>
+      </GlassPane>
+
+      <div className={styles.deskGrid}>
+        <GlassPane className={styles.deskSurface}>
+          <div className={styles.surfaceHeader}>
+            <div>
+              <div className={styles.surfaceTitle}>
+                {selectedHolding ? selectedHolding.symbol : "Holdings"}
+              </div>
+              <div className={styles.surfaceSub}>
+                {selectedHolding
+                  ? `${selectedHolding.account || "Brokerage"} • ${selectedHolding.txCount} fills`
+                  : "Add a symbol and start routing fills."}
+              </div>
+            </div>
+
+            {selectedHolding ? (
+              <div className={styles.focusStackFlat}>
+                <div
+                  className={styles.focusHeadline}
+                  style={{ color: selectedTone === "neutral" ? "#fff" : selectedMeta.text }}
+                >
+                  {selectedHolding.hasLivePrice ? money(selectedHolding.livePrice) : "—"}
+                </div>
+                <div
+                  className={styles.surfaceSub}
+                  style={{ color: selectedTone === "neutral" ? "rgba(255,255,255,0.66)" : selectedMeta.text }}
+                >
+                  {selectedQuote?.change != null
+                    ? `${signedMoney(selectedQuote.change)} • ${pct(selectedQuote.changesPercentage)}`
+                    : "quote route waiting"}
+                </div>
+              </div>
+            ) : (
+              <MiniPill tone="amber">No open positions</MiniPill>
+            )}
+          </div>
+
+          {selectedHolding ? (
+            <div className={styles.focusSubgrid}>
+              <div className={styles.focusCell}>
+                <div className={styles.inlineMetricLabel}>Shares</div>
+                <div className={styles.focusValue}>
+                  {toNum(selectedHolding.shares).toLocaleString(undefined, {
+                    maximumFractionDigits: 4,
+                  })}
+                </div>
+              </div>
+              <div className={styles.focusCell}>
+                <div className={styles.inlineMetricLabel}>Value</div>
+                <div className={styles.focusValue}>{money(selectedHolding.value)}</div>
+              </div>
+              <div className={styles.focusCell}>
+                <div className={styles.inlineMetricLabel}>Basis</div>
+                <div className={styles.focusValue}>{money(selectedHolding.remainingBasis)}</div>
+              </div>
+              <div className={styles.focusCell}>
+                <div className={styles.inlineMetricLabel}>P/L</div>
+                <div
+                  className={styles.focusValue}
+                  style={{ color: selectedHolding.hasLivePrice ? selectedMeta.text : "#fff" }}
+                >
+                  {selectedHolding.hasLivePrice ? signedMoney(selectedHolding.pnl) : "Pending"}
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          <div className={styles.surfaceDivider} />
+
+          <div className={styles.compactFormRow}>
+            <input
+              className={styles.compactField}
+              placeholder="Quick add symbol"
+              value={quickSymbol}
+              onChange={(event) => setQuickSymbol(event.target.value)}
+            />
+            <ActionBtn variant="primary" onClick={addAsset} disabled={working}>
+              Add
+            </ActionBtn>
+
+            <select
+              className={styles.compactSelect}
+              value={tradeAssetId}
+              onChange={(event) => setTradeAssetId(event.target.value)}
+            >
+              <option value="">Asset</option>
+              {assets.map((asset) => (
+                <option key={asset.id} value={asset.id}>
+                  {asset.symbol}
+                </option>
+              ))}
+            </select>
+
+            <select
+              className={styles.compactSelect}
+              value={tradeType}
+              onChange={(event) => setTradeType(event.target.value)}
+            >
+              <option value="BUY">BUY</option>
+              <option value="SELL">SELL</option>
+            </select>
+
+            <input
+              className={styles.compactField}
+              type="number"
+              step="0.0001"
+              value={tradeQty}
+              onChange={(event) => setTradeQty(event.target.value)}
+              placeholder="Qty"
+            />
+
+            <input
+              className={styles.compactField}
+              type="number"
+              step="0.01"
+              value={tradePrice}
+              onChange={(event) => setTradePrice(event.target.value)}
+              placeholder="Price"
+            />
+
+            <input
+              className={styles.compactField}
+              type="date"
+              value={tradeDate}
+              onChange={(event) => setTradeDate(event.target.value)}
+            />
+
+            <ActionBtn variant="primary" onClick={logTrade} disabled={working}>
+              Route fill
+            </ActionBtn>
+          </div>
+
+          <div className={styles.slimToolbar}>
+            <input
+              className={styles.slimSearch}
+              placeholder="Search symbol or account"
+              value={holdingSearch}
+              onChange={(event) => setHoldingSearch(event.target.value)}
+            />
+
+            <div className={styles.slimChipRow}>
+              {["all", "red", "green", "watch"].map((filter) => (
+                <button
+                  key={filter}
+                  type="button"
+                  className={
+                    filter === holdingToneFilter
+                      ? `${styles.rangeButton} ${styles.rangeButtonActive}`
+                      : styles.rangeButton
+                  }
+                  onClick={() => setHoldingToneFilter(filter)}
+                >
+                  {filter}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className={styles.tableArea}>
+            {visibleHoldings.length ? (
+              <div className={styles.holdingsStack}>
+                {visibleHoldings.map((item) => (
+                  <HoldingRow
+                    key={item.id}
+                    item={item}
+                    selected={item.id === selectedHolding?.id}
+                    onSelect={() => setSelectedAssetId(item.id)}
+                    onOpenMarket={() => router.push(`/market/${encodeURIComponent(item.symbol)}`)}
+                    onDelete={() => deleteAsset(item.id)}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className={styles.quietEmpty}>
+                <div className={styles.emptyTitle}>No holdings match that view</div>
+                <div className={styles.emptyText}>
+                  Clear the search or switch the chip. This surface is for active positions only.
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className={styles.surfaceDivider} />
+
+          <div className={styles.surfaceHeader}>
+            <div>
+              <div className={styles.surfaceTitle}>Tape</div>
+              <div className={styles.surfaceSub}>Broad market board kept on the desk, not split into another product.</div>
+            </div>
+          </div>
+
+          <div className={styles.boardGrid}>
+            {BOARD_SYMBOLS.map((item) => (
+              <BoardCard
+                key={item.symbol}
+                symbol={item.symbol}
+                label={item.label}
+                quote={prices[item.symbol] || null}
+                href={`/market/${encodeURIComponent(item.symbol)}`}
+              />
+            ))}
+          </div>
+        </GlassPane>
+
+        <div className={styles.railColumn}>
+          <GlassPane className={styles.railSurface}>
+            <div className={styles.surfaceHeader}>
+              <div>
+                <div className={styles.surfaceTitle}>Watchlist</div>
+                <div className={styles.surfaceSub}>Saved names ready for quick market view.</div>
+              </div>
+              <MiniPill>{favorites.length}</MiniPill>
+            </div>
+
+            {favorites.length ? (
+              <div className={styles.watchList}>
+                {favorites.slice(0, 6).map((item) => (
+                  <WatchRow
+                    key={item.id}
+                    symbol={asSymbol(item.symbol)}
+                    name={item.name || item.asset_type || "Watchlist"}
+                    quote={prices[asSymbol(item.symbol)] || null}
+                    href={`/market/${encodeURIComponent(asSymbol(item.symbol))}`}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className={styles.quietEmpty}>
+                <div className={styles.emptyTitle}>No saved names</div>
+                <div className={styles.emptyText}>Use Discover to build the watchlist.</div>
+              </div>
+            )}
+
+            <div className={styles.surfaceDivider} />
+
+            <div className={styles.surfaceHeader}>
+              <div>
+                <div className={styles.surfaceTitle}>Recent fills</div>
+                <div className={styles.surfaceSub}>Latest ledger activity.</div>
+              </div>
+              <MiniPill>{recentTxns.length}</MiniPill>
+            </div>
+
+            {recentTxns.length ? (
+              <div className={styles.fillList}>
+                {recentTxns.map((txn) => (
+                  <FillRow key={txn.id} txn={txn} assetMap={assetMap} />
+                ))}
+              </div>
+            ) : (
+              <div className={styles.quietEmpty}>
+                <div className={styles.emptyTitle}>No fills yet</div>
+                <div className={styles.emptyText}>Route the first trade and it lands here.</div>
+              </div>
+            )}
+          </GlassPane>
+
+          <GlassPane className={styles.railSurface}>
+            <div className={styles.surfaceHeader}>
+              <div>
+                <div className={styles.surfaceTitle}>Headlines</div>
+                <div className={styles.surfaceSub}>Research flow around the live book.</div>
+              </div>
+              <MiniPill>{news.length} stories</MiniPill>
+            </div>
+
+            {news.length ? (
+              <div className={styles.newsList}>
+                {news.slice(0, 6).map((item, index) => (
+                  <NewsRow key={`${item.url}-${index}`} item={item} />
+                ))}
+              </div>
+            ) : (
+              <div className={styles.quietEmpty}>
+                <div className={styles.emptyTitle}>No headlines returned</div>
+                <div className={styles.emptyText}>The news route came back empty.</div>
+              </div>
+            )}
+          </GlassPane>
         </div>
       </div>
     </main>

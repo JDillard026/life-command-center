@@ -1,0 +1,276 @@
+.page {
+  position: relative;
+  z-index: 1;
+  width: min(100%, 1420px);
+  margin: 0 auto;
+  display: grid;
+  gap: 14px;
+  padding: 16px 0 28px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(320px, 0.9fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.mainStack,
+.railStack {
+  min-width: 0;
+  display: grid;
+  gap: 14px;
+}
+
+.laneGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.laneCard {
+  min-height: 164px;
+  padding: 16px;
+  border-radius: 22px;
+  border: 1px solid rgba(214, 226, 255, 0.1);
+  background: linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.01));
+  text-align: left;
+  cursor: pointer;
+  transition: transform 140ms ease, border-color 140ms ease, box-shadow 140ms ease;
+}
+
+.laneCard:hover {
+  transform: translateY(-1px);
+}
+
+.laneCardActive {
+  border-color: rgba(143, 177, 255, 0.22);
+  box-shadow: 0 0 24px rgba(122, 151, 255, 0.14);
+}
+
+.laneTop {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.laneTitle {
+  font-size: 24px;
+  line-height: 0.98;
+  font-weight: 950;
+  letter-spacing: -0.05em;
+  color: #ffffff;
+}
+
+.laneSub {
+  margin-top: 8px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: rgba(255, 255, 255, 0.66);
+}
+
+.laneTag {
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(214, 226, 255, 0.12);
+  display: inline-flex;
+  align-items: center;
+  font-size: 10px;
+  line-height: 1;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-weight: 900;
+  color: rgba(255,255,255,0.78);
+}
+
+.formGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.fieldWrap {
+  display: grid;
+  gap: 6px;
+}
+
+.fieldLabel {
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-weight: 900;
+  color: rgba(255, 255, 255, 0.42);
+}
+
+.field,
+.textArea {
+  min-height: 42px;
+  width: 100%;
+  padding: 0 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(214, 226, 255, 0.12);
+  background: rgba(7, 12, 20, 0.76);
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 700;
+  outline: none;
+}
+
+.textArea {
+  min-height: 92px;
+  padding-top: 12px;
+  padding-bottom: 12px;
+  resize: vertical;
+}
+
+.field:focus,
+.textArea:focus {
+  border-color: rgba(255, 255, 255, 0.22);
+}
+
+.planPreviewGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.previewCard {
+  min-height: 100px;
+  padding: 14px;
+  border-radius: 18px;
+  border: 1px solid rgba(214, 226, 255, 0.1);
+  background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01));
+}
+
+.previewLabel {
+  font-size: 10px;
+  line-height: 1;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-weight: 900;
+  color: rgba(255, 255, 255, 0.42);
+}
+
+.previewValue {
+  margin-top: 10px;
+  font-size: 22px;
+  line-height: 1;
+  font-weight: 950;
+  letter-spacing: -0.05em;
+  color: #ffffff;
+}
+
+.previewNote {
+  margin-top: 6px;
+  font-size: 12px;
+  color: rgba(255,255,255,0.62);
+}
+
+.checkRow {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  min-height: 48px;
+  padding: 12px 14px;
+  border-radius: 18px;
+  border: 1px solid rgba(214, 226, 255, 0.1);
+  background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01));
+}
+
+.checkRow input {
+  margin-top: 3px;
+}
+
+.checkText {
+  font-size: 13px;
+  line-height: 1.55;
+  color: rgba(255,255,255,0.72);
+}
+
+.ruleList,
+.bucketList {
+  display: grid;
+  gap: 10px;
+}
+
+.ruleRow,
+.bucketRow {
+  min-height: 66px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 12px 14px;
+  border-radius: 18px;
+  border: 1px solid rgba(214, 226, 255, 0.1);
+  background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01));
+}
+
+.ruleTitle,
+.bucketTitle {
+  font-size: 14px;
+  font-weight: 900;
+  color: #ffffff;
+}
+
+.ruleText,
+.bucketText {
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.48;
+  color: rgba(255,255,255,0.62);
+}
+
+.ruleValue,
+.bucketValue {
+  font-size: 13px;
+  font-weight: 900;
+  color: #ffffff;
+  text-align: right;
+}
+
+.inlineRow {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.disclaimer {
+  font-size: 13px;
+  line-height: 1.62;
+  color: rgba(255,255,255,0.68);
+}
+
+@media (max-width: 1180px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 860px) {
+  .laneGrid,
+  .formGrid,
+  .planPreviewGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 760px) {
+  .page {
+    padding: 10px 0 20px;
+    gap: 10px;
+  }
+
+  .ruleRow,
+  .bucketRow {
+    grid-template-columns: 1fr;
+  }
+
+  .ruleValue,
+  .bucketValue {
+    text-align: left;
+  }
+}

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  BookOpenText,
+  Activity,
   CalendarDays,
   ChevronRight,
   CreditCard,
@@ -38,8 +38,9 @@ const NAV_ITEMS = [
   { label: "Spending", href: "/spending", icon: PiggyBank, section: "money" },
   { label: "Savings", href: "/savings", icon: Target, section: "money" },
 
-  { label: "Portfolio Desk", href: "/investments", icon: TrendingUp, section: "stocks", badge: "LIVE" },
-  { label: "Research Desk", href: "/investments/discover", icon: BookOpenText, section: "stocks", badge: "LAB" },
+  { label: "Portfolio", href: "/investments", icon: TrendingUp, section: "invest", badge: "LIVE" },
+  { label: "Discover", href: "/investments/discover", icon: Activity, section: "invest" },
+  { label: "Auto Invest", href: "/investments/auto", icon: Activity, section: "invest", badge: "NEW" },
 
   { label: "Refinance Analyzer", href: "/tools/refinance", icon: Landmark, section: "tools", badge: "NEW" },
   { label: "PFS Builder", href: "/tools/pfs", icon: FileText, section: "tools" },
@@ -75,7 +76,7 @@ const PROFILE_ITEMS = [
 const SECTION_COPY = {
   overview: "Core system visibility and daily command pages.",
   money: "Cash flow, bills, debt, spending, savings, and account movement.",
-  stocks: "Your stock workspace, portfolio desk, research desk, and market routes.",
+  invest: "Portfolio desk, discover flow, market view, and auto-invest routes.",
   tools: "Standalone premium tools and future paid utility routes.",
 };
 
@@ -222,7 +223,7 @@ export default function SideNav({
 
   const overviewItems = useMemo(() => NAV_ITEMS.filter((item) => item.section === "overview"), []);
   const moneyItems = useMemo(() => NAV_ITEMS.filter((item) => item.section === "money"), []);
-  const stockItems = useMemo(() => NAV_ITEMS.filter((item) => item.section === "stocks"), []);
+  const investItems = useMemo(() => NAV_ITEMS.filter((item) => item.section === "invest"), []);
   const toolItems = useMemo(() => NAV_ITEMS.filter((item) => item.section === "tools"), []);
 
   useEffect(() => {
@@ -388,9 +389,9 @@ export default function SideNav({
           </div>
 
           <div className={styles.detailSection}>
-            <div className={styles.sectionLabel}>Stocks</div>
+            <div className={styles.sectionLabel}>Invest</div>
             <div className={styles.detailList}>
-              {stockItems.map((item) => (
+              {investItems.map((item) => (
                 <NavDetailItem
                   key={item.href}
                   item={item}
