@@ -13,37 +13,40 @@
   color: rgba(255, 255, 255, 0.72);
 }
 
-.topStrip {
-  display: grid;
-  grid-template-columns: minmax(300px, 1fr) minmax(420px, 0.96fr) auto;
-  gap: 16px;
-  align-items: center;
-  padding: 18px 20px;
-  border-radius: 28px;
-  border: 1px solid rgba(210, 223, 255, 0.08);
-  background:
-    radial-gradient(circle at top right, rgba(55, 86, 166, 0.14), transparent 28%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.01)),
-    rgba(8, 12, 20, 0.94);
-  box-shadow:
-    0 24px 56px rgba(0, 0, 0, 0.32),
-    inset 0 1px 0 rgba(255, 255, 255, 0.035);
-}
-
-.topIdentity {
-  display: grid;
-  gap: 8px;
+.eyebrow,
+.fieldLabel,
+.modalEyebrow,
+.insightStat span,
+.kpiCard span,
+.metricInline span,
+.feedDivider,
+.mixDonutInner span,
+.feedMeta,
+.feedMicro,
+.sectionSub,
+.alertCopy span,
+.heroMeta,
+.heroReason,
+.emptyCardBody,
+.ideaBody,
+.helperListItem,
+.queueRowBody,
+.queueRowMeta,
+.metricCardMeta,
+.merchantRowMeta,
+.insightStatSub {
+  font-size: 11px;
+  line-height: 1.55;
+  color: rgba(255, 255, 255, 0.6);
 }
 
 .eyebrow,
 .fieldLabel,
-.receiptLineIndex,
-.receiptTotalCard span,
-.metricCompact span,
 .modalEyebrow,
 .insightStat span,
-.receiptStatusCard span {
-  font-size: 10px;
+.kpiCard span,
+.metricInline span,
+.feedDivider {
   text-transform: uppercase;
   letter-spacing: 0.14em;
   font-weight: 800;
@@ -58,59 +61,107 @@
   letter-spacing: -0.065em;
 }
 
-.pageSub,
-.sectionSub,
-.feedMicro,
-.feedMeta,
-.categoryMeta,
-.radarMeta,
-.receiptAttachmentMeta,
-.receiptReviewMeta,
-.helperText,
-.insightStatSub,
-.receiptPromptCopy,
-.workspaceSub,
-.coachLeadCopy,
-.heroMeta,
-.heroReason,
-.emptyCardBody,
-.helperBlock {
-  font-size: 12px;
-  line-height: 1.58;
-  color: rgba(255, 255, 255, 0.58);
-  overflow-wrap: anywhere;
+.sectionTitle,
+.heroName,
+.modalTitle,
+.emptyCardTitle,
+.metricCardTitle,
+.ideaTitle,
+.queueRowTitle,
+.feedName,
+.coachLeadTitle {
+  font-size: 15px;
+  line-height: 1.08;
+  font-weight: 860;
+  letter-spacing: -0.02em;
 }
 
-.pageSub {
-  margin: 0;
-  max-width: 760px;
+.topShell {
+  display: grid;
+  gap: 12px;
+}
+
+.topBar {
+  display: grid;
+  grid-template-columns: auto minmax(320px, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 14px 16px;
+  border-radius: 26px;
+  border: 1px solid rgba(216, 228, 255, 0.08);
+  background:
+    radial-gradient(circle at top right, rgba(58, 92, 176, 0.16), transparent 28%),
+    linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01)),
+    rgba(8, 12, 20, 0.95);
+  box-shadow:
+    0 24px 56px rgba(0, 0, 0, 0.32),
+    inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+.topIdentity {
+  display: grid;
+  gap: 4px;
+}
+
+.topSearchBox {
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(216, 228, 255, 0.09);
+  background: rgba(255,255,255,0.02);
+  color: rgba(255,255,255,0.48);
+}
+
+.topSearchBox input,
+.field,
+.fieldArea,
+.topSelect {
+  width: 100%;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: rgba(247,250,255,0.98);
+  font: inherit;
+}
+
+.topActions,
+.topTools,
+.modeTabs,
+.tabRow,
+.sectionRight,
+.heroRight,
+.feedTabs,
+.actionStack,
+.feedMeta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .kpiRow {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 10px;
 }
 
 .kpiCard,
 .storyCard,
 .heroCard,
-.receiptAttachmentCard,
-.receiptLineRow,
-.receiptTotalCard,
-.metricCompact,
 .insightStat,
-.categoryRow,
-.radarRow,
-.receiptReviewRow,
+.metricCard,
+.merchantRow,
 .emptyCard,
-.receiptPromptCard,
-.compactReceiptTile,
-.sheetSection,
-.coachLead,
+.ideaCard,
+.queueRowCard,
 .modalCard,
-.modalCardWide,
-.workspacePane {
+.workspacePane,
+.feedPane,
+.dockCard,
+.coachLead {
   min-width: 0;
   overflow: hidden;
   border-radius: 22px;
@@ -120,8 +171,19 @@
     rgba(10, 14, 22, 0.92);
 }
 
+.kpiCard,
+.storyCard,
+.emptyCard,
+.ideaCard,
+.queueRowCard,
+.dockCard,
+.coachLead,
+.feedPane,
+.workspacePane {
+  padding: 16px;
+}
+
 .kpiCard {
-  padding: 13px 14px;
   display: grid;
   gap: 6px;
 }
@@ -130,14 +192,13 @@
 .heroAmount,
 .feedAmount,
 .insightStat strong,
-.receiptTotalCard strong,
-.metricCompact strong,
-.radarTop strong,
-.receiptReviewRow strong,
-.categoryRow strong,
-.receiptStatusCard strong,
-.coachLeadTitle,
-.compactReceiptTitle {
+.metricInline strong,
+.mixLegendRow strong,
+.queueRowTitle,
+.queueRowMeta,
+.metricCardTitle,
+.merchantRowTop strong,
+.coachLeadTitle {
   display: block;
   min-width: 0;
   max-width: 100%;
@@ -157,251 +218,35 @@
   font-size: 11px;
   line-height: 1.4;
   color: rgba(255, 255, 255, 0.52);
-  overflow-wrap: anywhere;
 }
 
-.topTools {
+.pageNavRow {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.topSelect,
-.field,
-.fieldArea,
-.searchBox,
-.tab,
-.actionBtn,
-.iconButton,
-.cameraAction,
-.classificationChip,
-.modeTab {
-  -webkit-tap-highlight-color: transparent;
-}
-
-.topSelect,
-.field,
-.fieldArea {
-  width: 100%;
-  min-height: 42px;
-  padding: 11px 12px;
-  border-radius: 14px;
-  border: 1px solid rgba(216, 228, 255, 0.1);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.008)),
-    rgba(13, 18, 28, 0.94);
-  color: rgba(247, 250, 255, 0.98);
-  font: inherit;
-  outline: 0;
-}
-
-.topSelect {
-  width: auto;
-  min-width: 146px;
-}
-
-.fieldArea {
-  min-height: 96px;
-  resize: vertical;
-}
-
-.topSelect:focus-visible,
-.field:focus-visible,
-.fieldArea:focus-visible,
-.actionBtn:focus-visible,
-.iconButton:focus-visible,
-.tab:focus-visible,
-.cameraAction:focus-visible,
-.classificationChip:focus-visible,
-.modeTab:focus-visible {
-  outline: none;
-  border-color: rgba(142, 172, 255, 0.3);
-  box-shadow: 0 0 0 1px rgba(142, 172, 255, 0.18);
-}
-
-.workspace {
-  display: grid;
-  grid-template-columns: minmax(320px, 0.8fr) minmax(0, 1.2fr);
-  gap: 16px;
-  align-items: start;
-}
-
-.workspaceFeed,
-.workspaceMain,
-.feedPane,
-.workspacePane,
-.modalBody,
-.workspaceBody,
-.storyGrid,
-.storyGridWide,
-.insightGrid,
-.metricStripCompact,
-.receiptTotalsGrid,
-.receiptFlowGrid,
-.receiptModalGrid,
-.receiptModalMain,
-.receiptModalRail,
-.feedRow,
-.heroCard,
-.heroTop,
-.heroIdentity,
-.heroRight,
-.compactReceiptTile,
-.receiptSignalGrid,
-.coachStatsGrid,
-.receiptMiniGrid,
-.workspaceGridReceipt,
-.workspaceGridCoach {
-  min-width: 0;
-}
-
-.feedPane,
-.workspacePane {
-  display: grid;
-  gap: 14px;
-  min-height: calc(100svh - 210px);
-  padding: 16px;
-}
-
-.workspaceHeader {
-  display: flex;
-  align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
-  flex-wrap: wrap;
-}
-
-.workspaceHeaderRight {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.workspaceTitle,
-.sectionTitle,
-.heroName,
-.modalTitle,
-.coachLeadTitle,
-.receiptPromptTitle,
-.compactReceiptTitle {
-  font-size: 16px;
-  line-height: 1.1;
-  font-weight: 860;
-  letter-spacing: -0.02em;
-}
-
-.modalTitle {
-  font-size: 22px;
-}
-
-.searchRow {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 10px;
-}
-
-.searchBox {
-  min-height: 44px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 0 12px;
-  border-radius: 15px;
-  border: 1px solid rgba(216, 228, 255, 0.09);
-  background: rgba(255, 255, 255, 0.02);
-  color: rgba(255, 255, 255, 0.48);
-}
-
-.searchBox:focus-within {
-  border-color: rgba(142, 172, 255, 0.24);
-  box-shadow: 0 0 0 1px rgba(142, 172, 255, 0.14);
-}
-
-.searchBox input,
-.fieldBlock input,
-.fieldBlock textarea,
-.fieldBlock select {
-  width: 100%;
-  border: 0;
-  outline: 0;
-  background: transparent;
-  color: rgba(247, 250, 255, 0.98);
-  font: inherit;
-}
-
-.filterPanel {
-  padding: 12px;
-  border-radius: 18px;
-  border: 1px solid rgba(216, 228, 255, 0.08);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.024), rgba(255, 255, 255, 0.008)),
-    rgba(255, 255, 255, 0.014);
-}
-
-.filterGrid,
-.formGrid2,
-.formGrid3,
-.receiptTotalsGrid,
-.receiptLineGrid,
-.metricStripCompact,
-.insightGrid,
-.storyGrid,
-.storyGridWide,
-.receiptModalGrid,
-.receiptSignalGrid,
-.coachStatsGrid,
-.workspaceGridReceipt,
-.workspaceGridCoach {
-  display: grid;
-  gap: 12px;
-}
-
-.filterGrid,
-.formGrid2,
-.storyGrid,
-.workspaceGridCoach {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.formGrid3,
-.receiptLineGrid,
-.insightGrid,
-.receiptSignalGrid,
-.coachStatsGrid {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
-.storyGridWide,
-.receiptModalGrid,
-.workspaceGridReceipt {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.metricStripCompact,
-.receiptTotalsGrid {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-}
-
-.modeTabs,
-.tabRow,
-.inlineActions,
-.classificationToggle,
-.heroTagRow,
-.sectionRight {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  flex-wrap: wrap;
+  padding: 10px 14px;
+  border-radius: 22px;
+  border: 1px solid rgba(216,228,255,0.08);
+  background: rgba(8,12,20,0.72);
 }
 
 .modeTab,
 .actionBtn,
 .tab,
-.cameraAction,
-.classificationChip {
+.feedTab,
+.iconButton,
+.notificationButton,
+.topSelect,
+.field,
+.fieldArea {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.modeTab,
+.actionBtn,
+.tab,
+.feedTab {
   min-height: 38px;
   padding: 0 14px;
   border-radius: 999px;
@@ -418,31 +263,21 @@
   justify-content: center;
   gap: 7px;
   cursor: pointer;
-  text-decoration: none;
-  transition:
-    border-color 140ms ease,
-    background 140ms ease,
-    color 140ms ease,
-    transform 140ms ease;
-}
-
-.modeTab:hover,
-.actionBtn:hover,
-.tab:hover,
-.cameraAction:hover,
-.classificationChip:hover {
-  border-color: rgba(216, 228, 255, 0.18);
-  color: rgba(255, 255, 255, 0.98);
-  transform: translateY(-1px);
 }
 
 .modeTabActive,
-.tabActive {
+.tabActive,
+.feedTabActive {
   border-color: rgba(138, 170, 255, 0.3);
   background:
     linear-gradient(180deg, rgba(138, 170, 255, 0.16), rgba(138, 170, 255, 0.05)),
     rgba(18, 24, 38, 0.98);
   color: rgba(255, 255, 255, 0.98);
+}
+
+.actionBtn {
+  min-height: 40px;
+  padding: 0 14px;
 }
 
 .actionBtn_subtle {
@@ -471,9 +306,10 @@
   width: 100%;
 }
 
-.iconButton {
-  width: 34px;
-  height: 34px;
+.iconButton,
+.notificationButton {
+  width: 38px;
+  height: 38px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -482,16 +318,108 @@
   background: rgba(255, 255, 255, 0.03);
   color: rgba(255, 255, 255, 0.74);
   cursor: pointer;
-  transition:
-    border-color 140ms ease,
-    color 140ms ease,
-    transform 140ms ease;
 }
 
-.iconButton:hover {
-  border-color: rgba(216, 228, 255, 0.18);
-  color: rgba(255, 255, 255, 0.98);
-  transform: translateY(-1px);
+.notificationButton {
+  position: relative;
+}
+
+.notificationBadge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #ff7f7f;
+  color: #08101c;
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.topSelect,
+.field,
+.fieldArea {
+  min-height: 42px;
+  padding: 11px 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(216, 228, 255, 0.1);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.008)),
+    rgba(13, 18, 28, 0.94);
+}
+
+.topSelect {
+  width: auto;
+  min-width: 146px;
+}
+
+.fieldArea {
+  min-height: 96px;
+  resize: vertical;
+}
+
+.topSelect:focus-visible,
+.field:focus-visible,
+.fieldArea:focus-visible,
+.actionBtn:focus-visible,
+.iconButton:focus-visible,
+.tab:focus-visible,
+.modeTab:focus-visible,
+.feedTab:focus-visible,
+.notificationButton:focus-visible {
+  outline: none;
+  border-color: rgba(142, 172, 255, 0.3);
+  box-shadow: 0 0 0 1px rgba(142, 172, 255, 0.18);
+}
+
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(320px, 0.86fr) minmax(0, 1.14fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.workspaceFeed,
+.workspaceMain,
+.feedPane,
+.workspacePane,
+.workspaceBody,
+.dashboardLayout,
+.dashboardCanvas,
+.dashboardSide,
+.sideRailStack,
+.storyGrid,
+.breakdownGrid,
+.statGrid,
+.dockGrid,
+.formGrid2,
+.formGrid3,
+.stackGrid,
+.metricList,
+.feedMain,
+.feedTitle,
+.heroText,
+.helperList {
+  min-width: 0;
+}
+
+.feedPane,
+.workspacePane {
+  display: grid;
+  gap: 14px;
+  min-height: calc(100svh - 210px);
+}
+
+.feedTabs {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
 }
 
 .feedList {
@@ -505,7 +433,6 @@
 .feedList::-webkit-scrollbar,
 .modalBody::-webkit-scrollbar {
   width: 10px;
-  height: 10px;
 }
 
 .feedList::-webkit-scrollbar-thumb,
@@ -516,11 +443,6 @@
 
 .feedDivider {
   margin-top: 2px;
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.16em;
-  font-weight: 800;
-  color: rgba(255, 255, 255, 0.34);
 }
 
 .feedRow {
@@ -538,15 +460,6 @@
   color: inherit;
   text-align: left;
   cursor: pointer;
-  transition:
-    border-color 140ms ease,
-    background 140ms ease,
-    transform 140ms ease;
-}
-
-.feedRow:hover {
-  border-color: rgba(182, 199, 242, 0.16);
-  transform: translateY(-1px);
 }
 
 .feedRowActive {
@@ -598,66 +511,38 @@
   background: linear-gradient(180deg, rgba(139, 108, 53, 0.38), rgba(139, 108, 53, 0.1));
 }
 
-.feedMain {
+.feedMain,
+.feedTitle,
+.helperList,
+.dashboardCanvas,
+.dashboardSide,
+.sideRailStack,
+.storyGrid,
+.breakdownGrid,
+.stackGrid,
+.metricList,
+.workspaceBody {
   display: grid;
-  gap: 6px;
+  gap: 10px;
 }
 
 .feedTop,
 .heroTop,
 .heroIdentity,
-.heroRight,
-.radarTop,
-.receiptAttachmentTop,
-.receiptLineHeader,
-.receiptReviewRight,
-.breakdownRow,
-.categoryRowTop,
-.compactReceiptTile,
-.receiptPromptCard {
+.merchantRowTop,
+.queueRowTop,
+.ideaTopRow,
+.sectionHeader,
+.alertRow,
+.metricCardTop {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
 }
 
-.feedTitle,
-.heroText,
-.radarMain,
-.receiptModalMain,
-.receiptModalRail,
-.workspaceBody {
-  display: grid;
-  gap: 6px;
-}
-
-.feedName,
-.categoryName,
-.receiptAttachmentName,
-.receiptReviewName,
-.workspaceTitle {
-  font-size: 14px;
-  font-weight: 850;
-}
-
-.feedRight {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-}
-
-.feedBadge {
-  display: inline-flex;
-  align-items: center;
+.feedTitle {
   gap: 4px;
-  padding: 2px 8px;
-  border-radius: 999px;
-  background: rgba(123, 149, 224, 0.16);
-  color: rgba(231, 239, 255, 0.95);
-  font-size: 11px;
-  font-weight: 700;
 }
 
 .feedAmount {
@@ -667,51 +552,21 @@
 }
 
 .feedAmount_red,
-.textRed,
-.toneRed {
+.textRed {
   color: #ff9c9c;
 }
 
 .feedAmount_green,
-.textGreen,
-.toneGreen {
+.textGreen {
   color: #93e8b9;
 }
 
-.feedAmount_amber,
-.textAmber,
-.toneAmber {
+.feedAmount_amber {
   color: #ffd08a;
 }
 
-.textBlue,
-.toneBlue {
-  color: #a8c0ff;
-}
-
-.toneNeutral {
-  color: rgba(255, 255, 255, 0.88);
-}
-
 .heroCard,
-.storyCard,
-.emptyCard,
-.receiptAttachmentCard,
-.receiptLineRow,
-.receiptPromptCard,
-.compactReceiptTile,
-.coachLead,
-.sheetSection {
-  padding: 16px;
-}
-
-.receiptTotalCard,
-.metricCompact,
-.insightStat {
-  padding: 14px;
-}
-
-.heroCard {
+.dockCard {
   display: grid;
   gap: 14px;
   border-radius: 26px;
@@ -721,18 +576,14 @@
     rgba(10, 14, 22, 0.94);
 }
 
-.heroTop {
-  align-items: flex-start;
-}
-
 .heroIdentity {
   flex: 1 1 auto;
-  justify-content: flex-start;
+  align-items: center;
 }
 
-.heroRight {
-  flex: 0 0 auto;
-  max-width: 100%;
+.heroText {
+  display: grid;
+  gap: 4px;
 }
 
 .heroAmount {
@@ -742,7 +593,6 @@
   letter-spacing: -0.05em;
 }
 
-.softTag,
 .pill {
   display: inline-flex;
   align-items: center;
@@ -753,7 +603,6 @@
   background: rgba(255, 255, 255, 0.04);
   font-size: 11px;
   font-weight: 800;
-  letter-spacing: 0.01em;
 }
 
 .pill_neutral {
@@ -784,18 +633,38 @@
 .insightStat {
   display: grid;
   gap: 6px;
+  padding: 14px;
 }
 
 .insightStat strong,
-.receiptTotalCard strong,
-.metricCompact strong,
-.receiptStatusCard strong,
-.coachLeadTitle,
-.compactReceiptTitle {
-  font-size: clamp(15px, 1.2vw, 18px);
+.metricInline strong,
+.mixDonutInner strong,
+.merchantRowTop strong,
+.coachLeadTitle {
+  font-size: clamp(16px, 1.2vw, 18px);
   line-height: 1.02;
   font-weight: 880;
   letter-spacing: -0.04em;
+}
+
+.toneBlock_neutral {
+  background: rgba(255,255,255,0.02);
+}
+
+.toneBlock_blue {
+  background: linear-gradient(180deg, rgba(91, 120, 198, 0.18), rgba(91, 120, 198, 0.05));
+}
+
+.toneBlock_green {
+  background: linear-gradient(180deg, rgba(65, 136, 99, 0.18), rgba(65, 136, 99, 0.05));
+}
+
+.toneBlock_amber {
+  background: linear-gradient(180deg, rgba(150, 114, 55, 0.18), rgba(150, 114, 55, 0.05));
+}
+
+.toneBlock_red {
+  background: linear-gradient(180deg, rgba(158, 65, 65, 0.18), rgba(158, 65, 65, 0.05));
 }
 
 .progressTrack {
@@ -808,45 +677,184 @@
 .progressFill {
   height: 100%;
   border-radius: inherit;
-  background: currentColor;
 }
 
-.categoryRow,
-.radarRow,
-.receiptReviewRow,
-.receiptStatusCard {
+.toneFill_neutral {
+  background: rgba(255,255,255,0.3);
+}
+
+.toneFill_blue {
+  background: #8db0ff;
+}
+
+.toneFill_green {
+  background: #93e8b9;
+}
+
+.toneFill_amber {
+  background: #ffd08a;
+}
+
+.toneFill_red {
+  background: #ff9c9c;
+}
+
+.dashboardLayout {
   display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 0.82fr);
+  gap: 14px;
+}
+
+.dashboardCanvas {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.dashboardSide,
+.sideRailStack {
+  align-content: start;
+}
+
+.dockCard {
+  grid-column: 1 / -1;
+}
+
+.storyGrid,
+.breakdownGrid,
+.statGrid,
+.dockGrid,
+.formGrid2,
+.formGrid3 {
+  display: grid;
+  gap: 12px;
+}
+
+.storyGrid,
+.formGrid2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.formGrid3,
+.statGrid,
+.dockGrid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.metricList {
+  gap: 8px;
+}
+
+.metricInline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(255,255,255,0.02);
+  border: 1px solid rgba(255,255,255,0.04);
+}
+
+.metricCard {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+}
+
+.mixWrap {
+  display: grid;
+  grid-template-columns: 180px minmax(0, 1fr);
+  gap: 18px;
+  align-items: center;
+}
+
+.mixDonut {
+  width: 160px;
+  height: 160px;
+  border-radius: 50%;
+  position: relative;
+  box-shadow: inset 0 0 40px rgba(0,0,0,0.22);
+}
+
+.mixDonutInner {
+  position: absolute;
+  inset: 24px;
+  border-radius: 50%;
+  background: rgba(8,12,20,0.98);
+  border: 1px solid rgba(216,228,255,0.06);
+  display: grid;
+  place-items: center;
+  text-align: center;
+  padding: 10px;
+}
+
+.mixLegend {
+  display: grid;
+  gap: 10px;
+}
+
+.mixLegendRow {
+  display: grid;
+  grid-template-columns: auto minmax(0,1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(255,255,255,0.02);
+  border: 1px solid rgba(255,255,255,0.04);
+}
+
+.mixDot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+}
+
+.merchantRow {
+  display: grid;
+  grid-template-columns: 42px minmax(0,1fr);
   gap: 10px;
   padding: 12px;
-  align-items: start;
 }
 
-.radarRow {
-  grid-template-columns: 42px minmax(0, 1fr);
-  gap: 10px;
+.merchantRowMain {
+  display: grid;
+  gap: 4px;
 }
 
-.radarTop span {
-  min-width: 0;
-  max-width: 100%;
-  font-size: 13px;
-  font-weight: 820;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.alertRow {
+  padding: 12px;
+  border-radius: 16px;
+  border: 1px solid rgba(255,255,255,0.05);
+  background: rgba(255,255,255,0.018);
+  align-items: center;
 }
 
-.helperList,
-.stackRows,
-.radarList,
-.receiptReviewList,
-.receiptLineList,
-.receiptBreakdownList,
-.sheetSections,
-.receiptMiniGrid,
-.receiptEmptyHint {
+.alertIconWrap {
+  width: 34px;
+  height: 34px;
+  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 193, 90, 0.12);
+  color: #ffd08a;
+}
+
+.alertCopy {
+  display: grid;
+  gap: 4px;
+}
+
+.queueRowCard,
+.ideaCard {
   display: grid;
   gap: 10px;
+}
+
+.queueRowBody,
+.ideaBody,
+.helperListItem {
+  overflow-wrap: anywhere;
 }
 
 .helperListItem {
@@ -854,9 +862,16 @@
   border-radius: 16px;
   border: 1px solid rgba(216, 228, 255, 0.07);
   background: rgba(255, 255, 255, 0.016);
-  font-size: 12px;
-  line-height: 1.55;
-  color: rgba(255, 255, 255, 0.72);
+}
+
+.actionStackCol {
+  display: grid;
+  gap: 10px;
+}
+
+.coachLead {
+  display: grid;
+  gap: 8px;
 }
 
 .emptyCard {
@@ -866,64 +881,8 @@
   gap: 6px;
 }
 
-.emptyCardTitle {
-  font-size: 14px;
-  font-weight: 840;
-}
-
 .emptyAction {
   margin-top: 8px;
-}
-
-.compactReceiptTile {
-  width: 100%;
-  text-align: left;
-  cursor: pointer;
-  align-items: center;
-  transition: border-color 140ms ease, transform 140ms ease;
-}
-
-.compactReceiptTile:hover {
-  border-color: rgba(182, 199, 242, 0.16);
-  transform: translateY(-1px);
-}
-
-.compactReceiptIcon,
-.receiptPromptIcon {
-  width: 42px;
-  height: 42px;
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 14px;
-  border: 1px solid rgba(216, 228, 255, 0.08);
-  background: rgba(255, 255, 255, 0.04);
-}
-
-.compactReceiptBody,
-.receiptPromptBody {
-  flex: 1 1 auto;
-  display: grid;
-  gap: 4px;
-}
-
-.compactReceiptCopy {
-  font-size: 12px;
-  line-height: 1.5;
-  color: rgba(255, 255, 255, 0.62);
-}
-
-.compactReceiptMeta {
-  flex: 0 0 auto;
-}
-
-.receiptAttachmentCardCompact .metricStripCompact {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.receiptReviewRowCompact {
-  grid-template-columns: minmax(0, 1fr) auto;
 }
 
 .actionMenuWrap {
@@ -934,8 +893,8 @@
   position: absolute;
   top: calc(100% + 8px);
   right: 0;
-  z-index: 30;
-  min-width: 190px;
+  z-index: 40;
+  min-width: 220px;
   padding: 8px;
   border-radius: 18px;
   border: 1px solid rgba(216, 228, 255, 0.1);
@@ -947,8 +906,7 @@
   gap: 6px;
 }
 
-.actionMenuItem,
-.actionMenuItemDanger {
+.actionMenuItem {
   min-height: 38px;
   padding: 0 12px;
   border-radius: 12px;
@@ -965,66 +923,9 @@
   cursor: pointer;
 }
 
-.actionMenuItemDanger {
-  color: rgba(255, 223, 223, 0.94);
-}
-
-.hiddenInput {
-  display: none;
-}
-
-.receiptPreviewBox {
-  min-height: 180px;
-  border-radius: 20px;
-  border: 1px dashed rgba(216, 228, 255, 0.16);
-  background: rgba(255, 255, 255, 0.016);
-  overflow: hidden;
+.fieldBlock {
   display: grid;
-  place-items: center;
-  margin-bottom: 12px;
-}
-
-.receiptPreviewImage {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  background: rgba(255, 255, 255, 0.01);
-}
-
-.receiptPreviewFallback {
-  display: grid;
-  gap: 8px;
-  place-items: center;
-  color: rgba(255, 255, 255, 0.66);
-  text-align: center;
-  padding: 20px;
-}
-
-.textLink {
-  color: #c8d7ff;
-  font-size: 12px;
-  font-weight: 700;
-  text-decoration: none;
-}
-
-.classificationChipActive {
-  border-color: rgba(255, 255, 255, 0.1);
-}
-
-.classificationChip_need {
-  border-color: rgba(83, 153, 118, 0.18);
-}
-
-.classificationChip_want {
-  border-color: rgba(165, 126, 63, 0.18);
-}
-
-.classificationChip_waste {
-  border-color: rgba(160, 75, 75, 0.18);
-}
-
-.classificationChip_review {
-  border-color: rgba(87, 111, 164, 0.18);
+  gap: 6px;
 }
 
 .modalBackdrop {
@@ -1038,8 +939,7 @@
   backdrop-filter: blur(4px);
 }
 
-.modalCard,
-.modalCardWide {
+.modalCard {
   width: min(760px, 100%);
   max-height: calc(100svh - 36px);
   border-radius: 28px;
@@ -1051,10 +951,6 @@
   box-shadow: 0 34px 84px rgba(0, 0, 0, 0.46);
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
-}
-
-.modalCardWide {
-  width: min(980px, 100%);
 }
 
 .modalHeader,
@@ -1112,17 +1008,17 @@
   border-color: rgba(192, 95, 95, 0.24);
 }
 
-@media (max-width: 1540px) {
-  .topStrip {
-    grid-template-columns: 1fr;
+@media (max-width: 1420px) {
+  .kpiRow {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
-  .kpiRow {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .dashboardLayout {
+    grid-template-columns: 1fr;
   }
 }
 
-@media (max-width: 1320px) {
+@media (max-width: 1220px) {
   .workspace {
     grid-template-columns: 1fr;
   }
@@ -1136,34 +1032,29 @@
     max-height: none;
   }
 
-  .storyGridWide,
-  .receiptModalGrid,
-  .workspaceGridReceipt,
-  .workspaceGridCoach {
+  .dashboardCanvas,
+  .storyGrid,
+  .breakdownGrid,
+  .statGrid,
+  .dockGrid,
+  .formGrid2,
+  .formGrid3,
+  .mixWrap {
     grid-template-columns: 1fr;
+  }
+
+  .topBar {
+    grid-template-columns: 1fr;
+  }
+
+  .pageNavRow {
+    flex-direction: column;
+    align-items: stretch;
   }
 }
 
-@media (max-width: 980px) {
-  .kpiRow,
-  .filterGrid,
-  .formGrid2,
-  .formGrid3,
-  .receiptTotalsGrid,
-  .receiptLineGrid,
-  .metricStripCompact,
-  .insightGrid,
-  .storyGrid,
-  .storyGridWide,
-  .receiptModalGrid,
-  .receiptSignalGrid,
-  .coachStatsGrid,
-  .workspaceGridReceipt,
-  .workspaceGridCoach {
-    grid-template-columns: 1fr;
-  }
-
-  .searchRow {
+@media (max-width: 760px) {
+  .kpiRow {
     grid-template-columns: 1fr;
   }
 
@@ -1171,213 +1062,18 @@
     flex-direction: column;
   }
 
-  .heroRight {
-    width: 100%;
-    justify-content: space-between;
-  }
-
   .modalBackdrop {
     padding: 8px;
   }
 
-  .modalCard,
-  .modalCardWide {
+  .modalCard {
     width: 100%;
     max-height: calc(100svh - 16px);
     border-radius: 24px;
   }
 }
 
-
-.ocrBanner {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 12px 14px;
-  border-radius: 16px;
-  border: 1px solid rgba(216, 228, 255, 0.09);
-  background: rgba(255, 255, 255, 0.03);
-}
-
-.ocrBannerTitle {
-  font-size: 13px;
-  font-weight: 800;
-  color: rgba(247, 250, 255, 0.96);
-}
-
-.ocrBannerMeta {
-  margin-top: 4px;
-  font-size: 12px;
-  line-height: 1.5;
-  color: rgba(255, 255, 255, 0.62);
-}
-
-@media (max-width: 980px) {
-  .ocrBanner {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-}
-
-
-.topShell {
-  display: grid;
-  gap: 12px;
-}
-
-.topBar {
-  display: grid;
-  grid-template-columns: auto minmax(280px, 1fr) auto;
-  gap: 12px;
-  align-items: center;
-  padding: 14px 16px;
-  border-radius: 26px;
-  border: 1px solid rgba(216, 228, 255, 0.08);
-  background:
-    radial-gradient(circle at top right, rgba(55, 86, 166, 0.14), transparent 28%),
-    linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01)),
-    rgba(8,12,20,0.94);
-}
-
-.topBrandWrap {
-  display: grid;
-  gap: 4px;
-}
-
-.topSearchBox {
-  min-height: 46px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 0 14px;
-  border-radius: 16px;
-  border: 1px solid rgba(216, 228, 255, 0.09);
-  background: rgba(255,255,255,0.02);
-  color: rgba(255,255,255,0.48);
-}
-
-.topSearchBox input {
-  width: 100%;
-  border: 0;
-  outline: 0;
-  background: transparent;
-  color: rgba(247,250,255,0.98);
-  font: inherit;
-}
-
-.topActions {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.pageNavRow {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 10px 14px;
-  border-radius: 22px;
-  border: 1px solid rgba(216,228,255,0.08);
-  background: rgba(8,12,20,0.72);
-}
-
-.notificationWrap {
-  position: relative;
-}
-
-.notificationButton {
-  position: relative;
-  width: 42px;
-  height: 42px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 14px;
-  border: 1px solid rgba(216,228,255,0.1);
-  background: rgba(255,255,255,0.03);
-  color: rgba(255,255,255,0.86);
-  cursor: pointer;
-}
-
-.notificationBadge {
-  position: absolute;
-  top: -4px;
-  right: -4px;
-  min-width: 18px;
-  height: 18px;
-  padding: 0 5px;
-  border-radius: 999px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: #ff7f7f;
-  color: #08101c;
-  font-size: 10px;
-  font-weight: 900;
-}
-
-.notificationMenu {
-  position: absolute;
-  top: calc(100% + 8px);
-  right: 0;
-  z-index: 40;
-  width: min(320px, 80vw);
-  border-radius: 18px;
-  border: 1px solid rgba(216,228,255,0.1);
-  background: rgba(8,12,20,0.98);
-  box-shadow: 0 24px 54px rgba(0,0,0,0.32);
-  overflow: hidden;
-}
-
-.notificationMenuHeader {
-  padding: 12px 14px;
-  border-bottom: 1px solid rgba(255,255,255,0.06);
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: rgba(255,255,255,0.6);
-}
-
-.notificationMenuList {
-  display: grid;
-}
-
-.notificationItem {
-  width: 100%;
-  display: grid;
-  grid-template-columns: auto minmax(0,1fr);
-  gap: 10px;
-  padding: 12px 14px;
-  border: 0;
-  border-bottom: 1px solid rgba(255,255,255,0.04);
-  background: transparent;
-  color: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-
-.notificationItem:last-child { border-bottom: 0; }
-
-.notificationTone {
-  width: 10px;
-  height: 10px;
-  margin-top: 4px;
-  min-height: 10px;
-  padding: 0;
-}
-
-.notificationCopy {
-  display: grid;
-  gap: 4px;
-}
-
-.notificationCopy strong { font-size: 13px; font-weight: 800; }
-.notificationCopy span { font-size: 12px; line-height: 1.5; color: rgba(255,255,255,0.62); }
-
-.workspaceHeaderCompact {
+.detailHeader {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
@@ -1385,178 +1081,53 @@
   flex-wrap: wrap;
 }
 
-.dashboardGrid {
+.dashboardDock {
+  grid-column: 1 / -1;
+}
+
+.opportunityCard {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(320px, 0.9fr);
-  gap: 14px;
-}
-
-.boardCard {
-  min-width: 0;
-  overflow: hidden;
-  border-radius: 22px;
-  border: 1px solid rgba(216,228,255,0.08);
-  background: linear-gradient(180deg, rgba(255,255,255,0.026), rgba(255,255,255,0.008)), rgba(10,14,22,0.92);
-  padding: 16px;
-}
-
-.mixWrap {
-  display: grid;
-  grid-template-columns: 180px minmax(0,1fr);
-  gap: 18px;
-  align-items: center;
-}
-
-.mixDonut {
-  width: 160px;
-  height: 160px;
-  border-radius: 50%;
-  position: relative;
-  box-shadow: inset 0 0 40px rgba(0,0,0,0.22);
-}
-
-.mixDonutInner {
-  position: absolute;
-  inset: 24px;
-  border-radius: 50%;
-  background: rgba(8,12,20,0.98);
-  border: 1px solid rgba(216,228,255,0.06);
-  display: grid;
-  place-items: center;
-  text-align: center;
-}
-
-.mixDonutInner strong { font-size: 28px; font-weight: 900; line-height: 1; }
-.mixDonutInner span { font-size: 11px; color: rgba(255,255,255,0.56); text-transform: uppercase; letter-spacing: 0.1em; }
-
-.mixLegend { display: grid; gap: 10px; }
-.mixLegendRow {
-  display: grid;
-  grid-template-columns: auto minmax(0,1fr) auto;
   gap: 10px;
-  align-items: center;
-  padding: 10px 12px;
-  border-radius: 14px;
+  padding: 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(216, 228, 255, 0.08);
   background: rgba(255,255,255,0.02);
-  border: 1px solid rgba(255,255,255,0.04);
-}
-.mixDot { width: 10px; height: 10px; border-radius: 999px; }
-
-.feedMicro {
-  display: block;
-  max-width: 100%;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
-.feedMeta {
+.opportunityTop {
   display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.opportunityTitle {
+  font-size: 15px;
+  line-height: 1.1;
+  font-weight: 860;
+  letter-spacing: -0.02em;
+}
+
+.opportunityBody,
+.opportunityMeta {
+  font-size: 12px;
+  line-height: 1.55;
+  color: rgba(255,255,255,0.62);
+}
+
+.actionMenuItemDanger {
+  min-height: 38px;
+  padding: 0 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(214, 100, 100, 0.14);
+  background: rgba(120, 32, 32, 0.16);
+  color: rgba(255, 223, 223, 0.96);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 760;
+  display: inline-flex;
   align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-
-@media (max-width: 1200px) {
-  .topBar { grid-template-columns: 1fr; }
-  .pageNavRow { flex-direction: column; align-items: stretch; }
-  .dashboardGrid { grid-template-columns: 1fr; }
-  .mixWrap { grid-template-columns: 1fr; justify-items: center; }
-}
-
-
-.receiptWorkbench {
-  display: grid;
-  grid-template-columns: minmax(0, 1.12fr) minmax(340px, 0.88fr);
-  gap: 16px;
-  align-items: start;
-}
-
-.receiptWorkbenchPreview {
-  display: grid;
-  gap: 12px;
-  position: sticky;
-  top: 0;
-}
-
-.receiptSourceCard {
-  display: grid;
-  gap: 12px;
-}
-
-.receiptReviewTags {
-  display: flex;
+  justify-content: flex-start;
   gap: 8px;
-  flex-wrap: wrap;
-  margin-top: 8px;
-}
-
-.mixLegendRow strong,
-.insightStat strong,
-.receiptTotalCard strong,
-.metricCompact strong {
-  white-space: normal;
-  line-height: 1.08;
-}
-
-.receiptReviewRight {
-  align-items: flex-end;
-}
-
-@media (max-width: 1180px) {
-  .receiptWorkbench {
-    grid-template-columns: 1fr;
-  }
-
-  .receiptWorkbenchPreview {
-    position: static;
-  }
-}
-
-
-.breakdownGrid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
-}
-
-.breakdownStatGrid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.breakdownMetricGrid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.breakdownGrid .metricCompact strong,
-.breakdownGrid .insightStat strong {
-  font-size: clamp(16px, 1.05vw, 19px);
-  white-space: normal;
-  word-break: break-word;
-}
-
-.breakdownGrid .helperText {
-  margin-top: 10px;
-}
-
-.topShell .actionMenu {
-  min-width: 220px;
-}
-
-.notificationMenuHeader::after {
-  content: " · app bell moves to shell later";
-  color: rgba(255,255,255,0.34);
-  font-weight: 600;
-}
-
-@media (max-width: 1320px) {
-  .breakdownGrid,
-  .breakdownStatGrid,
-  .breakdownMetricGrid {
-    grid-template-columns: 1fr;
-  }
+  cursor: pointer;
 }

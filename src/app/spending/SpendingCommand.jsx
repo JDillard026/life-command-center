@@ -1,3 +1,4 @@
+
 "use client";
 
 export const dynamic = "force-dynamic";
@@ -9,12 +10,10 @@ import {
   DEFAULT_CATEGORIES,
   applyLedgerForTransaction,
   buildLedgerMap,
-  buildTopMerchants,
   budgetStatus,
   deleteCalendarEventBySource,
   emptySelection,
   getPreviousRange,
-  hydrateReceiptUrls,
   inRange,
   mapAccountRowToClient,
   mapCategoryClientToRow,
@@ -24,29 +23,20 @@ import {
   mapTransactionClientToRow,
   mapTransactionRowToClient,
   money,
-  autoClassifyReceiptItem,
-  autoCoachFlag,
-  autoPriceSignal,
-  shouldIgnoreReceiptItemName,
   parseMoneyInput,
   periodBounds,
   roundMoneyValue,
-  sanitizeUploadFileName,
-  sumExpenses,
   todayISO,
-  topCategoryGroups,
   trendMeta,
   uid,
   upsertCalendarEventForPlanned,
   upsertCalendarEventForTransaction,
 } from "./spending.helpers";
 import {
+  ControlModal,
   FeedPane,
   MainWorkspacePane,
-  ManageSheet,
-  QuickAddModal,
-  ReceiptDraftModal,
-  ReceiptViewerModal,
+  QuickEntryModal,
   ToastStack,
   TopStrip,
 } from "./spending.components";
@@ -73,168 +63,159 @@ function computeTotals(filteredTransactions, filteredPlanned) {
     income: roundMoneyValue(income),
     transfer: roundMoneyValue(transfer),
     plannedExpense: roundMoneyValue(plannedExpense),
-    forecastNet: roundMoneyValue(income - expense - plannedExpense),
   };
 }
 
-function emptyReceiptLine() {
+function emptyDraft(kind = "transaction", categories = [], accounts = []) {
   return {
-    id: uid(),
-    itemName: "",
-    quantity: "1",
-    unitPrice: "",
-    lineTotal: 0,
-    classification: "review",
+    kind,
+    id: "",
+    type: "expense",
+    amount: "",
+    date: todayISO(),
+    time: "",
+    categoryId: categories[0]?.id || "groceries",
+    merchant: "",
     note: "",
+    paymentMethod: "Card",
+    accountId: accounts[0]?.id || "",
+    transferAccountId:
+      accounts.find((account) => account.id !== (accounts[0]?.id || ""))?.id || "",
   };
 }
 
-function toSignedNumber(value, fallback = 0) {
-  const raw = parseMoneyInput(value);
-  if (!Number.isFinite(raw)) return fallback;
-  return raw;
-}
-
-function toPositiveNumber(value, fallback = 0) {
-  const raw = parseMoneyInput(value);
-  if (!Number.isFinite(raw) || raw < 0) return fallback;
-  return raw;
-}
-
-function toQuantity(value) {
-  const raw = Number(String(value ?? "").replace(/[^0-9.]/g, ""));
-  if (!Number.isFinite(raw) || raw <= 0) return 1;
-  return raw;
-}
-
-function computeLineTotal(item) {
-  const explicit = parseMoneyInput(item?.lineTotal);
-  if (Number.isFinite(explicit)) return roundMoneyValue(explicit);
-  return roundMoneyValue(toQuantity(item?.quantity) * toSignedNumber(item?.unitPrice, 0));
-}
-
-function normalizeReceiptLine(line = {}) {
-  const itemName = String(line.itemName || "");
-  const quantity = String(line.quantity ?? "1");
-  const unitPrice = String(line.unitPrice ?? "");
-  const lineTotal = computeLineTotal({ ...line, itemName, quantity, unitPrice });
-  const classification =
-    ["need", "want", "waste", "review"].includes(line.classification)
-      ? line.classification
-      : autoClassifyReceiptItem({
-          itemName,
-          merchantName: line.merchantName || "",
-          lineTotal,
-        });
-  const priceSignal =
-    ["good", "fair", "high", "neutral"].includes(line.priceSignal)
-      ? line.priceSignal
-      : autoPriceSignal({
-          itemName,
-          merchantName: line.merchantName || "",
-          unitPrice,
-          lineTotal,
-        });
-  const coachFlag =
-    ["good-price", "watch", "overspent", "stop", "normal"].includes(line.coachFlag)
-      ? line.coachFlag
-      : autoCoachFlag({ classification, priceSignal, lineTotal });
-
+function draftFromTransaction(tx, categories = [], accounts = []) {
+  const draft = emptyDraft("transaction", categories, accounts);
   return {
-    id: line.id || uid(),
-    itemName,
-    quantity,
-    unitPrice,
-    lineTotal,
-    classification,
-    priceSignal,
-    coachFlag,
-    includeInMath: line.includeInMath !== false,
-    note: String(line.note || ""),
+    ...draft,
+    id: tx.id,
+    type: tx.type || "expense",
+    amount: String(tx.amount ?? ""),
+    date: tx.date || todayISO(),
+    time: tx.time || "",
+    categoryId: tx.categoryId || draft.categoryId,
+    merchant: tx.merchant || "",
+    note: tx.note || "",
+    paymentMethod: tx.paymentMethod || "Card",
+    accountId: tx.accountId || draft.accountId,
+    transferAccountId: tx.transferAccountId || draft.transferAccountId,
   };
 }
 
-function buildReceiptDraft(seed = null, categories = [], accounts = []) {
+function draftFromPlanned(planned, categories = [], accounts = []) {
+  const draft = emptyDraft("planned", categories, accounts);
   return {
-    id: uid(),
-    file: null,
-    previewUrl: "",
-    fileName: "",
-    merchant: seed?.merchant || "",
-    date: seed?.date || todayISO(),
-    time: seed?.time || "",
-    accountId: seed?.accountId || accounts[0]?.id || "",
-    categoryId: seed?.categoryId || categories[0]?.id || "",
-    paymentMethod: seed?.paymentMethod || "Card",
-    note: seed?.note || "",
-    tax: "",
-    ocrSubtotal: null,
-    ocrTotal: null,
-    ocrDiscount: null,
-    items: [emptyReceiptLine()],
+    ...draft,
+    id: planned.id,
+    amount: String(planned.amount ?? ""),
+    date: planned.date || todayISO(),
+    time: planned.time || "",
+    categoryId: planned.categoryId || draft.categoryId,
+    merchant: planned.merchant || "",
+    note: planned.note || "",
   };
 }
 
-function computeReceiptDraftSummary(draft) {
-  const items = Array.isArray(draft?.items) ? draft.items.map(normalizeReceiptLine) : [];
-  const mathItems = items.filter((line) => line.includeInMath !== false);
-  const subtotalFromItems = roundMoneyValue(
-    mathItems.reduce((sum, line) => sum + (Number(line.lineTotal) || 0), 0)
-  );
-  const subtotal =
-    Number.isFinite(Number(draft?.ocrSubtotal)) ? roundMoneyValue(Number(draft.ocrSubtotal)) : subtotalFromItems;
-  const tax =
-    Number.isFinite(Number(draft?.tax)) ? roundMoneyValue(Number(draft.tax)) : 0;
-  const total =
-    Number.isFinite(Number(draft?.ocrTotal)) ? roundMoneyValue(Number(draft.ocrTotal)) : roundMoneyValue(subtotal + tax);
-  const buckets = { need: 0, want: 0, waste: 0, review: 0, overspent: 0, goodPrice: 0 };
+function computeTopMerchants(rows = []) {
+  const map = new Map();
 
-  mathItems.forEach((line) => {
-    const key = ["need", "want", "waste", "review"].includes(line.classification)
-      ? line.classification
-      : "review";
-    const amount = Math.max(0, Number(line.lineTotal) || 0);
-    buckets[key] = roundMoneyValue(buckets[key] + amount);
-    if (line.coachFlag === "overspent") {
-      buckets.overspent = roundMoneyValue(buckets.overspent + amount);
-    }
-    if (line.coachFlag === "good-price") {
-      buckets.goodPrice = roundMoneyValue(buckets.goodPrice + amount);
-    }
+  rows.forEach((row) => {
+    if (row.type !== "expense") return;
+    const merchant = String(row.merchant || "").trim();
+    if (!merchant) return;
+    const entry = map.get(merchant) || { merchant, total: 0, count: 0 };
+    entry.total = roundMoneyValue(entry.total + (Number(row.amount) || 0));
+    entry.count += 1;
+    map.set(merchant, entry);
   });
 
-  return {
-    count: items.filter((line) => line.itemName.trim() || Number(line.lineTotal) !== 0).length,
-    subtotal,
-    tax,
-    total,
-    discount: Number.isFinite(Number(draft?.ocrDiscount)) ? roundMoneyValue(Number(draft.ocrDiscount)) : 0,
-    ...buckets,
-  };
+  return Array.from(map.values())
+    .sort((a, b) => b.total - a.total || b.count - a.count)
+    .map((row) => ({
+      ...row,
+      avg: row.count > 0 ? roundMoneyValue(row.total / row.count) : 0,
+    }));
 }
 
-function mapReceiptItemRowToClient(row) {
-  return {
-    id: row.id,
-    receiptId: row.receipt_id,
-    userId: row.user_id,
-    lineIndex: Number(row.line_index) || 0,
-    itemName: row.item_name || "",
-    rawText: row.raw_text || "",
-    quantity: Number(row.quantity) || 1,
-    unitPrice: row.unit_price != null ? Number(row.unit_price) : 0,
-    lineTotal: Number(row.line_total) || 0,
-    classification: row.classification || "review",
-    priceSignal: row.price_signal || "neutral",
-    coachFlag: row.coach_flag || "normal",
-    classificationConfidence:
-      row.classification_confidence != null ? Number(row.classification_confidence) : null,
-    categoryHint: row.category_hint || "",
-    merchantRuleHit: row.merchant_rule_hit || "",
-    note: row.note || "",
-    createdAt: row.created_at || null,
-    updatedAt: row.updated_at || null,
-  };
+function createBetterBuyIdeas({ selectedTx, selectedBudgetRow, topMerchants = [], categoriesById }) {
+  const ideas = [];
+  if (!selectedTx || selectedTx.type !== "expense") return ideas;
+
+  const categoryName = categoriesById.get(selectedTx.categoryId)?.name || "this lane";
+
+  if ((selectedBudgetRow?.budget || 0) > 0 && (selectedBudgetRow?.forecast || 0) > (selectedBudgetRow?.budget || 0)) {
+    ideas.push({
+      id: `budget-${selectedTx.id}`,
+      title: `Reduce the next ${categoryName} ticket`,
+      body: `${categoryName} is already over budget. The next repeat purchase should target a lower-cost option or get delayed.`,
+      impact: `Potential savings: ${money(Math.max(5, roundMoneyValue(selectedTx.amount * 0.2)))}`,
+      tone: "bad",
+    });
+  }
+
+  const merchantRow = topMerchants.find(
+    (row) => String(row.merchant || "").toLowerCase() === String(selectedTx.merchant || "").toLowerCase()
+  );
+
+  if (merchantRow && merchantRow.count >= 3) {
+    ideas.push({
+      id: `merchant-${selectedTx.id}`,
+      title: `You keep spending at ${selectedTx.merchant || "this merchant"}`,
+      body: `This merchant is showing repeat pressure. Save a cheaper substitute or a different store before the next run.`,
+      impact: `Potential savings: ${money(Math.max(4, roundMoneyValue(merchantRow.avg * 0.12)))}`,
+      tone: "watch",
+    });
+  }
+
+  if (selectedTx.amount >= 40) {
+    ideas.push({
+      id: `price-${selectedTx.id}`,
+      title: `Target a lower price next time`,
+      body: `This ticket is large enough that even a modest price drop matters. Save a better option into Shopping List.`,
+      impact: `Potential savings: ${money(Math.max(3, roundMoneyValue(selectedTx.amount * 0.15)))}`,
+      tone: "good",
+    });
+  }
+
+  if (!ideas.length) {
+    ideas.push({
+      id: `generic-${selectedTx.id}`,
+      title: `Create a cheaper fallback option`,
+      body: `This purchase is not a disaster, but you still want a better default next time.`,
+      impact: `Potential savings: ${money(Math.max(2, roundMoneyValue(selectedTx.amount * 0.08)))}`,
+      tone: "good",
+    });
+  }
+
+  return ideas.slice(0, 4);
+}
+
+function buildSubscriptionCandidates(transactions) {
+  const grouped = new Map();
+
+  transactions
+    .filter((tx) => tx.type === "expense" && tx.merchant)
+    .forEach((tx) => {
+      const key = String(tx.merchant).trim().toLowerCase();
+      const entry = grouped.get(key) || {
+        id: key,
+        merchant: tx.merchant,
+        count: 0,
+        total: 0,
+      };
+      entry.count += 1;
+      entry.total += Number(tx.amount) || 0;
+      grouped.set(key, entry);
+    });
+
+  return Array.from(grouped.values())
+    .filter((entry) => entry.count >= 2)
+    .map((entry) => ({
+      ...entry,
+      avg: roundMoneyValue(entry.total / entry.count),
+    }))
+    .sort((a, b) => b.count - a.count || b.avg - a.avg)
+    .slice(0, 6);
 }
 
 export default function SpendingCommand() {
@@ -246,46 +227,25 @@ export default function SpendingCommand() {
 
   const [period, setPeriod] = React.useState("month");
   const [search, setSearch] = React.useState("");
-  const [groupFilter, setGroupFilter] = React.useState("All");
-  const [categoryFilter, setCategoryFilter] = React.useState("all");
-  const [typeFilter, setTypeFilter] = React.useState("all");
-  const [selectedRecord, setSelectedRecord] = React.useState(emptySelection());
   const [workspaceMode, setWorkspaceMode] = React.useState("dashboard");
+  const [selectedRecord, setSelectedRecord] = React.useState(emptySelection());
 
   const [categories, setCategories] = React.useState(DEFAULT_CATEGORIES);
   const [budgets, setBudgets] = React.useState(DEFAULT_BUDGETS);
   const [accounts, setAccounts] = React.useState([]);
   const [transactions, setTransactions] = React.useState([]);
   const [plannedItems, setPlannedItems] = React.useState([]);
-  const [receipts, setReceipts] = React.useState([]);
-  const [receiptItems, setReceiptItems] = React.useState([]);
-  const [receiptFeatureReady, setReceiptFeatureReady] = React.useState(true);
-  const [receiptDraft, setReceiptDraft] = React.useState(null);
-  const [receiptViewerOpen, setReceiptViewerOpen] = React.useState(false);
-  const [ocrRunning, setOcrRunning] = React.useState(false);
-  const [ocrError, setOcrError] = React.useState("");
-  const [ocrMeta, setOcrMeta] = React.useState(null);
 
   const [composerOpen, setComposerOpen] = React.useState(false);
+  const [composerKind, setComposerKind] = React.useState("create_tx");
+  const [composerDraft, setComposerDraft] = React.useState(emptyDraft());
   const [controlsOpen, setControlsOpen] = React.useState(false);
-
-  const [mode, setMode] = React.useState("now");
-  const [qaType, setQaType] = React.useState("expense");
-  const [qaAmount, setQaAmount] = React.useState("");
-  const [qaDate, setQaDate] = React.useState(todayISO());
-  const [qaTime, setQaTime] = React.useState("");
-  const [qaCategoryId, setQaCategoryId] = React.useState("groceries");
-  const [qaMerchant, setQaMerchant] = React.useState("");
-  const [qaNote, setQaNote] = React.useState("");
-  const [qaPayment, setQaPayment] = React.useState("Card");
-  const [qaAccountId, setQaAccountId] = React.useState("");
-  const [qaTransferToAccountId, setQaTransferToAccountId] = React.useState("");
-  const [convertAccountId, setConvertAccountId] = React.useState("");
 
   const [newCategoryName, setNewCategoryName] = React.useState("");
   const [newCategoryGroup, setNewCategoryGroup] = React.useState("Other");
   const [budgetEditorCategoryId, setBudgetEditorCategoryId] = React.useState("");
   const [budgetEditorValue, setBudgetEditorValue] = React.useState("");
+  const [queuedIdeas, setQueuedIdeas] = React.useState([]);
 
   const range = React.useMemo(() => periodBounds(period), [period]);
 
@@ -295,23 +255,10 @@ export default function SpendingCommand() {
     return map;
   }, [categories]);
 
-  const groups = React.useMemo(() => topCategoryGroups(categories), [categories]);
-
-  const clearQuickAdd = React.useCallback(() => {
-    setQaAmount("");
-    setQaDate(todayISO());
-    setQaTime("");
-    setQaMerchant("");
-    setQaNote("");
-    setQaPayment("Card");
-    setQaType("expense");
-    setQaCategoryId(categories[0]?.id || "groceries");
-    setQaAccountId(accounts[0]?.id || "");
-    setQaTransferToAccountId(
-      accounts.find((account) => account.id !== (accounts[0]?.id || ""))?.id || ""
-    );
-    setMode("now");
-  }, [accounts, categories]);
+  const groups = React.useMemo(() => {
+    const names = Array.from(new Set(categories.map((category) => category.group || "Other")));
+    return ["All", ...names];
+  }, [categories]);
 
   const loadAll = React.useCallback(
     async (preferredSelection = null) => {
@@ -331,9 +278,6 @@ export default function SpendingCommand() {
           setAccounts([]);
           setTransactions([]);
           setPlannedItems([]);
-          setReceipts([]);
-          setReceiptItems([]);
-          setReceiptFeatureReady(true);
           setLoading(false);
           return;
         }
@@ -385,7 +329,6 @@ export default function SpendingCommand() {
             : DEFAULT_CATEGORIES;
 
         const nextBudgets = { weekly: {}, monthly: {}, yearly: {} };
-
         if ((budgetRes.data || []).length > 0) {
           for (const row of budgetRes.data || []) {
             if (!nextBudgets[row.period_mode]) continue;
@@ -420,80 +363,11 @@ export default function SpendingCommand() {
             return Number(a.createdAt || 0) - Number(b.createdAt || 0);
           });
 
-        let loadedReceipts = [];
-        let loadedReceiptItems = [];
-        let nextReceiptFeatureReady = true;
-
-        try {
-          const [receiptRowsRes, receiptItemsRes] = await Promise.all([
-            supabase
-              .from("spending_receipts")
-              .select("*")
-              .eq("user_id", currentUser.id)
-              .order("captured_at", { ascending: false })
-              .order("created_at", { ascending: false }),
-            supabase
-              .from("spending_receipt_items")
-              .select("*")
-              .eq("user_id", currentUser.id)
-              .order("created_at", { ascending: false }),
-          ]);
-
-          if (receiptRowsRes.error) throw receiptRowsRes.error;
-          if (receiptItemsRes.error) throw receiptItemsRes.error;
-
-          loadedReceipts = await hydrateReceiptUrls(receiptRowsRes.data || []);
-          loadedReceiptItems = (receiptItemsRes.data || []).map(mapReceiptItemRowToClient);
-        } catch (receiptErr) {
-          const msg = String(receiptErr?.message || "");
-          const code = String(receiptErr?.code || "");
-
-          if (
-            code === "42P01" ||
-            msg.includes("spending_receipts") ||
-            msg.includes("spending_receipt_items") ||
-            msg.includes("relation") ||
-            msg.includes("does not exist")
-          ) {
-            nextReceiptFeatureReady = false;
-            loadedReceipts = [];
-            loadedReceiptItems = [];
-          } else {
-            throw receiptErr;
-          }
-        }
-
         setCategories(loadedCategories);
         setBudgets(nextBudgets);
         setAccounts(loadedAccounts);
         setTransactions(loadedTransactions);
         setPlannedItems(loadedPlanned);
-        setReceipts(loadedReceipts);
-        setReceiptItems(loadedReceiptItems);
-        setReceiptFeatureReady(nextReceiptFeatureReady);
-
-        const resolvedCategoryId =
-          loadedCategories.some((category) => category.id === qaCategoryId)
-            ? qaCategoryId
-            : loadedCategories[0]?.id || "groceries";
-
-        const firstAccountId = loadedAccounts[0]?.id || "";
-        const resolvedAccountId =
-          loadedAccounts.some((account) => account.id === qaAccountId)
-            ? qaAccountId
-            : firstAccountId;
-
-        setQaCategoryId(resolvedCategoryId);
-        setQaAccountId(resolvedAccountId);
-        setQaTransferToAccountId((prev) => {
-          const stillGood =
-            prev &&
-            loadedAccounts.some((account) => account.id === prev) &&
-            prev !== resolvedAccountId;
-
-          if (stillGood) return prev;
-          return loadedAccounts.find((account) => account.id !== resolvedAccountId)?.id || "";
-        });
 
         setBudgetEditorCategoryId((prev) =>
           loadedCategories.some((category) => category.id === prev)
@@ -527,7 +401,7 @@ export default function SpendingCommand() {
         setLoading(false);
       }
     },
-    [qaAccountId, qaCategoryId]
+    []
   );
 
   React.useEffect(() => {
@@ -540,64 +414,11 @@ export default function SpendingCommand() {
     return () => clearTimeout(id);
   }, [status]);
 
-  React.useEffect(() => {
-    if (!categories.length) return;
-    if (categories.some((category) => category.id === qaCategoryId)) return;
-    setQaCategoryId(categories[0].id);
-  }, [categories, qaCategoryId]);
-
-  React.useEffect(() => {
-    if (!accounts.length) {
-      setQaAccountId("");
-      return;
-    }
-    setQaAccountId((prev) =>
-      accounts.some((account) => account.id === prev) ? prev : accounts[0].id
-    );
-  }, [accounts]);
-
-  React.useEffect(() => {
-    if (accounts.length < 2) {
-      setQaTransferToAccountId("");
-      return;
-    }
-    setQaTransferToAccountId((prev) => {
-      if (prev && accounts.some((account) => account.id === prev) && prev !== qaAccountId) {
-        return prev;
-      }
-      return accounts.find((account) => account.id !== qaAccountId)?.id || "";
-    });
-  }, [accounts, qaAccountId]);
-
-  React.useEffect(() => {
-    if (!accounts.length) {
-      setConvertAccountId("");
-      return;
-    }
-    setConvertAccountId((prev) =>
-      accounts.some((account) => account.id === prev) ? prev : accounts[0].id
-    );
-  }, [accounts]);
-
-  React.useEffect(() => {
-    return () => {
-      if (receiptDraft?.previewUrl) {
-        URL.revokeObjectURL(receiptDraft.previewUrl);
-      }
-    };
-  }, [receiptDraft?.previewUrl]);
-
   const filteredTransactions = React.useMemo(() => {
     const q = search.trim().toLowerCase();
 
     return transactions
       .filter((tx) => inRange(tx.date, range.start, range.end))
-      .filter((tx) => (typeFilter === "all" ? true : tx.type === typeFilter))
-      .filter((tx) => (categoryFilter === "all" ? true : tx.categoryId === categoryFilter))
-      .filter((tx) => {
-        const groupName = categoriesById.get(tx.categoryId)?.group || "Other";
-        return groupFilter === "All" ? true : groupName === groupFilter;
-      })
       .filter((tx) => {
         if (!q) return true;
         const categoryName = categoriesById.get(tx.categoryId)?.name || "";
@@ -605,28 +426,13 @@ export default function SpendingCommand() {
           .toLowerCase()
           .includes(q);
       });
-  }, [transactions, range, typeFilter, categoryFilter, groupFilter, search, categoriesById]);
-
-
-  const enrichedTransactions = React.useMemo(
-    () =>
-      filteredTransactions.map((tx) => ({
-        ...tx,
-        categoryName: categoriesById.get(tx.categoryId)?.name || "",
-      })),
-    [filteredTransactions, categoriesById]
-  );
+  }, [transactions, range, search, categoriesById]);
 
   const filteredPlanned = React.useMemo(() => {
     const q = search.trim().toLowerCase();
 
     return plannedItems
       .filter((planned) => inRange(planned.date, range.start, range.end))
-      .filter((planned) => (categoryFilter === "all" ? true : planned.categoryId === categoryFilter))
-      .filter((planned) => {
-        const groupName = categoriesById.get(planned.categoryId)?.group || "Other";
-        return groupFilter === "All" ? true : groupName === groupFilter;
-      })
       .filter((planned) => {
         if (!q) return true;
         const categoryName = categoriesById.get(planned.categoryId)?.name || "";
@@ -634,7 +440,7 @@ export default function SpendingCommand() {
           .toLowerCase()
           .includes(q);
       });
-  }, [plannedItems, range, categoryFilter, groupFilter, search, categoriesById]);
+  }, [plannedItems, range, search, categoriesById]);
 
   const previousRange = React.useMemo(() => getPreviousRange(period, range), [period, range]);
   const previousTransactions = React.useMemo(
@@ -646,56 +452,24 @@ export default function SpendingCommand() {
     () => computeTotals(filteredTransactions, filteredPlanned),
     [filteredTransactions, filteredPlanned]
   );
-  const previousExpense = React.useMemo(() => sumExpenses(previousTransactions), [previousTransactions]);
+  const previousExpense = React.useMemo(
+    () =>
+      roundMoneyValue(
+        previousTransactions.reduce((sum, tx) => {
+          return tx.type === "expense" ? sum + (Number(tx.amount) || 0) : sum;
+        }, 0)
+      ),
+    [previousTransactions]
+  );
   const expenseTrend = React.useMemo(
     () => trendMeta(totals.expense, previousExpense),
     [totals.expense, previousExpense]
   );
+
   const topMerchants = React.useMemo(
-    () => buildTopMerchants(filteredTransactions),
+    () => computeTopMerchants(filteredTransactions).slice(0, 8),
     [filteredTransactions]
   );
-
-  const receiptsByTransaction = React.useMemo(() => {
-    const map = new Map();
-    receipts.forEach((receipt) => {
-      const key = String(receipt.transactionId || "");
-      if (!key) return;
-      const list = map.get(key) || [];
-      list.push(receipt);
-      map.set(key, list);
-    });
-    return map;
-  }, [receipts]);
-
-  const receiptItemsByReceiptId = React.useMemo(() => {
-    const map = new Map();
-    receiptItems.forEach((item) => {
-      const key = String(item.receiptId || "");
-      if (!key) return;
-      const list = map.get(key) || [];
-      list.push(item);
-      map.set(key, list);
-    });
-    return map;
-  }, [receiptItems]);
-
-  const receiptCountsByTransaction = React.useMemo(() => {
-    const map = new Map();
-    receiptsByTransaction.forEach((list, key) => map.set(key, list.length));
-    return map;
-  }, [receiptsByTransaction]);
-
-  const plannedByCategory = React.useMemo(() => {
-    const map = new Map();
-    filteredPlanned.forEach((planned) => {
-      map.set(
-        planned.categoryId || "uncat",
-        roundMoneyValue((map.get(planned.categoryId || "uncat") || 0) + roundMoneyValue(planned.amount))
-      );
-    });
-    return map;
-  }, [filteredPlanned]);
 
   const totalsByCategory = React.useMemo(
     () =>
@@ -707,7 +481,12 @@ export default function SpendingCommand() {
               .reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0)
           );
 
-          const planned = roundMoneyValue(plannedByCategory.get(category.id) || 0);
+          const planned = roundMoneyValue(
+            filteredPlanned
+              .filter((planned) => planned.categoryId === category.id)
+              .reduce((sum, planned) => sum + (Number(planned.amount) || 0), 0)
+          );
+
           const forecast = roundMoneyValue(spent + planned);
           const budget = roundMoneyValue(Number(budgets?.[range.budgetMode]?.[category.id] || 0));
 
@@ -719,11 +498,17 @@ export default function SpendingCommand() {
             forecast,
             budget,
             status: budgetStatus(forecast, budget),
-            pct: budget > 0 ? Math.max(0, Math.min((forecast / budget) * 100, 100)) : 0,
+            pctUsed: budget > 0 ? roundMoneyValue((forecast / budget) * 100) : 0,
+            amountLeft: budget > 0 ? roundMoneyValue(budget - forecast) : 0,
           };
         })
-        .sort((a, b) => b.forecast - a.forecast),
-    [categories, filteredTransactions, plannedByCategory, budgets, range.budgetMode]
+        .filter((row) => row.spent > 0 || row.planned > 0 || row.budget > 0)
+        .sort((a, b) => {
+          const aTone = a.status === "Over" ? 3 : a.status === "Near" ? 2 : 1;
+          const bTone = b.status === "Over" ? 3 : b.status === "Near" ? 2 : 1;
+          return bTone - aTone || Number(b.forecast) - Number(a.forecast);
+        }),
+    [categories, filteredTransactions, filteredPlanned, budgets, range.budgetMode]
   );
 
   const forecastRemaining = React.useMemo(() => {
@@ -745,49 +530,18 @@ export default function SpendingCommand() {
     [selectedRecord, plannedItems]
   );
 
-  const selectedCategory = React.useMemo(() => {
-    const categoryId =
-      selectedTx?.categoryId ||
-      selectedPlanned?.categoryId ||
-      receiptDraft?.categoryId ||
-      budgetEditorCategoryId ||
-      categories[0]?.id ||
-      "";
+  const selectedBudgetRow = React.useMemo(() => {
+    const categoryId = selectedTx?.categoryId || selectedPlanned?.categoryId || "";
+    return totalsByCategory.find((row) => row.categoryId === categoryId) || null;
+  }, [selectedTx, selectedPlanned, totalsByCategory]);
 
-    return categories.find((category) => category.id === categoryId) || null;
-  }, [selectedTx, selectedPlanned, receiptDraft?.categoryId, budgetEditorCategoryId, categories]);
-
-  const selectedBudget = React.useMemo(
-    () => (selectedCategory ? Number(budgets?.[range.budgetMode]?.[selectedCategory.id] || 0) : 0),
-    [selectedCategory, budgets, range.budgetMode]
-  );
-
-  const selectedSpent = React.useMemo(() => {
-    if (!selectedCategory) return 0;
-    const row = totalsByCategory.find((item) => item.categoryId === selectedCategory.id);
-    return Number(row?.spent || 0);
-  }, [selectedCategory, totalsByCategory]);
-
-  const selectedPlannedTotal = React.useMemo(
-    () => (selectedCategory ? Number(plannedByCategory.get(selectedCategory.id) || 0) : 0),
-    [selectedCategory, plannedByCategory]
-  );
-
-  const selectedReceipts = React.useMemo(
-    () => (selectedTx ? receiptsByTransaction.get(String(selectedTx.id)) || [] : []),
-    [receiptsByTransaction, selectedTx]
-  );
-
-  const selectedReceiptItemsByReceiptId = React.useMemo(() => {
-    const map = new Map();
-    selectedReceipts.forEach((receipt) => {
-      map.set(receipt.id, receiptItemsByReceiptId.get(receipt.id) || []);
-    });
-    return map;
-  }, [selectedReceipts, receiptItemsByReceiptId]);
-
-  const selectedForecast = roundMoneyValue(selectedSpent + selectedPlannedTotal);
-  const selectedLoadPct = selectedBudget > 0 ? (selectedForecast / selectedBudget) * 100 : 0;
+  const merchantStats = React.useMemo(() => {
+    if (!selectedTx?.merchant) return null;
+    const match = topMerchants.find(
+      (row) => String(row.merchant || "").toLowerCase() === String(selectedTx.merchant || "").toLowerCase()
+    );
+    return match ? { ...match, visits: match.count } : null;
+  }, [selectedTx, topMerchants]);
 
   const notifications = React.useMemo(() => {
     const items = [];
@@ -802,27 +556,27 @@ export default function SpendingCommand() {
           tone: "red",
           target: "dashboard",
           title: `${row.category.name} is over budget`,
-          body: overBy > 0 ? `${money(overBy)} over in the current ${range.label.toLowerCase()} view.` : "Category pressure is above target.",
+          body: `${money(overBy)} over in the current view.`,
         });
       });
 
-    if (selectedTx && !selectedReceipts.length) {
+    if (selectedTx) {
       items.push({
-        id: `receipt-${selectedTx.id}`,
-        tone: "amber",
-        target: "receipt",
-        title: "Selected transaction has no receipt",
-        body: `${selectedTx.merchant || selectedTx.note || "This transaction"} is missing receipt detail.`,
+        id: `detail-${selectedTx.id}`,
+        tone: "blue",
+        target: "breakdown",
+        title: "Direct row tools are live",
+        body: "Use the selected row to edit, judge, duplicate, or delete it.",
       });
     }
 
     if (totals.plannedExpense > 0) {
       items.push({
         id: "planned-pressure",
-        tone: "blue",
-        target: "dashboard",
+        tone: "amber",
+        target: "shopping",
         title: "Planned spending is active",
-        body: `${money(totals.plannedExpense)} in planned pressure is still sitting ahead.`,
+        body: `${money(totals.plannedExpense)} in future pressure is still sitting ahead.`,
       });
     }
 
@@ -830,197 +584,68 @@ export default function SpendingCommand() {
       items.push({
         id: "all-clear",
         tone: "green",
-        target: "dashboard",
+        target: "shopping",
         title: "No hard alerts right now",
         body: "Visible spending is stable in the current view.",
       });
     }
 
-    return items.slice(0, 6);
-  }, [totalsByCategory, selectedTx, selectedReceipts, totals.plannedExpense, range.label]);
+    return items;
+  }, [totalsByCategory, selectedTx, totals.plannedExpense]);
 
+  const betterBuyIdeas = React.useMemo(
+    () =>
+      createBetterBuyIdeas({
+        selectedTx,
+        selectedBudgetRow,
+        topMerchants,
+        categoriesById,
+      }),
+    [selectedTx, selectedBudgetRow, topMerchants, categoriesById]
+  );
 
-  function resetOcrState() {
-    setOcrRunning(false);
-    setOcrError("");
-    setOcrMeta(null);
+  const subscriptionCandidates = React.useMemo(
+    () => buildSubscriptionCandidates(transactions),
+    [transactions]
+  );
+
+  function queueIdea(idea) {
+    setQueuedIdeas((prev) => {
+      if (prev.some((entry) => entry.id === idea.id)) return prev;
+      return [...prev, idea];
+    });
+    setStatus("Queued for shopping list.");
   }
 
-  function applyOcrToDraft(baseDraft, ocrPayload) {
-    if (!baseDraft || !ocrPayload) return baseDraft;
-
-    const normalizedItems = Array.isArray(ocrPayload.items)
-      ? ocrPayload.items
-          .map((item) => {
-            const rawName = item.itemName || item.rawText || "";
-            if (shouldIgnoreReceiptItemName(rawName)) return null;
-            const parsed = normalizeReceiptLine({
-              id: uid(),
-              itemName: rawName,
-              quantity: item.quantity != null ? String(item.quantity) : "1",
-              unitPrice: item.unitPrice != null ? String(item.unitPrice) : "",
-              lineTotal: item.lineTotal != null ? String(item.lineTotal) : "",
-              merchantName: ocrPayload.merchant || baseDraft.merchant,
-              classification: item.classification,
-              priceSignal: item.priceSignal,
-              coachFlag: item.coachFlag,
-              note: item.note || "",
-              includeInMath: item.includeInMath !== false,
-            });
-            return parsed;
-          })
-          .filter(Boolean)
-      : [];
-
-    const ocrTax =
-      ocrPayload.tax != null && Number.isFinite(Number(ocrPayload.tax))
-        ? roundMoneyValue(Number(ocrPayload.tax))
-        : baseDraft.tax;
-
-    const explicitSubtotal =
-      ocrPayload.subtotal != null && Number.isFinite(Number(ocrPayload.subtotal))
-        ? roundMoneyValue(Number(ocrPayload.subtotal))
-        : null;
-
-    const explicitTotal =
-      ocrPayload.total != null && Number.isFinite(Number(ocrPayload.total))
-        ? roundMoneyValue(Number(ocrPayload.total))
-        : null;
-
-    const explicitDiscount =
-      ocrPayload.discount != null && Number.isFinite(Number(ocrPayload.discount))
-        ? roundMoneyValue(Number(ocrPayload.discount))
-        : null;
-
-    return {
-      ...baseDraft,
-      merchant: ocrPayload.merchant || baseDraft.merchant,
-      date: ocrPayload.date || baseDraft.date,
-      tax: ocrTax != null ? String(ocrTax) : baseDraft.tax,
-      ocrSubtotal: explicitSubtotal,
-      ocrTotal: explicitTotal,
-      ocrDiscount: explicitDiscount,
-      items: normalizedItems.length ? normalizedItems : baseDraft.items,
-    };
-  }
-
-  async function runReceiptOcr(file) {
-    if (!file) return;
-
-    setOcrRunning(true);
-    setOcrError("");
-
-    try {
-      const formData = new FormData();
-      formData.append("file", file);
-
-      const res = await fetch("/api/receipt-ocr", {
-        method: "POST",
-        body: formData,
-      });
-
-      const payload = await res.json().catch(() => ({}));
-
-      if (!res.ok) {
-        throw new Error(payload?.error || "Receipt OCR failed.");
-      }
-
-      setReceiptDraft((prev) => {
-        const base = prev || buildReceiptDraft(selectedTx || null, categories, accounts);
-        return applyOcrToDraft(base, payload);
-      });
-
-      setOcrMeta(payload?.ocr || null);
-      setStatus(payload?.items?.length ? "Receipt scanned and items extracted." : "Receipt scanned.");
-    } catch (err) {
-      setOcrError(err?.message || "Receipt OCR failed.");
-    } finally {
-      setOcrRunning(false);
-    }
-  }
-
-  async function rerunReceiptOcr() {
-    if (!receiptDraft?.file) return;
-    await runReceiptOcr(receiptDraft.file);
-  }
-
-  function openComposerBlank() {
-    clearQuickAdd();
+  function openCreateTransaction() {
+    setComposerKind("create_tx");
+    setComposerDraft(emptyDraft("transaction", categories, accounts));
     setComposerOpen(true);
   }
 
-  function startReceiptDraft(seedTx = null) {
-    setReceiptViewerOpen(false);
-    resetOcrState();
-    setReceiptDraft(buildReceiptDraft(seedTx, categories, accounts));
+  function openEditTransaction(tx) {
+    if (!tx) return;
+    setComposerKind("edit_tx");
+    setComposerDraft(draftFromTransaction(tx, categories, accounts));
+    setComposerOpen(true);
   }
 
-  function clearReceiptDraft() {
-    if (receiptDraft?.previewUrl) {
-      URL.revokeObjectURL(receiptDraft.previewUrl);
-    }
-    resetOcrState();
-    setReceiptDraft(null);
+  function openEditPlanned(planned) {
+    if (!planned) return;
+    setComposerKind("edit_planned");
+    setComposerDraft(draftFromPlanned(planned, categories, accounts));
+    setComposerOpen(true);
   }
 
-  function changeReceiptDraft(field, value) {
-    setReceiptDraft((prev) => (prev ? { ...prev, [field]: value } : prev));
-  }
-
-  async function chooseReceiptFile(file) {
-    if (!file) return;
-
-    resetOcrState();
-
-    setReceiptDraft((prev) => {
-      const base = prev || buildReceiptDraft(selectedTx || null, categories, accounts);
-      if (base.previewUrl) {
-        URL.revokeObjectURL(base.previewUrl);
-      }
-      return {
-        ...base,
-        file,
-        fileName: file.name,
-        previewUrl: URL.createObjectURL(file),
-      };
-    });
-
-    await runReceiptOcr(file);
-  }
-
-  function addReceiptDraftLine() {
-    setReceiptDraft((prev) =>
-      prev ? { ...prev, items: [...prev.items, emptyReceiptLine()] } : prev
-    );
-  }
-
-  function updateReceiptDraftLine(lineId, patch) {
-    setReceiptDraft((prev) => {
-      if (!prev) return prev;
-      return {
-        ...prev,
-        items: prev.items.map((line) =>
-          line.id === lineId ? normalizeReceiptLine({ ...line, ...patch, merchantName: receiptDraft?.merchant || "" }) : line
-        ),
-      };
-    });
-  }
-
-  function removeReceiptDraftLine(lineId) {
-    setReceiptDraft((prev) => {
-      if (!prev) return prev;
-      const nextItems = prev.items.filter((line) => line.id !== lineId);
-      return { ...prev, items: nextItems.length ? nextItems : [emptyReceiptLine()] };
-    });
-  }
-
-  async function rollbackInsertedTransaction(txId) {
-    if (!user || !txId) return;
-    try {
-      await supabase.from("spending_transactions").delete().eq("id", txId).eq("user_id", user.id);
-    } catch {
-      // best effort cleanup only
-    }
+  function duplicateTransaction(tx) {
+    if (!tx) return;
+    const nextDraft = draftFromTransaction(tx, categories, accounts);
+    nextDraft.id = "";
+    nextDraft.date = todayISO();
+    setComposerKind("create_tx");
+    setComposerDraft(nextDraft);
+    setComposerOpen(true);
+    setStatus("Loaded row into composer.");
   }
 
   async function createSyncedTransaction(tx) {
@@ -1036,146 +661,52 @@ export default function SpendingCommand() {
 
     const savedTx = mapTransactionRowToClient(savedRow, []);
 
-    try {
-      await applyLedgerForTransaction({
-        userId: user.id,
-        tx: savedTx,
-        accounts,
-      });
+    await applyLedgerForTransaction({
+      userId: user.id,
+      tx: savedTx,
+      accounts,
+    });
 
-      await upsertCalendarEventForTransaction(
-        savedTx,
-        user.id,
-        categoriesById.get(savedTx.categoryId) || null
-      );
+    await upsertCalendarEventForTransaction(
+      savedTx,
+      user.id,
+      categoriesById.get(savedTx.categoryId) || null
+    );
 
-      return savedTx;
-    } catch (syncErr) {
-      await rollbackInsertedTransaction(savedTx.id);
-
-      try {
-        await deleteCalendarEventBySource(
-          user.id,
-          savedTx.type === "income" ? "income" : "spending",
-          savedTx.id
-        );
-      } catch {
-        // cleanup only
-      }
-
-      throw new Error(syncErr?.message || "The transaction failed during account sync.");
-    }
+    return savedTx;
   }
 
-  async function saveCategory() {
-    if (!user) return;
-
-    const name = String(newCategoryName || "").trim();
-    const group = String(newCategoryGroup || "Other").trim() || "Other";
-
-    if (!name) {
-      setPageError("Category name required.");
-      return;
-    }
-
-    setSaving(true);
-    setPageError("");
-
-    try {
-      const category = {
-        id: uid(),
-        name,
-        group,
-        color: "#94a3b8",
-        isBudgeted: true,
-      };
-
-      const { error } = await supabase
-        .from("spending_categories")
-        .upsert([mapCategoryClientToRow(category, user.id)]);
-
-      if (error) throw error;
-
-      setNewCategoryName("");
-      setNewCategoryGroup("Other");
-      setStatus("Category added.");
-      await loadAll();
-    } catch (err) {
-      setPageError(err?.message || "Failed to save category.");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function saveBudgetValue() {
-    if (!user || !budgetEditorCategoryId) return;
-
-    const amount = parseMoneyInput(budgetEditorValue);
-    if (!Number.isFinite(amount) || amount < 0) {
-      setPageError("Enter a valid budget amount.");
-      return;
-    }
-
-    setSaving(true);
-    setPageError("");
-
-    try {
-      const payload = {
-        user_id: user.id,
-        category_id: budgetEditorCategoryId,
-        period_mode: range.budgetMode,
-        amount: roundMoneyValue(amount),
-        updated_at: new Date().toISOString(),
-      };
-
-      const { error } = await supabase
-        .from("spending_budgets")
-        .upsert([payload], { onConflict: "user_id,category_id,period_mode" });
-
-      if (error) throw error;
-
-      setBudgetEditorValue("");
-      setStatus("Budget saved.");
-      await loadAll();
-    } catch (err) {
-      setPageError(err?.message || "Failed to save budget.");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function addNow() {
-    if (!user) return;
-
-    const amount = parseMoneyInput(qaAmount);
+  async function saveTransactionCreate() {
+    const amount = parseMoneyInput(composerDraft.amount);
     if (!Number.isFinite(amount) || amount <= 0) {
-      setPageError("Enter a valid amount.");
-      return;
+      throw new Error("Enter a valid amount.");
     }
-    if (!qaAccountId) {
-      setPageError("Choose an account.");
-      return;
+    if (!composerDraft.accountId) {
+      throw new Error("Choose an account.");
     }
-    if (qaType === "transfer" && (!qaTransferToAccountId || qaTransferToAccountId === qaAccountId)) {
-      setPageError("Choose a different transfer account.");
-      return;
+    if (
+      composerDraft.type === "transfer" &&
+      (!composerDraft.transferAccountId || composerDraft.transferAccountId === composerDraft.accountId)
+    ) {
+      throw new Error("Choose a different transfer account.");
     }
 
-    const sourceAccount = accounts.find((account) => account.id === qaAccountId) || null;
-    const transferAccount = accounts.find((account) => account.id === qaTransferToAccountId) || null;
+    const sourceAccount = accounts.find((account) => account.id === composerDraft.accountId) || null;
+    const transferAccount =
+      accounts.find((account) => account.id === composerDraft.transferAccountId) || null;
 
     const tx = {
       id: uid(),
-      type: qaType,
+      type: composerDraft.type,
       amount: roundMoneyValue(amount),
-      categoryId: qaCategoryId || null,
-      date: qaDate || todayISO(),
-      time: qaTime || "",
-      merchant: qaMerchant.trim(),
-      note: qaNote.trim(),
-      paymentMethod: qaPayment,
+      categoryId: composerDraft.categoryId || null,
+      date: composerDraft.date || todayISO(),
+      time: composerDraft.time || "",
+      merchant: composerDraft.merchant.trim(),
+      note: composerDraft.note.trim(),
+      paymentMethod: composerDraft.paymentMethod || "Card",
       account:
-        qaType === "transfer"
+        composerDraft.type === "transfer"
           ? `${sourceAccount?.name || ""} → ${transferAccount?.name || ""}`
           : sourceAccount?.name || "",
       accountId: sourceAccount?.id || "",
@@ -1185,100 +716,211 @@ export default function SpendingCommand() {
       createdAt: Date.now(),
     };
 
-    setSaving(true);
-    setPageError("");
-
-    try {
-      const savedTx = await createSyncedTransaction(tx);
-      clearQuickAdd();
-      setComposerOpen(false);
-      setStatus(
-        `${qaType === "income" ? "Income" : qaType === "transfer" ? "Transfer" : "Expense"} posted.`
-      );
-      await loadAll({ kind: "tx", id: savedTx.id });
-    } catch (err) {
-      setPageError(err?.message || "Failed to add transaction.");
-    } finally {
-      setSaving(false);
-    }
+    const savedTx = await createSyncedTransaction(tx);
+    setComposerOpen(false);
+    setStatus("Transaction posted.");
+    await loadAll({ kind: "tx", id: savedTx.id });
   }
 
-  async function addPlanned() {
-    if (!user) return;
+  async function saveTransactionUpdate() {
+    if (!user || !composerDraft.id) throw new Error("Missing transaction.");
+    const existingTx = transactions.find((tx) => tx.id === composerDraft.id);
+    if (!existingTx) throw new Error("That transaction no longer exists.");
 
-    const amount = parseMoneyInput(qaAmount);
+    const amount = parseMoneyInput(composerDraft.amount);
     if (!Number.isFinite(amount) || amount <= 0) {
-      setPageError("Enter a valid planned amount.");
-      return;
+      throw new Error("Enter a valid amount.");
+    }
+    if (!composerDraft.accountId) {
+      throw new Error("Choose an account.");
+    }
+    if (
+      composerDraft.type === "transfer" &&
+      (!composerDraft.transferAccountId || composerDraft.transferAccountId === composerDraft.accountId)
+    ) {
+      throw new Error("Choose a different transfer account.");
     }
 
-    const planned = {
-      id: uid(),
+    const sourceAccount = accounts.find((account) => account.id === composerDraft.accountId) || null;
+    const transferAccount =
+      accounts.find((account) => account.id === composerDraft.transferAccountId) || null;
+
+    const updatedTx = {
+      ...existingTx,
+      type: composerDraft.type,
       amount: roundMoneyValue(amount),
-      categoryId: qaCategoryId || null,
-      date: qaDate || todayISO(),
-      time: qaTime || "",
-      merchant: qaMerchant.trim(),
-      note: qaNote.trim(),
-      createdAt: Date.now(),
+      categoryId: composerDraft.categoryId || null,
+      date: composerDraft.date || todayISO(),
+      time: composerDraft.time || "",
+      merchant: composerDraft.merchant.trim(),
+      note: composerDraft.note.trim(),
+      paymentMethod: composerDraft.paymentMethod || "Card",
+      account:
+        composerDraft.type === "transfer"
+          ? `${sourceAccount?.name || ""} → ${transferAccount?.name || ""}`
+          : sourceAccount?.name || "",
+      accountId: sourceAccount?.id || "",
+      accountName: sourceAccount?.name || "",
+      transferAccountId: transferAccount?.id || "",
+      transferAccountName: transferAccount?.name || "",
     };
 
-    setSaving(true);
-    setPageError("");
+    let reversed = false;
 
     try {
+      await applyLedgerForTransaction({
+        userId: user.id,
+        tx: existingTx,
+        accounts,
+        reverse: true,
+        sourceIdOverride: `${existingTx.id}_edit_reverse`,
+      });
+      reversed = true;
+
       const { data: savedRow, error } = await supabase
-        .from("spending_planned_items")
-        .insert([mapPlannedClientToRow(planned, user.id)])
+        .from("spending_transactions")
+        .update(mapTransactionClientToRow(updatedTx, user.id))
+        .eq("id", existingTx.id)
+        .eq("user_id", user.id)
         .select()
         .single();
 
       if (error) throw error;
 
-      const savedPlanned = mapPlannedRowToClient(savedRow);
+      const savedTx = mapTransactionRowToClient(savedRow, []);
 
-      await upsertCalendarEventForPlanned(
-        savedPlanned,
+      await applyLedgerForTransaction({
+        userId: user.id,
+        tx: savedTx,
+        accounts,
+        sourceIdOverride: `${savedTx.id}_edit_apply`,
+      });
+
+      await upsertCalendarEventForTransaction(
+        savedTx,
         user.id,
-        categoriesById.get(savedPlanned.categoryId) || null
+        categoriesById.get(savedTx.categoryId) || null
       );
 
-      clearQuickAdd();
       setComposerOpen(false);
-      setStatus("Planned item saved.");
-      await loadAll({ kind: "planned", id: savedPlanned.id });
+      setStatus("Transaction updated.");
+      await loadAll({ kind: "tx", id: savedTx.id });
     } catch (err) {
-      setPageError(err?.message || "Failed to save planned item.");
+      if (reversed) {
+        try {
+          await applyLedgerForTransaction({
+            userId: user.id,
+            tx: existingTx,
+            accounts,
+            sourceIdOverride: `${existingTx.id}_edit_restore`,
+          });
+        } catch {
+          // best effort only
+        }
+      }
+      throw err;
+    }
+  }
+
+  async function savePlannedCreate() {
+    if (!user) throw new Error("Missing user.");
+
+    const amount = parseMoneyInput(composerDraft.amount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      throw new Error("Enter a valid planned amount.");
+    }
+
+    const planned = {
+      id: uid(),
+      amount: roundMoneyValue(amount),
+      categoryId: composerDraft.categoryId || null,
+      date: composerDraft.date || todayISO(),
+      time: composerDraft.time || "",
+      merchant: composerDraft.merchant.trim(),
+      note: composerDraft.note.trim(),
+      createdAt: Date.now(),
+    };
+
+    const { data: savedRow, error } = await supabase
+      .from("spending_planned_items")
+      .insert([mapPlannedClientToRow(planned, user.id)])
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    const savedPlanned = mapPlannedRowToClient(savedRow);
+
+    await upsertCalendarEventForPlanned(
+      savedPlanned,
+      user.id,
+      categoriesById.get(savedPlanned.categoryId) || null
+    );
+
+    setComposerOpen(false);
+    setStatus("Planned item saved.");
+    await loadAll({ kind: "planned", id: savedPlanned.id });
+  }
+
+  async function savePlannedUpdate() {
+    if (!user || !composerDraft.id) throw new Error("Missing planned item.");
+
+    const amount = parseMoneyInput(composerDraft.amount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      throw new Error("Enter a valid planned amount.");
+    }
+
+    const planned = {
+      id: composerDraft.id,
+      amount: roundMoneyValue(amount),
+      categoryId: composerDraft.categoryId || null,
+      date: composerDraft.date || todayISO(),
+      time: composerDraft.time || "",
+      merchant: composerDraft.merchant.trim(),
+      note: composerDraft.note.trim(),
+    };
+
+    const { data: savedRow, error } = await supabase
+      .from("spending_planned_items")
+      .update(mapPlannedClientToRow(planned, user.id))
+      .eq("id", planned.id)
+      .eq("user_id", user.id)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    const savedPlanned = mapPlannedRowToClient(savedRow);
+
+    await upsertCalendarEventForPlanned(
+      savedPlanned,
+      user.id,
+      categoriesById.get(savedPlanned.categoryId) || null
+    );
+
+    setComposerOpen(false);
+    setStatus("Planned item updated.");
+    await loadAll({ kind: "planned", id: savedPlanned.id });
+  }
+
+  async function saveComposer() {
+    setSaving(true);
+    setPageError("");
+
+    try {
+      if (composerKind === "create_tx") await saveTransactionCreate();
+      if (composerKind === "edit_tx") await saveTransactionUpdate();
+      if (composerKind === "create_planned") await savePlannedCreate();
+      if (composerKind === "edit_planned") await savePlannedUpdate();
+    } catch (err) {
+      setPageError(err?.message || "Failed to save entry.");
     } finally {
       setSaving(false);
     }
   }
 
-  function duplicateTransaction(tx) {
-    if (!tx) return;
-
-    setQaType(tx.type || "expense");
-    setQaAmount(String(tx.amount || ""));
-    setQaDate(todayISO());
-    setQaTime(tx.time || "");
-    setQaCategoryId(tx.categoryId || categories[0]?.id || "");
-    setQaMerchant(tx.merchant || "");
-    setQaNote(tx.note || "");
-    setQaPayment(tx.paymentMethod || "Card");
-    setQaAccountId(tx.accountId || accounts[0]?.id || "");
-    setQaTransferToAccountId(
-      tx.transferAccountId ||
-        accounts.find((account) => account.id !== (tx.accountId || accounts[0]?.id || ""))?.id ||
-        ""
-    );
-    setMode("now");
-    setComposerOpen(true);
-    setStatus("Loaded row into quick add.");
-  }
-
   async function deleteTransaction(txId) {
     if (!user || !txId) return;
-
     const tx = transactions.find((entry) => entry.id === txId);
     if (!tx) return;
     if (!window.confirm("Delete this transaction?")) return;
@@ -1287,16 +929,12 @@ export default function SpendingCommand() {
     setPageError("");
 
     try {
-      const reverseTx = {
-        ...tx,
-        id: `${tx.id}_delete_reverse`,
-      };
-
       await applyLedgerForTransaction({
         userId: user.id,
-        tx: reverseTx,
+        tx,
         accounts,
         reverse: true,
+        sourceIdOverride: `${tx.id}_delete_reverse`,
       });
 
       const { error } = await supabase
@@ -1323,36 +961,35 @@ export default function SpendingCommand() {
   }
 
   async function convertPlanned(planned) {
-    if (!user || !planned || !convertAccountId) return;
-
-    const account = accounts.find((entry) => entry.id === convertAccountId);
+    if (!user || !planned) return;
+    const account = accounts[0];
     if (!account) {
-      setPageError("Choose an account for conversion.");
+      setPageError("Add an account first.");
       return;
     }
-
-    const tx = {
-      id: uid(),
-      type: "expense",
-      amount: roundMoneyValue(planned.amount),
-      categoryId: planned.categoryId || null,
-      date: planned.date,
-      time: planned.time || "",
-      merchant: planned.merchant || "",
-      note: planned.note || "",
-      paymentMethod: "Card",
-      account: account.name,
-      accountId: account.id,
-      accountName: account.name,
-      transferAccountId: "",
-      transferAccountName: "",
-      createdAt: Date.now(),
-    };
 
     setSaving(true);
     setPageError("");
 
     try {
+      const tx = {
+        id: uid(),
+        type: "expense",
+        amount: roundMoneyValue(planned.amount),
+        categoryId: planned.categoryId || null,
+        date: planned.date || todayISO(),
+        time: planned.time || "",
+        merchant: planned.merchant || "",
+        note: planned.note || "",
+        paymentMethod: "Card",
+        account: account.name,
+        accountId: account.id,
+        accountName: account.name,
+        transferAccountId: "",
+        transferAccountName: "",
+        createdAt: Date.now(),
+      };
+
       const savedTx = await createSyncedTransaction(tx);
 
       const { error: deleteError } = await supabase
@@ -1400,43 +1037,12 @@ export default function SpendingCommand() {
     }
   }
 
-  async function saveReceiptDraft() {
-    if (!user || !receiptDraft) return;
-    if (!receiptFeatureReady) {
-      setPageError("Receipt storage is not ready yet.");
-      return;
-    }
+  async function saveBudgetValue() {
+    if (!user || !budgetEditorCategoryId) return;
 
-    const account = accounts.find((entry) => entry.id === receiptDraft.accountId);
-    if (!account) {
-      setPageError("Choose an account for this receipt.");
-      return;
-    }
-    if (!receiptDraft.file) {
-      setPageError("Add a receipt image or PDF first.");
-      return;
-    }
-    if (!String(receiptDraft.merchant || "").trim()) {
-      setPageError("Merchant is required.");
-      return;
-    }
-
-    const cleanedItems = receiptDraft.items
-      .map(normalizeReceiptLine)
-      .filter((line) => line.itemName.trim() || Number(line.lineTotal) > 0);
-
-    if (!cleanedItems.length) {
-      setPageError("Add at least one receipt line item.");
-      return;
-    }
-
-    const summary = computeReceiptDraftSummary({
-      ...receiptDraft,
-      items: cleanedItems,
-    });
-
-    if (!(summary.total > 0)) {
-      setPageError("Receipt total must be greater than zero.");
+    const amount = parseMoneyInput(budgetEditorValue);
+    if (!Number.isFinite(amount) || amount < 0) {
+      setPageError("Enter a valid budget amount.");
       return;
     }
 
@@ -1444,130 +1050,69 @@ export default function SpendingCommand() {
     setPageError("");
 
     try {
-      const tx = {
-        id: uid(),
-        type: "expense",
-        amount: roundMoneyValue(summary.total),
-        categoryId: receiptDraft.categoryId || null,
-        date: receiptDraft.date || todayISO(),
-        time: receiptDraft.time || "",
-        merchant: String(receiptDraft.merchant || "").trim(),
-        note: String(receiptDraft.note || "").trim(),
-        paymentMethod: receiptDraft.paymentMethod || "Card",
-        account: account.name,
-        accountId: account.id,
-        accountName: account.name,
-        transferAccountId: "",
-        transferAccountName: "",
-        createdAt: Date.now(),
+      const payload = {
+        user_id: user.id,
+        category_id: budgetEditorCategoryId,
+        period_mode: range.budgetMode,
+        amount: roundMoneyValue(amount),
+        updated_at: new Date().toISOString(),
       };
 
-      const savedTx = await createSyncedTransaction(tx);
+      const { error } = await supabase
+        .from("spending_budgets")
+        .upsert([payload], { onConflict: "user_id,category_id,period_mode" });
 
-      let partialFailure = "";
+      if (error) throw error;
 
-      try {
-        const bucket = "spending-receipts";
-        const file = receiptDraft.file;
-        const cleanName = sanitizeUploadFileName(file.name);
-        const storagePath = `${user.id}/${savedTx.id}/${Date.now()}_${cleanName}`;
-
-        const { error: uploadErr } = await supabase.storage
-          .from(bucket)
-          .upload(storagePath, file, {
-            upsert: false,
-            contentType: file.type || undefined,
-          });
-
-        if (uploadErr) throw uploadErr;
-
-        const receiptPayload = {
-          id: uid(),
-          user_id: user.id,
-          transaction_id: savedTx.id,
-          file_name: file.name,
-          mime_type: file.type || "application/octet-stream",
-          file_size: file.size || 0,
-          storage_bucket: bucket,
-          storage_path: storagePath,
-          receipt_status: summary.review > 0 ? "reviewed" : "posted",
-          merchant_name: String(receiptDraft.merchant || "").trim(),
-          receipt_total: roundMoneyValue(summary.total),
-          subtotal: roundMoneyValue(summary.subtotal),
-          tax_amount: roundMoneyValue(summary.tax),
-          spent_needed_total: roundMoneyValue(summary.need),
-          spent_wanted_total: roundMoneyValue(summary.want),
-          spent_waste_total: roundMoneyValue(summary.waste),
-          spent_review_total: roundMoneyValue(summary.review),
-          note: String(receiptDraft.note || "").trim(),
-          captured_at: new Date().toISOString(),
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        };
-
-        const { data: savedReceipt, error: receiptSaveErr } = await supabase
-          .from("spending_receipts")
-          .insert([receiptPayload])
-          .select()
-          .single();
-
-        if (receiptSaveErr) throw receiptSaveErr;
-
-        const itemsPayload = cleanedItems.map((item, index) => ({
-          id: uid(),
-          receipt_id: savedReceipt.id,
-          user_id: user.id,
-          line_index: index + 1,
-          item_name: String(item.itemName || `Item ${index + 1}`).trim(),
-          raw_text: String(item.itemName || "").trim(),
-          quantity: toQuantity(item.quantity),
-          unit_price: roundMoneyValue(toPositiveNumber(item.unitPrice, 0)),
-          line_total: roundMoneyValue(item.lineTotal || 0),
-          classification: item.classification || "review",
-          price_signal: item.priceSignal || "neutral",
-          coach_flag: item.coachFlag || "normal",
-          classification_confidence: null,
-          category_hint: categoriesById.get(receiptDraft.categoryId || "")?.name || null,
-          merchant_rule_hit: null,
-          note: String(item.note || "").trim(),
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        }));
-
-        const { error: itemsErr } = await supabase
-          .from("spending_receipt_items")
-          .insert(itemsPayload);
-
-        if (itemsErr) throw itemsErr;
-      } catch (receiptErr) {
-        partialFailure =
-          receiptErr?.message || "Receipt detail failed to save after the transaction posted.";
-      }
-
-      clearReceiptDraft();
-      setStatus(
-        partialFailure
-          ? "Transaction posted, but receipt detail failed."
-          : "Receipt saved as transaction."
-      );
-
-      if (partialFailure) {
-        setPageError(partialFailure);
-      }
-
-      await loadAll({ kind: "tx", id: savedTx.id });
-      setWorkspaceMode("receipt");
+      setBudgetEditorValue("");
+      setStatus("Budget saved.");
+      await loadAll();
     } catch (err) {
-      setPageError(err?.message || "Failed to save receipt transaction.");
+      setPageError(err?.message || "Failed to save budget.");
     } finally {
       setSaving(false);
     }
   }
 
-  const receiptDraftSummary = React.useMemo(
-    () => computeReceiptDraftSummary(receiptDraft),
-    [receiptDraft]
-  );
+  async function saveCategory() {
+    if (!user) return;
+
+    const name = String(newCategoryName || "").trim();
+    const group = String(newCategoryGroup || "Other").trim() || "Other";
+
+    if (!name) {
+      setPageError("Category name required.");
+      return;
+    }
+
+    setSaving(true);
+    setPageError("");
+
+    try {
+      const category = {
+        id: uid(),
+        name,
+        group,
+        color: "#94a3b8",
+        isBudgeted: true,
+      };
+
+      const { error } = await supabase
+        .from("spending_categories")
+        .upsert([mapCategoryClientToRow(category, user.id)]);
+
+      if (error) throw error;
+
+      setNewCategoryName("");
+      setNewCategoryGroup("Other");
+      setStatus("Category added.");
+      await loadAll();
+    } catch (err) {
+      setPageError(err?.message || "Failed to save category.");
+    } finally {
+      setSaving(false);
+    }
+  }
 
   if (loading) return <main className={styles.loadingState}>Loading spending…</main>;
   if (!user) return <main className={styles.loadingState}>Sign in to use spending.</main>;
@@ -1578,109 +1123,70 @@ export default function SpendingCommand() {
         totals={totals}
         expenseTrend={expenseTrend}
         forecastRemaining={forecastRemaining}
+        totalsByCategory={totalsByCategory}
         period={period}
         setPeriod={setPeriod}
-        onOpenComposer={openComposerBlank}
         search={search}
         setSearch={setSearch}
-        activePage={workspaceMode}
-        setActivePage={setWorkspaceMode}
-        notifications={notifications}
+        mode={workspaceMode}
+        setMode={setWorkspaceMode}
+        onOpenComposer={openCreateTransaction}
+        onOpenControls={() => setControlsOpen(true)}
       />
 
       <div className={styles.workspace}>
         <section className={styles.workspaceFeed}>
           <FeedPane
-            typeFilter={typeFilter}
-            setTypeFilter={setTypeFilter}
-            categoryFilter={categoryFilter}
-            setCategoryFilter={setCategoryFilter}
-            groupFilter={groupFilter}
-            setGroupFilter={setGroupFilter}
-            categories={categories}
-            groups={groups}
-            transactions={enrichedTransactions.slice(0, 80)}
-            plannedItems={filteredPlanned.slice(0, 40)}
-            receiptCountsByTransaction={receiptCountsByTransaction}
+            transactions={filteredTransactions}
+            plannedItems={filteredPlanned}
             selectedRecord={selectedRecord}
-            onSelect={(next) => {
-              setSelectedRecord(next);
-              setReceiptViewerOpen(false);
-            }}
+            onSelect={setSelectedRecord}
           />
         </section>
 
         <section className={styles.workspaceMain}>
           <MainWorkspacePane
             mode={workspaceMode}
-            setMode={setWorkspaceMode}
+            totals={totals}
+            notifications={notifications}
+            topMerchants={topMerchants}
+            totalsByCategory={totalsByCategory}
             selectedTx={selectedTx}
             selectedPlanned={selectedPlanned}
+            selectedBudgetRow={selectedBudgetRow}
             categoriesById={categoriesById}
-            visibleTransactions={enrichedTransactions}
-            selectedCategory={selectedCategory}
-            selectedBudget={selectedBudget}
-            selectedSpent={selectedSpent}
-            selectedPlannedTotal={selectedPlannedTotal}
-            selectedForecast={selectedForecast}
-            selectedLoadPct={selectedLoadPct}
-            selectedReceipts={selectedReceipts}
-            selectedReceiptItemsByReceiptId={selectedReceiptItemsByReceiptId}
-            topMerchants={topMerchants}
-            totals={totals}
-            expenseTrend={expenseTrend}
-            forecastRemaining={forecastRemaining}
-            totalsByCategory={totalsByCategory}
-            onStartReceiptDraft={startReceiptDraft}
-            onOpenReceiptViewer={() => setReceiptViewerOpen(true)}
+            merchantStats={merchantStats}
+            betterBuyIdeas={betterBuyIdeas}
+            queuedIdeas={queuedIdeas}
+            onQueueIdea={queueIdea}
+            onOpenComposer={openCreateTransaction}
+            onOpenControls={() => setControlsOpen(true)}
+            onEditTransaction={() => selectedTx && openEditTransaction(selectedTx)}
             onDuplicateTransaction={() => selectedTx && duplicateTransaction(selectedTx)}
             onDeleteTransaction={() => selectedTx && deleteTransaction(selectedTx.id)}
-            onOpenComposer={openComposerBlank}
-            onOpenControls={() => setControlsOpen(true)}
+            onEditPlanned={() => selectedPlanned && openEditPlanned(selectedPlanned)}
             onConvertPlanned={() => selectedPlanned && convertPlanned(selectedPlanned)}
             onDeletePlanned={() => selectedPlanned && deletePlanned(selectedPlanned.id)}
-            convertAccountId={convertAccountId}
-            setConvertAccountId={setConvertAccountId}
-            accounts={accounts}
           />
         </section>
       </div>
 
-      <QuickAddModal
+      <QuickEntryModal
         open={composerOpen}
         onClose={() => setComposerOpen(false)}
-        mode={mode}
-        setMode={setMode}
-        qaType={qaType}
-        setQaType={setQaType}
-        qaAmount={qaAmount}
-        setQaAmount={setQaAmount}
-        qaDate={qaDate}
-        setQaDate={setQaDate}
-        qaTime={qaTime}
-        setQaTime={setQaTime}
-        qaCategoryId={qaCategoryId}
-        setQaCategoryId={setQaCategoryId}
-        qaMerchant={qaMerchant}
-        setQaMerchant={setQaMerchant}
-        qaNote={qaNote}
-        setQaNote={setQaNote}
-        qaPayment={qaPayment}
-        setQaPayment={setQaPayment}
-        qaAccountId={qaAccountId}
-        setQaAccountId={setQaAccountId}
-        qaTransferToAccountId={qaTransferToAccountId}
-        setQaTransferToAccountId={setQaTransferToAccountId}
-        accounts={accounts}
-        categories={categories}
         saving={saving}
-        onAddNow={addNow}
-        onAddPlanned={addPlanned}
+        composerKind={composerKind}
+        draft={composerDraft}
+        setDraft={setComposerDraft}
+        categories={categories}
+        accounts={accounts}
+        onSave={saveComposer}
       />
 
-      <ManageSheet
+      <ControlModal
         open={controlsOpen}
         onClose={() => setControlsOpen(false)}
+        saving={saving}
         totalsByCategory={totalsByCategory}
         budgetEditorCategoryId={budgetEditorCategoryId}
         setBudgetEditorCategoryId={setBudgetEditorCategoryId}
@@ -1694,37 +1200,7 @@ export default function SpendingCommand() {
         setNewCategoryGroup={setNewCategoryGroup}
         groups={groups}
         onSaveCategory={saveCategory}
-        saving={saving}
-      />
-
-      <ReceiptDraftModal
-        open={Boolean(receiptDraft)}
-        onClose={clearReceiptDraft}
-        receiptDraft={receiptDraft}
-        receiptDraftSummary={receiptDraftSummary}
-        categories={categories}
-        accounts={accounts}
-        onClearReceiptDraft={clearReceiptDraft}
-        onReceiptFileChosen={chooseReceiptFile}
-        onReceiptDraftChange={changeReceiptDraft}
-        onReceiptDraftAddLine={addReceiptDraftLine}
-        onReceiptDraftUpdateLine={updateReceiptDraftLine}
-        onReceiptDraftRemoveLine={removeReceiptDraftLine}
-        onSaveReceiptDraft={saveReceiptDraft}
-        saving={saving}
-        ocrRunning={ocrRunning}
-        ocrError={ocrError}
-        ocrMeta={ocrMeta}
-        onRetryOcr={rerunReceiptOcr}
-      />
-
-      <ReceiptViewerModal
-        open={receiptViewerOpen}
-        onClose={() => setReceiptViewerOpen(false)}
-        selectedTx={selectedTx}
-        selectedReceipts={selectedReceipts}
-        selectedReceiptItemsByReceiptId={selectedReceiptItemsByReceiptId}
-        onEditReceipt={() => startReceiptDraft(selectedTx)}
+        subscriptionCandidates={subscriptionCandidates}
       />
 
       <ToastStack status={status} pageError={pageError} onClearError={() => setPageError("")} />
