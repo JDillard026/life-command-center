@@ -20,27 +20,43 @@ function createBaseClient(key, extra = {}) {
 }
 
 export function createSupabaseAdminClient() {
+  if (!url) {
+    throw new Error("Missing NEXT_PUBLIC_SUPABASE_URL in .env.local.");
+  }
+  if (!serviceRole) {
+    throw new Error("Missing SUPABASE_SERVICE_ROLE_KEY in .env.local.");
+  }
+
   const client = createBaseClient(serviceRole);
   if (!client) {
-    throw new Error("Missing Supabase admin configuration.");
+    throw new Error("Could not create Supabase admin client.");
   }
   return client;
 }
 
 export function createSupabaseRequestClient(authorization = "") {
-  const client = createBaseClient(anon, authorization
-    ? {
-        global: {
-          headers: {
-            Authorization: authorization,
+  if (!url) {
+    throw new Error("Missing NEXT_PUBLIC_SUPABASE_URL in .env.local.");
+  }
+  if (!anon) {
+    throw new Error("Missing NEXT_PUBLIC_SUPABASE_ANON_KEY in .env.local.");
+  }
+
+  const client = createBaseClient(
+    anon,
+    authorization
+      ? {
+          global: {
+            headers: {
+              Authorization: authorization,
+            },
           },
-        },
-      }
-    : {}
+        }
+      : {}
   );
 
   if (!client) {
-    throw new Error("Missing Supabase request configuration.");
+    throw new Error("Could not create Supabase request client.");
   }
 
   return client;

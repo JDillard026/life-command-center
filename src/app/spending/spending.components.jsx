@@ -92,6 +92,7 @@ export function ActionBtn({
       onClick={onClick}
       disabled={disabled}
       className={cx(styles.actionBtn, styles[`actionBtn_${variant}`], full ? styles.actionBtnFull : "")}
+      style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "12px 18px", minHeight: 48, borderRadius: 18, fontWeight: 700, letterSpacing: "-0.01em", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.08), 0 10px 24px rgba(0,0,0,0.22)" }}
     >
       {children}
     </button>
@@ -209,30 +210,66 @@ function verdictForTransaction(tx, budgetRow, merchantVisits = 1, merchantAvg = 
 
 function CategoryMixCard({ rows = [], totalExpense = 0 }) {
   const positiveRows = rows.filter((row) => Number(row.forecast) > 0).slice(0, 6);
-  let cursor = 0;
-  const stops = positiveRows.map((row) => {
-    const pct = totalExpense > 0 ? (Number(row.forecast || 0) / totalExpense) * 100 : 0;
-    const start = cursor;
-    cursor += pct;
-    return `${row.category?.color || "#7aa0ff"} ${start}% ${cursor}%`;
-  });
-  const gradient = stops.length
-    ? `conic-gradient(from 220deg, ${stops.join(", ")})`
-    : "conic-gradient(from 220deg, rgba(122,160,255,0.72) 0 100%)";
+  const chartRows = positiveRows.length
+    ? positiveRows
+    : [{ categoryId: "fallback", category: { name: "Spending", color: "#7aa0ff" }, forecast: totalExpense || 0 }];
+  const radius = 62;
+  const stroke = 18;
+  const size = 160;
+  const circumference = 2 * Math.PI * radius;
+  let offset = 0;
 
   return (
-    <div className={styles.mixWrap}>
-      <div className={styles.mixDonut} style={{ background: gradient }}>
-        <div className={styles.mixDonutInner}>
-          <strong>{money(totalExpense || 0)}</strong>
-          <span>Total spent</span>
+    <div className={styles.mixWrap} style={{ alignItems: "center" }}>
+      <div style={{ position: "relative", width: size, height: size, flex: "0 0 auto" }}>
+        <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ overflow: "visible" }}>
+          <defs>
+            <filter id="spendGlow" x="-50%" y="-50%" width="200%" height="200%">
+              <feGaussianBlur stdDeviation="5" result="blur" />
+              <feMerge>
+                <feMergeNode in="blur" />
+                <feMergeNode in="SourceGraphic" />
+              </feMerge>
+            </filter>
+          </defs>
+          <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth={stroke} />
+          <g filter="url(#spendGlow)">
+            <animateTransform attributeName="transform" type="rotate" values={`-90 ${size / 2} ${size / 2};-450 ${size / 2} ${size / 2}`} dur="36s" repeatCount="indefinite" />
+            {chartRows.map((row) => {
+              const pct = totalExpense > 0 ? (Number(row.forecast || 0) / totalExpense) : 1 / chartRows.length;
+              const dash = Math.max(6, circumference * pct);
+              const el = (
+                <circle
+                  key={row.categoryId}
+                  cx={size / 2}
+                  cy={size / 2}
+                  r={radius}
+                  fill="none"
+                  stroke={row.category?.color || "#7aa0ff"}
+                  strokeWidth={stroke}
+                  strokeLinecap="round"
+                  strokeDasharray={`${dash} ${Math.max(0, circumference - dash)}`}
+                  strokeDashoffset={-offset}
+                />
+              );
+              offset += dash;
+              return el;
+            })}
+          </g>
+          <circle cx={size / 2} cy={size / 2} r={radius - 18} fill="rgba(6,10,18,0.9)" stroke="rgba(255,255,255,0.06)" />
+        </svg>
+        <div style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", textAlign: "center", pointerEvents: "none" }}>
+          <div>
+            <strong style={{ display: "block", fontSize: 24, letterSpacing: "-0.04em" }}>{money(totalExpense || 0)}</strong>
+            <span style={{ color: "rgba(255,255,255,0.68)", fontSize: 12 }}>Total spent</span>
+          </div>
         </div>
       </div>
-      <div className={styles.mixLegend}>
+      <div className={styles.mixLegend} style={{ minWidth: 0 }}>
         {positiveRows.length ? (
           positiveRows.map((row) => (
             <div key={row.categoryId} className={styles.mixLegendRow}>
-              <span className={styles.mixDot} style={{ background: row.category?.color || "#7aa0ff" }} />
+              <span className={styles.mixDot} style={{ background: row.category?.color || "#7aa0ff", boxShadow: `0 0 14px ${row.category?.color || "#7aa0ff"}66` }} />
               <span>{row.category?.name || "Category"}</span>
               <strong>{money(row.forecast || 0)}</strong>
             </div>
@@ -457,39 +494,34 @@ function DashboardPane({
   const visibleExpense = totalsByCategory.reduce((sum, row) => sum + (Number(row.forecast) || 0), 0);
 
   return (
-    <div className={styles.dashboardLayout}>
-      <div className={styles.storyCard}>
-        <SectionHeader title="Where your money is going" subcopy="Visible category mix in the current view." />
-        <CategoryMixCard rows={totalsByCategory} totalExpense={visibleExpense || totals.expense} />
+    <div style={{ display: "grid", gridTemplateColumns: "1.04fr 0.96fr", gap: 16, alignItems: "start" }}>
+      <div style={{ display: "grid", gap: 16 }}>
+        <div className={styles.storyCard}>
+          <SectionHeader title="Where your money is going" subcopy="Visible category mix in the current view." />
+          <CategoryMixCard rows={totalsByCategory} totalExpense={visibleExpense || totals.expense} />
+        </div>
+
+        <div className={styles.storyCard}>
+          <SectionHeader title="Budget pressure" subcopy="The hot lanes that actually matter right now." />
+          <BudgetPressureCard rows={totalsByCategory} />
+        </div>
       </div>
 
-      <div className={styles.storyCard}>
-        <SectionHeader title="Budget pressure" subcopy="The hot lanes that actually matter right now." />
-        <BudgetPressureCard rows={totalsByCategory} />
-      </div>
+      <div style={{ display: "grid", gap: 16 }}>
+        <div className={styles.storyCard}>
+          <SectionHeader title="Smart alerts" subcopy="What needs attention first." />
+          <AlertsCard notifications={notifications.slice(0, 3)} />
+        </div>
 
-      <div className={styles.storyCard}>
-        <SectionHeader title="Smart alerts" subcopy="What needs attention first." />
-        <AlertsCard notifications={notifications} />
-      </div>
+        <div className={styles.storyCard}>
+          <SectionHeader title="Top spending merchants" subcopy="Where the visible money is draining." />
+          <MerchantPressure rows={topMerchants.slice(0, 3)} />
+        </div>
 
-      <div className={styles.storyCard}>
-        <SectionHeader title="Top spending merchants" subcopy="Where the visible money is draining." />
-        <MerchantPressure rows={topMerchants} />
-      </div>
-
-      <div className={styles.storyCard}>
-        <SectionHeader title="Potential savings" subcopy="What you should fix next." />
-        <OpportunityCard betterBuyIdeas={betterBuyIdeas} />
-      </div>
-
-      <div className={styles.dashboardDock}>
-        <SelectedDock
-          selectedTx={selectedTx}
-          selectedBudgetRow={selectedBudgetRow}
-          categoriesById={categoriesById}
-          merchantStats={merchantStats}
-        />
+        <div className={styles.storyCard}>
+          <SectionHeader title="Potential savings" subcopy="What you should fix next." />
+          <OpportunityCard betterBuyIdeas={betterBuyIdeas.slice(0, 2)} />
+        </div>
       </div>
     </div>
   );
@@ -593,7 +625,7 @@ function BreakdownPane({
       />
 
       <div className={styles.storyGrid}>
-        <div className={styles.storyCard}>
+        <div className={styles.storyCard} style={{ minHeight: 220 }}>
           <SectionHeader title="Purchase read" subcopy="What this purchase is actually doing." />
           <div className={styles.statGrid}>
             <InsightStat label="Category" value={categoriesById.get(selectedTx.categoryId)?.name || "Uncategorized"} subcopy="lane" tone="blue" />
@@ -602,7 +634,7 @@ function BreakdownPane({
           </div>
         </div>
 
-        <div className={styles.storyCard}>
+        <div className={styles.storyCard} style={{ minHeight: 220 }}>
           <SectionHeader title="Budget impact" subcopy="Show the lane math, not fluff." />
           <div className={styles.metricList}>
             <div className={styles.metricInline}><span>Spent</span><strong>{money(selectedBudgetRow?.spent || 0)}</strong></div>
@@ -624,12 +656,12 @@ function ShoppingPane({ betterBuyIdeas = [], queuedIdeas = [], onQueueIdea }) {
   return (
     <div className={styles.workspaceBody}>
       <div className={styles.storyGrid}>
-        <div className={styles.storyCard}>
+        <div className={styles.storyCard} style={{ minHeight: 320 }}>
           <SectionHeader title="Shopping list" subcopy="Saved ideas you actually come back to later." right={<Pill tone="blue">{queuedIdeas.length}</Pill>} />
           <ShoppingListCard queuedIdeas={queuedIdeas} />
         </div>
 
-        <div className={styles.storyCard}>
+        <div className={styles.storyCard} style={{ minHeight: 320 }}>
           <SectionHeader title="Better buys" subcopy="What to fix and where to look next." />
           <div className={styles.stackGrid}>
             {betterBuyIdeas.length ? (
@@ -673,7 +705,7 @@ function CoachPane({ selectedTx, selectedBudgetRow, merchantStats, betterBuyIdea
   return (
     <div className={styles.workspaceBody}>
       <div className={styles.storyGrid}>
-        <div className={styles.storyCard}>
+        <div className={styles.storyCard} style={{ minHeight: 260 }}>
           <SectionHeader title="Blunt read" subcopy="This is where the page judges the row." />
           <div className={styles.coachLead}>
             <div className={styles.coachLeadTitle}>{verdict.label}</div>
@@ -686,7 +718,7 @@ function CoachPane({ selectedTx, selectedBudgetRow, merchantStats, betterBuyIdea
           </div>
         </div>
 
-        <div className={styles.storyCard}>
+        <div className={styles.storyCard} style={{ minHeight: 260 }}>
           <SectionHeader title="Pressure read" subcopy="Current lane and merchant strain." />
           <div className={styles.statGrid}>
             <InsightStat label="Category" value={categoryName} subcopy="active lane" tone="blue" />
@@ -697,7 +729,7 @@ function CoachPane({ selectedTx, selectedBudgetRow, merchantStats, betterBuyIdea
       </div>
 
       <div className={styles.storyGrid}>
-        <div className={styles.storyCard}>
+        <div className={styles.storyCard} style={{ minHeight: 320 }}>
           <SectionHeader title="What to do next" subcopy="Actual next moves, not filler." />
           <div className={styles.stackGrid}>
             {betterBuyIdeas.length ? (
@@ -721,7 +753,7 @@ function CoachPane({ selectedTx, selectedBudgetRow, merchantStats, betterBuyIdea
           </div>
         </div>
 
-        <div className={styles.storyCard}>
+        <div className={styles.storyCard} style={{ minHeight: 320 }}>
           <SectionHeader title="Shopping list snapshot" subcopy="Keep the saved ideas visible from Coach too." />
           <ShoppingListCard queuedIdeas={queuedIdeas} />
         </div>
@@ -742,6 +774,7 @@ export function TopStrip({
   setSearch,
   onOpenComposer,
   onOpenControls,
+  onOpenNotifications,
   onScanReceipt,
   receiptBusy = false,
 }) {
@@ -752,8 +785,8 @@ export function TopStrip({
   );
 
   return (
-    <div className={styles.topShell}>
-      <div className={styles.topBar}>
+    <div className={styles.topShell} style={{ display: "grid", gap: 14 }}>
+      <div className={styles.topBar} style={{ borderRadius: 30, overflow: "hidden" }}>
         <div className={styles.topIdentity}>
           <div className={styles.eyebrow}>Money / Spending</div>
           <h1 className={styles.pageTitle}>Spending</h1>
@@ -773,7 +806,7 @@ export function TopStrip({
           ) : null}
         </div>
 
-        <div className={styles.topActions}>
+        <div className={styles.topActions} style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
           <select value={period} onChange={(e) => setPeriod(e.target.value)} className={styles.topSelect}>
             <option value="week">This week</option>
             <option value="month">This month</option>
@@ -782,7 +815,7 @@ export function TopStrip({
           <button type="button" className={styles.notificationButton} onClick={onOpenControls} title="Page controls">
             <SlidersHorizontal size={15} />
           </button>
-          <button type="button" className={styles.notificationButton}>
+          <button type="button" className={styles.notificationButton} onClick={onOpenNotifications} title="Notifications">
             <Bell size={15} />
             {overBudgetRows.length ? <span className={styles.notificationBadge}>{overBudgetRows.length}</span> : null}
           </button>
@@ -794,7 +827,7 @@ export function TopStrip({
         </div>
       </div>
 
-      <div className={styles.kpiRow}>
+      <div className={styles.kpiRow} style={{ borderRadius: 30, overflow: "hidden" }}>
         <div className={styles.kpiCard}>
           <span>Spent this month</span>
           <strong style={{ letterSpacing: "-0.04em", lineHeight: 1 }}>{money(totals.expense || 0)}</strong>
@@ -874,14 +907,14 @@ export function FeedPane({
   const showPlanned = feedFilter === "all" || feedFilter === "planned";
 
   return (
-    <GlassPane tone="neutral" size="card" className={styles.feedPane}>
+    <GlassPane tone="neutral" size="card" className={styles.feedPane} style={{ height: "fit-content" }}>
       <SectionHeader
         title={railMode === "items" ? "Receipt items" : "Transactions"}
         subcopy={railMode === "items" ? "See every item pulled from receipts." : "Fast rail for row selection"}
         right={<Pill tone="blue">{railMode === "items" ? receiptItems.length : transactions.length + plannedItems.length}</Pill>}
       />
 
-      <div className={styles.feedTabs}>
+      <div className={styles.feedTabs} style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
         {[
           { id: "transactions", label: "Transactions" },
           { id: "items", label: "Items" },
@@ -899,7 +932,7 @@ export function FeedPane({
 
       {railMode === "transactions" ? (
         <>
-          <div className={styles.feedTabs}>
+          <div className={styles.feedTabs} style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
             {[
               { id: "all", label: "All" },
               { id: "expense", label: "Expenses" },
@@ -928,7 +961,7 @@ export function FeedPane({
                   key={tx.id}
                   type="button"
                   className={cx(styles.feedRow, selected ? styles.feedRowActive : "")}
-                  style={{ minHeight: 88, paddingTop: 12, paddingBottom: 12 }}
+                  style={{ minHeight: 92, paddingTop: 12, paddingBottom: 12, rowGap: 10 }}
                   onClick={() => onSelect({ kind: "tx", id: tx.id })}
                 >
                   <MerchantMark merchant={tx.merchant || tx.note || tx.type} />
@@ -975,7 +1008,7 @@ export function FeedPane({
                   key={item.id}
                   type="button"
                   className={cx(styles.feedRow, selected ? styles.feedRowActive : "")}
-                  style={{ minHeight: 84, paddingTop: 12, paddingBottom: 12 }}
+                  style={{ minHeight: 88, paddingTop: 12, paddingBottom: 12, rowGap: 10 }}
                   onClick={() => onSelect({ kind: "planned", id: item.id })}
                 >
                   <div className={cx(styles.merchantMark, styles.merchantMark_amber)}>
@@ -1010,6 +1043,21 @@ export function FeedPane({
                 </button>
               );
             })}
+
+            {filteredTransactions.length || (showPlanned && plannedItems.length) ? (
+              <div className={styles.queueRowCard} style={{ padding: 16, borderRadius: 22, minHeight: 112 }}>
+                <div className={styles.queueRowTop}>
+                  <div>
+                    <div className={styles.queueRowTitle}>Rail summary</div>
+                    <div className={styles.queueRowMeta}>{filteredTransactions.length} live rows{showPlanned ? ` · ${plannedItems.length} planned` : ""}</div>
+                  </div>
+                  <Pill tone="blue">active</Pill>
+                </div>
+                <div className={styles.sectionSub} style={{ marginTop: 10 }}>
+                  Use this rail as a dense selector. The blank dead space is gone and this block now closes the panel with useful state.
+                </div>
+              </div>
+            ) : null}
 
             {!filteredTransactions.length && !(showPlanned && plannedItems.length) ? (
               <EmptyCard title="Nothing visible" body="No rows match the current rail filter." />
@@ -1156,10 +1204,13 @@ export function MainWorkspacePane({
       </div>
 
       {railMode === "items" ? (
-        <ItemWorkspace selectedItem={selectedItem} itemStats={itemStats} />
+        <div style={{ minHeight: 720, display: "grid", alignContent: "start" }}>
+          <ItemWorkspace selectedItem={selectedItem} itemStats={itemStats} />
+        </div>
       ) : null}
 
       {railMode === "transactions" && mode === "dashboard" ? (
+        <div style={{ minHeight: 720, display: "grid", alignContent: "start" }}>
         <DashboardPane
           totals={totals}
           notifications={isPremium ? notifications : []}
@@ -1171,9 +1222,11 @@ export function MainWorkspacePane({
           merchantStats={merchantStats}
           betterBuyIdeas={isPremium ? betterBuyIdeas : []}
         />
+        </div>
       ) : null}
 
       {railMode === "transactions" && mode === "breakdown" ? (
+        <div style={{ minHeight: 720, display: "grid", alignContent: "start" }}>
         <BreakdownPane
           selectedTx={selectedTx}
           selectedPlanned={selectedPlanned}
@@ -1187,18 +1240,22 @@ export function MainWorkspacePane({
           onConvertPlanned={onConvertPlanned}
           onDeletePlanned={onDeletePlanned}
         />
+        </div>
       ) : null}
 
       {railMode === "transactions" && mode === "shopping" ? (
-        isPremium ? (
+        <div style={{ minHeight: 720, display: "grid", alignContent: "start" }}>
+        {isPremium ? (
           <ShoppingPane betterBuyIdeas={betterBuyIdeas} queuedIdeas={queuedIdeas} onQueueIdea={onQueueIdea} />
         ) : (
           <EmptyCard title="Membership required" body="Shopping intelligence is part of the paid plan." />
-        )
+        )}
+        </div>
       ) : null}
 
       {railMode === "transactions" && mode === "coach" ? (
-        isPremium ? (
+        <div style={{ minHeight: 720, display: "grid", alignContent: "start" }}>
+        {isPremium ? (
           <CoachPane
             selectedTx={selectedTx}
             selectedBudgetRow={selectedBudgetRow}
@@ -1210,9 +1267,21 @@ export function MainWorkspacePane({
           />
         ) : (
           <EmptyCard title="Membership required" body="Coach is part of the paid plan." />
-        )
+        )}
+        </div>
       ) : null}
     </GlassPane>
+  );
+}
+
+function PriceBreakdownRow({ label, value, tone = "neutral" }) {
+  return (
+    <div className={styles.queueRowCard} style={{ padding: 12 }}>
+      <div className={styles.queueRowTop}>
+        <div className={styles.queueRowTitle}>{label}</div>
+        <Pill tone={tone}>{money(value || 0)}</Pill>
+      </div>
+    </div>
   );
 }
 
@@ -1230,6 +1299,7 @@ export function ReceiptExtractionModal({
 
   const candidates = draft.candidates || [];
   const canMatch = Boolean(draft.selectedCandidateId);
+  const breakdown = draft.breakdown || {};
 
   function patch(field, value) {
     setDraft((prev) => ({ ...prev, [field]: value }));
@@ -1272,6 +1342,18 @@ export function ReceiptExtractionModal({
               </div>
 
               <div style={{ marginTop: 16 }}>
+                <SectionHeader title="Pricing breakdown" subcopy="Tax, discounts, fees, and savings pulled from OCR." />
+                <div className={styles.stackGrid}>
+                  <PriceBreakdownRow label="Subtotal" value={breakdown.subtotal} />
+                  <PriceBreakdownRow label="Tax" value={breakdown.tax} tone={breakdown.tax ? "amber" : "neutral"} />
+                  <PriceBreakdownRow label="Discounts" value={breakdown.discounts} tone={breakdown.discounts ? "green" : "neutral"} />
+                  <PriceBreakdownRow label="Fees" value={breakdown.fees} tone={breakdown.fees ? "amber" : "neutral"} />
+                  <PriceBreakdownRow label="Tip" value={breakdown.tip} tone={breakdown.tip ? "amber" : "neutral"} />
+                  <PriceBreakdownRow label="Estimated savings" value={breakdown.savingsEstimate} tone={breakdown.savingsEstimate ? "green" : "neutral"} />
+                </div>
+              </div>
+
+              <div style={{ marginTop: 16 }}>
                 <SectionHeader title="Extracted items" subcopy="Receipt line items pulled from OCR." />
                 {(draft.items || []).length ? (
                   <div className={styles.stackGrid}>
@@ -1283,7 +1365,7 @@ export function ReceiptExtractionModal({
                             <span>{item.name}</span>
                             <strong>{money(item.lineTotal || item.unitPrice || 0)}</strong>
                           </div>
-                          <div className={styles.merchantRowMeta}>qty {item.qty || 1}{item.needWant ? ` · ${item.needWant}` : ""}</div>
+                          <div className={styles.merchantRowMeta}>qty {item.qty || 1}{item.unitPrice ? ` · unit ${money(item.unitPrice)}` : ""}{item.needWant ? ` · ${item.needWant}` : ""}{/(discount|coupon|promo|savings|reward|markdown|member|loyalty|offer|deal)/i.test(item.name || "") ? " · discount" : ""}</div>
                         </div>
                       </div>
                     ))}
@@ -1317,7 +1399,7 @@ export function ReceiptExtractionModal({
                         <div className={styles.queueRowTop}>
                           <div>
                             <div className={styles.queueRowTitle}>{candidate.merchant}</div>
-                            <div className={styles.queueRowMeta}>{candidate.date} · {money(candidate.amount)}</div>
+                            <div className={styles.queueRowMeta}>{candidate.txDate || candidate.date} · {money(candidate.amount)}</div>
                           </div>
                           <Pill tone={candidate.score >= 85 ? "green" : candidate.score >= 60 ? "amber" : "neutral"}>{candidate.score}%</Pill>
                         </div>
@@ -1393,10 +1475,10 @@ export function TransactionDetailSheet({
             </div>
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "1.08fr 0.92fr", gap: 16 }}>
-            <div className={styles.storyCard}>
+          <div style={{ display: "grid", gridTemplateColumns: "1.08fr 0.92fr", gap: 16, alignItems: "start" }}>
+            <div className={styles.storyCard} style={{ minHeight: 600 }}>
               <SectionHeader title="Breakdown" subcopy="Use hidden tools here, not on the main page." />
-              <div className={styles.modalFooter} style={{ padding: 0, justifyContent: "flex-start", marginBottom: 12 }}>
+              <div className={styles.modalFooter} style={{ padding: 0, justifyContent: "flex-start", marginBottom: 20, gap: 14, rowGap: 14, flexWrap: "wrap", alignItems: "center" }}>
                 {type === "planned" ? (
                   <>
                     <ActionBtn onClick={onEditPlanned}>Edit</ActionBtn>
@@ -1412,10 +1494,10 @@ export function TransactionDetailSheet({
                   </>
                 )}
               </div>
-              <div className={styles.metricList}>
-                <div className={styles.metricInline}><span>Account</span><strong>{record.accountName || record.account || "—"}</strong></div>
-                <div className={styles.metricInline}><span>Method</span><strong>{record.paymentMethod || "—"}</strong></div>
-                <div className={styles.metricInline}><span>Note</span><strong>{record.note || "—"}</strong></div>
+              <div className={styles.stackGrid} style={{ marginBottom: 6 }}>
+                <div className={styles.queueRowCard}><div className={styles.queueRowTop}><div><div className={styles.queueRowTitle}>Account</div><div className={styles.queueRowMeta}>{record.accountName || record.account || "—"}</div></div></div></div>
+                <div className={styles.queueRowCard}><div className={styles.queueRowTop}><div><div className={styles.queueRowTitle}>Method</div><div className={styles.queueRowMeta}>{record.paymentMethod || "—"}</div></div></div></div>
+                <div className={styles.queueRowCard}><div className={styles.queueRowTop}><div><div className={styles.queueRowTitle}>Note</div><div className={styles.queueRowMeta}>{record.note || "—"}</div></div></div></div>
               </div>
 
               <div style={{ marginTop: 18 }}>
@@ -1430,7 +1512,7 @@ export function TransactionDetailSheet({
                             <span>{item.name}</span>
                             <strong>{money(item.lineTotal || item.unitPrice || 0)}</strong>
                           </div>
-                          <div className={styles.merchantRowMeta}>qty {item.qty || 1}{item.needWant ? ` · ${item.needWant}` : ""}</div>
+                          <div className={styles.merchantRowMeta}>qty {item.qty || 1}{item.unitPrice ? ` · unit ${money(item.unitPrice)}` : ""}{item.needWant ? ` · ${item.needWant}` : ""}{/(discount|coupon|promo|savings|reward|markdown|member|loyalty|offer|deal)/i.test(item.name || "") ? " · discount" : ""}</div>
                         </div>
                       </div>
                     ))}
@@ -1441,7 +1523,7 @@ export function TransactionDetailSheet({
               </div>
             </div>
 
-            <div className={styles.storyCard}>
+            <div className={styles.storyCard} style={{ minHeight: 600 }}>
               <SectionHeader title="Receipt preview" subcopy={isPremium ? "Receipt image and paid insights." : "Receipt image visible. Paid insights stay locked."} />
               {receiptPreview ? (
                 <img src={receiptPreview} alt="Receipt" style={{ width: "100%", borderRadius: 18, border: "1px solid rgba(255,255,255,0.08)", objectFit: "contain", background: "rgba(5,8,14,0.8)", maxHeight: 420 }} />
@@ -1450,9 +1532,9 @@ export function TransactionDetailSheet({
               )}
               <div style={{ marginTop: 16 }}>
                 {isPremium ? (
-                  <div className={styles.metricList}>
-                    <div className={styles.metricInline}><span>Attached items</span><strong>{receiptItems.length}</strong></div>
-                    <div className={styles.metricInline}><span>Receipt connected</span><strong>{receiptItems.length ? "Yes" : "No"}</strong></div>
+                  <div className={styles.stackGrid}>
+                    <div className={styles.queueRowCard}><div className={styles.queueRowTop}><div><div className={styles.queueRowTitle}>Attached items</div><div className={styles.queueRowMeta}>{receiptItems.length} parsed lines</div></div><Pill tone="blue">{receiptItems.length}</Pill></div></div>
+                    <div className={styles.queueRowCard}><div className={styles.queueRowTop}><div><div className={styles.queueRowTitle}>Receipt connected</div><div className={styles.queueRowMeta}>{receiptItems.length ? "Ready for premium insights" : "No receipt linked yet"}</div></div><Pill tone={receiptItems.length ? "green" : "neutral"}>{receiptItems.length ? "Yes" : "No"}</Pill></div></div>
                   </div>
                 ) : (
                   <EmptyCard title="Membership required" body="Advanced receipt intelligence is part of the paid plan." />
@@ -1761,7 +1843,8 @@ export function ControlModal({
         </div>
 
         <div className={styles.modalBody}>
-          <div className={styles.storyCard}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, alignItems: "start" }}>
+          <div className={styles.storyCard} style={{ minHeight: 248, borderRadius: 24 }}>
             <SectionHeader title="Budget controls" subcopy={`Adjust budgets for the current ${budgetMode} view.`} />
             <div className={styles.formGrid2}>
               <div className={styles.fieldBlock}>
@@ -1777,10 +1860,10 @@ export function ControlModal({
                 <input className={styles.field} value={budgetEditorValue} onChange={(e) => setBudgetEditorValue(e.target.value)} placeholder="0.00" inputMode="decimal" />
               </div>
             </div>
-            <ActionBtn variant="primary" onClick={onSaveBudgetValue} disabled={saving}>Save budget</ActionBtn>
+            <div style={{ display: "flex", gap: 12, marginTop: 14 }}><ActionBtn variant="primary" onClick={onSaveBudgetValue} disabled={saving}>Save budget</ActionBtn></div>
           </div>
 
-          <div className={styles.storyCard}>
+          <div className={styles.storyCard} style={{ minHeight: 248, borderRadius: 24 }}>
             <SectionHeader title="Add category" subcopy="Expand the system without cluttering the main page." />
             <div className={styles.formGrid2}>
               <div className={styles.fieldBlock}>
@@ -1796,10 +1879,12 @@ export function ControlModal({
                 </select>
               </div>
             </div>
-            <ActionBtn onClick={onSaveCategory} disabled={saving}>Save category</ActionBtn>
+            <div style={{ display: "flex", gap: 12, marginTop: 14 }}><ActionBtn onClick={onSaveCategory} disabled={saving}>Save category</ActionBtn></div>
           </div>
 
-          <div className={styles.storyCard}>
+          </div>
+
+          <div className={styles.storyCard} style={{ minHeight: 280, marginTop: 18, borderRadius: 24 }}>
             <SectionHeader title="Subscription review" subcopy="Recurring review lane kept outside real spend until you decide." />
             <div className={styles.stackGrid}>
               {subscriptionCandidates.length ? subscriptionCandidates.map((item) => (
@@ -1816,6 +1901,58 @@ export function ControlModal({
                 <EmptyCard title="No subscription candidates" body="Repeated merchant patterns will show up here." />
               )}
             </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function NotificationsModal({
+  open,
+  onClose,
+  notifications = [],
+  onJump,
+}) {
+  if (!open) return null;
+
+  return (
+    <div className={styles.modalBackdrop}>
+      <div className={styles.modalCard} style={{ width: "min(760px, 94vw)", maxWidth: 760, borderRadius: 28 }}>
+        <div className={styles.modalHeader}>
+          <div>
+            <div className={styles.modalEyebrow}>Notifications</div>
+            <div className={styles.modalTitle}>Signals worth opening</div>
+          </div>
+          <button type="button" className={styles.iconButton} onClick={onClose}>
+            <X size={14} />
+          </button>
+        </div>
+
+        <div className={styles.modalBody}>
+          <div className={styles.stackGrid}>
+            {notifications.length ? notifications.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                className={styles.queueRowCard}
+                onClick={() => {
+                  onJump?.(item.target || "dashboard");
+                  onClose?.();
+                }}
+                style={{ textAlign: "left", padding: 16, borderRadius: 20 }}
+              >
+                <div className={styles.queueRowTop}>
+                  <div>
+                    <div className={styles.queueRowTitle}>{item.title}</div>
+                    <div className={styles.queueRowMeta}>{item.body}</div>
+                  </div>
+                  <Pill tone={item.tone || "neutral"}>{item.target || "open"}</Pill>
+                </div>
+              </button>
+            )) : (
+              <EmptyCard title="No notifications" body="Nothing is demanding attention right now." />
+            )}
           </div>
         </div>
       </div>

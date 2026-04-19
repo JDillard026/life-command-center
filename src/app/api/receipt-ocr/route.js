@@ -35,7 +35,13 @@ function jsonError(message, status = 400) {
 async function getRequestContext(request) {
   const authorization = request.headers.get("authorization") || "";
   const requestClient = createSupabaseRequestClient(authorization);
-  const admin = createSupabaseAdminClient();
+
+  let admin = null;
+  try {
+    admin = createSupabaseAdminClient();
+  } catch {
+    admin = null;
+  }
 
   const {
     data: { user },
@@ -46,7 +52,10 @@ async function getRequestContext(request) {
     throw new Error("Unauthorized receipt request.");
   }
 
-  return { authorization, requestClient, admin, user };
+  const db = admin || requestClient;
+  const storage = admin || requestClient;
+
+  return { authorization, requestClient, admin, db, storage, user };
 }
 
 function buildCandidatePreview(transaction, receipt) {
@@ -55,6 +64,7 @@ function buildCandidatePreview(transaction, receipt) {
     merchant: transaction.merchant || transaction.note || "Transaction",
     amount: round2(transaction.amount),
     txDate: transaction.tx_date || "",
+    date: transaction.tx_date || "",
     paymentMethod: transaction.payment_method || "",
     cardLast4: transaction.card_last4 || "",
     sourceType: transaction.source_type || "manual",
@@ -63,7 +73,7 @@ function buildCandidatePreview(transaction, receipt) {
 }
 
 async function handlePreview(request) {
-  const { admin, user } = await getRequestContext(request);
+  const { db, storage, user } = await getRequestContext(request);
   const formData = await request.formData();
   const file = formData.get("file");
 
@@ -77,7 +87,7 @@ async function handlePreview(request) {
   const bucketName = process.env.SUPABASE_RECEIPTS_BUCKET || "receipts";
   const storagePath = buildReceiptStoragePath(user.id, fileName);
 
-  const { error: uploadError } = await admin.storage
+  const { error: uploadError } = await storage.storage
     .from(bucketName)
     .upload(storagePath, fileBuffer, {
       contentType,
@@ -95,8 +105,8 @@ async function handlePreview(request) {
     contentType,
   });
 
-  const matchedAccount = await findMatchingAccountByLast4(admin, user.id, receipt.cardLast4);
-  const imageUrl = await createSignedReceiptUrl(admin, bucketName, storagePath);
+  const matchedAccount = await findMatchingAccountByLast4(db, user.id, receipt.cardLast4);
+  const imageUrl = await createSignedReceiptUrl(storage, bucketName, storagePath);
   const receiptId = uid();
 
   const receiptRow = {
@@ -116,7 +126,7 @@ async function handlePreview(request) {
     raw_ocr_json: receipt.rawOcrJson || {},
   };
 
-  const { error: receiptInsertError } = await admin
+  const { error: receiptInsertError } = await db
     .from("spending_receipts")
     .insert([receiptRow]);
 
@@ -138,7 +148,7 @@ async function handlePreview(request) {
   }));
 
   if (itemRows.length) {
-    const { error: itemsError } = await admin
+    const { error: itemsError } = await db
       .from("spending_receipt_items")
       .insert(itemRows);
 
@@ -147,7 +157,7 @@ async function handlePreview(request) {
     }
   }
 
-  const candidatesRaw = await loadTransactionCandidates(admin, user.id, receipt.receiptDate);
+  const candidatesRaw = await loadTransactionCandidates(db, user.id, receipt.receiptDate);
   const candidates = candidatesRaw
     .map((transaction) => buildCandidatePreview(transaction, receipt))
     .filter((entry) => entry.score > 0)
@@ -168,6 +178,7 @@ async function handlePreview(request) {
       matchedAccountId: matchedAccount?.id || "",
       matchedAccountName: matchedAccount?.name || "",
       items: receipt.items || [],
+      breakdown: receipt.breakdown || null,
       candidates,
       suggestedMatchId: suggestedMatch?.id || "",
     },
@@ -175,7 +186,7 @@ async function handlePreview(request) {
 }
 
 async function handleCommit(request) {
-  const { admin, user } = await getRequestContext(request);
+  const { db, user } = await getRequestContext(request);
   const body = await request.json();
 
   const receiptId = String(body?.receiptId || "").trim();
@@ -190,7 +201,7 @@ async function handleCommit(request) {
     return jsonError("Missing receipt id.", 400);
   }
 
-  const { data: existingReceipt, error: receiptError } = await admin
+  const { data: existingReceipt, error: receiptError } = await db
     .from("spending_receipts")
     .select("*")
     .eq("id", receiptId)
@@ -201,7 +212,7 @@ async function handleCommit(request) {
     return jsonError("Receipt not found.", 404);
   }
 
-  const matchedAccount = await findMatchingAccountByLast4(admin, user.id, cardLast4 || existingReceipt.card_last4 || "");
+  const matchedAccount = await findMatchingAccountByLast4(db, user.id, cardLast4 || existingReceipt.card_last4 || "");
   const normalizedMerchant = normalizeMerchant(merchant || existingReceipt.merchant_raw || "");
 
   const receiptPatch = {
@@ -215,7 +226,7 @@ async function handleCommit(request) {
   };
 
   if (commitMode === "receipt_only") {
-    const { error: updateError } = await admin
+    const { error: updateError } = await db
       .from("spending_receipts")
       .update({
         ...receiptPatch,
@@ -244,7 +255,7 @@ async function handleCommit(request) {
 
     if (cardLast4) txPatch.card_last4 = cardLast4;
 
-    const { error: txError } = await admin
+    const { error: txError } = await db
       .from("spending_transactions")
       .update(txPatch)
       .eq("id", transactionId)
@@ -254,7 +265,7 @@ async function handleCommit(request) {
       return jsonError(txError.message || "Could not match receipt to transaction.", 500);
     }
 
-    const { error: receiptUpdateError } = await admin
+    const { error: receiptUpdateError } = await db
       .from("spending_receipts")
       .update({
         ...receiptPatch,
@@ -287,7 +298,7 @@ async function handleCommit(request) {
     matchedAccount,
   });
 
-  const { data: createdTx, error: createError } = await admin
+  const { data: createdTx, error: createError } = await db
     .from("spending_transactions")
     .insert([txPayload])
     .select("id,amount,merchant,tx_date,account_name,card_last4,created_at")
@@ -299,7 +310,7 @@ async function handleCommit(request) {
 
   if (matchedAccount) {
     await postReceiptExpenseLedger({
-      supabaseAdmin: admin,
+      supabaseAdmin: db,
       userId: user.id,
       account: matchedAccount,
       transaction: {
@@ -309,7 +320,7 @@ async function handleCommit(request) {
     });
   }
 
-  const { error: finalReceiptError } = await admin
+  const { error: finalReceiptError } = await db
     .from("spending_receipts")
     .update({
       ...receiptPatch,

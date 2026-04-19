@@ -38,6 +38,7 @@ import {
   QuickEntryModal,
   ReceiptCaptureModal,
   ReceiptExtractionModal,
+  NotificationsModal,
   ToastStack,
   TopStrip,
   TransactionDetailSheet,
@@ -249,6 +250,7 @@ export default function SpendingCommand() {
   const [composerKind, setComposerKind] = React.useState("create_tx");
   const [composerDraft, setComposerDraft] = React.useState(emptyDraft());
   const [controlsOpen, setControlsOpen] = React.useState(false);
+  const [notificationsOpen, setNotificationsOpen] = React.useState(false);
 
   const [newCategoryName, setNewCategoryName] = React.useState("");
   const [newCategoryGroup, setNewCategoryGroup] = React.useState("Other");
@@ -864,7 +866,7 @@ export default function SpendingCommand() {
 
       const payload = await readReceiptApiResponse(response);
       if (!response.ok || !payload?.ok) {
-        throw new Error(payload?.error || rawText || "Receipt processing failed.");
+        throw new Error(payload?.error || "Receipt processing failed.");
       }
 
       setReceiptDraft({
@@ -877,6 +879,7 @@ export default function SpendingCommand() {
         matchedAccountId: payload.receipt.matchedAccountId || "",
         matchedAccountName: payload.receipt.matchedAccountName || "",
         items: payload.receipt.items || [],
+        breakdown: payload.receipt.breakdown || null,
         candidates: payload.receipt.candidates || [],
         selectedCandidateId: payload.receipt.suggestedMatchId || payload.receipt.candidates?.[0]?.id || "",
       });
@@ -925,7 +928,7 @@ export default function SpendingCommand() {
 
       const payload = await readReceiptApiResponse(response);
       if (!response.ok || !payload?.ok) {
-        throw new Error(payload?.error || rawText || "Receipt finalization failed.");
+        throw new Error(payload?.error || "Receipt finalization failed.");
       }
 
       setReceiptReviewOpen(false);
@@ -1451,6 +1454,7 @@ export default function SpendingCommand() {
         setSearch={setSearch}
         onOpenComposer={openCreateTransaction}
         onOpenControls={() => setControlsOpen(true)}
+        onOpenNotifications={() => setNotificationsOpen(true)}
         onScanReceipt={openReceiptPicker}
         receiptBusy={receiptBusy}
       />
@@ -1461,11 +1465,11 @@ export default function SpendingCommand() {
           display: "grid",
           gridTemplateColumns: "minmax(300px, 420px) minmax(0, 1fr)",
           gap: 16,
-          alignItems: "stretch",
+          alignItems: "start",
           width: "100%",
         }}
       >
-        <section className={styles.workspaceFeed} style={{ minWidth: 0, width: "100%", alignSelf: "stretch" }}>
+        <section className={styles.workspaceFeed} style={{ minWidth: 0, width: "100%", alignSelf: "start" }}>
           <FeedPane
             railMode={railMode}
             setRailMode={setRailMode}
@@ -1552,6 +1556,13 @@ export default function SpendingCommand() {
         categories={categories}
         accounts={accounts}
         onSave={saveComposer}
+      />
+
+      <NotificationsModal
+        open={notificationsOpen}
+        onClose={() => setNotificationsOpen(false)}
+        notifications={notifications}
+        onJump={(target) => setWorkspaceMode(target || "dashboard")}
       />
 
       <ControlModal

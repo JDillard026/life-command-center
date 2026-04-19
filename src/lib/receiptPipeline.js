@@ -1,3 +1,5 @@
+import { AnalyzeExpenseCommand, TextractClient } from "@aws-sdk/client-textract";
+
 function pad2(value) {
   return String(value).padStart(2, "0");
 }
@@ -122,6 +124,83 @@ function guessNeedWant(name) {
   return "unknown";
 }
 
+function isDiscountLabel(value) {
+  return /(discount|coupon|promo|savings|reward|markdown|member|loyalty|offer|deal)/i.test(cleanString(value));
+}
+
+function summarizePricingBreakdown(root, items, fallbackTotal) {
+  const subtotalExplicit = moneyFromValue(
+    firstPresent(
+      root?.subtotal,
+      root?.sub_total,
+      root?.pre_tax_total,
+      root?.item_total,
+      root?.merchandise_total,
+      root?.breakdown?.subtotal
+    )
+  );
+
+  const tax = moneyFromValue(
+    firstPresent(root?.tax, root?.tax_total, root?.sales_tax, root?.breakdown?.tax)
+  ) ?? 0;
+
+  const tip = moneyFromValue(
+    firstPresent(root?.tip, root?.gratuity, root?.breakdown?.tip)
+  ) ?? 0;
+
+  const fees = moneyFromValue(
+    firstPresent(
+      root?.fees,
+      root?.fee,
+      root?.service_charge,
+      root?.service_fee,
+      root?.delivery_fee,
+      root?.breakdown?.fees
+    )
+  ) ?? 0;
+
+  const explicitDiscounts = moneyFromValue(
+    firstPresent(
+      root?.discount,
+      root?.discount_total,
+      root?.coupon,
+      root?.coupon_total,
+      root?.savings,
+      root?.promotion,
+      root?.breakdown?.discounts,
+      root?.breakdown?.savings
+    )
+  );
+
+  let detectedDiscounts = 0;
+  let positiveItemSubtotal = 0;
+
+  for (const item of items || []) {
+    const lineTotal = Number(item?.lineTotal ?? item?.unitPrice ?? 0) || 0;
+    const isDiscount = lineTotal < 0 || isDiscountLabel(item?.name);
+
+    if (isDiscount) {
+      detectedDiscounts += Math.abs(lineTotal);
+    } else if (lineTotal > 0) {
+      positiveItemSubtotal += lineTotal;
+    }
+  }
+
+  const discounts = explicitDiscounts ?? detectedDiscounts;
+  const subtotal = subtotalExplicit ?? (positiveItemSubtotal > 0 ? roundMoney(positiveItemSubtotal) : null);
+  const total = moneyFromValue(firstPresent(root?.total, root?.grand_total, root?.receipt_total, root?.amount_total, root?.amount, root?.breakdown?.total, fallbackTotal)) ?? 0;
+
+  return {
+    subtotal: subtotal ?? 0,
+    tax,
+    tip,
+    fees,
+    discounts,
+    total,
+    savingsEstimate: discounts,
+  };
+}
+
 export function normalizeReceiptItems(rawItems = []) {
   if (!Array.isArray(rawItems)) return [];
 
@@ -202,26 +281,201 @@ export function normalizeReceiptOcrPayload(payload) {
 
   const merchantNormalized = normalizeMerchant(merchantRaw);
   const guessedCategoryId = guessCategoryFromText(`${merchantRaw} ${items.map((item) => item.name).join(" ")}`);
+  const breakdown = summarizePricingBreakdown(root, items, total);
 
   return {
     merchantRaw,
     merchantNormalized,
-    total: total ?? 0,
+    total: breakdown.total ?? total ?? 0,
     receiptDate: receiptDate || todayISO(),
     cardLast4,
     items,
+    breakdown,
     guessedCategoryId,
     rawOcrJson: payload,
   };
 }
 
+
+function hasAwsTextractConfig() {
+  return Boolean(
+    process.env.AWS_REGION &&
+      process.env.AWS_ACCESS_KEY_ID &&
+      process.env.AWS_SECRET_ACCESS_KEY
+  );
+}
+
+function buildTextractClient() {
+  return new TextractClient({
+    region: process.env.AWS_REGION,
+    credentials: {
+      accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+      secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+      ...(process.env.AWS_SESSION_TOKEN
+        ? { sessionToken: process.env.AWS_SESSION_TOKEN }
+        : {}),
+    },
+  });
+}
+
+function textractFieldValue(field) {
+  return cleanString(
+    firstPresent(
+      field?.ValueDetection?.Text,
+      field?.LabelDetection?.Text,
+      field?.Type?.Text
+    )
+  );
+}
+
+function textractSummaryLookup(summaryFields = []) {
+  const lookup = new Map();
+
+  for (const field of summaryFields) {
+    const key = cleanString(field?.Type?.Text).toUpperCase();
+    const value = textractFieldValue(field);
+    if (!key || !value) continue;
+    if (!lookup.has(key)) lookup.set(key, []);
+    lookup.get(key).push(value);
+  }
+
+  return lookup;
+}
+
+function textractFirst(lookup, ...keys) {
+  for (const key of keys) {
+    const values = lookup.get(String(key || "").toUpperCase());
+    if (values?.length) return values[0];
+  }
+  return null;
+}
+
+function parseTextractItems(expenseDocument) {
+  const groups = expenseDocument?.LineItemGroups || [];
+  const items = [];
+
+  for (const group of groups) {
+    for (const lineItem of group?.LineItems || []) {
+      const fields = lineItem?.LineItemExpenseFields || [];
+      const lookup = new Map();
+
+      for (const field of fields) {
+        const key = cleanString(field?.Type?.Text).toUpperCase();
+        const value = textractFieldValue(field);
+        if (!key || !value) continue;
+        lookup.set(key, value);
+      }
+
+      items.push({
+        name:
+          lookup.get("ITEM") ||
+          lookup.get("DESCRIPTION") ||
+          lookup.get("PRODUCT_CODE") ||
+          "Receipt item",
+        qty: moneyFromValue(lookup.get("QUANTITY")) || 1,
+        unit_price:
+          moneyFromValue(lookup.get("UNIT_PRICE")) ||
+          moneyFromValue(lookup.get("PRICE")) ||
+          null,
+        line_total:
+          moneyFromValue(lookup.get("PRICE")) ||
+          moneyFromValue(lookup.get("AMOUNT")) ||
+          moneyFromValue(lookup.get("TOTAL")) ||
+          null,
+      });
+    }
+  }
+
+  return items;
+}
+
+function extractTextractPayload(response) {
+  const expenseDocument = response?.ExpenseDocuments?.[0] || null;
+  if (!expenseDocument) {
+    throw new Error("AWS Textract returned no expense document.");
+  }
+
+  const summaryLookup = textractSummaryLookup(expenseDocument.SummaryFields || []);
+  const rawItems = parseTextractItems(expenseDocument);
+
+  const merchant = firstPresent(
+    textractFirst(summaryLookup, "VENDOR_NAME"),
+    textractFirst(summaryLookup, "RECEIVER_NAME"),
+    textractFirst(summaryLookup, "SUPPLIER_NAME"),
+    textractFirst(summaryLookup, "STORE_NAME")
+  );
+
+  const total = firstPresent(
+    textractFirst(summaryLookup, "TOTAL"),
+    textractFirst(summaryLookup, "AMOUNT_DUE"),
+    textractFirst(summaryLookup, "SUBTOTAL")
+  );
+
+  const receiptDate = firstPresent(
+    textractFirst(summaryLookup, "INVOICE_RECEIPT_DATE"),
+    textractFirst(summaryLookup, "DATE"),
+    textractFirst(summaryLookup, "TRANSACTION_DATE")
+  );
+
+  const cardLast4 = firstPresent(
+    textractFirst(summaryLookup, "LAST4"),
+    textractFirst(summaryLookup, "CARD_LAST4"),
+    textractFirst(summaryLookup, "ACCOUNT_NUMBER")
+  );
+
+  return normalizeReceiptOcrPayload({
+    receipt: {
+      merchant,
+      total,
+      date: receiptDate,
+      card_last4: cardLast4,
+      subtotal: textractFirst(summaryLookup, "SUBTOTAL"),
+      tax: textractFirst(summaryLookup, "TAX"),
+      discount: firstPresent(
+        textractFirst(summaryLookup, "DISCOUNT"),
+        textractFirst(summaryLookup, "COUPON"),
+        textractFirst(summaryLookup, "PROMOTION")
+      ),
+      tip: firstPresent(
+        textractFirst(summaryLookup, "TIP"),
+        textractFirst(summaryLookup, "GRATUITY")
+      ),
+      fees: firstPresent(
+        textractFirst(summaryLookup, "SERVICE_CHARGE"),
+        textractFirst(summaryLookup, "SERVICE_FEE"),
+        textractFirst(summaryLookup, "DELIVERY_FEE")
+      ),
+      items: rawItems,
+    },
+    textract: response,
+  });
+}
+
+async function callAwsTextractReceiptOcr({ fileBuffer }) {
+  const client = buildTextractClient();
+  const command = new AnalyzeExpenseCommand({
+    Document: {
+      Bytes: fileBuffer,
+    },
+  });
+
+  const response = await client.send(command);
+  return extractTextractPayload(response);
+}
+
 export async function callReceiptOcr({ fileBuffer, fileName, contentType }) {
+  if (hasAwsTextractConfig()) {
+    return callAwsTextractReceiptOcr({ fileBuffer, fileName, contentType });
+  }
+
   const url = process.env.RECEIPT_OCR_API_URL;
   const apiKey = process.env.RECEIPT_OCR_API_KEY;
   const authHeader = cleanString(process.env.RECEIPT_OCR_AUTH_HEADER || "x-api-key");
 
   if (!url || !apiKey) {
-    throw new Error("Receipt OCR is not configured.");
+    throw new Error(
+      "Receipt OCR is not configured. Add AWS Textract envs or RECEIPT_OCR_API_URL / RECEIPT_OCR_API_KEY."
+    );
   }
 
   const body = {
