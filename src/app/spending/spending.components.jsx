@@ -730,6 +730,7 @@ function CoachPane({ selectedTx, selectedBudgetRow, merchantStats, betterBuyIdea
   );
 }
 
+
 export function TopStrip({
   totals,
   expenseTrend,
@@ -739,24 +740,16 @@ export function TopStrip({
   setPeriod,
   search,
   setSearch,
-  mode,
-  setMode,
   onOpenComposer,
   onOpenControls,
+  onScanReceipt,
+  receiptBusy = false,
 }) {
-  const [menuOpen, setMenuOpen] = React.useState(false);
   const overBudgetRows = totalsByCategory.filter((row) => row.budget > 0 && row.forecast > row.budget);
   const overBudgetAmount = overBudgetRows.reduce(
     (sum, row) => sum + Math.max(0, Number(row.forecast) - Number(row.budget)),
     0
   );
-
-  const tabs = [
-    { id: "dashboard", label: "Dashboard" },
-    { id: "breakdown", label: "Transaction Breakdown" },
-    { id: "shopping", label: "Shopping List" },
-    { id: "coach", label: "Coach" },
-  ];
 
   return (
     <div className={styles.topShell}>
@@ -781,10 +774,22 @@ export function TopStrip({
         </div>
 
         <div className={styles.topActions}>
+          <select value={period} onChange={(e) => setPeriod(e.target.value)} className={styles.topSelect}>
+            <option value="week">This week</option>
+            <option value="month">This month</option>
+            <option value="year">This year</option>
+          </select>
+          <button type="button" className={styles.notificationButton} onClick={onOpenControls} title="Page controls">
+            <SlidersHorizontal size={15} />
+          </button>
           <button type="button" className={styles.notificationButton}>
             <Bell size={15} />
             {overBudgetRows.length ? <span className={styles.notificationBadge}>{overBudgetRows.length}</span> : null}
           </button>
+          <ActionBtn onClick={onScanReceipt} disabled={receiptBusy}>
+            <Receipt size={14} />
+            {receiptBusy ? "Opening camera..." : "Scan receipt"}
+          </ActionBtn>
           <ActionBtn variant="primary" onClick={onOpenComposer}><Plus size={14} />Add transaction</ActionBtn>
         </div>
       </div>
@@ -792,77 +797,71 @@ export function TopStrip({
       <div className={styles.kpiRow}>
         <div className={styles.kpiCard}>
           <span>Spent this month</span>
-          <strong>{money(totals.expense || 0)}</strong>
+          <strong style={{ letterSpacing: "-0.04em", lineHeight: 1 }}>{money(totals.expense || 0)}</strong>
           <small>{expenseTrend?.value || "0%"} vs prior month</small>
         </div>
         <div className={styles.kpiCard}>
           <span>Income</span>
-          <strong>{money(totals.income || 0)}</strong>
+          <strong style={{ letterSpacing: "-0.04em", lineHeight: 1 }}>{money(totals.income || 0)}</strong>
           <small>Money in</small>
         </div>
         <div className={styles.kpiCard}>
           <span>Planned</span>
-          <strong>{money(totals.plannedExpense || 0)}</strong>
+          <strong style={{ letterSpacing: "-0.04em", lineHeight: 1 }}>{money(totals.plannedExpense || 0)}</strong>
           <small>Future pressure</small>
         </div>
         <div className={styles.kpiCard}>
           <span>Forecast left</span>
-          <strong className={forecastRemaining < 0 ? styles.textRed : styles.textGreen}>{money(forecastRemaining || 0)}</strong>
+          <strong className={forecastRemaining < 0 ? styles.textRed : styles.textGreen} style={{ letterSpacing: "-0.04em", lineHeight: 1 }}>{money(forecastRemaining || 0)}</strong>
           <small>Budget room left</small>
         </div>
         <div className={styles.kpiCard}>
           <span>Over budget</span>
-          <strong className={overBudgetAmount > 0 ? styles.textRed : styles.textGreen}>{money(overBudgetAmount)}</strong>
+          <strong className={overBudgetAmount > 0 ? styles.textRed : styles.textGreen} style={{ letterSpacing: "-0.04em", lineHeight: 1 }}>{money(overBudgetAmount)}</strong>
           <small>{overBudgetRows.length} hot lanes</small>
-        </div>
-      </div>
-
-      <div className={styles.pageNavRow}>
-        <div className={styles.modeTabs}>
-          {tabs.map((tab) => (
-            <button
-              key={tab.id}
-              type="button"
-              className={cx(styles.modeTab, mode === tab.id ? styles.modeTabActive : "")}
-              onClick={() => setMode(tab.id)}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-
-        <div className={styles.topTools}>
-          <select value={period} onChange={(e) => setPeriod(e.target.value)} className={styles.topSelect}>
-            <option value="week">This week</option>
-            <option value="month">This month</option>
-            <option value="year">This year</option>
-          </select>
-
-          <div className={styles.actionMenuWrap}>
-            <button type="button" className={styles.iconButton} onClick={() => setMenuOpen((v) => !v)}>
-              <SlidersHorizontal size={14} />
-            </button>
-            {menuOpen ? (
-              <div className={styles.actionMenu}>
-                <button type="button" className={styles.actionMenuItem} onClick={() => { setMenuOpen(false); onOpenComposer?.(); }}>
-                  <Plus size={14} /> New entry
-                </button>
-                <button type="button" className={styles.actionMenuItem} onClick={() => { setMenuOpen(false); onOpenControls?.(); }}>
-                  <PiggyBank size={14} /> Controls
-                </button>
-                <button type="button" className={styles.actionMenuItem} onClick={() => { setMenuOpen(false); setMode?.("shopping"); }}>
-                  <ShoppingCart size={14} /> Open shopping list
-                </button>
-              </div>
-            ) : null}
-          </div>
         </div>
       </div>
     </div>
   );
 }
 
-export function FeedPane({ transactions, plannedItems, selectedRecord, onSelect }) {
+function ItemFeedRow({ item, selected, onClick }) {
+  return (
+    <button
+      type="button"
+      className={cx(styles.feedRow, selected ? styles.feedRowActive : "")}
+      onClick={onClick}
+    >
+      <MerchantMark merchant={item.merchant || item.name || "Item"} />
+      <div className={styles.feedMain}>
+        <div className={styles.feedTop}>
+          <div className={styles.feedTitle}>
+            <span className={styles.feedName}>{item.name}</span>
+            <span className={styles.feedMicro}>{item.merchant || "Receipt item"}</span>
+          </div>
+          <div className={styles.feedAmount} style={{ letterSpacing: "-0.03em", lineHeight: 1 }}>{money(item.lineTotal || item.unitPrice || 0)}</div>
+        </div>
+        <div className={styles.feedMeta}>
+          <Receipt size={12} />
+          {shortDate(item.receiptDate)} · qty {item.qty || 1}
+          {item.needWant ? ` · ${item.needWant}` : ""}
+          {item.cardLast4 ? ` · card ${item.cardLast4}` : ""}
+        </div>
+      </div>
+    </button>
+  );
+}
+
+export function FeedPane({
+  railMode = "transactions",
+  setRailMode,
+  transactions = [],
+  plannedItems = [],
+  receiptItems = [],
+  selectedRecord = { kind: "tx", id: null },
+  onSelect,
+  onOpenTransactionSheet,
+}) {
   const [feedFilter, setFeedFilter] = React.useState("all");
 
   const filteredTransactions = React.useMemo(() => {
@@ -877,105 +876,234 @@ export function FeedPane({ transactions, plannedItems, selectedRecord, onSelect 
   return (
     <GlassPane tone="neutral" size="card" className={styles.feedPane}>
       <SectionHeader
-        title="Transactions"
-        subcopy="Fast rail for row selection"
-        right={<Pill tone="blue">{transactions.length + plannedItems.length}</Pill>}
+        title={railMode === "items" ? "Receipt items" : "Transactions"}
+        subcopy={railMode === "items" ? "See every item pulled from receipts." : "Fast rail for row selection"}
+        right={<Pill tone="blue">{railMode === "items" ? receiptItems.length : transactions.length + plannedItems.length}</Pill>}
       />
 
       <div className={styles.feedTabs}>
         {[
-          { id: "all", label: "All" },
-          { id: "expense", label: "Expenses" },
-          { id: "income", label: "Income" },
-          { id: "planned", label: "Planned" },
+          { id: "transactions", label: "Transactions" },
+          { id: "items", label: "Items" },
         ].map((item) => (
           <button
             key={item.id}
             type="button"
-            className={cx(styles.feedTab, feedFilter === item.id ? styles.feedTabActive : "")}
-            onClick={() => setFeedFilter(item.id)}
+            className={cx(styles.feedTab, railMode === item.id ? styles.feedTabActive : "")}
+            onClick={() => setRailMode(item.id)}
           >
             {item.label}
           </button>
         ))}
       </div>
 
-      <div className={styles.feedList}>
-        {filteredTransactions.map((tx) => {
-          const selected = selectedRecord.kind === "tx" && selectedRecord.id === tx.id;
-          const tone = toneForType(tx.type);
-          const Icon = iconForType(tx.type);
+      {railMode === "transactions" ? (
+        <>
+          <div className={styles.feedTabs}>
+            {[
+              { id: "all", label: "All" },
+              { id: "expense", label: "Expenses" },
+              { id: "income", label: "Income" },
+              { id: "planned", label: "Planned" },
+            ].map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                className={cx(styles.feedTab, feedFilter === item.id ? styles.feedTabActive : "")}
+                onClick={() => setFeedFilter(item.id)}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
 
-          return (
-            <button
-              key={tx.id}
-              type="button"
-              className={cx(styles.feedRow, selected ? styles.feedRowActive : "")}
-              onClick={() => onSelect({ kind: "tx", id: tx.id })}
-            >
-              <MerchantMark merchant={tx.merchant || tx.note || tx.type} />
-              <div className={styles.feedMain}>
-                <div className={styles.feedTop}>
-                  <div className={styles.feedTitle}>
-                    <span className={styles.feedName}>{tx.merchant || tx.note || tx.type}</span>
-                    <span className={styles.feedMicro}>{formatRailAccountLine(tx)}</span>
+          <div className={styles.feedList}>
+            {filteredTransactions.map((tx) => {
+              const selected = selectedRecord.kind === "tx" && selectedRecord.id === tx.id;
+              const tone = toneForType(tx.type);
+              const Icon = iconForType(tx.type);
+
+              return (
+                <button
+                  key={tx.id}
+                  type="button"
+                  className={cx(styles.feedRow, selected ? styles.feedRowActive : "")}
+                  style={{ minHeight: 88, paddingTop: 12, paddingBottom: 12 }}
+                  onClick={() => onSelect({ kind: "tx", id: tx.id })}
+                >
+                  <MerchantMark merchant={tx.merchant || tx.note || tx.type} />
+                  <div className={styles.feedMain}>
+                    <div className={styles.feedTop}>
+                      <div className={styles.feedTitle}>
+                        <span className={styles.feedName}>{tx.merchant || tx.note || tx.type}</span>
+                        <span className={styles.feedMicro}>{formatRailAccountLine(tx)}</span>
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <div className={cx(styles.feedAmount, styles[`feedAmount_${tone}`])} style={{ letterSpacing: "-0.03em", lineHeight: 1 }}>{money(tx.amount)}</div>
+                        <button
+                          type="button"
+                          className={styles.iconButton}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            onOpenTransactionSheet?.(tx);
+                          }}
+                          title="Transaction tools"
+                        >
+                          <MoreHorizontal size={14} />
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className={styles.feedMeta}>
+                      <Icon size={12} />
+                      {shortDate(tx.date)} · {fmtTime(tx.time)} · {tx.type}
+                      {tx.paymentMethod ? ` · ${tx.paymentMethod}` : ""}
+                      {tx.sourceType === "receipt" ? " · receipt" : ""}
+                      {tx.receiptId ? " · attached" : ""}
+                    </div>
                   </div>
-                  <div className={cx(styles.feedAmount, styles[`feedAmount_${tone}`])}>{money(tx.amount)}</div>
-                </div>
+                </button>
+              );
+            })}
 
-                <div className={styles.feedMeta}>
-                  <Icon size={12} />
-                  {shortDate(tx.date)} · {fmtTime(tx.time)} · {tx.type}
-                  {tx.paymentMethod ? ` · ${tx.paymentMethod}` : ""}
-                  {isBillManagedTransaction(tx) ? " · bills-owned" : ""}
-                </div>
-              </div>
-            </button>
-          );
-        })}
+            {showPlanned && plannedItems.length ? <div className={styles.feedDivider}>Planned</div> : null}
 
-        {showPlanned && plannedItems.length ? <div className={styles.feedDivider}>Planned</div> : null}
+            {showPlanned && plannedItems.map((item) => {
+              const selected = selectedRecord.kind === "planned" && selectedRecord.id === item.id;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  className={cx(styles.feedRow, selected ? styles.feedRowActive : "")}
+                  style={{ minHeight: 84, paddingTop: 12, paddingBottom: 12 }}
+                  onClick={() => onSelect({ kind: "planned", id: item.id })}
+                >
+                  <div className={cx(styles.merchantMark, styles.merchantMark_amber)}>
+                    <Receipt size={15} />
+                  </div>
+                  <div className={styles.feedMain}>
+                    <div className={styles.feedTop}>
+                      <div className={styles.feedTitle}>
+                        <span className={styles.feedName}>{item.merchant || item.note || "Planned item"}</span>
+                        <span className={styles.feedMicro}>planned pressure</span>
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <div className={cx(styles.feedAmount, styles.feedAmount_amber)} style={{ letterSpacing: "-0.03em", lineHeight: 1 }}>{money(item.amount)}</div>
+                        <button
+                          type="button"
+                          className={styles.iconButton}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            onOpenTransactionSheet?.(item, "planned");
+                          }}
+                          title="Planned tools"
+                        >
+                          <MoreHorizontal size={14} />
+                        </button>
+                      </div>
+                    </div>
+                    <div className={styles.feedMeta}>
+                      <Receipt size={12} />
+                      {shortDate(item.date)} · {fmtTime(item.time)}
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
 
-        {showPlanned && plannedItems.map((item) => {
-          const selected = selectedRecord.kind === "planned" && selectedRecord.id === item.id;
-          return (
-            <button
+            {!filteredTransactions.length && !(showPlanned && plannedItems.length) ? (
+              <EmptyCard title="Nothing visible" body="No rows match the current rail filter." />
+            ) : null}
+          </div>
+        </>
+      ) : (
+        <div className={styles.feedList}>
+          {(receiptItems || []).map((item) => (
+            <ItemFeedRow
               key={item.id}
-              type="button"
-              className={cx(styles.feedRow, selected ? styles.feedRowActive : "")}
-              onClick={() => onSelect({ kind: "planned", id: item.id })}
-            >
-              <div className={cx(styles.merchantMark, styles.merchantMark_amber)}>
-                <Receipt size={15} />
-              </div>
-              <div className={styles.feedMain}>
-                <div className={styles.feedTop}>
-                  <div className={styles.feedTitle}>
-                    <span className={styles.feedName}>{item.merchant || item.note || "Planned item"}</span>
-                    <span className={styles.feedMicro}>planned pressure</span>
-                  </div>
-                  <div className={cx(styles.feedAmount, styles.feedAmount_amber)}>{money(item.amount)}</div>
-                </div>
-
-                <div className={styles.feedMeta}>
-                  <Receipt size={12} />
-                  {shortDate(item.date)} · {fmtTime(item.time)}
-                </div>
-              </div>
-            </button>
-          );
-        })}
-
-        {!filteredTransactions.length && !(showPlanned && plannedItems.length) ? (
-          <EmptyCard title="Nothing visible" body="No rows match the current rail filter." />
-        ) : null}
-      </div>
+              item={item}
+              selected={selectedRecord.kind === "item" && selectedRecord.id === item.id}
+              onClick={() => onSelect({ kind: "item", id: item.id })}
+            />
+          ))}
+          {!receiptItems.length ? (
+            <EmptyCard title="No receipt items yet" body="Scan a receipt and the individual line items will show up here." />
+          ) : null}
+        </div>
+      )}
     </GlassPane>
+  );
+}
+
+function ItemWorkspace({ selectedItem, itemStats }) {
+  if (!selectedItem) {
+    return <EmptyCard title="No item selected" body="Switch the left rail to Items and pick a receipt item." />;
+  }
+
+  return (
+    <div className={styles.workspaceBody}>
+      <div className={styles.storyGrid}>
+        <div className={styles.storyCard}>
+          <SectionHeader title="Item detail" subcopy="This is the individual receipt line, not the whole transaction." />
+          <div className={styles.dockCard}>
+            <div className={styles.heroTop}>
+              <div className={styles.heroIdentity}>
+                <MerchantMark merchant={selectedItem.merchant || selectedItem.name} size="lg" />
+                <div className={styles.heroText}>
+                  <div className={styles.heroName}>{selectedItem.name}</div>
+                  <div className={styles.heroMeta}>{selectedItem.merchant || "Receipt"} · {shortDate(selectedItem.receiptDate)} · qty {selectedItem.qty || 1}</div>
+                </div>
+              </div>
+              <div className={styles.heroRight}>
+                <Pill tone={selectedItem.needWant === "need" ? "green" : selectedItem.needWant === "want" ? "amber" : "neutral"}>{selectedItem.needWant || "unscored"}</Pill>
+                <div className={styles.heroAmount} style={{ letterSpacing: "-0.04em", lineHeight: 1 }}>{money(selectedItem.lineTotal || selectedItem.unitPrice || 0)}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className={styles.storyCard}>
+          <SectionHeader title="Your history" subcopy="Real history from your own scanned receipts." />
+          <div className={styles.statGrid}>
+            <InsightStat label="This month" value={`${itemStats.monthCount}x`} subcopy="bought" tone="blue" />
+            <InsightStat label="This year" value={`${itemStats.yearCount}x`} subcopy="bought" tone="green" />
+            <InsightStat label="Avg price" value={money(itemStats.avgPrice)} subcopy="your own receipts" tone="amber" />
+          </div>
+        </div>
+      </div>
+
+      <div className={styles.storyGrid}>
+        <div className={styles.storyCard}>
+          <SectionHeader title="Price read" subcopy="Real stats first. Store comparison comes later." />
+          <div className={styles.metricList}>
+            <div className={styles.metricInline}><span>Lowest you paid</span><strong>{money(itemStats.lowPrice)}</strong></div>
+            <div className={styles.metricInline}><span>Highest you paid</span><strong>{money(itemStats.highPrice)}</strong></div>
+            <div className={styles.metricInline}><span>Last paid</span><strong>{money(selectedItem.lineTotal || selectedItem.unitPrice || 0)}</strong></div>
+          </div>
+          <div className={styles.sectionSub}>No outside cheaper-store engine is wired yet, so this view sticks to real data you actually have.</div>
+        </div>
+
+        <div className={styles.storyCard}>
+          <SectionHeader title="Receipt source" subcopy="Where this item came from." />
+          {selectedItem.imageUrl ? (
+            <img
+              src={selectedItem.imageUrl}
+              alt={selectedItem.name}
+              style={{ width: "100%", borderRadius: 18, border: "1px solid rgba(255,255,255,0.08)", objectFit: "cover", maxHeight: 320 }}
+            />
+          ) : (
+            <EmptyCard title="No preview" body="The receipt image is not available for this item yet." />
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
 
 export function MainWorkspacePane({
   mode,
+  setMode,
+  railMode,
   totals,
   notifications,
   topMerchants,
@@ -983,6 +1111,8 @@ export function MainWorkspacePane({
   selectedTx,
   selectedPlanned,
   selectedBudgetRow,
+  selectedItem,
+  itemStats,
   categoriesById,
   merchantStats,
   betterBuyIdeas,
@@ -994,24 +1124,56 @@ export function MainWorkspacePane({
   onEditPlanned,
   onConvertPlanned,
   onDeletePlanned,
+  membershipLevel = "free",
 }) {
+  const isPremium = membershipLevel !== "free";
+  const tabs = [
+    { id: "dashboard", label: "Total" },
+    { id: "breakdown", label: railMode === "items" ? "Item detail" : "Breakdown" },
+    { id: "shopping", label: "Shopping List" },
+    { id: "coach", label: "Coach" },
+  ];
+
   return (
     <GlassPane tone="neutral" size="card" className={styles.workspacePane}>
-      {mode === "dashboard" ? (
+      <div className={styles.sectionHeader} style={{ marginBottom: 12 }}>
+        <div>
+          <div className={styles.sectionTitle}>{railMode === "items" ? "Item workspace" : "Spending workspace"}</div>
+          <div className={styles.sectionSub}>{railMode === "items" ? "Individual receipt item view" : "Main page views moved into the workspace where they belong"}</div>
+        </div>
+        <div className={styles.modeTabs}>
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              className={cx(styles.modeTab, mode === tab.id ? styles.modeTabActive : "")}
+              onClick={() => setMode(tab.id)}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {railMode === "items" ? (
+        <ItemWorkspace selectedItem={selectedItem} itemStats={itemStats} />
+      ) : null}
+
+      {railMode === "transactions" && mode === "dashboard" ? (
         <DashboardPane
           totals={totals}
-          notifications={notifications}
+          notifications={isPremium ? notifications : []}
           topMerchants={topMerchants}
           totalsByCategory={totalsByCategory}
           selectedTx={selectedTx}
           selectedBudgetRow={selectedBudgetRow}
           categoriesById={categoriesById}
           merchantStats={merchantStats}
-          betterBuyIdeas={betterBuyIdeas}
+          betterBuyIdeas={isPremium ? betterBuyIdeas : []}
         />
       ) : null}
 
-      {mode === "breakdown" ? (
+      {railMode === "transactions" && mode === "breakdown" ? (
         <BreakdownPane
           selectedTx={selectedTx}
           selectedPlanned={selectedPlanned}
@@ -1027,22 +1189,410 @@ export function MainWorkspacePane({
         />
       ) : null}
 
-      {mode === "shopping" ? (
-        <ShoppingPane betterBuyIdeas={betterBuyIdeas} queuedIdeas={queuedIdeas} onQueueIdea={onQueueIdea} />
+      {railMode === "transactions" && mode === "shopping" ? (
+        isPremium ? (
+          <ShoppingPane betterBuyIdeas={betterBuyIdeas} queuedIdeas={queuedIdeas} onQueueIdea={onQueueIdea} />
+        ) : (
+          <EmptyCard title="Membership required" body="Shopping intelligence is part of the paid plan." />
+        )
       ) : null}
 
-      {mode === "coach" ? (
-        <CoachPane
-          selectedTx={selectedTx}
-          selectedBudgetRow={selectedBudgetRow}
-          merchantStats={merchantStats}
-          betterBuyIdeas={betterBuyIdeas}
-          queuedIdeas={queuedIdeas}
-          onQueueIdea={onQueueIdea}
-          categoriesById={categoriesById}
-        />
+      {railMode === "transactions" && mode === "coach" ? (
+        isPremium ? (
+          <CoachPane
+            selectedTx={selectedTx}
+            selectedBudgetRow={selectedBudgetRow}
+            merchantStats={merchantStats}
+            betterBuyIdeas={betterBuyIdeas}
+            queuedIdeas={queuedIdeas}
+            onQueueIdea={onQueueIdea}
+            categoriesById={categoriesById}
+          />
+        ) : (
+          <EmptyCard title="Membership required" body="Coach is part of the paid plan." />
+        )
       ) : null}
     </GlassPane>
+  );
+}
+
+export function ReceiptExtractionModal({
+  open,
+  busy,
+  draft,
+  setDraft,
+  onClose,
+  onCreate,
+  onMatch,
+  onSaveReceiptOnly,
+}) {
+  if (!open || !draft) return null;
+
+  const candidates = draft.candidates || [];
+  const canMatch = Boolean(draft.selectedCandidateId);
+
+  function patch(field, value) {
+    setDraft((prev) => ({ ...prev, [field]: value }));
+  }
+
+  return (
+    <div className={styles.modalBackdrop}>
+      <div className={styles.modalCard} style={{ width: "min(920px, 94vw)", maxWidth: 920, borderRadius: 28 }}>
+        <div className={styles.modalHeader}>
+          <div>
+            <div className={styles.modalEyebrow}>Receipt OCR extraction</div>
+            <div className={styles.modalTitle}>Review before creating the transaction</div>
+          </div>
+          <button type="button" className={styles.iconButton} onClick={onClose}>
+            <X size={14} />
+          </button>
+        </div>
+
+        <div className={styles.modalBody}>
+          <div style={{ display: "grid", gridTemplateColumns: "1.05fr 0.95fr", gap: 16 }}>
+            <div className={styles.storyCard}>
+              <SectionHeader title="Extracted fields" subcopy="Edit anything wrong before saving." />
+              <div className={styles.formGrid2}>
+                <div className={styles.fieldBlock}>
+                  <label className={styles.fieldLabel}>Merchant</label>
+                  <input className={styles.field} value={draft.merchant || ""} onChange={(e) => patch("merchant", e.target.value)} />
+                </div>
+                <div className={styles.fieldBlock}>
+                  <label className={styles.fieldLabel}>Total</label>
+                  <input className={styles.field} value={draft.total ?? ""} onChange={(e) => patch("total", e.target.value)} inputMode="decimal" />
+                </div>
+                <div className={styles.fieldBlock}>
+                  <label className={styles.fieldLabel}>Date</label>
+                  <input className={styles.field} type="date" value={draft.receiptDate || ""} onChange={(e) => patch("receiptDate", e.target.value)} />
+                </div>
+                <div className={styles.fieldBlock}>
+                  <label className={styles.fieldLabel}>Card last 4</label>
+                  <input className={styles.field} value={draft.cardLast4 || ""} onChange={(e) => patch("cardLast4", e.target.value)} maxLength={4} />
+                </div>
+              </div>
+
+              <div style={{ marginTop: 16 }}>
+                <SectionHeader title="Extracted items" subcopy="Receipt line items pulled from OCR." />
+                {(draft.items || []).length ? (
+                  <div className={styles.stackGrid}>
+                    {draft.items.map((item, idx) => (
+                      <div key={`${item.name}-${idx}`} className={styles.merchantRow}>
+                        <MerchantMark merchant={item.name} />
+                        <div className={styles.merchantRowMain}>
+                          <div className={styles.merchantRowTop}>
+                            <span>{item.name}</span>
+                            <strong>{money(item.lineTotal || item.unitPrice || 0)}</strong>
+                          </div>
+                          <div className={styles.merchantRowMeta}>qty {item.qty || 1}{item.needWant ? ` · ${item.needWant}` : ""}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <EmptyCard title="No items extracted" body="The OCR got the receipt shell but not the line items." />
+                )}
+              </div>
+            </div>
+
+            <div className={styles.storyCard}>
+              <SectionHeader title="Receipt + match review" subcopy="Use a match if it found the right transaction." />
+              {draft.imageUrl ? (
+                <img src={draft.imageUrl} alt="Receipt preview" style={{ width: "100%", borderRadius: 18, border: "1px solid rgba(255,255,255,0.08)", objectFit: "contain", background: "rgba(5,8,14,0.8)", maxHeight: 320 }} />
+              ) : (
+                <EmptyCard title="No preview" body="Receipt image preview was not returned." />
+              )}
+
+              <div style={{ marginTop: 16 }}>
+                <SectionHeader title="Suggested matches" subcopy={draft.matchedAccountName ? `Account hint: ${draft.matchedAccountName}` : "No account hint found yet."} />
+                {candidates.length ? (
+                  <div className={styles.stackGrid}>
+                    {candidates.map((candidate) => (
+                      <button
+                        key={candidate.id}
+                        type="button"
+                        className={styles.queueRowCard}
+                        onClick={() => patch("selectedCandidateId", candidate.id)}
+                        style={{ textAlign: "left", borderColor: draft.selectedCandidateId === candidate.id ? "rgba(122,160,255,0.48)" : undefined }}
+                      >
+                        <div className={styles.queueRowTop}>
+                          <div>
+                            <div className={styles.queueRowTitle}>{candidate.merchant}</div>
+                            <div className={styles.queueRowMeta}>{candidate.date} · {money(candidate.amount)}</div>
+                          </div>
+                          <Pill tone={candidate.score >= 85 ? "green" : candidate.score >= 60 ? "amber" : "neutral"}>{candidate.score}%</Pill>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <EmptyCard title="No match suggestions" body="Create a new transaction from this receipt or save the receipt only." />
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className={styles.modalFooter}>
+          <ActionBtn onClick={onClose}>Cancel</ActionBtn>
+          <ActionBtn onClick={onSaveReceiptOnly} disabled={busy}>Save receipt only</ActionBtn>
+          <ActionBtn onClick={onMatch} disabled={busy || !canMatch}>Match selected</ActionBtn>
+          <ActionBtn variant="primary" onClick={onCreate} disabled={busy}>Create transaction</ActionBtn>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function TransactionDetailSheet({
+  open,
+  type = "transaction",
+  record,
+  receiptItems = [],
+  membershipLevel = "free",
+  onClose,
+  onEditTransaction,
+  onDuplicateTransaction,
+  onDeleteTransaction,
+  onEditPlanned,
+  onConvertPlanned,
+  onDeletePlanned,
+  onOpenReceiptCapture,
+}) {
+  if (!open || !record) return null;
+
+  const isPremium = membershipLevel !== "free";
+  const amount = type === "planned" ? record.amount : record.amount;
+  const receiptPreview = receiptItems.find((item) => item.imageUrl)?.imageUrl || "";
+
+  return (
+    <div className={styles.modalBackdrop} style={{ justifyContent: "flex-end", padding: 16 }}>
+      <div className={styles.modalCard} style={{ width: "min(780px, 92vw)", maxWidth: 780, height: "calc(100vh - 32px)", overflow: "auto", borderRadius: 28 }}>
+        <div className={styles.modalHeader}>
+          <div>
+            <div className={styles.modalEyebrow}>{type === "planned" ? "Planned item" : "Transaction detail"}</div>
+            <div className={styles.modalTitle}>{record.merchant || record.note || "Entry"}</div>
+          </div>
+          <button type="button" className={styles.iconButton} onClick={onClose}>
+            <X size={14} />
+          </button>
+        </div>
+
+        <div className={styles.modalBody}>
+          <div className={styles.dockCard}>
+            <div className={styles.heroTop}>
+              <div className={styles.heroIdentity}>
+                <MerchantMark merchant={record.merchant || record.note || "Entry"} size="lg" />
+                <div className={styles.heroText}>
+                  <div className={styles.heroName}>{record.merchant || record.note || "Entry"}</div>
+                  <div className={styles.heroMeta}>{shortDate(record.date)} · {fmtTime(record.time)} · {type === "planned" ? "planned" : record.type}</div>
+                </div>
+              </div>
+              <div className={styles.heroRight}>
+                <div className={styles.heroAmount} style={{ letterSpacing: "-0.04em", lineHeight: 1 }}>{money(amount || 0)}</div>
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1.08fr 0.92fr", gap: 16 }}>
+            <div className={styles.storyCard}>
+              <SectionHeader title="Breakdown" subcopy="Use hidden tools here, not on the main page." />
+              <div className={styles.modalFooter} style={{ padding: 0, justifyContent: "flex-start", marginBottom: 12 }}>
+                {type === "planned" ? (
+                  <>
+                    <ActionBtn onClick={onEditPlanned}>Edit</ActionBtn>
+                    <ActionBtn onClick={onConvertPlanned}>Convert</ActionBtn>
+                    <ActionBtn variant="danger" onClick={onDeletePlanned}>Delete</ActionBtn>
+                  </>
+                ) : (
+                  <>
+                    <ActionBtn onClick={onEditTransaction}>Edit</ActionBtn>
+                    <ActionBtn onClick={onDuplicateTransaction}>Duplicate</ActionBtn>
+                    <ActionBtn onClick={onOpenReceiptCapture}><Receipt size={14} /> Add / View receipt</ActionBtn>
+                    <ActionBtn variant="danger" onClick={onDeleteTransaction}>Delete</ActionBtn>
+                  </>
+                )}
+              </div>
+              <div className={styles.metricList}>
+                <div className={styles.metricInline}><span>Account</span><strong>{record.accountName || record.account || "—"}</strong></div>
+                <div className={styles.metricInline}><span>Method</span><strong>{record.paymentMethod || "—"}</strong></div>
+                <div className={styles.metricInline}><span>Note</span><strong>{record.note || "—"}</strong></div>
+              </div>
+
+              <div style={{ marginTop: 18 }}>
+                <SectionHeader title="Receipt items" subcopy="Attached items for this transaction." />
+                {receiptItems.length ? (
+                  <div className={styles.stackGrid}>
+                    {receiptItems.map((item) => (
+                      <div key={item.id} className={styles.merchantRow}>
+                        <MerchantMark merchant={item.name} />
+                        <div className={styles.merchantRowMain}>
+                          <div className={styles.merchantRowTop}>
+                            <span>{item.name}</span>
+                            <strong>{money(item.lineTotal || item.unitPrice || 0)}</strong>
+                          </div>
+                          <div className={styles.merchantRowMeta}>qty {item.qty || 1}{item.needWant ? ` · ${item.needWant}` : ""}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <EmptyCard title="No receipt items" body="Attach or scan a receipt to populate item breakdown here." />
+                )}
+              </div>
+            </div>
+
+            <div className={styles.storyCard}>
+              <SectionHeader title="Receipt preview" subcopy={isPremium ? "Receipt image and paid insights." : "Receipt image visible. Paid insights stay locked."} />
+              {receiptPreview ? (
+                <img src={receiptPreview} alt="Receipt" style={{ width: "100%", borderRadius: 18, border: "1px solid rgba(255,255,255,0.08)", objectFit: "contain", background: "rgba(5,8,14,0.8)", maxHeight: 420 }} />
+              ) : (
+                <EmptyCard title="No receipt preview" body="Use Add / View receipt to attach one." />
+              )}
+              <div style={{ marginTop: 16 }}>
+                {isPremium ? (
+                  <div className={styles.metricList}>
+                    <div className={styles.metricInline}><span>Attached items</span><strong>{receiptItems.length}</strong></div>
+                    <div className={styles.metricInline}><span>Receipt connected</span><strong>{receiptItems.length ? "Yes" : "No"}</strong></div>
+                  </div>
+                ) : (
+                  <EmptyCard title="Membership required" body="Advanced receipt intelligence is part of the paid plan." />
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function ReceiptCaptureModal({ open, busy, onClose, onFileReady }) {
+  const videoRef = React.useRef(null);
+  const inputRef = React.useRef(null);
+  const streamRef = React.useRef(null);
+  const [cameraError, setCameraError] = React.useState("");
+  const [cameraReady, setCameraReady] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!open) return undefined;
+
+    let stopped = false;
+
+    async function startCamera() {
+      if (!navigator?.mediaDevices?.getUserMedia) {
+        setCameraError("Direct camera is not available here. Use upload fallback.");
+        return;
+      }
+
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: "environment" } },
+          audio: false,
+        });
+
+        if (stopped) {
+          stream.getTracks().forEach((track) => track.stop());
+          return;
+        }
+
+        streamRef.current = stream;
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          await videoRef.current.play().catch(() => {});
+        }
+        setCameraReady(true);
+        setCameraError("");
+      } catch {
+        setCameraReady(false);
+        setCameraError("Camera permission failed or is blocked. Use upload fallback.");
+      }
+    }
+
+    startCamera();
+
+    return () => {
+      stopped = true;
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((track) => track.stop());
+        streamRef.current = null;
+      }
+      setCameraReady(false);
+    };
+  }, [open]);
+
+  async function capturePhoto() {
+    const video = videoRef.current;
+    if (!video) return;
+
+    const canvas = document.createElement("canvas");
+    canvas.width = video.videoWidth || 1280;
+    canvas.height = video.videoHeight || 720;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.92));
+    if (!blob) return;
+
+    const file = new File([blob], `receipt-${Date.now()}.jpg`, { type: "image/jpeg" });
+    onFileReady?.(file);
+  }
+
+  function handleFallbackPick(event) {
+    const file = event.target.files?.[0] || null;
+    event.target.value = "";
+    if (!file) return;
+    onFileReady?.(file);
+  }
+
+  if (!open) return null;
+
+  return (
+    <div className={styles.modalBackdrop}>
+      <div className={styles.modalCard}>
+        <div className={styles.modalHeader}>
+          <div>
+            <div className={styles.modalEyebrow}>Receipt capture</div>
+            <div className={styles.modalTitle}>Camera first, files second</div>
+          </div>
+          <button type="button" className={styles.iconButton} onClick={onClose}>
+            <X size={14} />
+          </button>
+        </div>
+
+        <div className={styles.modalBody}>
+          <div style={{ borderRadius: 18, overflow: "hidden", border: "1px solid rgba(255,255,255,0.08)", background: "rgba(6,10,18,0.88)", minHeight: 320, display: "grid", placeItems: "center" }}>
+            {cameraReady ? (
+              <video ref={videoRef} playsInline muted style={{ width: "100%", height: 360, objectFit: "cover" }} />
+            ) : (
+              <div style={{ padding: 24, textAlign: "center", color: "rgba(255,255,255,0.72)" }}>
+                {cameraError || "Starting camera..."}
+              </div>
+            )}
+          </div>
+
+          <div className={styles.sectionSub} style={{ marginTop: 12 }}>
+            On phones this opens a real camera view first. Upload from files stays as fallback.
+          </div>
+        </div>
+
+        <div className={styles.modalFooter}>
+          <input
+            ref={inputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            style={{ display: "none" }}
+            onChange={handleFallbackPick}
+          />
+          <ActionBtn onClick={() => inputRef.current?.click()} disabled={busy}>Upload instead</ActionBtn>
+          <ActionBtn variant="primary" onClick={capturePhoto} disabled={busy || !cameraReady}>
+            {busy ? "Processing..." : "Capture receipt"}
+          </ActionBtn>
+        </div>
+      </div>
+    </div>
   );
 }
 

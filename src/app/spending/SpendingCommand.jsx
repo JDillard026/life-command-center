@@ -1,4 +1,3 @@
-
 "use client";
 
 export const dynamic = "force-dynamic";
@@ -37,8 +36,11 @@ import {
   FeedPane,
   MainWorkspacePane,
   QuickEntryModal,
+  ReceiptCaptureModal,
+  ReceiptExtractionModal,
   ToastStack,
   TopStrip,
+  TransactionDetailSheet,
 } from "./spending.components";
 import styles from "./SpendingPage.module.css";
 
@@ -224,10 +226,16 @@ export default function SpendingCommand() {
   const [pageError, setPageError] = React.useState("");
   const [status, setStatus] = React.useState("");
   const [saving, setSaving] = React.useState(false);
+  const [receiptBusy, setReceiptBusy] = React.useState(false);
+  const [cameraOpen, setCameraOpen] = React.useState(false);
+  const [detailOpen, setDetailOpen] = React.useState(false);
+  const [receiptReviewOpen, setReceiptReviewOpen] = React.useState(false);
+  const [receiptDraft, setReceiptDraft] = React.useState(null);
 
   const [period, setPeriod] = React.useState("month");
   const [search, setSearch] = React.useState("");
   const [workspaceMode, setWorkspaceMode] = React.useState("dashboard");
+  const [railMode, setRailMode] = React.useState("transactions");
   const [selectedRecord, setSelectedRecord] = React.useState(emptySelection());
 
   const [categories, setCategories] = React.useState(DEFAULT_CATEGORIES);
@@ -235,6 +243,7 @@ export default function SpendingCommand() {
   const [accounts, setAccounts] = React.useState([]);
   const [transactions, setTransactions] = React.useState([]);
   const [plannedItems, setPlannedItems] = React.useState([]);
+  const [receiptItems, setReceiptItems] = React.useState([]);
 
   const [composerOpen, setComposerOpen] = React.useState(false);
   const [composerKind, setComposerKind] = React.useState("create_tx");
@@ -260,6 +269,16 @@ export default function SpendingCommand() {
     return ["All", ...names];
   }, [categories]);
 
+  const membershipLevel = React.useMemo(() => {
+    const raw = String(
+      user?.user_metadata?.membership_level ||
+      user?.user_metadata?.plan ||
+      user?.app_metadata?.membership_level ||
+      "free"
+    ).toLowerCase();
+    return raw || "free";
+  }, [user]);
+
   const loadAll = React.useCallback(
     async (preferredSelection = null) => {
       setLoading(true);
@@ -282,7 +301,7 @@ export default function SpendingCommand() {
           return;
         }
 
-        const [catRes, budgetRes, accountRes, txRes, plannedRes, ledgerRes] = await Promise.all([
+        const [catRes, budgetRes, accountRes, txRes, plannedRes, ledgerRes, receiptRes, receiptItemRes] = await Promise.all([
           supabase
             .from("spending_categories")
             .select("*")
@@ -292,7 +311,7 @@ export default function SpendingCommand() {
           supabase.from("spending_budgets").select("*").eq("user_id", currentUser.id),
           supabase
             .from("accounts")
-            .select("id,name,account_type,balance")
+            .select("id,name,account_type,balance,card_last4,institution_name,external_account_id")
             .eq("user_id", currentUser.id)
             .order("name"),
           supabase
@@ -314,6 +333,16 @@ export default function SpendingCommand() {
             .select("source_id,account_id,related_account_id,related_account_name,delta,kind,source_type")
             .eq("user_id", currentUser.id)
             .eq("source_type", "spending_transaction"),
+          supabase
+            .from("spending_receipts")
+            .select("id,merchant_raw,receipt_date,receipt_total,image_url,matched_transaction_id,card_last4")
+            .eq("user_id", currentUser.id)
+            .order("created_at", { ascending: false }),
+          supabase
+            .from("spending_receipt_items")
+            .select("id,receipt_id,name,qty,unit_price,line_total,category_guess,need_want,price_score,created_at")
+            .eq("user_id", currentUser.id)
+            .order("created_at", { ascending: false }),
         ]);
 
         if (catRes.error) throw catRes.error;
@@ -322,6 +351,8 @@ export default function SpendingCommand() {
         if (txRes.error) throw txRes.error;
         if (plannedRes.error) throw plannedRes.error;
         if (ledgerRes.error) throw ledgerRes.error;
+        if (receiptRes.error) throw receiptRes.error;
+        if (receiptItemRes.error) throw receiptItemRes.error;
 
         const loadedCategories =
           (catRes.data || []).length > 0
@@ -363,11 +394,35 @@ export default function SpendingCommand() {
             return Number(a.createdAt || 0) - Number(b.createdAt || 0);
           });
 
+        const receiptsById = new Map((receiptRes.data || []).map((row) => [row.id, row]));
+        const loadedReceiptItems = (receiptItemRes.data || []).map((row) => {
+          const receipt = receiptsById.get(row.receipt_id) || {};
+          return {
+            id: row.id,
+            receiptId: row.receipt_id,
+            name: row.name || "Receipt item",
+            qty: Number(row.qty) || 1,
+            unitPrice: Number(row.unit_price) || 0,
+            lineTotal: Number(row.line_total) || Number(row.unit_price) || 0,
+            categoryGuess: row.category_guess || "",
+            needWant: row.need_want || "",
+            priceScore: row.price_score || "",
+            merchant: receipt.merchant_raw || "",
+            receiptDate: receipt.receipt_date || todayISO(),
+            receiptTotal: Number(receipt.receipt_total) || 0,
+            imageUrl: receipt.image_url || "",
+            matchedTransactionId: receipt.matched_transaction_id || "",
+            cardLast4: receipt.card_last4 || "",
+            createdAt: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
+          };
+        });
+
         setCategories(loadedCategories);
         setBudgets(nextBudgets);
         setAccounts(loadedAccounts);
         setTransactions(loadedTransactions);
         setPlannedItems(loadedPlanned);
+        setReceiptItems(loadedReceiptItems);
 
         setBudgetEditorCategoryId((prev) =>
           loadedCategories.some((category) => category.id === prev)
@@ -381,17 +436,21 @@ export default function SpendingCommand() {
             ((preferredSelection.kind === "tx" &&
               loadedTransactions.some((tx) => tx.id === preferredSelection.id)) ||
               (preferredSelection.kind === "planned" &&
-                loadedPlanned.some((planned) => planned.id === preferredSelection.id)))
+                loadedPlanned.some((planned) => planned.id === preferredSelection.id)) ||
+              (preferredSelection.kind === "item" &&
+                loadedReceiptItems.some((item) => item.id === preferredSelection.id)))
           ) {
             return preferredSelection;
           }
 
           const stillExists =
             (prev.kind === "tx" && loadedTransactions.some((tx) => tx.id === prev.id)) ||
-            (prev.kind === "planned" && loadedPlanned.some((planned) => planned.id === prev.id));
+            (prev.kind === "planned" && loadedPlanned.some((planned) => planned.id === prev.id)) ||
+            (prev.kind === "item" && loadedReceiptItems.some((item) => item.id === prev.id));
 
           if (stillExists) return prev;
           if (loadedTransactions[0]) return { kind: "tx", id: loadedTransactions[0].id };
+          if (loadedReceiptItems[0]) return { kind: "item", id: loadedReceiptItems[0].id };
           if (loadedPlanned[0]) return { kind: "planned", id: loadedPlanned[0].id };
           return emptySelection();
         });
@@ -422,7 +481,7 @@ export default function SpendingCommand() {
       .filter((tx) => {
         if (!q) return true;
         const categoryName = categoriesById.get(tx.categoryId)?.name || "";
-        return `${tx.merchant} ${tx.note} ${tx.date} ${tx.time} ${categoryName} ${tx.amount} ${tx.paymentMethod} ${tx.account}`
+        return `${tx.merchant} ${tx.note} ${tx.date} ${tx.time} ${categoryName} ${tx.amount} ${tx.paymentMethod} ${tx.account} ${tx.cardLast4} ${tx.sourceType}`
           .toLowerCase()
           .includes(q);
       });
@@ -441,6 +500,19 @@ export default function SpendingCommand() {
           .includes(q);
       });
   }, [plannedItems, range, search, categoriesById]);
+
+  const filteredReceiptItems = React.useMemo(() => {
+    const q = search.trim().toLowerCase();
+
+    return receiptItems
+      .filter((item) => inRange(item.receiptDate || todayISO(), range.start, range.end))
+      .filter((item) => {
+        if (!q) return true;
+        return `${item.name} ${item.merchant} ${item.receiptDate} ${item.qty} ${item.lineTotal} ${item.needWant} ${item.cardLast4}`
+          .toLowerCase()
+          .includes(q);
+      });
+  }, [receiptItems, range, search]);
 
   const previousRange = React.useMemo(() => getPreviousRange(period, range), [period, range]);
   const previousTransactions = React.useMemo(
@@ -489,6 +561,7 @@ export default function SpendingCommand() {
 
           const forecast = roundMoneyValue(spent + planned);
           const budget = roundMoneyValue(Number(budgets?.[range.budgetMode]?.[category.id] || 0));
+          const statusLabel = budgetStatus(forecast, budget);
 
           return {
             categoryId: category.id,
@@ -497,15 +570,25 @@ export default function SpendingCommand() {
             planned,
             forecast,
             budget,
-            status: budgetStatus(forecast, budget),
+            status: {
+              label: statusLabel,
+              tone:
+                statusLabel === "Over"
+                  ? "red"
+                  : statusLabel === "Near"
+                    ? "amber"
+                    : statusLabel === "OK"
+                      ? "green"
+                      : "neutral",
+            },
             pctUsed: budget > 0 ? roundMoneyValue((forecast / budget) * 100) : 0,
             amountLeft: budget > 0 ? roundMoneyValue(budget - forecast) : 0,
           };
         })
         .filter((row) => row.spent > 0 || row.planned > 0 || row.budget > 0)
         .sort((a, b) => {
-          const aTone = a.status === "Over" ? 3 : a.status === "Near" ? 2 : 1;
-          const bTone = b.status === "Over" ? 3 : b.status === "Near" ? 2 : 1;
+          const aTone = a.status.label === "Over" ? 3 : a.status.label === "Near" ? 2 : 1;
+          const bTone = b.status.label === "Over" ? 3 : b.status.label === "Near" ? 2 : 1;
           return bTone - aTone || Number(b.forecast) - Number(a.forecast);
         }),
     [categories, filteredTransactions, filteredPlanned, budgets, range.budgetMode]
@@ -530,10 +613,88 @@ export default function SpendingCommand() {
     [selectedRecord, plannedItems]
   );
 
+  const selectedItem = React.useMemo(
+    () => (selectedRecord.kind === "item" ? receiptItems.find((item) => item.id === selectedRecord.id) || null : null),
+    [selectedRecord, receiptItems]
+  );
+
   const selectedBudgetRow = React.useMemo(() => {
     const categoryId = selectedTx?.categoryId || selectedPlanned?.categoryId || "";
     return totalsByCategory.find((row) => row.categoryId === categoryId) || null;
   }, [selectedTx, selectedPlanned, totalsByCategory]);
+
+  const itemStats = React.useMemo(() => {
+    if (!selectedItem) {
+      return { monthCount: 0, yearCount: 0, avgPrice: 0, lowPrice: 0, highPrice: 0 };
+    }
+
+    const nameKey = String(selectedItem.name || "").trim().toLowerCase();
+    const history = receiptItems.filter((item) => String(item.name || "").trim().toLowerCase() === nameKey);
+    const now = new Date();
+    const monthCount = history.filter((item) => {
+      const d = new Date(`${item.receiptDate}T00:00:00`);
+      return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+    }).length;
+    const yearCount = history.filter((item) => {
+      const d = new Date(`${item.receiptDate}T00:00:00`);
+      return d.getFullYear() === now.getFullYear();
+    }).length;
+    const prices = history.map((item) => Number(item.lineTotal) || Number(item.unitPrice) || 0).filter((value) => value > 0);
+
+    return {
+      monthCount,
+      yearCount,
+      avgPrice: prices.length ? roundMoneyValue(prices.reduce((sum, value) => sum + value, 0) / prices.length) : 0,
+      lowPrice: prices.length ? Math.min(...prices) : 0,
+      highPrice: prices.length ? Math.max(...prices) : 0,
+    };
+  }, [selectedItem, receiptItems]);
+
+  React.useEffect(() => {
+    if (railMode === "items") {
+      if (selectedRecord.kind !== "item") {
+        if (filteredReceiptItems[0]) {
+          setSelectedRecord({ kind: "item", id: filteredReceiptItems[0].id });
+        }
+      }
+      return;
+    }
+
+    if (selectedRecord.kind === "item") {
+      if (filteredTransactions[0]) {
+        setSelectedRecord({ kind: "tx", id: filteredTransactions[0].id });
+      } else if (filteredPlanned[0]) {
+        setSelectedRecord({ kind: "planned", id: filteredPlanned[0].id });
+      } else {
+        setSelectedRecord(emptySelection());
+      }
+    }
+  }, [railMode, selectedRecord.kind, filteredReceiptItems, filteredTransactions, filteredPlanned]);
+
+  const detailRecord = React.useMemo(() => {
+    if (selectedRecord.kind === "tx") return selectedTx;
+    if (selectedRecord.kind === "planned") return selectedPlanned;
+    return null;
+  }, [selectedRecord.kind, selectedTx, selectedPlanned]);
+
+  const detailReceiptItems = React.useMemo(() => {
+    if (selectedRecord.kind !== "tx" || !selectedTx) return [];
+    return receiptItems.filter((item) => {
+      if (item.matchedTransactionId && item.matchedTransactionId === selectedTx.id) return true;
+      if (selectedTx.receiptId && item.receiptId === selectedTx.receiptId) return true;
+      return false;
+    });
+  }, [selectedRecord.kind, selectedTx, receiptItems]);
+
+  function openTransactionSheet(record, kind = "transaction") {
+    if (!record) return;
+    if (kind === "planned") {
+      setSelectedRecord({ kind: "planned", id: record.id });
+    } else {
+      setSelectedRecord({ kind: "tx", id: record.id });
+    }
+    setDetailOpen(true);
+  }
 
   const merchantStats = React.useMemo(() => {
     if (!selectedTx?.merchant) return null;
@@ -648,6 +809,149 @@ export default function SpendingCommand() {
     setStatus("Loaded row into composer.");
   }
 
+  function openReceiptPicker() {
+    setCameraOpen(true);
+  }
+
+  async function readReceiptApiResponse(response) {
+    const rawText = await response.text();
+
+    let payload = null;
+    try {
+      payload = rawText ? JSON.parse(rawText) : null;
+    } catch {
+      if (rawText.includes("<!DOCTYPE")) {
+        throw new Error("Receipt API route returned HTML instead of JSON. Check the server terminal for the real route error.");
+      }
+      throw new Error(rawText || "Invalid receipt API response.");
+    }
+
+    return payload;
+  }
+
+  async function processReceiptFile(file) {
+    if (!file) return;
+    if (!supabase) {
+      setPageError("Supabase client is not available.");
+      return;
+    }
+
+    setReceiptBusy(true);
+    setCameraOpen(false);
+    setPageError("");
+
+    try {
+      const {
+        data: { session },
+        error: sessionError,
+      } = await supabase.auth.getSession();
+
+      if (sessionError) throw sessionError;
+      if (!session?.access_token) {
+        throw new Error("Could not verify your session for receipt upload.");
+      }
+
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const response = await fetch("/api/receipt-ocr", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: formData,
+      });
+
+      const payload = await readReceiptApiResponse(response);
+      if (!response.ok || !payload?.ok) {
+        throw new Error(payload?.error || rawText || "Receipt processing failed.");
+      }
+
+      setReceiptDraft({
+        receiptId: payload.receipt.receiptId,
+        merchant: payload.receipt.merchant || "",
+        total: payload.receipt.total || 0,
+        receiptDate: payload.receipt.receiptDate || "",
+        cardLast4: payload.receipt.cardLast4 || "",
+        imageUrl: payload.receipt.imageUrl || "",
+        matchedAccountId: payload.receipt.matchedAccountId || "",
+        matchedAccountName: payload.receipt.matchedAccountName || "",
+        items: payload.receipt.items || [],
+        candidates: payload.receipt.candidates || [],
+        selectedCandidateId: payload.receipt.suggestedMatchId || payload.receipt.candidates?.[0]?.id || "",
+      });
+      setReceiptReviewOpen(true);
+      setStatus("Receipt extracted. Review it before saving.");
+    } catch (err) {
+      setPageError(err?.message || "Failed to process receipt.");
+    } finally {
+      setReceiptBusy(false);
+    }
+  }
+
+  async function finalizeReceipt(commitMode = "create") {
+    if (!receiptDraft || !supabase) return;
+
+    setReceiptBusy(true);
+    setPageError("");
+
+    try {
+      const {
+        data: { session },
+        error: sessionError,
+      } = await supabase.auth.getSession();
+
+      if (sessionError) throw sessionError;
+      if (!session?.access_token) {
+        throw new Error("Could not verify your session for receipt save.");
+      }
+
+      const response = await fetch("/api/receipt-ocr", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          receiptId: receiptDraft.receiptId,
+          commitMode,
+          transactionId: receiptDraft.selectedCandidateId || null,
+          merchant: receiptDraft.merchant,
+          total: Number(receiptDraft.total) || 0,
+          receiptDate: receiptDraft.receiptDate,
+          cardLast4: receiptDraft.cardLast4,
+        }),
+      });
+
+      const payload = await readReceiptApiResponse(response);
+      if (!response.ok || !payload?.ok) {
+        throw new Error(payload?.error || rawText || "Receipt finalization failed.");
+      }
+
+      setReceiptReviewOpen(false);
+      setReceiptDraft(null);
+
+      if (commitMode === "match") {
+        setStatus("Receipt matched to transaction.");
+      } else if (commitMode === "create") {
+        setStatus("Transaction created from receipt.");
+      } else {
+        setStatus("Receipt saved.");
+      }
+
+      const selection = payload?.match?.transactionId
+        ? { kind: "tx", id: payload.match.transactionId }
+        : null;
+
+      setRailMode("items");
+      await loadAll(selection);
+    } catch (err) {
+      setPageError(err?.message || "Failed to finalize receipt.");
+    } finally {
+      setReceiptBusy(false);
+    }
+  }
+
   async function createSyncedTransaction(tx) {
     if (!user) throw new Error("Missing user.");
 
@@ -713,6 +1017,13 @@ export default function SpendingCommand() {
       accountName: sourceAccount?.name || "",
       transferAccountId: transferAccount?.id || "",
       transferAccountName: transferAccount?.name || "",
+      sourceType: "manual",
+      receiptId: null,
+      externalTransactionId: null,
+      externalAccountId: sourceAccount?.externalAccountId || null,
+      cardLast4: sourceAccount?.cardLast4 || null,
+      matchStatus: "manual",
+      merchantNormalized: composerDraft.merchant.trim().toLowerCase(),
       createdAt: Date.now(),
     };
 
@@ -763,6 +1074,9 @@ export default function SpendingCommand() {
       accountName: sourceAccount?.name || "",
       transferAccountId: transferAccount?.id || "",
       transferAccountName: transferAccount?.name || "",
+      externalAccountId: existingTx.externalAccountId || sourceAccount?.externalAccountId || null,
+      cardLast4: existingTx.cardLast4 || sourceAccount?.cardLast4 || null,
+      merchantNormalized: composerDraft.merchant.trim().toLowerCase(),
     };
 
     let reversed = false;
@@ -987,6 +1301,13 @@ export default function SpendingCommand() {
         accountName: account.name,
         transferAccountId: "",
         transferAccountName: "",
+        sourceType: "manual",
+        receiptId: null,
+        externalTransactionId: null,
+        externalAccountId: account.externalAccountId || null,
+        cardLast4: account.cardLast4 || null,
+        matchStatus: "manual",
+        merchantNormalized: String(planned.merchant || "").trim().toLowerCase(),
         createdAt: Date.now(),
       };
 
@@ -1128,25 +1449,40 @@ export default function SpendingCommand() {
         setPeriod={setPeriod}
         search={search}
         setSearch={setSearch}
-        mode={workspaceMode}
-        setMode={setWorkspaceMode}
         onOpenComposer={openCreateTransaction}
         onOpenControls={() => setControlsOpen(true)}
+        onScanReceipt={openReceiptPicker}
+        receiptBusy={receiptBusy}
       />
 
-      <div className={styles.workspace}>
-        <section className={styles.workspaceFeed}>
+      <div
+        className={styles.workspace}
+        style={{
+          display: "grid",
+          gridTemplateColumns: "minmax(300px, 420px) minmax(0, 1fr)",
+          gap: 16,
+          alignItems: "stretch",
+          width: "100%",
+        }}
+      >
+        <section className={styles.workspaceFeed} style={{ minWidth: 0, width: "100%", alignSelf: "stretch" }}>
           <FeedPane
+            railMode={railMode}
+            setRailMode={setRailMode}
             transactions={filteredTransactions}
             plannedItems={filteredPlanned}
+            receiptItems={filteredReceiptItems}
             selectedRecord={selectedRecord}
             onSelect={setSelectedRecord}
+            onOpenTransactionSheet={openTransactionSheet}
           />
         </section>
 
-        <section className={styles.workspaceMain}>
+        <section className={styles.workspaceMain} style={{ minWidth: 0, width: "100%", alignSelf: "stretch" }}>
           <MainWorkspacePane
             mode={workspaceMode}
+            setMode={setWorkspaceMode}
+            railMode={railMode}
             totals={totals}
             notifications={notifications}
             topMerchants={topMerchants}
@@ -1154,22 +1490,57 @@ export default function SpendingCommand() {
             selectedTx={selectedTx}
             selectedPlanned={selectedPlanned}
             selectedBudgetRow={selectedBudgetRow}
+            selectedItem={selectedItem}
+            itemStats={itemStats}
             categoriesById={categoriesById}
             merchantStats={merchantStats}
             betterBuyIdeas={betterBuyIdeas}
             queuedIdeas={queuedIdeas}
             onQueueIdea={queueIdea}
-            onOpenComposer={openCreateTransaction}
-            onOpenControls={() => setControlsOpen(true)}
             onEditTransaction={() => selectedTx && openEditTransaction(selectedTx)}
             onDuplicateTransaction={() => selectedTx && duplicateTransaction(selectedTx)}
             onDeleteTransaction={() => selectedTx && deleteTransaction(selectedTx.id)}
             onEditPlanned={() => selectedPlanned && openEditPlanned(selectedPlanned)}
             onConvertPlanned={() => selectedPlanned && convertPlanned(selectedPlanned)}
             onDeletePlanned={() => selectedPlanned && deletePlanned(selectedPlanned.id)}
+            membershipLevel={membershipLevel}
           />
         </section>
       </div>
+
+      <ReceiptExtractionModal
+        open={receiptReviewOpen}
+        busy={receiptBusy}
+        draft={receiptDraft}
+        setDraft={setReceiptDraft}
+        onClose={() => { setReceiptReviewOpen(false); setReceiptDraft(null); }}
+        onCreate={() => finalizeReceipt("create")}
+        onMatch={() => finalizeReceipt("match")}
+        onSaveReceiptOnly={() => finalizeReceipt("receipt_only")}
+      />
+
+      <TransactionDetailSheet
+        open={detailOpen}
+        type={selectedRecord.kind === "planned" ? "planned" : "transaction"}
+        record={detailRecord}
+        receiptItems={detailReceiptItems}
+        membershipLevel={membershipLevel}
+        onClose={() => setDetailOpen(false)}
+        onEditTransaction={() => { setDetailOpen(false); selectedTx && openEditTransaction(selectedTx); }}
+        onDuplicateTransaction={() => { setDetailOpen(false); selectedTx && duplicateTransaction(selectedTx); }}
+        onDeleteTransaction={() => { setDetailOpen(false); selectedTx && deleteTransaction(selectedTx.id); }}
+        onEditPlanned={() => { setDetailOpen(false); selectedPlanned && openEditPlanned(selectedPlanned); }}
+        onConvertPlanned={() => { setDetailOpen(false); selectedPlanned && convertPlanned(selectedPlanned); }}
+        onDeletePlanned={() => { setDetailOpen(false); selectedPlanned && deletePlanned(selectedPlanned.id); }}
+        onOpenReceiptCapture={() => { setDetailOpen(false); setCameraOpen(true); }}
+      />
+
+      <ReceiptCaptureModal
+        open={cameraOpen}
+        busy={receiptBusy}
+        onClose={() => setCameraOpen(false)}
+        onFileReady={processReceiptFile}
+      />
 
       <QuickEntryModal
         open={composerOpen}

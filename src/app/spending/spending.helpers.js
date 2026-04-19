@@ -1,4 +1,3 @@
-
 import { supabase } from "@/lib/supabaseClient";
 import { writeAccountDelta, writeAccountTransfer } from "@/lib/accountLedger";
 
@@ -240,6 +239,9 @@ export function mapAccountRowToClient(row) {
     name: String(row.name || "Account"),
     accountType: String(row.account_type || "other"),
     balance: roundMoneyValue(row.balance),
+    cardLast4: String(row.card_last4 || ""),
+    institutionName: String(row.institution_name || ""),
+    externalAccountId: String(row.external_account_id || ""),
   };
 }
 
@@ -301,6 +303,13 @@ export function mapTransactionRowToClient(row, ledgerRows = []) {
     accountName,
     transferAccountId,
     transferAccountName,
+    sourceType: row.source_type || "manual",
+    receiptId: row.receipt_id || "",
+    externalTransactionId: row.external_transaction_id || "",
+    externalAccountId: row.external_account_id || "",
+    cardLast4: row.card_last4 || "",
+    matchStatus: row.match_status || "",
+    merchantNormalized: row.merchant_normalized || "",
     createdAt: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
   };
 }
@@ -318,6 +327,13 @@ export function mapTransactionClientToRow(tx, userId) {
     note: tx.note || "",
     payment_method: tx.paymentMethod || "",
     account_name: tx.account || "",
+    source_type: tx.sourceType || "manual",
+    receipt_id: tx.receiptId || null,
+    external_transaction_id: tx.externalTransactionId || null,
+    external_account_id: tx.externalAccountId || null,
+    card_last4: tx.cardLast4 || null,
+    match_status: tx.matchStatus || null,
+    merchant_normalized: tx.merchantNormalized || null,
     created_at: tx.createdAt ? new Date(tx.createdAt).toISOString() : new Date().toISOString(),
     updated_at: new Date().toISOString(),
   };

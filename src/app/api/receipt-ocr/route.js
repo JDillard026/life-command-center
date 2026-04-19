@@ -1,253 +1,350 @@
 import { NextResponse } from "next/server";
-import { AnalyzeExpenseCommand, TextractClient } from "@aws-sdk/client-textract";
+import {
+  buildReceiptStoragePath,
+  buildReceiptTransactionPayload,
+  callReceiptOcr,
+  createSignedReceiptUrl,
+  findMatchingAccountByLast4,
+  loadTransactionCandidates,
+  normalizeMerchant,
+  postReceiptExpenseLedger,
+  scoreTransactionReceiptMatch,
+} from "@/lib/receiptPipeline";
+import {
+  createSupabaseAdminClient,
+  createSupabaseRequestClient,
+} from "@/lib/supabaseAdmin";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const REGION =
-  process.env.AWS_REGION ||
-  process.env.AWS_DEFAULT_REGION ||
-  process.env.TEXTRACT_AWS_REGION;
+function uid() {
+  return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+}
 
-function buildClient() {
-  if (!REGION) {
-    throw new Error("Missing AWS_REGION for receipt OCR.");
+function round2(value) {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return 0;
+  return Math.round((num + Number.EPSILON) * 100) / 100;
+}
+
+function jsonError(message, status = 400) {
+  return NextResponse.json({ ok: false, error: message }, { status });
+}
+
+async function getRequestContext(request) {
+  const authorization = request.headers.get("authorization") || "";
+  const requestClient = createSupabaseRequestClient(authorization);
+  const admin = createSupabaseAdminClient();
+
+  const {
+    data: { user },
+    error,
+  } = await requestClient.auth.getUser();
+
+  if (error || !user?.id) {
+    throw new Error("Unauthorized receipt request.");
   }
 
-  const accessKeyId = process.env.AWS_ACCESS_KEY_ID;
-  const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
-  const sessionToken = process.env.AWS_SESSION_TOKEN;
+  return { authorization, requestClient, admin, user };
+}
 
-  return new TextractClient({
-    region: REGION,
-    ...(accessKeyId && secretAccessKey
-      ? {
-          credentials: {
-            accessKeyId,
-            secretAccessKey,
-            ...(sessionToken ? { sessionToken } : {}),
-          },
-        }
-      : {}),
+function buildCandidatePreview(transaction, receipt) {
+  return {
+    id: transaction.id,
+    merchant: transaction.merchant || transaction.note || "Transaction",
+    amount: round2(transaction.amount),
+    txDate: transaction.tx_date || "",
+    paymentMethod: transaction.payment_method || "",
+    cardLast4: transaction.card_last4 || "",
+    sourceType: transaction.source_type || "manual",
+    score: scoreTransactionReceiptMatch(transaction, receipt),
+  };
+}
+
+async function handlePreview(request) {
+  const { admin, user } = await getRequestContext(request);
+  const formData = await request.formData();
+  const file = formData.get("file");
+
+  if (!file || typeof file.arrayBuffer !== "function") {
+    return jsonError("Missing receipt file.", 400);
+  }
+
+  const fileName = file.name || "receipt.jpg";
+  const contentType = file.type || "image/jpeg";
+  const fileBuffer = Buffer.from(await file.arrayBuffer());
+  const bucketName = process.env.SUPABASE_RECEIPTS_BUCKET || "receipts";
+  const storagePath = buildReceiptStoragePath(user.id, fileName);
+
+  const { error: uploadError } = await admin.storage
+    .from(bucketName)
+    .upload(storagePath, fileBuffer, {
+      contentType,
+      upsert: false,
+      cacheControl: "3600",
+    });
+
+  if (uploadError) {
+    return jsonError(uploadError.message || "Could not upload receipt image.", 500);
+  }
+
+  const receipt = await callReceiptOcr({
+    fileBuffer,
+    fileName,
+    contentType,
+  });
+
+  const matchedAccount = await findMatchingAccountByLast4(admin, user.id, receipt.cardLast4);
+  const imageUrl = await createSignedReceiptUrl(admin, bucketName, storagePath);
+  const receiptId = uid();
+
+  const receiptRow = {
+    id: receiptId,
+    user_id: user.id,
+    storage_path: storagePath,
+    image_url: imageUrl,
+    ocr_status: "parsed",
+    merchant_raw: receipt.merchantRaw || "",
+    merchant_normalized: receipt.merchantNormalized || normalizeMerchant(receipt.merchantRaw || ""),
+    receipt_total: round2(receipt.total),
+    receipt_date: receipt.receiptDate || null,
+    card_last4: receipt.cardLast4 || null,
+    matched_transaction_id: null,
+    matched_account_id: matchedAccount?.id || null,
+    source_confidence: null,
+    raw_ocr_json: receipt.rawOcrJson || {},
+  };
+
+  const { error: receiptInsertError } = await admin
+    .from("spending_receipts")
+    .insert([receiptRow]);
+
+  if (receiptInsertError) {
+    return jsonError(receiptInsertError.message || "Could not save receipt metadata.", 500);
+  }
+
+  const itemRows = (receipt.items || []).map((item) => ({
+    id: uid(),
+    receipt_id: receiptId,
+    user_id: user.id,
+    name: item.name || "Receipt item",
+    qty: Number(item.qty) || 1,
+    unit_price: item.unitPrice ?? null,
+    line_total: item.lineTotal ?? null,
+    category_guess: item.categoryGuess || null,
+    need_want: item.needWant || null,
+    price_score: item.priceScore || null,
+  }));
+
+  if (itemRows.length) {
+    const { error: itemsError } = await admin
+      .from("spending_receipt_items")
+      .insert(itemRows);
+
+    if (itemsError) {
+      return jsonError(itemsError.message || "Could not save receipt items.", 500);
+    }
+  }
+
+  const candidatesRaw = await loadTransactionCandidates(admin, user.id, receipt.receiptDate);
+  const candidates = candidatesRaw
+    .map((transaction) => buildCandidatePreview(transaction, receipt))
+    .filter((entry) => entry.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 8);
+
+  const suggestedMatch = candidates.find((entry) => entry.score >= 70) || candidates[0] || null;
+
+  return NextResponse.json({
+    ok: true,
+    receipt: {
+      receiptId,
+      merchant: receipt.merchantRaw || "",
+      total: round2(receipt.total),
+      receiptDate: receipt.receiptDate || "",
+      cardLast4: receipt.cardLast4 || "",
+      imageUrl,
+      matchedAccountId: matchedAccount?.id || "",
+      matchedAccountName: matchedAccount?.name || "",
+      items: receipt.items || [],
+      candidates,
+      suggestedMatchId: suggestedMatch?.id || "",
+    },
   });
 }
 
-function normalizeWhitespace(value = "") {
-  return String(value || "").replace(/\s+/g, " ").trim();
-}
+async function handleCommit(request) {
+  const { admin, user } = await getRequestContext(request);
+  const body = await request.json();
 
-function parseMoney(value) {
-  const raw = String(value || "").replace(/[^0-9.\-]/g, "");
-  const parsed = Number(raw);
-  return Number.isFinite(parsed) ? parsed : null;
-}
+  const receiptId = String(body?.receiptId || "").trim();
+  const commitMode = String(body?.commitMode || "create").trim();
+  const transactionId = String(body?.transactionId || "").trim();
+  const merchant = String(body?.merchant || "").trim();
+  const total = round2(body?.total);
+  const receiptDate = String(body?.receiptDate || "").trim();
+  const cardLast4 = String(body?.cardLast4 || "").trim();
 
-function parseDateToIso(value) {
-  const text = normalizeWhitespace(value);
-  if (!text) return "";
-
-  const native = new Date(text);
-  if (!Number.isNaN(native.getTime())) {
-    return native.toISOString().slice(0, 10);
+  if (!receiptId) {
+    return jsonError("Missing receipt id.", 400);
   }
 
-  const slashMatch = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
-  if (slashMatch) {
-    const [, mm, dd, yy] = slashMatch;
-    const year = yy.length === 2 ? `20${yy}` : yy;
-    return `${year.padStart(4, "0")}-${mm.padStart(2, "0")}-${dd.padStart(2, "0")}`;
+  const { data: existingReceipt, error: receiptError } = await admin
+    .from("spending_receipts")
+    .select("*")
+    .eq("id", receiptId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (receiptError || !existingReceipt) {
+    return jsonError("Receipt not found.", 404);
   }
 
-  return "";
-}
+  const matchedAccount = await findMatchingAccountByLast4(admin, user.id, cardLast4 || existingReceipt.card_last4 || "");
+  const normalizedMerchant = normalizeMerchant(merchant || existingReceipt.merchant_raw || "");
 
-function average(values) {
-  const clean = values.filter((n) => Number.isFinite(n));
-  if (!clean.length) return null;
-  return clean.reduce((sum, n) => sum + n, 0) / clean.length;
-}
+  const receiptPatch = {
+    merchant_raw: merchant || existingReceipt.merchant_raw || "",
+    merchant_normalized: normalizedMerchant || null,
+    receipt_total: total || existingReceipt.receipt_total || 0,
+    receipt_date: receiptDate || existingReceipt.receipt_date || null,
+    card_last4: cardLast4 || existingReceipt.card_last4 || null,
+    matched_account_id: matchedAccount?.id || null,
+    updated_at: new Date().toISOString(),
+  };
 
-function summaryMap(summaryFields = []) {
-  const map = new Map();
-  for (const field of summaryFields) {
-    const type = normalizeWhitespace(field?.Type?.Text).toUpperCase();
-    const value = normalizeWhitespace(field?.ValueDetection?.Text);
-    const confidence = average([
-      Number(field?.Type?.Confidence),
-      Number(field?.ValueDetection?.Confidence),
-    ]);
-    if (!type || !value) continue;
-    if (!map.has(type)) {
-      map.set(type, []);
+  if (commitMode === "receipt_only") {
+    const { error: updateError } = await admin
+      .from("spending_receipts")
+      .update({
+        ...receiptPatch,
+        ocr_status: "saved",
+      })
+      .eq("id", receiptId)
+      .eq("user_id", user.id);
+
+    if (updateError) {
+      return jsonError(updateError.message || "Could not save receipt.", 500);
     }
-    map.get(type).push({ value, confidence });
+
+    return NextResponse.json({ ok: true, match: { transactionId: null } });
   }
-  return map;
-}
 
-function getFirstSummaryValue(map, keys = []) {
-  for (const key of keys) {
-    const hit = map.get(key);
-    if (hit?.[0]?.value) return hit[0].value;
-  }
-  return "";
-}
-
-function getFirstSummaryMoney(map, keys = []) {
-  const value = getFirstSummaryValue(map, keys);
-  return parseMoney(value);
-}
-
-function normalizeLineItems(lineItemGroups = []) {
-  const items = [];
-
-  for (const group of lineItemGroups) {
-    for (const line of group?.LineItems || []) {
-      const fields = new Map();
-      const confidences = [];
-
-      for (const field of line?.LineItemExpenseFields || []) {
-        const type = normalizeWhitespace(field?.Type?.Text).toUpperCase();
-        const value = normalizeWhitespace(field?.ValueDetection?.Text);
-        const confidence = average([
-          Number(field?.Type?.Confidence),
-          Number(field?.ValueDetection?.Confidence),
-        ]);
-        if (Number.isFinite(confidence)) confidences.push(confidence);
-        if (type && value && !fields.has(type)) {
-          fields.set(type, value);
-        }
-      }
-
-      const itemName =
-        fields.get("ITEM") ||
-        fields.get("EXPENSE_ROW") ||
-        fields.get("DESCRIPTION") ||
-        "";
-      const quantity = parseMoney(fields.get("QUANTITY")) || 1;
-      const unitPrice =
-        parseMoney(fields.get("PRICE")) ??
-        parseMoney(fields.get("UNIT_PRICE")) ??
-        parseMoney(fields.get("RATE"));
-      const lineTotal =
-        parseMoney(fields.get("AMOUNT")) ??
-        parseMoney(fields.get("TOTAL")) ??
-        parseMoney(fields.get("PRICE")) ??
-        (Number.isFinite(unitPrice) ? quantity * unitPrice : 0);
-
-      if (!itemName && !Number.isFinite(lineTotal)) continue;
-
-      items.push({
-        itemName: itemName || "Receipt item",
-        quantity,
-        unitPrice: Number.isFinite(unitPrice) ? Number(unitPrice.toFixed(2)) : 0,
-        lineTotal: Number.isFinite(lineTotal) ? Number(lineTotal.toFixed(2)) : 0,
-        note: "",
-        confidence: average(confidences),
-      });
+  if (commitMode === "match") {
+    if (!transactionId) {
+      return jsonError("Choose a transaction to match.", 400);
     }
+
+    const txPatch = {
+      receipt_id: receiptId,
+      match_status: "receipt_matched",
+      merchant_normalized: normalizedMerchant || null,
+    };
+
+    if (cardLast4) txPatch.card_last4 = cardLast4;
+
+    const { error: txError } = await admin
+      .from("spending_transactions")
+      .update(txPatch)
+      .eq("id", transactionId)
+      .eq("user_id", user.id);
+
+    if (txError) {
+      return jsonError(txError.message || "Could not match receipt to transaction.", 500);
+    }
+
+    const { error: receiptUpdateError } = await admin
+      .from("spending_receipts")
+      .update({
+        ...receiptPatch,
+        matched_transaction_id: transactionId,
+        ocr_status: "matched",
+      })
+      .eq("id", receiptId)
+      .eq("user_id", user.id);
+
+    if (receiptUpdateError) {
+      return jsonError(receiptUpdateError.message || "Could not update receipt match.", 500);
+    }
+
+    return NextResponse.json({ ok: true, match: { transactionId } });
   }
 
-  return items;
+  const receiptModel = {
+    merchantRaw: merchant || existingReceipt.merchant_raw || "Receipt scan",
+    merchantNormalized: normalizedMerchant || null,
+    total: total || existingReceipt.receipt_total || 0,
+    receiptDate: receiptDate || existingReceipt.receipt_date || null,
+    cardLast4: cardLast4 || existingReceipt.card_last4 || "",
+    guessedCategoryId: "misc",
+  };
+
+  const txPayload = buildReceiptTransactionPayload({
+    userId: user.id,
+    receiptId,
+    receipt: receiptModel,
+    matchedAccount,
+  });
+
+  const { data: createdTx, error: createError } = await admin
+    .from("spending_transactions")
+    .insert([txPayload])
+    .select("id,amount,merchant,tx_date,account_name,card_last4,created_at")
+    .single();
+
+  if (createError || !createdTx) {
+    return jsonError(createError?.message || "Could not create transaction from receipt.", 500);
+  }
+
+  if (matchedAccount) {
+    await postReceiptExpenseLedger({
+      supabaseAdmin: admin,
+      userId: user.id,
+      account: matchedAccount,
+      transaction: {
+        ...txPayload,
+        ...createdTx,
+      },
+    });
+  }
+
+  const { error: finalReceiptError } = await admin
+    .from("spending_receipts")
+    .update({
+      ...receiptPatch,
+      matched_transaction_id: createdTx.id,
+      ocr_status: "created",
+    })
+    .eq("id", receiptId)
+    .eq("user_id", user.id);
+
+  if (finalReceiptError) {
+    return jsonError(finalReceiptError.message || "Could not finalize receipt transaction.", 500);
+  }
+
+  return NextResponse.json({
+    ok: true,
+    match: {
+      transactionId: createdTx.id,
+    },
+  });
 }
 
 export async function POST(request) {
   try {
-    const formData = await request.formData();
-    const file = formData.get("file");
+    const contentType = request.headers.get("content-type") || "";
 
-    if (!(file instanceof File)) {
-      return NextResponse.json({ error: "No receipt file was provided." }, { status: 400 });
+    if (contentType.includes("multipart/form-data")) {
+      return await handlePreview(request);
     }
 
-    if (!file.size) {
-      return NextResponse.json({ error: "The receipt file is empty." }, { status: 400 });
+    if (contentType.includes("application/json")) {
+      return await handleCommit(request);
     }
 
-    const supported = [
-      "image/png",
-      "image/jpeg",
-      "image/jpg",
-      "image/tiff",
-      "application/pdf",
-    ];
-
-    if (file.type && !supported.includes(file.type)) {
-      return NextResponse.json(
-        { error: "Receipt OCR supports PNG, JPEG, TIFF, and PDF files." },
-        { status: 400 }
-      );
-    }
-
-    if (file.size > 10 * 1024 * 1024) {
-      return NextResponse.json(
-        { error: "This file is too large for synchronous receipt OCR. Keep it under 10 MB." },
-        { status: 400 }
-      );
-    }
-
-    const bytes = new Uint8Array(await file.arrayBuffer());
-    const client = buildClient();
-    const response = await client.send(
-      new AnalyzeExpenseCommand({
-        Document: {
-          Bytes: bytes,
-        },
-      })
-    );
-
-    const expense = response?.ExpenseDocuments?.[0];
-    if (!expense) {
-      return NextResponse.json(
-        { error: "OCR ran, but no receipt data was returned." },
-        { status: 422 }
-      );
-    }
-
-    const summary = summaryMap(expense.SummaryFields || []);
-    const items = normalizeLineItems(expense.LineItemGroups || []);
-
-    const merchant = getFirstSummaryValue(summary, ["VENDOR_NAME", "NAME"]);
-    const dateText = getFirstSummaryValue(summary, ["INVOICE_RECEIPT_DATE", "DATE"]);
-    const subtotal = getFirstSummaryMoney(summary, ["SUBTOTAL"]);
-    const tax = getFirstSummaryMoney(summary, ["TAX", "TAX_AMOUNT"]);
-    const total = getFirstSummaryMoney(summary, ["TOTAL", "AMOUNT_DUE"]);
-
-    const summaryConf = [];
-    for (const entries of summary.values()) {
-      for (const entry of entries) {
-        if (Number.isFinite(entry.confidence)) summaryConf.push(entry.confidence);
-      }
-    }
-    const itemConfs = items.map((item) => item.confidence).filter((n) => Number.isFinite(n));
-
-    return NextResponse.json({
-      merchant,
-      date: parseDateToIso(dateText),
-      subtotal: Number.isFinite(subtotal) ? subtotal : null,
-      tax: Number.isFinite(tax) ? tax : null,
-      total: Number.isFinite(total) ? total : null,
-      items: items.map((item) => ({
-        itemName: item.itemName,
-        quantity: item.quantity,
-        unitPrice: item.unitPrice,
-        lineTotal: item.lineTotal,
-        note: item.note,
-      })),
-      ocr: {
-        provider: "aws_textract_analyze_expense",
-        providerLabel: "AWS Textract",
-        pages: Number(response?.DocumentMetadata?.Pages) || 1,
-        summaryFieldCount: expense?.SummaryFields?.length || 0,
-        itemCount: items.length,
-        confidence: average([...summaryConf, ...itemConfs]),
-        scannedAt: new Date().toISOString(),
-      },
-    });
+    return jsonError("Unsupported receipt request type.", 415);
   } catch (error) {
-    return NextResponse.json(
-      { error: error?.message || "Receipt OCR failed." },
-      { status: 500 }
-    );
+    return jsonError(error?.message || "Receipt OCR request failed.", 500);
   }
 }
