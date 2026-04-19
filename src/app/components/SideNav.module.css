@@ -7,7 +7,7 @@
   border-radius: 20px;
   border: 1px solid rgba(255, 255, 255, 0.06);
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.018), rgba(255, 255, 255, 0) 84px),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.018), rgba(255, 255, 255, 0) 88px),
     rgba(6, 10, 16, 0.96);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.028),
@@ -47,6 +47,7 @@
   background: transparent;
   padding: 0;
   cursor: pointer;
+  font: inherit;
 }
 
 .logoWrap {
@@ -154,6 +155,14 @@
     linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0)),
     rgba(255, 255, 255, 0.035);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  transition:
+    border-color 140ms ease,
+    transform 140ms ease,
+    box-shadow 140ms ease;
+}
+
+.compactAccountButton:hover {
+  transform: translateY(-1px);
 }
 
 .compactAccountButtonOpen {
@@ -172,6 +181,7 @@
   font-weight: 900;
   color: #091019;
   background: linear-gradient(135deg, rgba(176, 196, 238, 0.94), rgba(91, 143, 232, 0.82));
+  flex: 0 0 auto;
 }
 
 .profileAvatar {
@@ -184,14 +194,12 @@
   width: 36px;
   height: 36px;
   font-size: 13px;
-  flex: 0 0 auto;
 }
 
 .profileAvatarLarge {
   width: 40px;
   height: 40px;
   font-size: 14px;
-  flex: 0 0 auto;
 }
 
 .profileButtonGlow {
@@ -272,11 +280,11 @@
   padding: 12px;
   border-radius: 13px;
   border: 1px solid rgba(255, 255, 255, 0.05);
-  background: rgba(255,255,255,0.018);
+  background: rgba(255, 255, 255, 0.018);
 }
 
 .activeSummaryLabel {
-  color: rgba(255,255,255,0.32);
+  color: rgba(255, 255, 255, 0.32);
 }
 
 .activeSummaryName {
@@ -290,7 +298,7 @@
   margin-top: 6px;
   font-size: 11px;
   line-height: 1.5;
-  color: rgba(255,255,255,0.48);
+  color: rgba(255, 255, 255, 0.48);
 }
 
 .detailBody {
@@ -307,7 +315,7 @@
 
 .sectionLabel {
   padding: 0 6px 6px;
-  color: rgba(255,255,255,0.28);
+  color: rgba(255, 255, 255, 0.28);
 }
 
 .detailList {
@@ -325,11 +333,20 @@
   justify-content: space-between;
   gap: 10px;
   color: rgba(192, 205, 226, 0.74);
+  text-decoration: none;
+}
+
+.detailItem:hover,
+.detailItem:focus-visible {
+  background: rgba(255, 255, 255, 0.025);
+  border-color: rgba(255, 255, 255, 0.05);
+  color: #fff;
+  outline: none;
 }
 
 .detailItemActive {
-  background: rgba(255,255,255,0.03);
-  border-color: rgba(255,255,255,0.08);
+  background: rgba(255, 255, 255, 0.03);
+  border-color: rgba(255, 255, 255, 0.08);
   color: #fff;
   box-shadow: inset 2px 0 0 rgba(123, 166, 247, 0.5);
 }
@@ -345,7 +362,7 @@
 }
 
 .detailArrow {
-  color: rgba(255,255,255,0.26);
+  color: rgba(255, 255, 255, 0.26);
 }
 
 .detailIcon,
@@ -354,8 +371,8 @@
   width: 24px;
   height: 24px;
   border-radius: 8px;
-  background: rgba(255,255,255,0.04);
-  border: 1px solid rgba(255,255,255,0.05);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.05);
   display: grid;
   place-items: center;
   flex: 0 0 auto;
@@ -376,9 +393,9 @@
   min-height: 18px;
   padding: 0 6px;
   border-radius: 999px;
-  border: 1px solid rgba(255,255,255,0.08);
-  background: rgba(255,255,255,0.05);
-  color: rgba(232,237,245,0.76);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(232, 237, 245, 0.76);
   font-size: 9px;
   font-weight: 800;
 }
@@ -387,7 +404,7 @@
   position: relative;
   margin-top: auto;
   padding: 14px 10px 10px;
-  border-top: 1px solid rgba(255,255,255,0.06);
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .accountButton {
@@ -395,12 +412,29 @@
   min-height: 56px;
   padding: 10px;
   border-radius: 14px;
-  border: 1px solid rgba(255,255,255,0.08);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   display: flex;
   align-items: center;
   gap: 10px;
-  background: rgba(255,255,255,0.018);
+  background: rgba(255, 255, 255, 0.018);
   color: #fff;
+  transition:
+    border-color 140ms ease,
+    transform 140ms ease,
+    box-shadow 140ms ease,
+    background 140ms ease;
+}
+
+.accountButton:hover {
+  transform: translateY(-1px);
+  background: rgba(255, 255, 255, 0.028);
+}
+
+.accountButtonOpen {
+  border-color: rgba(123, 166, 247, 0.18);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.03),
+    0 0 0 1px rgba(78, 124, 226, 0.08);
 }
 
 .accountCopy {
@@ -416,7 +450,12 @@
 .profileMetaSub {
   font-size: 10px;
   line-height: 1.45;
-  color: rgba(255,255,255,0.42);
+  color: rgba(255, 255, 255, 0.42);
+}
+
+.accountChevron {
+  transition: transform 160ms ease;
+  color: rgba(232, 237, 245, 0.56);
 }
 
 .accountChevronOpen {
@@ -426,9 +465,9 @@
 .profileMenu {
   padding: 12px;
   border-radius: 20px;
-  border: 1px solid rgba(255,255,255,0.08);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(7, 11, 18, 0.98);
-  box-shadow: 0 20px 44px rgba(0,0,0,0.36);
+  box-shadow: 0 20px 44px rgba(0, 0, 0, 0.36);
   z-index: 30;
 }
 
@@ -446,12 +485,18 @@
   width: min(286px, calc(100vw - 118px));
 }
 
+.profileMenuCopy {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
 .profileMetaCard {
   margin-top: 12px;
   padding: 12px;
   border-radius: 14px;
-  border: 1px solid rgba(255,255,255,0.05);
-  background: rgba(255,255,255,0.02);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.02);
 }
 
 .profileMetaValue {
@@ -476,11 +521,19 @@
   align-items: center;
   gap: 10px;
   color: rgba(232, 237, 245, 0.82);
+  text-decoration: none;
+}
+
+.profileLink:hover,
+.profileLink:focus-visible {
+  background: rgba(255, 255, 255, 0.03);
+  border-color: rgba(255, 255, 255, 0.05);
+  outline: none;
 }
 
 .profileLinkActive {
-  background: rgba(255,255,255,0.04);
-  border-color: rgba(123,166,247,0.16);
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(123, 166, 247, 0.16);
 }
 
 .profileLinkCopy {
@@ -494,9 +547,38 @@
   height: 36px;
   margin-top: 10px;
   border-radius: 10px;
-  border: 1px solid rgba(255,255,255,0.08);
-  background: rgba(255,255,255,0.04);
-  color: rgba(232,237,245,0.82);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(232, 237, 245, 0.82);
   display: grid;
   place-items: center;
+}
+
+@media (max-width: 1180px) {
+  .profileMenuCompact {
+    width: min(286px, calc(100vw - 140px));
+  }
+}
+
+@media (max-width: 760px) {
+  .shell {
+    border-radius: 18px;
+  }
+
+  .detailHeader {
+    padding: 12px;
+  }
+
+  .detailSection {
+    padding: 10px 8px 0;
+  }
+
+  .detailFooter {
+    padding: 12px 8px 8px;
+  }
+
+  .profileMenuCompact {
+    left: calc(100% + 10px);
+    width: min(280px, calc(100vw - 110px));
+  }
 }

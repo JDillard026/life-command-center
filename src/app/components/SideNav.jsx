@@ -25,6 +25,7 @@ import {
   Wallet,
   X,
 } from "lucide-react";
+import useCurrentAccountIdentity from "@/hooks/useCurrentAccountIdentity";
 import styles from "./SideNav.module.css";
 
 const NAV_ITEMS = [
@@ -38,11 +39,34 @@ const NAV_ITEMS = [
   { label: "Spending", href: "/spending", icon: PiggyBank, section: "money" },
   { label: "Savings", href: "/savings", icon: Target, section: "money" },
 
-  { label: "Portfolio", href: "/investments", icon: TrendingUp, section: "invest", badge: "LIVE" },
-  { label: "Discover", href: "/investments/discover", icon: Activity, section: "invest" },
-  { label: "Auto Invest", href: "/investments/auto", icon: Activity, section: "invest", badge: "NEW" },
+  {
+    label: "Portfolio",
+    href: "/investments",
+    icon: TrendingUp,
+    section: "invest",
+    badge: "LIVE",
+  },
+  {
+    label: "Discover",
+    href: "/investments/discover",
+    icon: Activity,
+    section: "invest",
+  },
+  {
+    label: "Auto Invest",
+    href: "/investments/auto",
+    icon: Activity,
+    section: "invest",
+    badge: "NEW",
+  },
 
-  { label: "Refinance Analyzer", href: "/tools/refinance", icon: Landmark, section: "tools", badge: "NEW" },
+  {
+    label: "Refinance Analyzer",
+    href: "/tools/refinance",
+    icon: Landmark,
+    section: "tools",
+    badge: "NEW",
+  },
   { label: "PFS Builder", href: "/tools/pfs", icon: FileText, section: "tools" },
 ];
 
@@ -93,6 +117,7 @@ function resolveActiveItem(pathname) {
   if (pathname.startsWith("/market/")) {
     return NAV_ITEMS.find((item) => item.href === "/investments/discover");
   }
+
   return NAV_ITEMS.find((item) => isActive(pathname, item.href)) || NAV_ITEMS[0];
 }
 
@@ -121,18 +146,27 @@ function NavDetailItem({ item, active, onNavigate }) {
   );
 }
 
-function ProfileMenu({ open, compact = false, onNavigate }) {
+function ProfileMenu({ open, compact = false, onNavigate, account }) {
   const pathname = usePathname() || "";
 
   if (!open) return null;
 
   return (
-    <div className={cx(styles.profileMenu, compact ? styles.profileMenuCompact : styles.profileMenuExpanded)}>
+    <div
+      className={cx(
+        styles.profileMenu,
+        compact ? styles.profileMenuCompact : styles.profileMenuExpanded
+      )}
+    >
       <div className={styles.profileMenuHead}>
-        <div className={styles.profileAvatarLarge}>J</div>
+        <div className={styles.profileAvatarLarge}>{account.initials}</div>
         <div className={styles.profileMenuCopy}>
-          <div className={styles.profileMenuName}>Jacob</div>
-          <div className={styles.profileMenuPlan}>Life Command Center</div>
+          <div className={styles.profileMenuName}>
+            {account.loading ? "Loading..." : account.displayName}
+          </div>
+          <div className={styles.profileMenuPlan}>
+            {account.email || "Account center"}
+          </div>
         </div>
       </div>
 
@@ -171,7 +205,7 @@ function ProfileMenu({ open, compact = false, onNavigate }) {
   );
 }
 
-function ExpandedAccountButton({ open, onToggle }) {
+function ExpandedAccountButton({ open, onToggle, account }) {
   return (
     <button
       type="button"
@@ -180,19 +214,26 @@ function ExpandedAccountButton({ open, onToggle }) {
       aria-label="Open account menu"
       onClick={onToggle}
     >
-      <div className={styles.accountAvatar}>J</div>
+      <div className={styles.accountAvatar}>{account.initials}</div>
+
       <div className={styles.accountCopy}>
-        <div className={styles.accountName}>Jacob</div>
+        <div className={styles.accountName}>
+          {account.loading ? "Loading..." : account.displayName}
+        </div>
         <div className={styles.accountPlan}>Account & settings</div>
       </div>
+
       <div className={styles.accountChevronWrap}>
-        <ChevronRight size={14} className={cx(styles.accountChevron, open && styles.accountChevronOpen)} />
+        <ChevronRight
+          size={14}
+          className={cx(styles.accountChevron, open && styles.accountChevronOpen)}
+        />
       </div>
     </button>
   );
 }
 
-function CompactAccountButton({ open, onToggle }) {
+function CompactAccountButton({ open, onToggle, account }) {
   return (
     <button
       type="button"
@@ -202,7 +243,7 @@ function CompactAccountButton({ open, onToggle }) {
       title="Account"
       onClick={onToggle}
     >
-      <div className={styles.profileAvatar}>J</div>
+      <div className={styles.profileAvatar}>{account.initials}</div>
       <div className={styles.profileButtonGlow} />
     </button>
   );
@@ -218,13 +259,26 @@ export default function SideNav({
   const [profileOpen, setProfileOpen] = useState(false);
   const compactProfileRef = useRef(null);
   const expandedProfileRef = useRef(null);
+  const account = useCurrentAccountIdentity();
 
   const activeItem = resolveActiveItem(pathname);
 
-  const overviewItems = useMemo(() => NAV_ITEMS.filter((item) => item.section === "overview"), []);
-  const moneyItems = useMemo(() => NAV_ITEMS.filter((item) => item.section === "money"), []);
-  const investItems = useMemo(() => NAV_ITEMS.filter((item) => item.section === "invest"), []);
-  const toolItems = useMemo(() => NAV_ITEMS.filter((item) => item.section === "tools"), []);
+  const overviewItems = useMemo(
+    () => NAV_ITEMS.filter((item) => item.section === "overview"),
+    []
+  );
+  const moneyItems = useMemo(
+    () => NAV_ITEMS.filter((item) => item.section === "money"),
+    []
+  );
+  const investItems = useMemo(
+    () => NAV_ITEMS.filter((item) => item.section === "invest"),
+    []
+  );
+  const toolItems = useMemo(
+    () => NAV_ITEMS.filter((item) => item.section === "tools"),
+    []
+  );
 
   useEffect(() => {
     setProfileOpen(false);
@@ -316,8 +370,17 @@ export default function SideNav({
 
         {showCompactAccount ? (
           <div className={styles.iconRailBottom} ref={compactProfileRef}>
-            <CompactAccountButton open={profileOpen} onToggle={() => setProfileOpen((prev) => !prev)} />
-            <ProfileMenu open={profileOpen} compact onNavigate={handleNavigate} />
+            <CompactAccountButton
+              open={profileOpen}
+              onToggle={() => setProfileOpen((prev) => !prev)}
+              account={account}
+            />
+            <ProfileMenu
+              open={profileOpen}
+              compact
+              onNavigate={handleNavigate}
+              account={account}
+            />
           </div>
         ) : null}
 
@@ -355,7 +418,9 @@ export default function SideNav({
 
         <div className={styles.activeSummary}>
           <div className={styles.activeSummaryLabel}>Current</div>
-          <div className={styles.activeSummaryName}>{activeItem?.label || "Dashboard"}</div>
+          <div className={styles.activeSummaryName}>
+            {activeItem?.label || "Dashboard"}
+          </div>
           <div className={styles.activeSummaryNote}>{activeSummaryCopy}</div>
         </div>
 
@@ -419,8 +484,16 @@ export default function SideNav({
 
         {!collapsed ? (
           <div className={styles.detailFooter} ref={expandedProfileRef}>
-            <ExpandedAccountButton open={profileOpen} onToggle={() => setProfileOpen((prev) => !prev)} />
-            <ProfileMenu open={profileOpen} onNavigate={handleNavigate} />
+            <ExpandedAccountButton
+              open={profileOpen}
+              onToggle={() => setProfileOpen((prev) => !prev)}
+              account={account}
+            />
+            <ProfileMenu
+              open={profileOpen}
+              onNavigate={handleNavigate}
+              account={account}
+            />
           </div>
         ) : null}
       </div>
