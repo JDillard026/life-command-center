@@ -5,25 +5,28 @@ import GlassPane from "../components/GlassPane";
 import styles from "./SavingsPage.module.css";
 import { supabase } from "@/lib/supabaseClient";
 import {
+  DEFAULT_GOAL_DRAFT,
   amountLeft,
   fmtMonthLabel,
   mapGoalRow,
   mapGoalToRow,
   monthKeyFromISO,
+  normalizeImportedGoal,
   parseMoneyInput,
   priorityRank,
   progressPercent,
   projectedFinishByMonthly,
-  recentProjection,
-  resolvedGoalName,
   safeNum,
+  sortContributionsDesc,
+  thisMonthContributionTotal,
   todayISO,
   uid,
 } from "./savings.helpers";
 import {
-  SummaryStrip,
-  RosterPane,
-  CommandBoard,
+  GoalNavigator,
+  GoalWorkspace,
+  SavingsRightRail,
+  SavingsTopBar,
 } from "./savings.components";
 
 export default function SavingsCommand() {
@@ -34,28 +37,21 @@ export default function SavingsCommand() {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("active");
   const [sort, setSort] = useState("priority");
-  const [showArchived, setShowArchived] = useState(false);
-  const [focusMode, setFocusMode] = useState("deadline");
   const [selectedGoalId, setSelectedGoalId] = useState("");
-  const [boardTab, setBoardTab] = useState("dashboard");
+  const [workspaceTab, setWorkspaceTab] = useState("dashboard");
+
+  const [createOpen, setCreateOpen] = useState(false);
+  const [utilityOpen, setUtilityOpen] = useState(false);
+  const [goalDraft, setGoalDraft] = useState({ ...DEFAULT_GOAL_DRAFT });
 
   const [savingIds, setSavingIds] = useState({});
   const [pageError, setPageError] = useState("");
   const [addingBusy, setAddingBusy] = useState(false);
-  const [ioText, setIoText] = useState("");
-
-  const [adding, setAdding] = useState({
-    preset: "Emergency Fund",
-    customName: "",
-    target: "",
-    current: "",
-    dueDate: "",
-    priority: "Medium",
-  });
 
   const [customContribution, setCustomContribution] = useState({});
   const [customContributionNote, setCustomContributionNote] = useState({});
   const [plannerMonthlyPush, setPlannerMonthlyPush] = useState({});
+  const [ioText, setIoText] = useState("");
 
   const rowSaveTimers = useRef({});
 
@@ -77,6 +73,7 @@ export default function SavingsCommand() {
 
   async function loadSavingsPage() {
     if (!supabase) {
+      setPageError("Supabase is not configured.");
       setLoading(false);
       return;
     }
@@ -85,6 +82,7 @@ export default function SavingsCommand() {
     setPageError("");
 
     const user = await getCurrentUser();
+
     if (!user) {
       setUserId(null);
       setGoals([]);
@@ -103,7 +101,7 @@ export default function SavingsCommand() {
 
     if (error) {
       console.error("load savings error:", error);
-      setPageError(error.message || "Failed to load savings.");
+      setPageError(error.message || "Failed to load savings goals.");
       setGoals([]);
       setSelectedGoalId("");
       setLoading(false);
@@ -111,6 +109,7 @@ export default function SavingsCommand() {
     }
 
     const mappedGoals = (data || []).map(mapGoalRow);
+
     setGoals(mappedGoals);
     setSelectedGoalId((prev) => prev || mappedGoals[0]?.id || "");
     setLoading(false);
@@ -136,13 +135,12 @@ export default function SavingsCommand() {
   useEffect(() => {
     if (!goals.length) {
       setSelectedGoalId("");
+      setCreateOpen(true);
       return;
     }
 
-    const exists = goals.some((g) => g.id === selectedGoalId);
-    if (!exists) {
-      setSelectedGoalId(goals[0]?.id || "");
-    }
+    const exists = goals.some((goal) => goal.id === selectedGoalId);
+    if (!exists) setSelectedGoalId(goals[0]?.id || "");
   }, [goals, selectedGoalId]);
 
   async function persistGoal(nextGoal) {
@@ -169,28 +167,40 @@ export default function SavingsCommand() {
 
     rowSaveTimers.current[nextGoal.id] = setTimeout(() => {
       persistGoal(nextGoal);
-    }, 300);
+    }, 320);
   }
 
   function updateGoal(id, patch) {
     setGoals((prev) => {
-      const nextRows = prev.map((g) =>
-        g.id === id
-          ? { ...g, ...patch, updatedAt: new Date().toISOString() }
-          : g
-      );
-      const changed = nextRows.find((g) => g.id === id);
+      let changed = null;
+
+      const next = prev.map((goal) => {
+        if (goal.id !== id) return goal;
+
+        changed = {
+          ...goal,
+          ...patch,
+          updatedAt: new Date().toISOString(),
+        };
+
+        return changed;
+      });
+
       if (changed) scheduleGoalSave(changed);
-      return nextRows;
+      return next;
     });
   }
 
-  async function addGoalFromForm() {
+  async function addGoalFromDraft() {
     if (!supabase || !userId || addingBusy) return;
 
-    const name = resolvedGoalName(adding.preset, adding.customName);
-    const target = safeNum(parseMoneyInput(adding.target), NaN);
-    const current = safeNum(parseMoneyInput(adding.current || "0"), 0);
+    const name =
+      goalDraft.preset === "Other"
+        ? String(goalDraft.customName || "").trim()
+        : goalDraft.preset;
+
+    const target = safeNum(parseMoneyInput(goalDraft.target), NaN);
+    const current = safeNum(parseMoneyInput(goalDraft.current || "0"), 0);
 
     if (!name) {
       alert("Goal name is required.");
@@ -207,13 +217,13 @@ export default function SavingsCommand() {
       return;
     }
 
-    const next = {
+    const nextGoal = {
       id: uid(),
       name,
       target,
       current,
-      dueDate: adding.dueDate || "",
-      priority: adding.priority || "Medium",
+      dueDate: goalDraft.dueDate || "",
+      priority: goalDraft.priority || "Medium",
       archived: false,
       createdAt: Date.now(),
       updatedAt: new Date().toISOString(),
@@ -231,26 +241,21 @@ export default function SavingsCommand() {
     };
 
     setAddingBusy(true);
-    setGoals((prev) => [next, ...prev]);
-    setSelectedGoalId(next.id);
-    setBoardTab("focus");
+    setGoals((prev) => [nextGoal, ...prev]);
+    setSelectedGoalId(nextGoal.id);
+    setWorkspaceTab("dashboard");
 
     const { error } = await supabase
       .from("savings_goals")
-      .insert(mapGoalToRow(next, userId));
+      .insert(mapGoalToRow(nextGoal, userId));
 
     if (error) {
       console.error("add goal error:", error);
       await loadSavingsPage();
+      setPageError(error.message || "Failed to add goal.");
     } else {
-      setAdding({
-        preset: "Emergency Fund",
-        customName: "",
-        target: "",
-        current: "",
-        dueDate: "",
-        priority: "Medium",
-      });
+      setGoalDraft({ ...DEFAULT_GOAL_DRAFT });
+      setCreateOpen(false);
     }
 
     setAddingBusy(false);
@@ -258,9 +263,15 @@ export default function SavingsCommand() {
 
   async function removeGoal(id) {
     if (!supabase || !userId) return;
-    if (typeof window !== "undefined" && !window.confirm("Delete this goal?")) return;
+    if (typeof window !== "undefined" && !window.confirm("Delete this goal?")) {
+      return;
+    }
 
-    const nextGoals = goals.filter((g) => g.id !== id);
+    if (rowSaveTimers.current[id]) {
+      clearTimeout(rowSaveTimers.current[id]);
+    }
+
+    const nextGoals = goals.filter((goal) => goal.id !== id);
     setGoals(nextGoals);
 
     if (selectedGoalId === id) {
@@ -275,12 +286,13 @@ export default function SavingsCommand() {
 
     if (error) {
       console.error("delete goal error:", error);
+      setPageError(error.message || "Failed to delete goal.");
       await loadSavingsPage();
     }
   }
 
   async function duplicateGoal(goal) {
-    if (!supabase || !userId) return;
+    if (!supabase || !userId || !goal) return;
 
     const cloned = {
       ...goal,
@@ -289,8 +301,8 @@ export default function SavingsCommand() {
       createdAt: Date.now(),
       updatedAt: new Date().toISOString(),
       contributions: Array.isArray(goal.contributions)
-        ? goal.contributions.map((item) => ({
-            ...item,
+        ? goal.contributions.map((entry) => ({
+            ...entry,
             id: uid(),
           }))
         : [],
@@ -298,7 +310,6 @@ export default function SavingsCommand() {
 
     setGoals((prev) => [cloned, ...prev]);
     setSelectedGoalId(cloned.id);
-    setBoardTab("focus");
 
     const { error } = await supabase
       .from("savings_goals")
@@ -306,45 +317,49 @@ export default function SavingsCommand() {
 
     if (error) {
       console.error("duplicate goal error:", error);
+      setPageError(error.message || "Failed to duplicate goal.");
       await loadSavingsPage();
     }
   }
 
   function toggleArchiveGoal(goal) {
+    if (!goal) return;
     updateGoal(goal.id, { archived: !goal.archived });
   }
 
   function applyContribution(goalId, amount, note = "") {
-    const parsedAmount = safeNum(amount, NaN);
+    const parsed = safeNum(amount, NaN);
 
-    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+    if (!Number.isFinite(parsed) || parsed <= 0) {
       alert("Contribution amount must be greater than 0.");
       return;
     }
 
     setGoals((prev) => {
-      const nextRows = prev.map((goal) => {
+      let changed = null;
+
+      const next = prev.map((goal) => {
         if (goal.id !== goalId) return goal;
 
         const entry = {
           id: uid(),
           date: todayISO(),
-          amount: parsedAmount,
+          amount: parsed,
           note: String(note || "").trim(),
         };
 
-        return {
+        changed = {
           ...goal,
-          current: safeNum(goal.current, 0) + parsedAmount,
+          current: safeNum(goal.current, 0) + parsed,
           contributions: [entry, ...(Array.isArray(goal.contributions) ? goal.contributions : [])],
           updatedAt: new Date().toISOString(),
         };
+
+        return changed;
       });
 
-      const changed = nextRows.find((g) => g.id === goalId);
       if (changed) scheduleGoalSave(changed);
-
-      return nextRows;
+      return next;
     });
 
     setCustomContribution((prev) => ({ ...prev, [goalId]: "" }));
@@ -353,25 +368,28 @@ export default function SavingsCommand() {
 
   function undoLastContribution(goalId) {
     setGoals((prev) => {
-      const nextRows = prev.map((goal) => {
+      let changed = null;
+
+      const next = prev.map((goal) => {
         if (goal.id !== goalId) return goal;
-        const list = Array.isArray(goal.contributions) ? goal.contributions : [];
+
+        const list = Array.isArray(goal.contributions) ? [...goal.contributions] : [];
         if (!list.length) return goal;
 
         const [last, ...rest] = list;
 
-        return {
+        changed = {
           ...goal,
           current: Math.max(0, safeNum(goal.current, 0) - safeNum(last.amount, 0)),
           contributions: rest,
           updatedAt: new Date().toISOString(),
         };
+
+        return changed;
       });
 
-      const changed = nextRows.find((g) => g.id === goalId);
       if (changed) scheduleGoalSave(changed);
-
-      return nextRows;
+      return next;
     });
   }
 
@@ -401,22 +419,11 @@ export default function SavingsCommand() {
     }
 
     if (typeof window !== "undefined") {
-      const okay = window.confirm("Replace all current savings goals for this account?");
+      const okay = window.confirm("Replace all current savings goals?");
       if (!okay) return;
     }
 
-    const normalized = parsed.map((goal) => ({
-      id: goal.id ?? uid(),
-      name: String(goal.name ?? "").trim(),
-      target: safeNum(goal.target, 0),
-      current: safeNum(goal.current, 0),
-      dueDate: goal.dueDate || "",
-      priority: goal.priority || "Medium",
-      archived: !!goal.archived,
-      createdAt: goal.createdAt ?? Date.now(),
-      updatedAt: new Date().toISOString(),
-      contributions: Array.isArray(goal.contributions) ? goal.contributions : [],
-    }));
+    const normalized = parsed.map((item) => normalizeImportedGoal(item));
 
     setGoals(normalized);
     setSelectedGoalId(normalized[0]?.id || "");
@@ -427,7 +434,7 @@ export default function SavingsCommand() {
       .eq("user_id", userId);
 
     if (deleteError) {
-      console.error("import delete savings goals error:", deleteError);
+      console.error("import delete error:", deleteError);
       setPageError(deleteError.message || "Failed while clearing current goals.");
       await loadSavingsPage();
       return;
@@ -435,126 +442,66 @@ export default function SavingsCommand() {
 
     if (normalized.length > 0) {
       const rows = normalized.map((goal) => mapGoalToRow(goal, userId));
+
       const { error: insertError } = await supabase
         .from("savings_goals")
         .upsert(rows, { onConflict: "id" });
 
       if (insertError) {
-        console.error("import upsert savings goals error:", insertError);
+        console.error("import insert error:", insertError);
         setPageError(insertError.message || "Import failed.");
         await loadSavingsPage();
       }
     }
   }
 
-  const activeGoals = useMemo(() => goals.filter((g) => !g.archived), [goals]);
+  const activeGoals = useMemo(() => goals.filter((goal) => !goal.archived), [goals]);
 
-  const totals = useMemo(() => {
-    const totalCurrent = activeGoals.reduce((sum, g) => sum + safeNum(g.current), 0);
-    const totalTarget = activeGoals.reduce((sum, g) => sum + safeNum(g.target), 0);
-    const totalLeft = Math.max(0, totalTarget - totalCurrent);
-    const completion = totalTarget > 0 ? (totalCurrent / totalTarget) * 100 : 0;
-
-    const fundedCount = activeGoals.filter((g) => amountLeft(g) <= 0).length;
-    const dueSoonCount = activeGoals.filter((g) => {
-      const d = Number.isFinite(new Date(g.dueDate).getTime()) ? null : null;
-      const remaining = amountLeft(g);
-      const diff = g.dueDate ? Math.round((new Date(`${g.dueDate}T00:00:00`).getTime() - new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate()).getTime()) / 86400000) : null;
-      return diff !== null && diff >= 0 && diff <= 14 && remaining > 0;
-    }).length;
-
-    const overdueCount = activeGoals.filter((g) => {
-      const diff = g.dueDate ? Math.round((new Date(`${g.dueDate}T00:00:00`).getTime() - new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate()).getTime()) / 86400000) : null;
-      return diff !== null && diff < 0 && amountLeft(g) > 0;
-    }).length;
-
-    return {
-      totalCurrent,
-      totalTarget,
-      totalLeft,
-      completion,
-      fundedCount,
-      dueSoonCount,
-      overdueCount,
-    };
-  }, [activeGoals]);
-
-  const rankedGoals = useMemo(() => {
+  const rankedActiveGoals = useMemo(() => {
     const rows = [...activeGoals];
 
-    if (focusMode === "gap") {
-      rows.sort((a, b) => {
-        const leftDiff = amountLeft(b) - amountLeft(a);
-        if (leftDiff !== 0) return leftDiff;
-        return priorityRank(a.priority) - priorityRank(b.priority);
-      });
-    } else if (focusMode === "progress") {
-      rows.sort((a, b) => {
-        const progressDiff = progressPercent(a) - progressPercent(b);
-        if (progressDiff !== 0) return progressDiff;
-        return amountLeft(b) - amountLeft(a);
-      });
-    } else {
-      rows.sort((a, b) => {
-        const aFunded = amountLeft(a) <= 0 ? 1 : 0;
-        const bFunded = amountLeft(b) <= 0 ? 1 : 0;
-        if (aFunded !== bFunded) return aFunded - bFunded;
+    rows.sort((a, b) => {
+      const aFunded = amountLeft(a) <= 0 ? 1 : 0;
+      const bFunded = amountLeft(b) <= 0 ? 1 : 0;
+      if (aFunded !== bFunded) return aFunded - bFunded;
 
-        const ad = a.dueDate
-          ? Math.round(
-              (new Date(`${a.dueDate}T00:00:00`).getTime() -
-                new Date(
-                  new Date().getFullYear(),
-                  new Date().getMonth(),
-                  new Date().getDate()
-                ).getTime()) /
-                86400000
-            )
-          : Number.POSITIVE_INFINITY;
+      const aDue = a.dueDate
+        ? new Date(`${a.dueDate}T00:00:00`).getTime()
+        : Number.POSITIVE_INFINITY;
+      const bDue = b.dueDate
+        ? new Date(`${b.dueDate}T00:00:00`).getTime()
+        : Number.POSITIVE_INFINITY;
 
-        const bd = b.dueDate
-          ? Math.round(
-              (new Date(`${b.dueDate}T00:00:00`).getTime() -
-                new Date(
-                  new Date().getFullYear(),
-                  new Date().getMonth(),
-                  new Date().getDate()
-                ).getTime()) /
-                86400000
-            )
-          : Number.POSITIVE_INFINITY;
+      if (aDue !== bDue) return aDue - bDue;
 
-        if (ad !== bd) return ad - bd;
+      const pr = priorityRank(a.priority) - priorityRank(b.priority);
+      if (pr !== 0) return pr;
 
-        const pr = priorityRank(a.priority) - priorityRank(b.priority);
-        if (pr !== 0) return pr;
+      return amountLeft(b) - amountLeft(a);
+    });
 
-        return amountLeft(b) - amountLeft(a);
-      });
-    }
-
-    return rows.map((g, i) => ({
-      ...g,
-      priorityRank: i + 1,
-    }));
-  }, [activeGoals, focusMode]);
+    return rows;
+  }, [activeGoals]);
 
   const priorityMap = useMemo(() => {
     const map = new Map();
-    rankedGoals.forEach((g) => map.set(g.id, g.priorityRank));
+    rankedActiveGoals.forEach((goal, index) => {
+      map.set(goal.id, index + 1);
+    });
     return map;
-  }, [rankedGoals]);
+  }, [rankedActiveGoals]);
 
   const visibleGoals = useMemo(() => {
-    const q = search.trim().toLowerCase();
+    const query = search.trim().toLowerCase();
 
-    let list = goals.filter((g) => {
-      if (filter === "active" && g.archived) return false;
-      if (filter === "archived" && !g.archived) return false;
+    let list = goals.filter((goal) => {
+      if (filter === "active" && goal.archived) return false;
+      if (filter === "archived" && !goal.archived) return false;
+
       if (filter === "due") {
-        const diff = g.dueDate
+        const dueDays = goal.dueDate
           ? Math.round(
-              (new Date(`${g.dueDate}T00:00:00`).getTime() -
+              (new Date(`${goal.dueDate}T00:00:00`).getTime() -
                 new Date(
                   new Date().getFullYear(),
                   new Date().getMonth(),
@@ -563,17 +510,18 @@ export default function SavingsCommand() {
                 86400000
             )
           : null;
-        if (!(diff !== null && diff <= 14 && amountLeft(g) > 0)) return false;
+
+        if (!(dueDays !== null && dueDays >= 0 && dueDays <= 14 && amountLeft(goal) > 0)) {
+          return false;
+        }
       }
 
-      if (!showArchived && filter !== "archived" && g.archived) return false;
+      if (!query) return true;
 
-      if (!q) return true;
-
-      return [g.name, g.priority, g.dueDate]
+      return [goal.name, goal.priority, goal.dueDate]
         .join(" ")
         .toLowerCase()
-        .includes(q);
+        .includes(query);
     });
 
     if (sort === "priority") {
@@ -586,7 +534,20 @@ export default function SavingsCommand() {
       return list;
     }
 
-    if (sort === "left") {
+    if (sort === "due") {
+      list.sort((a, b) => {
+        const ad = a.dueDate
+          ? new Date(`${a.dueDate}T00:00:00`).getTime()
+          : Number.POSITIVE_INFINITY;
+        const bd = b.dueDate
+          ? new Date(`${b.dueDate}T00:00:00`).getTime()
+          : Number.POSITIVE_INFINITY;
+        return ad - bd;
+      });
+      return list;
+    }
+
+    if (sort === "gap") {
       list.sort((a, b) => amountLeft(b) - amountLeft(a));
       return list;
     }
@@ -599,52 +560,21 @@ export default function SavingsCommand() {
     if (sort === "updated") {
       list.sort(
         (a, b) =>
-          new Date(b.updatedAt || 0).getTime() -
-          new Date(a.updatedAt || 0).getTime()
+          new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime()
       );
       return list;
     }
 
     if (sort === "name") {
-      list.sort((a, b) =>
-        String(a.name || "").localeCompare(String(b.name || ""))
-      );
+      list.sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")));
       return list;
     }
 
-    list.sort((a, b) => {
-      const ad = a.dueDate
-        ? Math.round(
-            (new Date(`${a.dueDate}T00:00:00`).getTime() -
-              new Date(
-                new Date().getFullYear(),
-                new Date().getMonth(),
-                new Date().getDate()
-              ).getTime()) /
-              86400000
-          )
-        : 9999;
-
-      const bd = b.dueDate
-        ? Math.round(
-            (new Date(`${b.dueDate}T00:00:00`).getTime() -
-              new Date(
-                new Date().getFullYear(),
-                new Date().getMonth(),
-                new Date().getDate()
-              ).getTime()) /
-              86400000
-          )
-        : 9999;
-
-      return ad - bd;
-    });
-
     return list;
-  }, [goals, showArchived, filter, search, sort, priorityMap]);
+  }, [goals, filter, search, sort, priorityMap]);
 
   const selectedGoal =
-    goals.find((g) => g.id === selectedGoalId) || visibleGoals[0] || null;
+    goals.find((goal) => goal.id === selectedGoalId) || visibleGoals[0] || null;
 
   const selectedPriority = selectedGoal
     ? priorityMap.get(selectedGoal.id) ?? null
@@ -654,36 +584,80 @@ export default function SavingsCommand() {
 
   const selectedContributions = useMemo(() => {
     if (!selectedGoal) return [];
-    return (Array.isArray(selectedGoal.contributions) ? selectedGoal.contributions : [])
-      .slice()
-      .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
+    return sortContributionsDesc(
+      Array.isArray(selectedGoal.contributions) ? selectedGoal.contributions : []
+    );
   }, [selectedGoal]);
 
-  const contributionFeed = useMemo(() => {
-    const items = activeGoals.flatMap((goal) =>
-      (Array.isArray(goal.contributions) ? goal.contributions : []).map((entry) => ({
-        id: entry.id,
-        goalId: goal.id,
-        goalName: goal.name,
-        amount: safeNum(entry.amount),
-        note: entry.note || "",
-        date: entry.date || "",
-      }))
-    );
-
-    return items
-      .sort((a, b) => String(b.date).localeCompare(String(a.date)))
-      .slice(0, 10);
+  const boardFeed = useMemo(() => {
+    return activeGoals
+      .flatMap((goal) =>
+        (Array.isArray(goal.contributions) ? goal.contributions : []).map((entry) => ({
+          id: `${goal.id}-${entry.id}`,
+          goalId: goal.id,
+          goalName: goal.name,
+          amount: safeNum(entry.amount, 0),
+          note: entry.note || "",
+          date: entry.date || "",
+        }))
+      )
+      .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")))
+      .slice(0, 12);
   }, [activeGoals]);
 
-  const monthLabel = fmtMonthLabel(monthKeyFromISO(todayISO()));
+  const totals = useMemo(() => {
+    const totalCurrent = activeGoals.reduce(
+      (sum, goal) => sum + safeNum(goal.current, 0),
+      0
+    );
 
-  const heroTone =
-    totals.overdueCount > 0
-      ? "red"
-      : totals.dueSoonCount > 0
-      ? "amber"
-      : "green";
+    const totalTarget = activeGoals.reduce(
+      (sum, goal) => sum + safeNum(goal.target, 0),
+      0
+    );
+
+    const totalLeft = Math.max(0, totalTarget - totalCurrent);
+
+    const today = new Date(
+      new Date().getFullYear(),
+      new Date().getMonth(),
+      new Date().getDate()
+    ).getTime();
+
+    const dueSoonCount = activeGoals.filter((goal) => {
+      if (!goal.dueDate || amountLeft(goal) <= 0) return false;
+      const diff = Math.round(
+        (new Date(`${goal.dueDate}T00:00:00`).getTime() - today) / 86400000
+      );
+      return diff >= 0 && diff <= 14;
+    }).length;
+
+    const overdueCount = activeGoals.filter((goal) => {
+      if (!goal.dueDate || amountLeft(goal) <= 0) return false;
+      const diff = Math.round(
+        (new Date(`${goal.dueDate}T00:00:00`).getTime() - today) / 86400000
+      );
+      return diff < 0;
+    }).length;
+
+    const thisMonthAdded = activeGoals.reduce(
+      (sum, goal) => sum + thisMonthContributionTotal(goal),
+      0
+    );
+
+    return {
+      totalCurrent,
+      totalTarget,
+      totalLeft,
+      activeCount: activeGoals.length,
+      archivedCount: goals.filter((goal) => goal.archived).length,
+      dueSoonCount,
+      overdueCount,
+      thisMonthAdded,
+    };
+  }, [activeGoals, goals]);
+
+  const monthLabel = fmtMonthLabel(monthKeyFromISO(todayISO()));
 
   const plannerPushValue = selectedGoal
     ? plannerMonthlyPush[selectedGoal.id] ?? ""
@@ -696,8 +670,8 @@ export default function SavingsCommand() {
   if (loading) {
     return (
       <main className={styles.page}>
-        <GlassPane className={styles.gatePanel}>
-          <div className={styles.gateText}>Loading savings.</div>
+        <GlassPane className={styles.loadingPane}>
+          <div className={styles.loadingText}>Loading savings.</div>
         </GlassPane>
       </main>
     );
@@ -712,93 +686,110 @@ export default function SavingsCommand() {
         </GlassPane>
       ) : null}
 
-      <SummaryStrip
+      <SavingsTopBar
         totals={totals}
-        focusMode={focusMode}
-        monthLabel={monthLabel}
-        activeGoals={activeGoals}
         selectedGoal={selectedGoal}
-        heroTone={heroTone}
+        monthLabel={monthLabel}
+        createOpen={createOpen}
+        utilityOpen={utilityOpen}
+        onToggleCreate={() => setCreateOpen((prev) => !prev)}
+        onToggleUtilities={() => setUtilityOpen((prev) => !prev)}
       />
 
       <div className={styles.workspace}>
         <div className={styles.leftCol}>
-          <RosterPane
-            visibleGoals={visibleGoals}
-            selectedGoal={selectedGoal}
-            priorityMap={priorityMap}
+          <GoalNavigator
+            goals={visibleGoals}
+            selectedGoalId={selectedGoalId}
+            onSelectGoal={setSelectedGoalId}
             search={search}
             setSearch={setSearch}
             filter={filter}
             setFilter={setFilter}
             sort={sort}
             setSort={setSort}
-            focusMode={focusMode}
-            setFocusMode={setFocusMode}
-            onSelectGoal={setSelectedGoalId}
-            onDuplicate={duplicateGoal}
-            onArchive={toggleArchiveGoal}
-            onDelete={removeGoal}
+            priorityMap={priorityMap}
+            onDuplicateGoal={duplicateGoal}
+            onToggleArchiveGoal={toggleArchiveGoal}
+            onDeleteGoal={removeGoal}
           />
         </div>
 
         <div className={styles.mainCol}>
-          <CommandBoard
-            boardTab={boardTab}
-            setBoardTab={setBoardTab}
+          <GoalWorkspace
             selectedGoal={selectedGoal}
             selectedPriority={selectedPriority}
             selectedSaving={selectedSaving}
+            workspaceTab={workspaceTab}
+            setWorkspaceTab={setWorkspaceTab}
             selectedContributions={selectedContributions}
-            contributionFeed={contributionFeed}
+            boardFeed={boardFeed}
             plannerPushValue={plannerPushValue}
-            setPlannerPushValue={(value) =>
-              selectedGoal &&
+            setPlannerPushValue={(value) => {
+              if (!selectedGoal) return;
               setPlannerMonthlyPush((prev) => ({
                 ...prev,
                 [selectedGoal.id]: value,
-              }))
-            }
+              }));
+            }}
             plannerSimulation={plannerSimulation}
-            activeGoals={activeGoals}
             customAmount={selectedGoal ? customContribution[selectedGoal.id] ?? "" : ""}
             customNote={selectedGoal ? customContributionNote[selectedGoal.id] ?? "" : ""}
-            setCustomAmount={(value) =>
-              selectedGoal &&
+            setCustomAmount={(value) => {
+              if (!selectedGoal) return;
               setCustomContribution((prev) => ({
                 ...prev,
                 [selectedGoal.id]: value,
-              }))
-            }
-            setCustomNote={(value) =>
-              selectedGoal &&
+              }));
+            }}
+            setCustomNote={(value) => {
+              if (!selectedGoal) return;
               setCustomContributionNote((prev) => ({
                 ...prev,
                 [selectedGoal.id]: value,
-              }))
-            }
-            adding={adding}
-            setAdding={setAdding}
-            addingBusy={addingBusy}
-            ioText={ioText}
-            setIoText={setIoText}
-            onAddGoal={addGoalFromForm}
-            onPatchGoal={(patch) => selectedGoal && updateGoal(selectedGoal.id, patch)}
-            onDuplicateGoal={duplicateGoal}
-            onToggleArchiveGoal={toggleArchiveGoal}
-            onDeleteGoal={removeGoal}
-            onQuickAdd={(amount) =>
-              selectedGoal && applyContribution(selectedGoal.id, amount, "Quick add")
-            }
-            onUndoLast={() => selectedGoal && undoLastContribution(selectedGoal.id)}
-            onCustomAdd={() =>
-              selectedGoal &&
+              }));
+            }}
+            onCustomAdd={() => {
+              if (!selectedGoal) return;
               applyContribution(
                 selectedGoal.id,
                 parseMoneyInput(customContribution[selectedGoal.id] ?? ""),
                 customContributionNote[selectedGoal.id] ?? ""
-              )
-            }
+              );
+            }}
+            onQuickAdd={(amount) => {
+              if (!selectedGoal) return;
+              applyContribution(selectedGoal.id, amount, "Quick add");
+            }}
+            onUndoLast={() => {
+              if (!selectedGoal) return;
+              undoLastContribution(selectedGoal.id);
+            }}
+            onOpenCreate={() => setCreateOpen(true)}
+          />
+        </div>
+
+        <div className={styles.rightCol}>
+          <SavingsRightRail
+            createOpen={createOpen}
+            onToggleCreate={() => setCreateOpen((prev) => !prev)}
+            goalDraft={goalDraft}
+            setGoalDraft={setGoalDraft}
+            onAddGoal={addGoalFromDraft}
+            addingBusy={addingBusy}
+            selectedGoal={selectedGoal}
+            selectedSaving={selectedSaving}
+            onPatchGoal={(patch) => {
+              if (!selectedGoal) return;
+              updateGoal(selectedGoal.id, patch);
+            }}
+            onDuplicateGoal={duplicateGoal}
+            onToggleArchiveGoal={toggleArchiveGoal}
+            onDeleteGoal={removeGoal}
+            utilityOpen={utilityOpen}
+            onToggleUtilities={() => setUtilityOpen((prev) => !prev)}
+            ioText={ioText}
+            setIoText={setIoText}
             onExportGoals={exportGoals}
             onImportGoals={importReplaceGoals}
           />
